@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>품질 콘솔 — ASK: SEOUL 운영</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a534e'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='14' font-weight='700' fill='%23fff' text-anchor='middle'%3EOPS%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    /* 마켓플레이스와 같은 단청 팔레트지만 표면은 더 어둡다 — 운영 도구라는 신호 */
+    --bg:#f4f6f5; --panel:#ffffff;
+    --ink:#12211f; --muted:#48605c; --faint:#8fa3a0; --line:#e6eae8; --line-strong:#ccd5d2;
+    --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
+    --teal:#0f6f68; --teal-deep:#0a534e; --teal-soft:#e9f4f2; --teal-line:#a9d5cf;
+    --ok:#0a6b45; --ok-soft:#e8f6ee;
+    --red-ink:#b42318; --red-soft:#fef3f2; --amber-ink:#b54708; --amber-soft:#fffaeb;
+    --deck:#08110f; --deck-line:rgba(214,240,235,.10); --deck-ink:#c2d6d1; --deck-dim:#71908a;
+    --shadow-xs:0 1px 2px rgba(16,24,40,.05);
+    --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono',monospace;
+  }
+  * { box-sizing:border-box; margin:0; }
+  body { font-family:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
+                     system-ui,-apple-system,sans-serif;
+         background:var(--bg); color:var(--ink); font-size:14.5px; line-height:1.65; word-break:keep-all;
+         -webkit-font-smoothing:antialiased; }
+  a { color:inherit; }
+  .lab { font-family:var(--mono); font-size:10.5px; font-weight:600; letter-spacing:.12em;
+         text-transform:uppercase; color:var(--faint); }
+
+  .top { background:var(--deck); color:#fff; padding:0 26px; height:56px;
+         display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:5; }
+  .top .mark { font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:.1em;
+               background:var(--teal-deep); padding:4px 9px; border-radius:5px; }
+  .top h1 { font-size:15px; font-weight:600; letter-spacing:-.01em; }
+  .top .sp { flex:1; }
+  .top select { font:inherit; font-size:12.5px; background:rgba(255,255,255,.06); color:#fff;
+                border:1px solid var(--deck-line); border-radius:6px; padding:4px 8px; }
+  .top a { font-size:12.5px; color:var(--deck-ink); text-decoration:none; }
+  .top a:hover { color:#fff; text-decoration:underline; text-underline-offset:3px; }
+  /* 읽기 전용 ↔ 운영자 모드 표시 겸 토글 — 지금 무엇을 할 수 있는 상태인지가 상단에 늘 보인다 */
+  .top .mode { font:inherit; font-size:12px; font-weight:600; cursor:pointer;
+               background:rgba(255,255,255,.06); color:var(--deck-ink);
+               border:1px solid rgba(255,255,255,.14); border-radius:6px; padding:5px 11px; }
+  .top .mode:hover { color:#fff; border-color:rgba(255,255,255,.3); }
+  .top .mode.on { background:var(--ok-soft); color:var(--ok); border-color:#b7e4cb; }
+
+  .wrap { max-width:1220px; margin:0 auto; padding:20px 26px 64px; }
+  .banner { border-radius:8px; padding:10px 14px; font-size:12.5px; margin-bottom:16px; }
+  .banner.warn { background:var(--amber-soft); border:1px solid #fedf89; color:#93370d; }
+  .banner.info { background:var(--teal-soft); border:1px solid var(--teal-line); color:var(--teal-deep); }
+  .banner b { font-weight:700; }
+
+  .gate { max-width:420px; margin:60px auto; background:var(--panel); border:1px solid var(--line);
+          border-radius:10px; padding:24px; box-shadow:var(--shadow-xs); }
+  .gate h2 { font-size:16px; font-weight:700; }
+  .gate p { font-size:12.5px; color:var(--muted); margin-top:6px; }
+  .gate .row { display:flex; gap:8px; margin-top:16px; }
+  .gate input { flex:1; font:inherit; font-size:13.5px; padding:9px 12px; border-radius:7px;
+                border:1px solid var(--line-strong); outline:none; }
+  .gate input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .gate button { font:inherit; font-size:13.5px; font-weight:600; color:#fff; background:var(--accent);
+                 border:0; border-radius:7px; padding:0 18px; cursor:pointer; }
+  .gate .err { color:var(--red-ink); font-size:12.5px; margin-top:10px; min-height:1.2em; }
+
+  /* 탭 — 두 품질을 나눠 보되, 라벨의 점이 "안 보는 쪽이 아픈지"를 먼저 알려준다.
+     탭으로 가리면 문제를 놓치기 쉬운데, 상태 점이 그 대가를 상쇄한다. */
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 18px; }
+  .tabs button { font:inherit; font-size:13.5px; font-weight:600; color:var(--muted);
+                 background:none; border:0; border-bottom:2px solid transparent; padding:9px 16px;
+                 cursor:pointer; display:flex; align-items:center; gap:8px; margin-bottom:-1px; }
+  .tabs button:hover { color:var(--ink); }
+  .tabs button[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--accent); }
+  .tabs button .dot { width:7px; height:7px; border-radius:50%; background:var(--line-strong); flex:none; }
+  .tabs button .dot.ok { background:var(--ok); }
+  .tabs button .dot.bad { background:var(--red-ink); }
+  .tabs button .sub { font-weight:400; font-size:11.5px; color:var(--faint); }
+  .pane[hidden] { display:none; }
+
+  h2.sec { font-size:15px; font-weight:700; margin:0 0 4px; display:flex; align-items:baseline; gap:10px; }
+  h2.sec span { font-size:12px; font-weight:400; color:var(--faint); }
+
+  .kpis { display:grid; grid-template-columns:repeat(4,1fr); background:var(--panel);
+          border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow-xs); margin:10px 0 16px; }
+  @media (max-width:760px){ .kpis { grid-template-columns:repeat(2,1fr); } }
+  .kpi { padding:13px 18px; border-left:1px solid var(--line); }
+  .kpi:first-child { border-left:0; }
+  .kpi .v { font-size:22px; font-weight:800; letter-spacing:-.02em; margin-top:3px;
+            font-variant-numeric:tabular-nums; }
+  .kpi .v.bad { color:var(--red-ink); } .kpi .v.good { color:var(--ok); }
+  .kpi .k { font-size:11.5px; color:var(--muted); }
+
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:960px){ .grid { grid-template-columns:1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+          box-shadow:var(--shadow-xs); overflow:hidden; }
+  .card.wide { grid-column:1/-1; }
+  .card .hd { padding:13px 18px 0; }
+  .card .hd h3 { font-size:13.5px; font-weight:700; }
+  .card .hd p { font-size:11.5px; color:var(--faint); margin-top:1px; }
+  .card .bd { padding:10px 18px 16px; overflow-x:auto; }
+
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th { text-align:left; font-family:var(--mono); font-size:9.5px; font-weight:600; letter-spacing:.06em;
+       text-transform:uppercase; color:var(--faint); padding:6px 10px 6px 0; white-space:nowrap;
+       border-bottom:1px solid var(--line); }
+  td { padding:7px 10px 7px 0; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums;
+       white-space:nowrap; }
+  tr:last-child td { border-bottom:0; }
+  td.name { font-family:var(--mono); font-size:11.5px; white-space:normal; word-break:break-all; }
+  td.r, th.r { text-align:right; }
+  .pill { font-family:var(--mono); font-size:10px; font-weight:600; padding:1px 7px; border-radius:4px; }
+  .pill.bad { background:var(--red-soft); color:var(--red-ink); }
+  .pill.warn { background:var(--amber-soft); color:var(--amber-ink); }
+  .pill.ok { background:var(--ok-soft); color:var(--ok); }
+  .pill.dim { background:var(--bg); color:var(--faint); border:1px solid var(--line); }
+  .empty { padding:16px 0; font-size:12.5px; color:var(--faint); }
+  /* 키 관리 — 조치 버튼은 작고 조용하게. 파괴적인 것(폐기·삭제)만 색으로 구분한다 */
+  .kbtn { font:inherit; font-size:11px; font-weight:600; color:var(--muted); background:var(--panel);
+          border:1px solid var(--line-strong); border-radius:5px; padding:3px 8px; cursor:pointer; }
+  .kbtn:hover { border-color:var(--accent-line); color:var(--accent-deep); }
+  .kbtn.danger:hover { border-color:#f0b4ae; color:var(--red-ink); background:var(--red-soft); }
+  .kbtn.armed { background:var(--red-ink); border-color:var(--red-ink); color:#fff; }
+  .kbtn:disabled { opacity:.45; cursor:default; }
+  .kacts { display:flex; gap:5px; justify-content:flex-end; flex-wrap:wrap; }
+  .keyMsg { font-size:12px; margin-top:10px; min-height:1.2em; color:var(--muted); }
+  .keyMsg.done { color:var(--ok); } .keyMsg.err { color:var(--red-ink); }
+  .qcell { display:flex; gap:5px; align-items:center; justify-content:flex-end; }
+  .qcell input { width:64px; font:inherit; font-size:11.5px; text-align:right; padding:2px 5px;
+                 border:1px solid var(--line-strong); border-radius:5px; font-variant-numeric:tabular-nums; }
+  .qcell input:focus { border-color:var(--accent); outline:none; }
+
+  /* SLO 캘린더 — 하루 = 칸 하나. 초록/노랑/빨강이 곧 "그날 파이프라인이 어땠나" */
+  .cal { display:flex; gap:4px; flex-wrap:wrap; margin-top:8px; }
+  .cal .d { width:34px; height:34px; border-radius:6px; display:flex; align-items:center;
+            justify-content:center; font-family:var(--mono); font-size:10.5px; font-weight:600;
+            border:1px solid transparent; }
+  .cal .d.pass { background:var(--ok-soft); color:var(--ok); border-color:#b7e4cb; }
+  .cal .d.partial { background:var(--amber-soft); color:var(--amber-ink); border-color:#fedf89; }
+  .cal .d.fail { background:var(--red-soft); color:var(--red-ink); border-color:#fecdc9; }
+  /* 초록 위장 — 통과로 계산된 날이라 초록이지만, 실제로는 빈 run 이다.
+     초록 그대로 두면 함정을 그대로 재현하게 되므로 붉은 테두리로 표시한다. */
+  .cal .d.disguise { background:var(--ok-soft); color:var(--red-ink); border-color:var(--red-ink);
+                     border-width:1.5px; }
+  .cal-legend { display:flex; gap:14px; margin-top:10px; font-size:11.5px; color:var(--muted); }
+
+  .bars { display:flex; align-items:flex-end; gap:4px; height:70px; margin-top:6px; }
+  .bars .b { flex:1; min-width:6px; background:var(--teal-soft); border-radius:3px 3px 0 0; }
+  .bars .b > i { display:block; width:100%; background:var(--teal); border-radius:3px 3px 0 0; }
+  .bars-axis { display:flex; justify-content:space-between; margin-top:6px;
+               font-family:var(--mono); font-size:10px; color:var(--faint); }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <span class="mark">OPS</span>
+  <h1>품질 콘솔</h1>
+  <span class="sp"></span>
+  <label class="lab" for="days" style="color:var(--deck-dim)">기간</label>
+  <select id="days">
+    <option value="7">7일</option>
+    <option value="14" selected>14일</option>
+    <option value="30">30일</option>
+  </select>
+  <button id="modeBtn" class="mode">읽기 전용 · 잠금 해제</button>
+  <a href="http://localhost:8787/" target="_blank" rel="noopener">마켓플레이스 ↗</a>
+</div>
+
+<div class="wrap">
+  <!-- 막는 문이 아니라 여는 문이다 — 화면은 토큰 없이 뜨고, 여기서 푸는 건 '조치' 권한뿐이다 -->
+  <div id="gate" class="gate" hidden>
+    <h2>운영자 잠금 해제</h2>
+    <p>보는 데는 토큰이 필요 없습니다. <b>키 폐기·복구·쿼터 변경·삭제</b>처럼 되돌릴 수 없는 조치만 토큰을 요구합니다.</p>
+    <div class="row">
+      <input type="password" id="token" placeholder="OPS_TOKEN" autocomplete="off" aria-label="운영자 토큰">
+      <button id="enter">해제</button>
+    </div>
+    <div class="err" id="gateErr"></div>
+  </div>
+
+  <div id="app" hidden>
+    <div class="tabs" role="tablist" aria-label="품질 영역">
+      <button role="tab" id="tab-pipeline" aria-controls="pane-pipeline" aria-selected="true">
+        <span class="dot" id="dot-pipeline"></span>파이프라인 품질
+        <span class="sub">수집·변환</span>
+      </button>
+      <button role="tab" id="tab-serving" aria-controls="pane-serving" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-serving"></span>서빙 품질
+        <span class="sub">외부 응답</span>
+      </button>
+      <button role="tab" id="tab-keys" aria-controls="pane-keys" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-keys"></span>키 관리
+        <span class="sub">발급·쿼터·폐기</span>
+      </button>
+    </div>
+
+    <div id="banners"></div>
+
+    <section class="pane" id="pane-pipeline" role="tabpanel" aria-labelledby="tab-pipeline" tabindex="0">
+    <h2 class="sec">파이프라인 품질 <span>수집·변환이 제 몫을 했나 · gold_*_slo_daily</span></h2>
+    <div class="kpis" id="pipeKpis"></div>
+    <div class="grid">
+      <div class="card wide">
+        <div class="hd"><h3>일자별 SLO</h3><p>정기런 통과 = 초록 · 수동 복구로만 살림 = 노랑 · 그날 데이터 없음 = 빨강</p></div>
+        <div class="bd" id="cal"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>도메인 커버리지</h3><p>SLO 마트를 가진 도메인 — 없는 곳은 품질을 잴 수 없다</p></div>
+        <div class="bd" id="domains"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>살펴야 할 날</h3><p>정기런 실패 + <b>초록 위장</b>(통과로 보였지만 빈 run)</p></div>
+        <div class="bd" id="badDays"></div>
+      </div>
+    </div>
+    </section>
+
+    <section class="pane" id="pane-serving" role="tabpanel" aria-labelledby="tab-serving" tabindex="0" hidden>
+    <h2 class="sec">서빙 품질 <span>외부에 잘 나가고 있나 · 게이트웨이 _request_log</span></h2>
+    <div class="kpis" id="servKpis"></div>
+    <div class="grid">
+      <div class="card wide">
+        <div class="hd"><h3>일자별 호출</h3></div>
+        <div class="bd" id="daily"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>없어서 못 판 것</h3><p>404·400 은 그대로 로드맵이다</p></div>
+        <div class="bd" id="failures"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>조용한 0행</h3><p>200 인데 빈 응답 — 커버리지 구멍</p></div>
+        <div class="bd" id="empty"></div>
+      </div>
+      <div class="card wide">
+        <div class="hd"><h3>제품별 수요</h3><p>구경(preview)만 하고 떠나나, 실제로 쓰나(data)</p></div>
+        <div class="bd" id="products"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>라우트</h3></div>
+        <div class="bd" id="routes"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>키별 재방문</h3><p>키 해시 앞 8자만</p></div>
+        <div class="bd" id="keys"></div>
+      </div>
+    </div>
+    </section>
+
+    <section class="pane" id="pane-keys" role="tabpanel" aria-labelledby="tab-keys" tabindex="0" hidden>
+    <h2 class="sec">키 관리 <span>누가 쓰고 있나 · 발급된 키의 쿼터·상태</span></h2>
+    <div class="kpis" id="keyKpis"></div>
+    <div class="grid">
+      <div class="card wide">
+        <div class="hd">
+          <h3>발급된 키</h3>
+          <p>이메일은 서버에서 가려 보낸다 — 응답에도 원문이 없다. 조치는 전부 키 단위라 주소가 필요 없다.<br>
+             오늘 사용량은 KST 기준 · 총 호출은 최근 30일 요청 로그 기준(그 전 기록은 지워진다)</p>
+        </div>
+        <div class="bd" id="keyTable"></div>
+        <div class="keyMsg" id="keyMsg"></div>
+      </div>
+    </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const nf = new Intl.NumberFormat("ko-KR");
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const TK = "ops_token";                       // sessionStorage 전용 — URL 에 절대 싣지 않는다
+const token = () => sessionStorage.getItem(TK) || "";
+const md = (d) => (d || "").slice(5).replace("-", "/");
+
+function table(cols, rows, empty) {
+  if (!rows || !rows.length) return "<div class='empty'>" + empty + "</div>";
+  return "<table><thead><tr>" +
+    cols.map((c) => "<th" + (c.r ? " class='r'" : "") + ">" + esc(c.t) + "</th>").join("") +
+    "</tr></thead><tbody>" + rows.map((r) => "<tr>" +
+      cols.map((c) => "<td class='" + (c.name ? "name " : "") + (c.r ? "r" : "") + "'>" +
+        (c.get(r) ?? "—") + "</td>").join("") + "</tr>").join("") + "</tbody></table>";
+}
+const kpis = (el, items) => {
+  $(el).innerHTML = items.map(([lab, v, k, cls]) =>
+    "<div class='kpi'><div class='lab'>" + lab + "</div><div class='v" + (cls ? " " + cls : "") + "'>" +
+    v + "</div><div class='k'>" + esc(k) + "</div></div>").join("");
+};
+
+// ── 탭. 상태는 URL 해시에 둔다 — 새로고침·링크 공유에도 보던 자리가 유지된다.
+const PANES = ["pipeline", "serving", "keys"];
+function showTab(name) {
+  if (!PANES.includes(name)) name = PANES[0];
+  for (const p of PANES) {
+    const on = p === name;
+    $("tab-" + p).setAttribute("aria-selected", String(on));
+    $("tab-" + p).tabIndex = on ? 0 : -1;
+    $("pane-" + p).hidden = !on;
+  }
+  // 배너는 자기 탭에서만 — 서빙 탭에서 파이프라인 경고를 띄우면 남의 문제로 읽힌다
+  for (const el of document.querySelectorAll("#banners [data-pane]"))
+    el.hidden = el.dataset.pane !== name;
+  if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
+}
+for (const p of PANES) {
+  $("tab-" + p).addEventListener("click", () => showTab(p));
+  $("tab-" + p).addEventListener("keydown", (e) => {   // 좌우 화살표로 탭 이동(WAI-ARIA 관행)
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const next = PANES[(PANES.indexOf(p) + (e.key === "ArrowRight" ? 1 : PANES.length - 1)) % PANES.length];
+    showTab(next); $("tab-" + next).focus();
+  });
+}
+addEventListener("hashchange", () => showTab(location.hash.slice(1)));
+
+function render(d) {
+  // ── 배너: 샘플 데이터·누락 섹션을 밝힌다. data-pane 이 붙은 것은 해당 탭에서만 보인다
+  const b = [];
+  if (d.meta.pipeline_is_sample)
+    b.push("<div class='banner warn' data-pane='pipeline'><b>파이프라인 값은 합성 샘플입니다</b> — 팀 D1 쓰기가 막혀 있어 " +
+           "실제 SLO 마트를 가져오지 못했습니다. 이 값으로 운영 판단을 하지 마세요.</div>");
+  if (d.meta.missing.includes("serving"))
+    b.push("<div class='banner info' data-pane='serving'>서빙 로그를 찾지 못했습니다 — 게이트웨이 D1 상태를 공유하도록 " +
+           "<code>--persist-to</code> 설정을 확인하세요.</div>");
+  if (d.meta.missing.includes("pipeline"))
+    b.push("<div class='banner info' data-pane='pipeline'>파이프라인 테이블이 없습니다 — <code>npm run seed</code> 를 먼저 실행하세요.</div>");
+  if (!CAN_WRITE)
+    b.push("<div class='banner info' data-pane='keys'>읽기 전용입니다 — 폐기·복구·쿼터·삭제는 상단 <b>잠금 해제</b> 뒤에 할 수 있습니다.</div>");
+  $("banners").innerHTML = b.join("");
+
+  // ── 파이프라인
+  const slo = d.pipeline.slo, doms = d.pipeline.domains;
+  const withSlo = doms.filter((x) => x.has_slo).length;
+  const passed = slo.filter((r) => r.scheduled_slo_passed).length;
+  const viol = slo.reduce((a, r) => a + (r.violation_count || 0), 0);
+  // 초록 위장 — Airflow success 인데 expected=0. **통과로 보이는 날**이라 실패 목록에 안 잡힌다.
+  // 그래서 별도 지표로 세우고, 아래 '살펴야 할 날'에도 따로 표시한다(7/7 실사례).
+  const disguise = slo.reduce((a, r) => a + (r.green_disguise_runs || 0), 0);
+  // 정기런 실패 + 초록 위장 = 사람이 들여다봐야 하는 날
+  const badDays = slo.filter((r) => !r.scheduled_slo_passed || (r.green_disguise_runs || 0) > 0);
+  kpis("pipeKpis", [
+    ["Scheduled SLO", slo.length ? Math.round(passed / slo.length * 100) + "%" : "—",
+     slo.length ? passed + "/" + slo.length + "일 정기런 통과" : "데이터 없음",
+     slo.length && passed / slo.length < 0.9 ? "bad" : "good"],
+    ["Domains", withSlo + " / " + doms.length, "SLO 마트 보유 도메인", withSlo < doms.length ? "bad" : "good"],
+    ["Violations", nf.format(viol), "계약 위반 누적", viol > 0 ? "bad" : "good"],
+    ["초록 위장", nf.format(disguise), "통과로 보였지만 빈 run", disguise > 0 ? "bad" : "good"],
+  ]);
+
+  $("cal").innerHTML = slo.length
+    ? "<div class='cal'>" + slo.map((r) => {
+        // 초록 위장은 통과로 계산된 날이라 pass 로 묻힌다 — 그게 바로 함정이라 먼저 분기한다
+        const cls = (r.green_disguise_runs || 0) > 0 ? "disguise"
+          : r.scheduled_slo_passed ? "pass" : (r.eod_slo_passed ? "partial" : "fail");
+        return "<div class='d " + cls + "' title='" + esc(r.event_date) + " · 커버리지 " +
+          (r.best_coverage_pct ?? "—") + "% · 실패 데이터셋 " + (r.failed_dataset_count ?? 0) +
+          ((r.green_disguise_runs || 0) > 0 ? " · 초록 위장 " + r.green_disguise_runs : "") + "'>" +
+          esc(md(r.event_date)) + "</div>";
+      }).join("") + "</div>" +
+      "<div class='cal-legend'><span><span class='pill ok'>초록</span> 정기런 통과</span>" +
+      "<span><span class='pill warn'>노랑</span> 수동 복구로 살림</span>" +
+      "<span><span class='pill bad'>빨강</span> 그날 데이터 없음</span>" +
+      "<span><b style='color:var(--red-ink)'>붉은 테두리</b> 초록 위장 — 통과로 계산됐지만 빈 run</span></div>"
+    : "<div class='empty'>SLO 데이터가 없습니다</div>";
+
+  $("domains").innerHTML = table([
+    { t:"domain", get:(r) => esc(r.label) + " <span class='pill dim'>" + esc(r.domain) + "</span>" },
+    { t:"SLO", get:(r) => r.has_slo
+        ? "<span class='pill ok'>보유</span>"
+        : "<span class='pill warn'>" + esc(r.note || "미보유") + "</span>" },
+  ], doms, "도메인 등록부가 비었습니다");
+
+  $("badDays").innerHTML = table([
+    { t:"date", get:(r) => esc(r.event_date) },
+    { t:"무슨 일", get:(r) => (r.green_disguise_runs || 0) > 0
+        ? "<span class='pill bad'>초록 위장 " + r.green_disguise_runs + "</span>"
+        : (r.eod_slo_passed ? "<span class='pill warn'>복구됨</span>"
+                            : "<span class='pill bad'>실패</span>") },
+    { t:"cov", r:true, get:(r) => (r.best_coverage_pct ?? "—") + "%" },
+    { t:"failed", r:true, get:(r) => r.failed_dataset_count },
+    { t:"viol", r:true, get:(r) => r.violation_count },
+  ], badDays, "살펴야 할 날이 없습니다");
+
+  // ── 서빙
+  const s = d.serving;
+  const calls = s.routes.reduce((a, r) => a + r.calls, 0);
+  const errs = s.routes.reduce((a, r) => a + (r.errors || 0), 0);
+  const emptyN = s.empty.reduce((a, r) => a + r.empty_responses, 0);
+  const errPct = calls ? errs / calls * 100 : 0;
+  kpis("servKpis", [
+    ["Calls", nf.format(calls), "최근 " + d.window_days + "일 총 호출", ""],
+    ["Error rate", errPct.toFixed(1) + "%", errs + "건 실패", errPct >= 5 ? "bad" : ""],
+    ["Empty 200", nf.format(emptyN), "조용한 0행 응답", emptyN > 0 ? "bad" : ""],
+    ["Active keys", nf.format(s.keys.length), "이 기간에 호출한 키", ""],
+  ]);
+
+  if (s.daily.length) {
+    const max = Math.max(...s.daily.map((x) => x.calls));
+    $("daily").innerHTML =
+      "<div class='bars'>" + s.daily.map((x) =>
+        "<div class='b' title='" + esc(x.day) + " · " + x.calls + "회'>" +
+        "<i style='height:" + Math.max(3, Math.round(x.calls / max * 70)) + "px'></i></div>").join("") + "</div>" +
+      "<div class='bars-axis'><span>" + esc(s.daily[0].day) + "</span><span>" +
+      esc(s.daily[s.daily.length - 1].day) + "</span></div>";
+  } else $("daily").innerHTML = "<div class='empty'>이 기간에 호출이 없습니다</div>";
+
+  $("failures").innerHTML = table([
+    { t:"status", get:(r) => "<span class='pill " + (r.status >= 500 ? "bad" : "warn") + "'>" + r.status + "</span>" },
+    { t:"route", get:(r) => esc(r.route) },
+    { t:"table", get:(r) => esc(r.table_name || "—"), name:true },
+    { t:"hits", r:true, get:(r) => r.hits },
+  ], s.failures, "실패 없음");
+
+  $("empty").innerHTML = table([
+    { t:"table", get:(r) => esc(r.table_name || "—"), name:true },
+    { t:"filters", get:(r) => esc(r.filters || "(없음)") },
+    { t:"count", r:true, get:(r) => r.empty_responses },
+  ], s.empty, "0행 응답 없음");
+
+  $("products").innerHTML = table([
+    { t:"table", get:(r) => esc(r.table_name), name:true },
+    { t:"preview", r:true, get:(r) => r.previews },
+    { t:"data", r:true, get:(r) => r.calls },
+    { t:"전환", r:true, get:(r) => r.previews ? Math.round(r.calls / r.previews * 100) + "%" : "—" },
+    { t:"avg rows", r:true, get:(r) => r.avg_rows },
+  ], s.products, "조회된 제품 없음");
+
+  $("routes").innerHTML = table([
+    { t:"route", get:(r) => esc(r.route), name:true },
+    { t:"calls", r:true, get:(r) => nf.format(r.calls) },
+    { t:"errors", r:true, get:(r) => r.errors ? "<span class='pill bad'>" + r.errors + "</span>" : "0" },
+    { t:"avg ms", r:true, get:(r) => r.avg_ms },
+  ], s.routes, "호출 없음");
+
+  $("keys").innerHTML = table([
+    { t:"key", get:(r) => esc(r.key_id), name:true },
+    { t:"calls", r:true, get:(r) => nf.format(r.calls) },
+    { t:"days", r:true, get:(r) => r.active_days > 1
+        ? "<span class='pill ok'>" + r.active_days + "</span>" : r.active_days },
+  ], s.keys, "인증 호출 없음");
+
+  // ── 탭 라벨의 상태 점 — 탭으로 가린 쪽이 아픈지를 전환 없이 알려준다.
+  // 판정 기준은 KPI 의 경고 조건과 같다(정기런 실패·계약 위반 / 에러율 5% 이상·0행 발생).
+  const pipeBad = badDays.length > 0 || viol > 0;
+  const servBad = errPct >= 5 || emptyN > 0;
+  $("dot-pipeline").className = "dot " + (slo.length ? (pipeBad ? "bad" : "ok") : "");
+  $("dot-serving").className = "dot " + (calls ? (servBad ? "bad" : "ok") : "");
+  showTab(location.hash.slice(1) || PANES[0]);   // 배너 가시성도 여기서 맞춰진다
+}
+
+// ── 키 관리 ────────────────────────────────────────────────────────────────────────
+// 이 표에는 이메일이 그대로 보인다. 운영자가 "누구 키인지" 없이는 조치를 못 하기 때문인데,
+// 그래서 이 화면은 토큰 뒤에 있어야 한다(gate 참조).
+const fmtTs = (s) => (s ? s.slice(0, 16).replace("T", " ") : null);
+let KEYS = [];
+// 조치 가능 여부는 **서버가 알려준 값**을 그대로 쓴다. 화면에서 이걸 켠다고 뚫리지 않는다 —
+// 실제 차단은 POST 쪽 requireWrite 가 한다. 여기서 하는 일은 못 할 일을 버튼으로 내밀지 않는 것뿐이다.
+let CAN_WRITE = false;
+const authHeaders = () => (token() ? { authorization: "Bearer " + token() } : {});
+
+async function keyAction(hash, action, extra) {
+  const res = await fetch("/api/keys", {
+    method: "POST",
+    headers: { ...authHeaders(), "content-type": "application/json" },
+    body: JSON.stringify({ action, key_hash: hash, ...(extra || {}) }),
+  });
+  const body = await res.json().catch(() => ({}));
+  const msg = $("keyMsg");
+  if (!res.ok) { msg.className = "keyMsg err"; msg.textContent = body.detail || ("실패 (HTTP " + res.status + ")"); return; }
+  msg.className = "keyMsg done";
+  msg.textContent = ({
+    revoke: "폐기했습니다", restore: "복구했습니다",
+    quota: "쿼터를 " + nf.format(body.daily_quota) + "회로 바꿨습니다",
+    delete: "삭제했습니다 — 키·이메일·사용량이 지워졌습니다",
+  })[action] + " (" + body.key_prefix + "…)";
+  await loadKeys();
+}
+
+function renderKeys(rows) {
+  KEYS = rows || [];
+  const active = KEYS.filter((k) => k.status === "active");
+  const near = active.filter((k) => k.daily_quota > 0 && k.used_today / k.daily_quota >= 0.8);
+  kpis("keyKpis", [
+    ["발급 키", nf.format(KEYS.length), "전체"],
+    ["활성", nf.format(active.length), "폐기 " + (KEYS.length - active.length) + "개"],
+    ["오늘 호출", nf.format(KEYS.reduce((a, k) => a + (k.used_today || 0), 0)), "모든 키 합계"],
+    ["쿼터 임박", nf.format(near.length), "80% 이상 소진", near.length ? "bad" : ""],
+  ]);
+
+  $("keyTable").innerHTML = table([
+    { t: "키", name: true, get: (r) => "<code>" + esc(r.key_prefix) + "…</code>" },
+    { t: "이메일", get: (r) => esc(r.email_masked) },
+    { t: "상태", get: (r) => r.status === "active"
+        ? "<span class='pill ok'>활성</span>" : "<span class='pill bad'>폐기</span>" },
+    { t: "오늘 / 쿼터", r: true, get: (r) => {
+        const ratio = r.daily_quota > 0 ? r.used_today / r.daily_quota : 0;
+        const cls = ratio >= 1 ? "bad" : ratio >= 0.8 ? "warn" : "dim";
+        const used = "<span class='pill " + cls + "'>" + nf.format(r.used_today) + "</span>";
+        // 읽기 전용일 때 입력칸을 남겨두면 "고칠 수 있다"고 읽힌다 — 숫자만 보여준다
+        return "<div class='qcell'>" + used + (CAN_WRITE
+          ? "<input type='number' min='0' value='" + r.daily_quota + "' data-q='" + r.key_hash + "' aria-label='일일 쿼터'>" +
+            "<button class='kbtn' data-act='quota' data-h='" + r.key_hash + "'>저장</button>"
+          : "<span>/ " + nf.format(r.daily_quota) + "</span>") + "</div>"; } },
+    { t: "총 호출", r: true, get: (r) => nf.format(r.calls_logged) },
+    { t: "최근 호출", r: true, get: (r) => fmtTs(r.last_call) },
+    { t: "발급", r: true, get: (r) => fmtTs(r.created_at) },
+    { t: "", r: true, get: (r) => CAN_WRITE
+        ? "<div class='kacts'>" + (r.status === "active"
+            ? "<button class='kbtn danger' data-act='revoke' data-h='" + r.key_hash + "'>폐기</button>"
+            : "<button class='kbtn' data-act='restore' data-h='" + r.key_hash + "'>복구</button>") +
+          "<button class='kbtn danger' data-act='delete' data-h='" + r.key_hash + "'>삭제</button></div>"
+        : "" },
+  ], KEYS, "발급된 키가 없습니다 — 마켓플레이스에서 키를 발급하면 여기에 나타납니다");
+
+  $("dot-keys").className = "dot " + (KEYS.length ? (near.length ? "bad" : "ok") : "");
+}
+
+// 파괴적 조치는 한 번 더 묻는다 — 버튼이 '정말 폐기/삭제'로 바뀐 뒤 두 번째 클릭에만 실행된다
+$("keyTable").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-act]");
+  if (!b) return;
+  const act = b.dataset.act, hash = b.dataset.h;
+  if (act === "quota") {
+    const input = $("keyTable").querySelector("input[data-q='" + hash + "']");
+    return keyAction(hash, "quota", { daily_quota: parseInt(input.value, 10) });
+  }
+  if (act === "restore") return keyAction(hash, "restore");
+  if (b.dataset.armed !== "1") {
+    for (const other of $("keyTable").querySelectorAll("button[data-armed='1']")) {
+      other.dataset.armed = ""; other.classList.remove("armed");
+      other.textContent = other.dataset.act === "revoke" ? "폐기" : "삭제";
+    }
+    b.dataset.armed = "1"; b.classList.add("armed");
+    b.textContent = act === "revoke" ? "정말 폐기" : "정말 삭제";
+    const msg = $("keyMsg");
+    msg.className = "keyMsg";
+    msg.textContent = act === "revoke"
+      ? "폐기하면 그 키의 호출이 즉시 403이 됩니다 (복구 가능)."
+      : "삭제하면 키·이메일·사용량이 지워집니다 — 되돌릴 수 없습니다.";
+    return;
+  }
+  keyAction(hash, act);
+});
+
+async function loadKeys() {
+  const res = await fetch("/api/keys", { headers: authHeaders() });
+  if (!res.ok) { renderKeys([]); return; }
+  const body = await res.json();
+  CAN_WRITE = Boolean(body.can_write);
+  renderKeys(body.keys);
+  if (!CAN_WRITE) { $("keyMsg").className = "keyMsg"; $("keyMsg").textContent = ""; }
+}
+
+// 상단 배지 = 지금 무엇을 할 수 있는 상태인가. 조치 권한이 화면 어딘가에 숨어 있으면
+// "왜 버튼이 없지?"로 헤매게 된다.
+function syncMode() {
+  const b = $("modeBtn");
+  b.textContent = CAN_WRITE ? "운영자 모드 · 잠그기" : "읽기 전용 · 잠금 해제";
+  b.classList.toggle("on", CAN_WRITE);
+}
+
+async function load() {
+  let res;
+  try {
+    res = await fetch("/api/summary?days=" + $("days").value, { headers: authHeaders() });
+  } catch { return fail("서버에 닿지 못했습니다"); }
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({}));
+    return fail(b.detail || ("불러오지 못했습니다 (HTTP " + res.status + ")"));
+  }
+  const data = await res.json();
+  CAN_WRITE = Boolean(data.meta && data.meta.can_write);   // 배너·버튼보다 먼저 확정한다
+  // 저장해 둔 토큰이 더는 맞지 않는다 — 읽기는 그대로 되니 화면을 막지 않고 알리기만 한다
+  if (token() && !CAN_WRITE) {
+    sessionStorage.removeItem(TK);
+    $("gateErr").textContent = "토큰이 맞지 않습니다";
+    $("gate").hidden = false;
+  }
+  $("app").hidden = false;
+  render(data);
+  syncMode();
+  await loadKeys();   // render() 가 showTab 으로 끝나므로 그 뒤에 채운다
+}
+// 데이터를 못 받은 상태 — 그릴 것이 없으니 화면을 접고 사유만 보여준다
+function fail(msg) {
+  $("app").hidden = true; $("gate").hidden = false;
+  $("gateErr").textContent = msg || "";
+}
+$("modeBtn").addEventListener("click", () => {
+  if (CAN_WRITE) {                       // 잠그기 — 토큰을 지우고 읽기 전용으로 되돌린다
+    sessionStorage.removeItem(TK);
+    $("gate").hidden = true; $("gateErr").textContent = "";
+    return load();
+  }
+  $("gate").hidden = !$("gate").hidden;
+  if (!$("gate").hidden) $("token").focus();
+});
+$("enter").addEventListener("click", () => {
+  const t = $("token").value.trim();
+  if (!t) { $("gateErr").textContent = "토큰을 입력해주세요"; return; }
+  sessionStorage.setItem(TK, t);
+  $("token").value = "";
+  $("gateErr").textContent = "";
+  $("gate").hidden = true;
+  load();
+});
+$("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("enter").click(); });
+$("days").addEventListener("change", load);
+load();   // 토큰 없이도 뜬다 — 막는 문이 아니라 여는 문이다
+</script>
+</body>
+</html>
