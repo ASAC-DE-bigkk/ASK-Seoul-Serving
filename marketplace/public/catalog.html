@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>데이터 카탈로그 — ASK: SEOUL 데이터 플랫폼</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    /* 팔레트는 랜딩(index.html)과 같은 단청 계열 — 두 페이지가 어긋나면 다른 서비스로 보인다 */
+    --bg:#f6f7f6; --panel:#ffffff; --sidebar:#0e1a18; --sidebar-hi:#1a2d2a;
+    --sidebar-ink:#c2d6d1; --sidebar-dim:#71908a;
+    --ink:#12211f; --muted:#48605c; --faint:#8fa3a0; --line:#e6eae8; --line-strong:#ccd5d2;
+    --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
+    --green-soft:#ecfdf3; --green-ink:#0a6b45;
+    --amber-soft:#fffaeb; --amber-ink:#b54708; --red-soft:#fef3f2; --red-ink:#b42318;
+    --shadow-xs:0 1px 2px rgba(16,24,40,.05);
+    --shadow-sm:0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
+    --mono:ui-monospace,'Cascadia Code',Consolas,monospace;
+  }
+  * { box-sizing:border-box; margin:0; }
+  html { scroll-behavior:smooth; }
+  /* 서체 스택·급수는 랜딩과 같은 규칙 — 근거는 index.html 주석 참고 */
+  body { font-family:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
+                     system-ui,-apple-system,'Noto Sans KR',sans-serif;
+         background:var(--bg); color:var(--ink); font-size:14.5px; line-height:1.65; word-break:keep-all;
+         -webkit-font-smoothing:antialiased; text-size-adjust:100%; }
+  .shell { display:grid; grid-template-columns:248px 1fr; min-height:100vh; }
+  @media (max-width:860px){ .shell { grid-template-columns:1fr; } .side { display:none; } }
+
+  .side { background:var(--sidebar); color:var(--sidebar-ink); padding:16px 0 0; position:sticky; top:0;
+          height:100vh; overflow-y:auto; display:flex; flex-direction:column;
+          border-right:1px solid rgba(255,255,255,.06); }
+  .side .brand { display:flex; align-items:center; gap:10px; padding:6px 18px 16px;
+                 border-bottom:1px solid rgba(255,255,255,.07); margin-bottom:8px; }
+  .side .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
+                       background:linear-gradient(140deg,#0f6f68,#2aa79a);
+                       display:flex; align-items:center; justify-content:center;
+                       font-weight:800; font-size:13px; color:#fff; letter-spacing:-.02em; }
+  .side .brand .nm { font-weight:700; font-size:13.5px; color:#fff; letter-spacing:-.01em; line-height:1.25; }
+  .side .brand .sub { display:block; font-weight:500; font-size:10.5px; color:var(--sidebar-dim);
+                      letter-spacing:.02em; }
+  .side .group { padding:16px 18px 6px; font-size:10px; font-weight:700; letter-spacing:.1em;
+                 color:var(--sidebar-dim); }
+  .dnav { list-style:none; padding:0 8px; }
+  .dnav li { display:flex; align-items:center; gap:9px; padding:7px 12px; font-size:13px; cursor:pointer;
+             border-radius:6px; margin-bottom:1px; font-weight:500; color:var(--sidebar-ink); }
+  .dnav li:hover { background:rgba(255,255,255,.05); color:#fff; }
+  .dnav li.active { background:var(--sidebar-hi); color:#fff; font-weight:600;
+                    box-shadow:inset 2px 0 0 var(--accent); }
+  .dnav li.soon { cursor:default; color:var(--sidebar-dim); }
+  .dnav li.soon:hover { background:none; color:var(--sidebar-dim); }
+  .dnav .dot { width:6px; height:6px; border-radius:50%; background:#2aa79a; flex:none; }
+  .dnav li.soon .dot { background:#294a45; }
+  .dnav .cnt { margin-left:auto; font-size:10.5px; font-variant-numeric:tabular-nums;
+               background:rgba(255,255,255,.08); border-radius:4px; padding:1px 6px; color:var(--sidebar-ink); }
+  .dnav .soon-tag { margin-left:auto; font-size:9.5px; padding:1px 6px; border-radius:4px;
+                    background:rgba(255,255,255,.06); color:var(--sidebar-dim); letter-spacing:.02em; }
+  .side .foot { margin-top:auto; padding:14px 18px 16px; font-size:10.5px; color:var(--sidebar-dim);
+                line-height:1.9; border-top:1px solid rgba(255,255,255,.07); }
+  .side .foot b { color:var(--sidebar-ink); font-weight:600; }
+  .side .foot code { font-family:var(--mono); font-size:10px; }
+  .side .foot a { color:var(--sidebar-ink); text-decoration:none; }
+  .side .foot a:hover { color:#fff; text-decoration:underline; text-underline-offset:2px; }
+
+  .main { min-width:0; }
+  .topbar { background:var(--panel); border-bottom:1px solid var(--line); padding:0 28px; height:52px;
+            display:flex; align-items:center; gap:16px; position:sticky; top:0; z-index:9; }
+  .topbar h1 { font-size:14px; font-weight:600; letter-spacing:-.01em; padding-right:16px;
+               border-right:1px solid var(--line); }
+  /* 앵커 착지점 — 52px 스티키 topbar 아래로 내려야 제목이 가리지 않는다 */
+  #auth, #catalog, #playground { scroll-margin-top:64px; }
+  .search { flex:1; max-width:400px; position:relative; }
+  .search input { width:100%; padding:7px 12px 7px 32px; border:1px solid var(--line-strong); border-radius:6px;
+                  font:inherit; font-size:13px; background:var(--panel); outline:none;
+                  transition:border-color .12s, box-shadow .12s; }
+  .search input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .search .ico { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--faint);
+                 display:flex; }
+  .spacer { flex:1; }
+  .env-pill { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:600;
+              padding:3px 10px; border-radius:6px; border:1px solid var(--line-strong);
+              color:var(--muted); background:var(--panel); white-space:nowrap; letter-spacing:.01em; }
+  .env-pill i { width:6px; height:6px; border-radius:50%; background:#f79009; }
+  .keychip { font-family:var(--mono); font-size:11px; padding:4px 10px; border-radius:6px;
+             border:1px solid var(--line-strong); color:var(--muted); cursor:pointer; background:var(--panel); }
+  .keychip.on { border-color:var(--accent-line); background:var(--accent-soft); color:var(--accent-deep); font-weight:600; }
+
+  .content { padding:24px 28px 64px; max-width:1160px; }
+  .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; }
+  .step { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px;
+          display:flex; gap:12px; align-items:flex-start; cursor:pointer; box-shadow:var(--shadow-xs);
+          transition:border-color .12s, box-shadow .12s; }
+  .step:hover { border-color:var(--accent-line); box-shadow:var(--shadow-sm); }
+  .step .num { width:24px; height:24px; flex:none; border-radius:6px; background:var(--accent-soft);
+               color:var(--accent-deep); font-weight:700; font-size:12px; display:flex;
+               align-items:center; justify-content:center; margin-top:1px;
+               font-variant-numeric:tabular-nums; }
+  .step .tt { font-weight:600; font-size:13.5px; }
+  .step .dd { font-size:12.5px; color:var(--muted); margin-top:1px; }
+  .terms { display:flex; gap:6px; flex-wrap:wrap; margin:12px 0 24px; }
+  .terms span { font-size:11.5px; font-weight:500; color:var(--muted); background:var(--panel);
+                border:1px solid var(--line); border-radius:5px; padding:3px 9px; }
+  .terms span b { color:var(--ink); font-weight:600; }
+
+  .auth { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px 20px;
+          margin-bottom:28px; display:grid; grid-template-columns:1fr 1fr; gap:24px;
+          box-shadow:var(--shadow-xs); }
+  @media (max-width:760px){ .auth { grid-template-columns:1fr; } }
+  .auth h3 { font-size:12.5px; font-weight:600; margin-bottom:9px; color:var(--ink); }
+  .row { display:flex; gap:8px; }
+  input, select { font:inherit; font-size:13px; color:var(--ink); background:var(--panel);
+                  border:1px solid var(--line-strong); border-radius:6px; padding:7px 11px; outline:none;
+                  transition:border-color .12s, box-shadow .12s; }
+  input:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .row input { flex:1; min-width:0; }
+  button { font:inherit; font-size:13px; font-weight:600; border:0; border-radius:6px; padding:7px 14px;
+           cursor:pointer; transition:background .12s, border-color .12s; }
+  button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .btn-p { background:var(--accent); color:#fff; box-shadow:var(--shadow-xs); }
+  .btn-p:hover { background:var(--accent-deep); }
+  .btn-g { background:var(--panel); color:var(--muted); border:1px solid var(--line-strong);
+           box-shadow:var(--shadow-xs); }
+  .btn-g:hover { border-color:var(--accent); color:var(--accent-deep); }
+  .btn-sm { padding:4px 10px; font-size:12px; }
+  .reveal { display:none; margin-top:10px; border:1px solid var(--accent-line); background:var(--accent-soft);
+            border-radius:6px; padding:10px 12px; }
+  .reveal .k { display:flex; gap:8px; align-items:center; }
+  .reveal code { font-family:var(--mono); font-size:12px; font-weight:700; word-break:break-all; flex:1;
+                 color:var(--accent-deep); }
+  .reveal .warn { font-size:11.5px; color:var(--red-ink); margin-top:6px; }
+  .ferr { font-size:12.5px; color:var(--red-ink); margin-top:8px; line-height:1.5; }
+  .revoke { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px;
+            padding-top:10px; border-top:1px solid var(--line); }
+  .revoke span { font-size:11.5px; color:var(--faint); line-height:1.5; }
+  .revoke span.done { color:var(--green-ink); }
+  .pager { display:flex; align-items:center; gap:10px; margin-top:10px; }
+  .pager span { font-size:11.5px; color:var(--faint); font-variant-numeric:tabular-nums; }
+  .consent { font-size:11.5px; color:var(--faint); margin-top:10px; line-height:1.6; }
+  .consent b { color:var(--muted); font-weight:600; }
+  .usage .bar { height:6px; background:var(--bg); border:1px solid var(--line); border-radius:999px;
+                overflow:hidden; margin-top:10px; }
+  .usage .fill { height:100%; width:0%; background:var(--accent); transition:width .3s; }
+  .usage .txt { display:flex; justify-content:space-between; font-size:11.5px; color:var(--muted);
+                margin-top:5px; font-variant-numeric:tabular-nums; }
+
+  .sec-title { display:flex; align-items:baseline; gap:10px; margin:4px 0 10px; }
+  .sec-title h2 { font-size:15px; font-weight:700; letter-spacing:-.01em; }
+  .sec-title .hint { font-size:11.5px; color:var(--faint); }
+
+  .plist { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden;
+           margin-bottom:30px; box-shadow:var(--shadow-xs); }
+  .phead, .prow { display:grid; grid-template-columns:minmax(220px,1.4fr) minmax(200px,2fr) 110px 110px 90px;
+                  gap:14px; align-items:center; padding:10px 18px; }
+  .phead { background:#f2f6f4; border-bottom:1px solid var(--line); font-size:10.5px; font-weight:600;
+           letter-spacing:.06em; color:var(--muted); }
+  .prow { border-bottom:1px solid var(--line); cursor:pointer; transition:background .1s; }
+  .prow:hover { background:#f2f6f4; }
+  .prow:last-child, .pdetail:last-child { border-bottom:0; }
+  .prow .t { font-weight:600; font-size:13px; }
+  .prow .t small { display:block; font-family:var(--mono); font-size:10.5px; font-weight:400;
+                   color:var(--faint); margin-top:1px; }
+  .prow .q { font-size:12.5px; color:var(--muted); }
+  .prow .n { font-size:12.5px; font-variant-numeric:tabular-nums; text-align:right; }
+  .badge { font-family:var(--mono); font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:4px;
+           white-space:nowrap; background:var(--accent-soft); color:var(--accent-deep);
+           border:1px solid var(--accent-line); justify-self:start; }
+  .badge.dim { background:var(--panel); color:var(--muted); border:1px solid var(--line-strong);
+               font-family:inherit; }
+  .prow .act { text-align:right; }
+  .pdetail { display:none; padding:16px 18px 20px; background:#f2f6f4; border-bottom:1px solid var(--line); }
+  .pdetail.open { display:block; }
+  /* 스키마 표 — 컬럼명 · 타입 · 설명. 설명이 붙으면서 2열 격자로는 줄바꿈이 많아져 한 줄 = 한 컬럼 */
+  .pdetail .cols { margin:10px 0 14px; border-top:1px solid var(--line); }
+  @media (max-width:760px){
+    .phead,.prow { grid-template-columns:1fr 90px; }
+    .prow .q,.prow .n,.phead span:nth-child(2),.phead span:nth-child(3),.phead span:nth-child(4){ display:none; } }
+  .pdetail .col-item { display:grid; grid-template-columns:minmax(170px,230px) 76px 1fr; gap:6px 14px;
+                       align-items:baseline; padding:8px 0; border-bottom:1px solid var(--line); font-size:12.5px; }
+  .pdetail .col-item code { font-family:var(--mono); color:var(--ink); word-break:break-all; }
+  .pdetail .col-item .ty { color:var(--faint); font-family:var(--mono); font-size:10.5px; }
+  .pdetail .col-item .ds { color:var(--muted); font-size:12.5px; line-height:1.6; }
+  .pdetail .col-item .ds.none { color:var(--faint); font-style:italic; }
+  /* 조인 키는 다른 데이터와 붙이는 지점이라 눈에 띄어야 한다 */
+  .pdetail .col-item .kk { font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:.06em;
+                           color:var(--accent-deep); background:var(--accent-soft); border:1px solid var(--accent-line);
+                           border-radius:3px; padding:0 4px; margin-left:6px; vertical-align:1px; }
+  @media (max-width:760px){
+    .pdetail .col-item { grid-template-columns:1fr auto; }
+    .pdetail .col-item .ds { grid-column:1/-1; }
+  }
+  .endpoint { font-family:var(--mono); font-size:12px; background:#08110f; color:#e4e9f1;
+              border-radius:6px; padding:10px 13px; overflow-x:auto; white-space:pre;
+              border:1px solid #1d2939; }
+  .endpoint .m { color:#32d583; font-weight:700; }
+  .pdetail .dhead { font-size:10.5px; font-weight:600; letter-spacing:.06em; color:var(--muted);
+                    margin-bottom:5px; }
+
+  .play { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:20px;
+          box-shadow:var(--shadow-xs); }
+  .play-grid { display:grid; grid-template-columns:240px 1fr; gap:24px; }
+  @media (max-width:760px){ .play-grid { grid-template-columns:1fr; } }
+  .field { margin-bottom:12px; }
+  .field label { display:block; font-size:10.5px; font-weight:600; letter-spacing:.05em;
+                 color:var(--muted); margin-bottom:5px; }
+  .field input, .field select { width:100%; }
+  .resp-head { display:flex; align-items:center; gap:10px; margin:14px 0 8px; }
+  .status { font-family:var(--mono); font-size:11.5px; font-weight:700; padding:2px 9px; border-radius:4px;
+            display:none; }
+  .status.ok { background:var(--green-soft); color:var(--green-ink); display:inline-block; }
+  .status.err { background:var(--red-soft); color:var(--red-ink); display:inline-block; }
+  .resp-meta { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .toggle-raw { background:none; border:none; color:var(--accent-deep); font-size:12px; padding:0;
+                cursor:pointer; text-decoration:underline; text-underline-offset:3px; box-shadow:none; }
+  .table-scroll { overflow-x:auto; border:1px solid var(--line); border-radius:6px; background:var(--panel); }
+  table.data { border-collapse:collapse; width:100%; font-size:12px; font-variant-numeric:tabular-nums; }
+  table.data th { background:#f2f6f4; font-family:var(--mono); font-size:10px; color:var(--muted);
+                  font-weight:600; text-align:left; padding:7px 11px; white-space:nowrap;
+                  border-bottom:1px solid var(--line); position:sticky; top:0; }
+  table.data td { padding:6px 11px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  table.data tr:last-child td { border-bottom:0; }
+  table.data tbody tr:hover td { background:#f2f6f4; }
+  .raw-json { display:none; font-family:var(--mono); font-size:11.5px; background:#f2f6f4;
+              border:1px solid var(--line); border-radius:6px; padding:11px; overflow:auto; max-height:320px; }
+  .empty { color:var(--faint); font-size:12.5px; padding:26px; text-align:center;
+           border:1px dashed var(--line-strong); border-radius:6px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <aside class="side">
+    <div class="brand" onclick="location.href='/'" style="cursor:pointer" title="홈으로"><span class="logo">AS</span><span class="nm">ASK SEOUL<span class="sub">Data Platform Console</span></span></div>
+    <div class="group">도메인</div>
+    <ul class="dnav" id="dnav"></ul>
+    <div class="group">리소스</div>
+    <ul class="dnav">
+      <li onclick="location.href='/'"><span class="dot" style="background:#3a5450"></span>홈 · 서비스 소개</li>
+      <li data-hash="#playground" onclick="goHash('#playground')"><span class="dot" style="background:#3a5450"></span>플레이그라운드</li>
+      <li data-hash="#auth" onclick="goHash('#auth')"><span class="dot" style="background:#3a5450"></span>인증 · API 키</li>
+    </ul>
+    <!-- 개발자용 페이지라 오류 형식(RFC 7807)은 남긴다 — 그건 붙일 때 실제로 필요한 정보다.
+         반면 내부 계약 버전·배치 시각·이슈 번호는 이용자가 알 일이 아니라 뺐다. -->
+    <div class="foot">매일 1회 갱신<br>오류 응답 <code>RFC 7807</code><br>프로토타입 · 가용성 무보장
+      <br><a href="/legal#attribution">데이터 출처</a> · <a href="/legal#terms">이용약관</a> · <a href="/legal#privacy">개인정보</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h1 id="pageTitle">데이터 카탈로그</h1>
+      <div class="search"><span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span><input type="search" id="q" placeholder="제품·질문·테이블명 검색"></div>
+      <span class="spacer"></span>
+      <span class="env-pill"><i></i>프로토타입</span>
+      <span class="keychip" id="keychip" onclick="goHash('#auth')">키 미연결</span>
+    </div>
+
+    <div class="content">
+      <div class="steps" id="steps"></div>
+      <div class="terms" id="terms"></div>
+
+      <div class="auth" id="auth">
+        <div>
+          <h3>API 키 발급</h3>
+          <div class="row">
+            <input type="email" id="email" placeholder="you@example.com" autocomplete="email" aria-label="이메일">
+            <button class="btn-p" id="issueBtn">발급</button>
+          </div>
+          <div class="reveal" id="keyReveal">
+            <div class="k"><code id="keyValue"></code><button class="btn-g btn-sm" id="copyKey">복사</button></div>
+            <div class="warn" id="keyNote">이 키는 지금 한 번만 표시됩니다 — 서버에는 해시만 저장됩니다.</div>
+          </div>
+          <div class="ferr" id="issueErr"></div>
+          <!-- 고지는 수집 지점에 있어야 의미가 있다 — 이메일을 실제로 받는 곳이 여기다 -->
+          <div class="consent">발급하면 <a href="/legal#terms">이용약관</a>과 <a href="/legal#privacy">개인정보 처리방침</a>에 동의하는 것으로 봅니다.
+            이메일은 <b>이메일당 1키 식별</b>에만 쓰고, 키 원문은 저장하지 않습니다.</div>
+        </div>
+        <div class="usage">
+          <h3>내 사용량</h3>
+          <div class="row"><input type="password" id="pKey" placeholder="ask_… (발급 시 자동 입력)" autocomplete="off"><button class="btn-g" id="keyEye" title="키 보기/가리기" aria-label="키 보기/가리기">보기</button><button class="btn-g" id="meBtn">조회</button></div>
+          <div class="bar"><div class="fill" id="quotaFill"></div></div>
+          <div class="txt"><span id="quotaWho">—</span><span id="quotaTxt">— / —</span></div>
+          <!-- 파괴적 동작이라 2단계 — 발급의 rotate 확인과 같은 규칙 -->
+          <div class="revoke">
+            <button class="btn-g btn-sm" id="revokeBtn">키 폐기</button>
+            <button class="btn-g btn-sm" id="purgeBtn" style="display:none">이메일·기록까지 삭제</button>
+            <span id="revokeNote"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec-title" id="catalog"><h2 id="listTitle">전체 제품</h2><span class="hint" id="listHint"></span></div>
+      <div class="plist">
+        <div class="phead"><span>제품</span><span>답하는 질문</span><span>행 수</span><span>조회 축</span><span></span></div>
+        <div id="plistBody"></div>
+      </div>
+
+      <div class="sec-title" id="playground"><h2>플레이그라운드</h2><span class="hint">키 인증 · 쿼터 실계상 호출</span></div>
+      <div class="play">
+        <div class="play-grid">
+          <div>
+            <div class="field"><label for="pTable">데이터</label><select id="pTable"></select></div>
+            <div class="field"><label for="pLimit">행 수 (limit)</label><input type="number" id="pLimit" value="10" min="1" max="5000"></div>
+            <div class="field" id="rangeField" style="display:none">
+              <label>기간 · <span id="axisName"></span></label>
+              <input type="text" id="pFrom" placeholder="from · YYYY-MM-DD" style="margin-bottom:6px">
+              <input type="text" id="pTo" placeholder="to · YYYY-MM-DD">
+            </div>
+            <button class="btn-p" id="runBtn" style="width:100%">호출</button>
+          </div>
+          <div>
+            <div class="endpoint" id="reqPreview"><span class="m">GET</span> /api/data/&lt;table&gt;?limit=10</div>
+            <div class="resp-head">
+              <span class="status" id="respStatus"></span>
+              <span class="resp-meta" id="respMeta"></span>
+              <span style="flex:1"></span>
+              <button class="toggle-raw" id="toggleRaw" style="display:none">JSON 원문</button>
+            </div>
+            <div class="table-scroll" id="tableWrap" style="display:none"><table class="data" id="respTable"></table></div>
+            <pre class="raw-json" id="rawJson"></pre>
+            <div class="pager" id="pager" style="display:none">
+              <button class="btn-g btn-sm" id="nextPageBtn">다음 페이지 →</button>
+              <span id="pagerNote"></span>
+            </div>
+            <div class="empty" id="respEmpty">키를 연결하고 호출하면 응답이 여기 표시됩니다</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const nf = new Intl.NumberFormat("ko-KR");
+
+// id 는 domainOf() 가 product_id 앞머리에서 뽑는 값과 같아야 한다 — 다르면 그 도메인 제품이
+// 목록에 안 붙고 '준비 중'으로 뜬다(citydata 를 population 으로 적었던 게 그 경우였다)
+const DOMAINS = [
+  { id:"culture",    name:"문화·행사" },
+  { id:"citydata",   name:"인구·도시" },
+  { id:"transit",    name:"대중교통" },
+  { id:"commerce",   name:"상권" },
+  { id:"weather",    name:"날씨" },
+  { id:"traffic",    name:"도로 소통" },   // '교통'은 '대중교통'의 부분 문자열이라 나란히 놓이면 구분이 안 됐다
+];
+// 표시명·그레인 — fixtures/build_fixtures.py 가 계약에서 뽑아 두는 생성물.
+// 계약(_catalog)에 display 필드가 없어 서빙 응답에 안 실려오기 때문이고, v1.2 에 들어가면 지운다.
+let DISPLAY = {};
+
+let PRODUCTS = [];
+let activeDomain = "all";
+let query = "";
+
+const domainOf = (p) => (p.product_id || p.name || "").replace(/^gold_/, "").split("_")[0];
+const titleOf = (p) => (DISPLAY[p.product_id] || {}).title || p.product_id || p.name;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+
+// 컬럼 설명 — 정본은 ASAC-DBT 계약(yml). _catalog.columns 는 name·type 만 실어 오므로
+// fixtures/build_column_docs.py 가 같은 계약에서 뽑아 둔다(손으로 옮긴 사전이 아니다).
+// 계약 v1.2 에 컬럼 설명이 들어가면 이 파일과 생성기는 지운다.
+let COLUMN_DOCS = {};
+// 조인 키 표시 — 이 데이터를 남의 데이터에 붙이는 지점
+const JOIN_KEY = /^(admin_dong_code|gu_code|stat_region_cd)$/;
+
+// 앵커 이동 — 브라우저의 로드 시점 점프에 맡길 수 없다. 목록·시작하기가 JS 로 렌더되면서
+// 앵커 위쪽 높이가 바뀌기 때문(홈의 '무료로 시작'·하단 버튼이 쓰는 /catalog#auth 진입이 맨 위에 떨어지던 원인).
+// 같은 해시를 다시 눌러도 동작하도록 hashchange 가 아니라 직접 스크롤한다.
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function goHash(hash, behavior) {
+  const el = hash && document.getElementById(hash.slice(1));
+  if (!el) return;
+  history.replaceState(null, "", hash);   // 주소는 맞추되 브라우저 점프는 일으키지 않는다
+  el.scrollIntoView({ behavior: REDUCED ? "auto" : (behavior || "smooth"), block: "start" });
+  // 사이드바 '리소스'에 현재 위치를 표시한다 — 세 진입점이 한 문서라, 어디에 왔는지가 안 보이면
+  // 링크가 죽은 것처럼 읽힌다
+  for (const li of document.querySelectorAll("[data-hash]"))
+    li.classList.toggle("active", li.dataset.hash === hash);
+}
+
+async function boot() {
+  const res = await fetch("/api/catalog");
+  PRODUCTS = (await res.json()).products || [];
+  // 설명·표시명이 없어도 카탈로그는 그대로 뜬다 — 부가 정보라 실패를 삼킨다
+  try { COLUMN_DOCS = await (await fetch("/column-docs.json")).json(); } catch { COLUMN_DOCS = {}; }
+  try { DISPLAY = await (await fetch("/product-display.json")).json(); } catch { DISPLAY = {}; }
+  const q0 = new URLSearchParams(location.search).get("q");
+  if (q0) { $("q").value = q0; query = q0.trim().toLowerCase(); }
+  renderNav(); renderStart(); renderList(); renderSelect();
+  updatePreview();
+  if (location.hash) goHash(location.hash, "auto");   // 렌더가 끝난 뒤라야 위치가 맞는다
+}
+
+function renderNav() {
+  const counts = {};
+  for (const p of PRODUCTS) counts[domainOf(p)] = (counts[domainOf(p)] || 0) + 1;
+  for (const d of Object.keys(counts)) if (!DOMAINS.some((x) => x.id === d)) DOMAINS.push({ id:d, name:d });
+  const ul = $("dnav");
+  ul.innerHTML = "";
+  const all = document.createElement("li");
+  all.className = activeDomain === "all" ? "active" : "";
+  all.innerHTML = "<span class='dot'></span>전체<span class='cnt'>" + PRODUCTS.length + "</span>";
+  all.onclick = () => { activeDomain = "all"; renderNav(); renderList(); };
+  ul.appendChild(all);
+  for (const d of DOMAINS) {
+    const n = counts[d.id] || 0;
+    const li = document.createElement("li");
+    li.className = (activeDomain === d.id ? "active " : "") + (n ? "" : "soon");
+    li.innerHTML = "<span class='dot'></span>" + d.name +
+      (n ? "<span class='cnt'>" + n + "</span>" : "<span class='soon-tag'>준비 중</span>");
+    if (n) li.onclick = () => { activeDomain = d.id; renderNav(); renderList(); };
+    ul.appendChild(li);
+  }
+}
+
+function renderStart() {
+  const step = (n, tt, dd, hash) =>
+    "<div class='step' onclick=\"goHash('" + hash + "')\"><div class='num'>" + n + "</div>" +
+    "<div><div class='tt'>" + tt + "</div><div class='dd'>" + dd + "</div></div></div>";
+  $("steps").innerHTML =
+    step(1, "API 키 받기", "이메일만 넣으면 즉시 발급됩니다", "#auth") +
+    step(2, "데이터 고르기", "답하고 싶은 질문으로 찾아보세요", "#catalog") +
+    step(3, "바로 호출하기", "curl 한 줄 · JSON 응답", "#playground");
+  $("terms").innerHTML =
+    "<span><b>무료</b></span>" +
+    "<span>키당 하루 <b>1,000회</b> · 분당 <b>60회</b></span>" +
+    "<span>매일 1회 갱신</span>" +
+    "<span>REST · JSON 표준</span>";
+}
+function fmtFresh(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  const kst = new Date(d.getTime() + 9 * 3600 * 1000);
+  return kst.toISOString().slice(0, 16).replace("T", " ") + " KST";
+}
+
+function visible() {
+  return PRODUCTS.filter((p) => {
+    if (activeDomain !== "all" && domainOf(p) !== activeDomain) return false;
+    if (!query) return true;
+    const hay = (titleOf(p) + " " + (p.product_question || "") + " " + p.name).toLowerCase();
+    return hay.includes(query);
+  });
+}
+
+function renderList() {
+  const list = visible();
+  const dn = activeDomain === "all" ? "전체 제품" : (DOMAINS.find((d) => d.id === activeDomain) || {}).name;
+  $("listTitle").textContent = dn;
+  $("listHint").textContent = list.length + "개" + (query ? " · '" + query + "' 검색" : "");
+  const body = $("plistBody");
+  body.innerHTML = "";
+  if (!list.length) { body.innerHTML = "<div class='empty' style='border:0'>조건에 맞는 제품이 없습니다</div>"; return; }
+  for (const p of list) {
+    const d = DISPLAY[p.product_id] || {};
+    const row = document.createElement("div");
+    row.className = "prow";
+    row.innerHTML =
+      "<div class='t'>" + titleOf(p) + "<small>" + p.name + "</small></div>" +
+      "<div class='q'>" + (p.product_question || "—") + "</div>" +
+      "<div class='n'>" + nf.format(p.row_count || 0) + "</div>" +
+      (p.time_axis ? "<span class='badge'>" + p.time_axis + "</span>" : "<span class='badge dim'>명부형</span>") +
+      "<div class='act'><button class='btn-g btn-sm' data-try='" + p.name + "'>써보기</button></div>";
+    const detail = document.createElement("div");
+    detail.className = "pdetail";
+    const cols = p.columns || [];
+    detail.innerHTML =
+      "<div class='dhead'>엔드포인트</div>" +
+      "<div class='endpoint'><span class='m'>GET</span> /api/data/" + p.name + "?limit=100" +
+      (p.time_axis ? "&from=2026-07-01&to=2026-07-31" : "") + "</div>" +
+      "<div class='dhead' style='margin-top:12px'>스키마 · " + cols.length + "컬럼" + (d.unit ? " · 그레인: " + d.unit : "") +
+      (p.exported_at ? " · 마지막 갱신 " + fmtFresh(p.exported_at) : "") + "</div>" +
+      "<div class='cols'>" + cols.map((c) => {
+        const ds = (COLUMN_DOCS[p.name] || {})[c.name];
+        return "<div class='col-item'><span><code>" + c.name + "</code>" +
+          (JOIN_KEY.test(c.name) ? "<span class='kk'>JOIN</span>" : "") + "</span>" +
+          "<span class='ty'>" + c.type + "</span>" +
+          (ds ? "<span class='ds'>" + esc(ds) + "</span>"
+              : "<span class='ds none'>설명 준비 중</span>") + "</div>";
+      }).join("") + "</div>" +
+      "<div style='margin-top:12px'><button class='btn-g' data-pv='" + p.name + "'>샘플 5행 미리보기 — 키 없이</button></div>" +
+      "<div class='table-scroll' data-pvwrap style='display:none;margin-top:8px'><table class='data'></table></div>";
+    row.addEventListener("click", (e) => {
+      if (e.target.closest("[data-try]")) return;
+      detail.classList.toggle("open");
+    });
+    // 무인증 미리보기 — 물건을 먼저 보여준다 (쿼터 무과금)
+    detail.querySelector("[data-pv]").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const wrap = detail.querySelector("[data-pvwrap]");
+      if (wrap.style.display === "block") { wrap.style.display = "none"; btn.textContent = "샘플 5행 미리보기 — 키 없이"; return; }
+      btn.disabled = true; btn.textContent = "불러오는 중…";
+      try {
+        const res = await fetch("/api/preview/" + btn.dataset.pv);
+        const b = await res.json();
+        const rows = b.rows || [];
+        const tcols = rows.length ? Object.keys(rows[0]) : [];
+        wrap.querySelector("table").innerHTML =
+          "<thead><tr>" + tcols.map((c) => "<th>" + c + "</th>").join("") + "</tr></thead>" +
+          "<tbody>" + rows.map((r) =>
+            "<tr>" + tcols.map((c) => "<td>" + (r[c] ?? "<span style='color:var(--faint)'>∅</span>") + "</td>").join("") + "</tr>"
+          ).join("") + "</tbody>";
+        wrap.style.display = "block";
+        btn.textContent = "미리보기 접기";
+      } catch { btn.textContent = "불러오기 실패 — 다시 시도"; }
+      finally { btn.disabled = false; }
+    });
+    body.appendChild(row); body.appendChild(detail);
+  }
+  body.querySelectorAll("[data-try]").forEach((b) => b.addEventListener("click", () => {
+    $("pTable").value = b.dataset.try;
+    onTableChange();
+    goHash("#playground");
+  }));
+}
+
+function renderSelect() {
+  const sel = $("pTable");
+  sel.innerHTML = "";
+  for (const p of PRODUCTS) {
+    const o = document.createElement("option");
+    o.value = p.name; o.textContent = titleOf(p) + " — " + p.name;
+    sel.appendChild(o);
+  }
+  onTableChange();
+}
+
+function currentProduct() { return PRODUCTS.find((p) => p.name === $("pTable").value); }
+function onTableChange() {
+  const p = currentProduct();
+  if (!p) return;
+  $("rangeField").style.display = p.time_axis ? "block" : "none";
+  $("axisName").textContent = p.time_axis || "";
+  resetPaging();
+  updatePreview();
+}
+function buildPath() {
+  const p = currentProduct();
+  if (!p) return "";
+  const q = new URLSearchParams();
+  q.set("limit", $("pLimit").value || "10");
+  if (p.time_axis && $("pFrom").value.trim()) q.set("from", $("pFrom").value.trim());
+  if (p.time_axis && $("pTo").value.trim()) q.set("to", $("pTo").value.trim());
+  return "/api/data/" + p.name + "?" + q.toString();
+}
+function updatePreview() {
+  const key = $("pKey").value.trim();
+  $("reqPreview").innerHTML =
+    "<span class='m'>curl</span> -H \"Authorization: Bearer " + (key ? key.slice(0, 8) + "…" : "&lt;API_KEY&gt;") + "\" \\\n" +
+    "  \"" + location.origin + buildPath() + "\"";
+  const chip = $("keychip");
+  if (key) { chip.textContent = key.slice(0, 8) + "…"; chip.className = "keychip on"; }
+  else { chip.textContent = "키 미연결"; chip.className = "keychip"; }
+}
+async function refreshQuota() {
+  const key = $("pKey").value.trim();
+  if (!key) return;
+  try {
+    const res = await fetch("/api/me", { headers: { authorization: "Bearer " + key } });
+    if (!res.ok) return;
+    const b = await res.json();
+    $("quotaFill").style.width = Math.min(100, (b.used_today / b.daily_quota) * 100) + "%";
+    $("quotaTxt").textContent = nf.format(b.used_today) + " / " + nf.format(b.daily_quota);
+    $("quotaWho").textContent = b.email + " · " + b.day;
+  } catch {}
+}
+function renderRows(rows) {
+  const tbl = $("respTable");
+  tbl.innerHTML = "";
+  if (!rows.length) { $("tableWrap").style.display = "none"; return; }
+  const cols = Object.keys(rows[0]);
+  tbl.innerHTML =
+    "<thead><tr>" + cols.map((c) => "<th>" + c + "</th>").join("") + "</tr></thead>" +
+    "<tbody>" + rows.slice(0, 15).map((r) =>
+      "<tr>" + cols.map((c) => "<td>" + (r[c] ?? "<span style='color:var(--faint)'>∅</span>") + "</td>").join("") + "</tr>"
+    ).join("") + "</tbody>";
+  $("tableWrap").style.display = "block";
+}
+// problem+json → 사람이 읽는 한국어. 매핑 없으면 서버 detail 그대로.
+function friendly(status, body) {
+  const t = (body && body.title) || "";
+  if (t === "rotate confirmation required") return null; // 별도 확인 플로가 처리
+  if (status === 429 && t === "issuance rate limited")
+    return "같은 네트워크에서 발급이 잦았어요 — IP당 시간당 5회까지예요. 잠시 뒤 다시 시도해주세요.";
+  if (status === 429 && t === "burst rate limited")
+    return `너무 빠르게 호출했어요 — 분당 60건까지예요. ${(body && body.retry_after) || 60}초 뒤 다시 시도해주세요.`;
+  if (status === 429) return "오늘 호출 한도를 모두 썼어요 — 내일 00:00(KST)에 리셋됩니다.";
+  if (status === 409 && t === "cursor expired")
+    return "데이터가 그 사이 새로 발행됐어요 — 첫 페이지부터 다시 받아주세요.";
+  if (status === 401) return "키가 유효하지 않아요 — 위 '인증 · API 키'에서 발급하거나 다시 입력해주세요.";
+  if (status === 403) return "폐기된 키예요 — 같은 이메일로 재발급하면 새 키를 받을 수 있어요.";
+  if (status === 400 && t === "no time axis")
+    return "이 데이터는 시간축이 없어서 기간(from/to) 필터를 지원하지 않아요 — 기간을 비우고 호출해주세요.";
+  if (status === 400 && t === "unknown filter") return (body.detail || "") + " — 컬럼 이름 오타를 확인해주세요.";
+  return (body && (body.detail || body.title)) || "요청이 실패했어요.";
+}
+function showStatus(code, msg) {
+  const s = $("respStatus");
+  s.textContent = "HTTP " + code;
+  s.className = "status " + (String(code)[0] === "2" ? "ok" : "err");
+  $("respMeta").textContent = msg || "";
+}
+// 페이지 상태 — 커서는 "이 질의를 이어받는 표"라, 질의가 바뀌면(테이블·limit·기간) 버려야 한다
+let pageCursor = null, pageNo = 0, pageRows = 0;
+function resetPaging() {
+  pageCursor = null; pageNo = 0; pageRows = 0;
+  $("pager").style.display = "none";
+  $("pagerNote").textContent = "";
+}
+
+async function run(useCursor) {
+  const key = $("pKey").value.trim();
+  if (!key) { showStatus(401, "키를 먼저 발급/입력하세요"); return; }
+  if (!useCursor) resetPaging();
+  const btn = useCursor ? $("nextPageBtn") : $("runBtn");
+  btn.disabled = true;
+  try {
+    const path = buildPath() + (useCursor && pageCursor ? "&cursor=" + encodeURIComponent(pageCursor) : "");
+    const res = await fetch(path, { headers: { authorization: "Bearer " + key } });
+    const body = await res.json();
+    $("rawJson").textContent = JSON.stringify(body, null, 2);
+    $("toggleRaw").style.display = "inline";
+    $("respEmpty").style.display = "none";
+    if (res.ok) {
+      pageNo += 1;
+      pageRows += body.row_count;
+      showStatus(res.status, body.row_count + "행 · limit " + body.limit +
+        (pageNo > 1 ? " · " + pageNo + "페이지(누적 " + nf.format(pageRows) + "행)" : "") +
+        (body.time_axis ? " · 축 " + body.time_axis : ""));
+      renderRows(body.rows || []);
+      $("rawJson").style.display = "none";
+      pageCursor = body.next_cursor || null;
+      $("pager").style.display = pageNo > 1 || body.has_more ? "flex" : "none";
+      $("nextPageBtn").style.display = body.has_more ? "inline-block" : "none";
+      $("pagerNote").textContent = body.has_more
+        ? "커서 이어받기 — 페이지마다 쿼터 1회"
+        : "마지막 페이지 · 누적 " + nf.format(pageRows) + "행";
+    } else {
+      showStatus(res.status, friendly(res.status, body));
+      $("tableWrap").style.display = "none";
+      $("rawJson").style.display = "block";
+      if (res.status === 409) resetPaging();   // 재발행 — 커서를 들고 있어도 의미가 없다
+    }
+  } catch (e) { showStatus("ERR", String(e)); }
+  finally { btn.disabled = false; refreshQuota(); }
+}
+
+// 발급은 2단계 — 등록된 이메일이면 서버가 409 를 주고, 버튼이 "재발급 확인" 모드로 바뀐다
+function resetIssueBtn() {
+  const b = $("issueBtn");
+  b.textContent = "발급"; b.dataset.confirm = ""; b.style.background = "";
+}
+$("issueBtn").addEventListener("click", async () => {
+  $("issueErr").textContent = "";
+  const confirmRotate = $("issueBtn").dataset.confirm === "1";
+  const res = await fetch("/api/keys", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: $("email").value, ...(confirmRotate ? { confirm_rotate: true } : {}) }),
+  });
+  const body = await res.json();
+  if (res.status === 409 && body.title === "rotate confirmation required") {
+    $("issueErr").textContent =
+      "이 이메일에는 이미 키(" + body.key_prefix + "…)가 있어요. 재발급하면 그 키는 즉시 만료됩니다 — 계속하려면 버튼을 한 번 더 눌러주세요.";
+    const b = $("issueBtn");
+    b.textContent = "기존 키 만료하고 재발급"; b.dataset.confirm = "1"; b.style.background = "var(--red-ink, #b3423a)";
+    return;
+  }
+  resetIssueBtn();
+  if (!res.ok) { $("issueErr").textContent = friendly(res.status, body); return; }
+  $("keyValue").textContent = body.key;
+  $("keyReveal").style.display = "block";
+  if (body.rotated) $("keyNote").textContent = "기존 키는 방금 폐기되었습니다. 새 키는 지금 한 번만 표시됩니다.";
+  $("pKey").value = body.key;
+  resetRevokeUi();   // 새 키다 — 직전 키의 폐기 결과가 남아 있으면 안 된다
+  updatePreview(); refreshQuota();
+});
+function resetRevokeUi() {
+  const b = $("revokeBtn");
+  b.style.display = "inline-block"; b.textContent = "키 폐기"; b.dataset.confirm = "";
+  $("purgeBtn").style.display = "none";
+  $("revokeNote").className = ""; $("revokeNote").textContent = "";
+}
+$("email").addEventListener("input", () => { resetIssueBtn(); $("issueErr").textContent = ""; });
+$("keyEye").addEventListener("click", () => {
+  const k = $("pKey");
+  const show = k.type === "password";
+  k.type = show ? "text" : "password";
+  $("keyEye").textContent = show ? "가리기" : "보기";
+});
+$("copyKey").addEventListener("click", async () => {
+  await navigator.clipboard.writeText($("keyValue").textContent);
+  $("copyKey").textContent = "복사됨";
+  setTimeout(() => ($("copyKey").textContent = "복사"), 1500);
+});
+$("toggleRaw").addEventListener("click", () => {
+  const r = $("rawJson");
+  const show = r.style.display !== "block";
+  r.style.display = show ? "block" : "none";
+  $("tableWrap").style.display = show ? "none" : "block";
+});
+$("q").addEventListener("input", () => { query = $("q").value.trim().toLowerCase(); renderList(); });
+// 폐기 — 되돌릴 수 없으니 한 번 더 묻는다(발급의 rotate 확인과 같은 규칙).
+// 폐기한 키로도 삭제는 되어야 해서(서버가 allowRevoked 로 받는다), 폐기 뒤에 '완전 삭제'가 열린다.
+async function callRevoke(purge) {
+  const key = $("pKey").value.trim();
+  if (!key) { $("revokeNote").textContent = "폐기할 키를 위 칸에 넣어주세요"; return; }
+  const btn = purge ? $("purgeBtn") : $("revokeBtn");
+  btn.disabled = true;
+  try {
+    const res = await fetch("/api/keys" + (purge ? "?purge=true" : ""),
+      { method: "DELETE", headers: { authorization: "Bearer " + key } });
+    const body = await res.json();
+    if (!res.ok) { $("revokeNote").className = ""; $("revokeNote").textContent = friendly(res.status, body); return; }
+    $("revokeNote").className = "done";
+    $("revokeNote").textContent = purge
+      ? "삭제했습니다 — 키·이메일·사용량이 지워졌습니다."
+      : "폐기했습니다 — 이 키는 이제 403입니다. 같은 이메일로 다시 발급할 수 있습니다.";
+    $("purgeBtn").style.display = purge ? "none" : "inline-block";
+    $("revokeBtn").style.display = "none";
+    if (purge) $("pKey").value = "";
+    resetPaging();
+    refreshQuota();
+  } catch (e) { $("revokeNote").className = ""; $("revokeNote").textContent = String(e); }
+  finally { btn.disabled = false; }
+}
+$("revokeBtn").addEventListener("click", () => {
+  const b = $("revokeBtn");
+  if (b.dataset.confirm !== "1") {
+    b.dataset.confirm = "1"; b.textContent = "정말 폐기";
+    $("revokeNote").className = "";
+    $("revokeNote").textContent = "폐기하면 이 키로는 더 이상 호출할 수 없습니다.";
+    return;
+  }
+  b.dataset.confirm = ""; b.textContent = "키 폐기";
+  callRevoke(false);
+});
+$("purgeBtn").addEventListener("click", () => callRevoke(true));
+
+// run(useCursor) 이라 이벤트 객체를 그대로 넘기면 안 된다 — 클릭 이벤트는 truthy 다
+$("runBtn").addEventListener("click", () => run(false));
+$("nextPageBtn").addEventListener("click", () => run(true));
+$("meBtn").addEventListener("click", () => { updatePreview(); refreshQuota(); });
+$("pTable").addEventListener("change", onTableChange);
+// 질의가 바뀌면 들고 있던 커서는 다른 질의의 표가 된다 — 버린다
+for (const id of ["pLimit", "pFrom", "pTo"]) $(id).addEventListener("input", resetPaging);
+for (const id of ["pKey", "pLimit", "pFrom", "pTo"]) $(id).addEventListener("input", updatePreview);
+
+boot();
+</script>
+</body>
+</html>

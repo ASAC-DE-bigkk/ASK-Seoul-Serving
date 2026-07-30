@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ASK: SEOUL — 서울 데이터 API 허브</title>
+<meta name="description" content="서울의 문화·인구·교통·상권·날씨 데이터를 행정동 코드 하나로 조인해 쓰는 API 허브. 커버리지는 도메인마다 다르며 제품마다 명시. 이메일만으로 즉시 키 발급.">
+<meta name="theme-color" content="#08110f">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ASK: SEOUL">
+<meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
+<meta property="og:description" content="흩어진 서울 데이터를 같은 축 위에. 미리보기는 키 없이 무료.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    /* 팔레트 — 단청(丹靑)에서 가져왔다. 청록이 데이터, 주홍이 행동.
+       제네릭 SaaS 블루를 쓰지 않는 이유: 이 제품의 소재가 서울이기 때문이다.
+       중성색도 순회색이 아니라 청록 쪽으로 아주 살짝 기울여 놓았다. */
+    --bg:#f6f7f6; --panel:#ffffff;
+    --ink:#12211f; --muted:#48605c; --faint:#8fa3a0; --line:#e6eae8; --line-strong:#ccd5d2;
+    --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
+    --teal:#0f6f68; --teal-deep:#0a534e; --teal-soft:#e9f4f2; --teal-line:#a9d5cf;
+    --green-soft:#ecfdf3; --green-ink:#0a6b45; --red-ink:#b42318; --red-soft:#fef3f2;
+    /* 어두운 표면 — 히어로·데모·CTA 가 공유한다 */
+    --deck:#08110f; --deck-2:#0e1a18; --deck-line:rgba(214,240,235,.10);
+    --deck-ink:#c2d6d1; --deck-dim:#71908a;
+    --shadow-xs:0 1px 2px rgba(16,24,40,.05);
+    --shadow-sm:0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
+    --shadow-md:0 6px 16px rgba(11,18,32,.10);
+    --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono',monospace;
+  }
+  * { box-sizing:border-box; margin:0; }
+  html { scroll-behavior:smooth; }
+  /* 서체 — 실측(2026-07-28, 이 개발 PC): 'Pretendard Variable' 미설치, Pretendard 설치됨.
+     대부분의 방문자 PC 에는 Pretendard 가 없어 Windows=맑은 고딕 / macOS=Apple SD Gothic Neo 로
+     떨어진다. system-ui(Segoe UI)에는 한글이 없어 글리프 단위 폴백이 일어나므로, 한글 폴백을
+     운에 맡기지 않고 직접 지정한다. 웹폰트는 쓰지 않는다 — 한글 폰트는 무거워 첫 화면을 늦춘다 */
+  body { font-family:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
+                     system-ui,-apple-system,'Noto Sans KR',sans-serif;
+         background:var(--bg); color:var(--ink); font-size:15px; line-height:1.7; word-break:keep-all;
+         -webkit-font-smoothing:antialiased; text-size-adjust:100%; }
+  a { color:inherit; text-decoration:none; }
+  .wrap { max-width:1140px; margin:0 auto; padding:0 24px; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:6px; }
+  .deck :focus-visible, .nav :focus-visible { outline-color:#5fd6c6; }
+  /* 데이터를 가리키는 미세 라벨 — 이 페이지의 서체 규칙 */
+  .lab { font-family:var(--mono); font-size:10.5px; font-weight:600; letter-spacing:.12em;
+         text-transform:uppercase; color:var(--faint); }
+  .deck .lab { color:var(--deck-dim); }
+  .num { font-variant-numeric:tabular-nums; }
+
+  /* ─── nav ─── */
+  .nav { background:var(--deck); border-bottom:1px solid var(--deck-line); position:sticky; top:0; z-index:20; }
+  .nav-in { display:flex; align-items:center; gap:20px; height:56px; }
+  .brand { display:flex; align-items:center; gap:10px; }
+  .brand .logo { width:30px; height:30px; border-radius:7px;
+                 background:linear-gradient(140deg,#0f6f68,#2aa79a);
+                 display:flex; align-items:center; justify-content:center;
+                 font-weight:800; font-size:13px; color:#fff; }
+  .brand .nm { font-weight:700; font-size:14px; color:#fff; letter-spacing:-.01em; line-height:1.2; }
+  .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
+                color:var(--deck-dim); letter-spacing:.1em; text-transform:uppercase; }
+  .nav-links { display:flex; gap:2px; margin-left:6px; }
+  .nav-links a { font-size:13px; font-weight:500; color:var(--deck-ink); padding:6px 12px; border-radius:6px; }
+  .nav-links a:hover { background:rgba(255,255,255,.06); color:#fff; }
+  .nav-links a.active { color:#fff; font-weight:600; background:rgba(255,255,255,.08); }
+  .nav .spacer { flex:1; }
+  .env-pill { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px;
+              font-weight:600; letter-spacing:.08em; padding:4px 10px; border-radius:5px;
+              border:1px solid var(--deck-line); color:var(--deck-ink); white-space:nowrap; }
+  .env-pill i { width:5px; height:5px; border-radius:50%; background:#f79009; }
+  .nav-cta { font-size:12.5px; font-weight:600; color:#fff; background:var(--accent);
+             padding:7px 14px; border-radius:6px; white-space:nowrap; }
+  .nav-cta:hover { background:var(--accent-deep); }
+  @media (max-width:900px){ .env-pill { display:none; } .nav-in { gap:12px; } }
+  @media (max-width:760px){
+    .nav-links a { display:none; }
+    .nav-links a.keep { display:block; padding:6px 10px; }
+    .brand .sub { display:none; }
+  }
+
+  /* ─── hero: 공간축 격자 위 ───
+     배경은 426칸 격자다 — 서울의 행정동 수와 같은 칸 수. 이 제품의 차별점이
+     "행정동 단위로 자를 수 있다"인데, 그 사실을 문장이 아니라 표면으로 말한다.
+     칸의 밝기는 장식이지 실측이 아니다(그래서 지도라고 부르지 않는다). */
+  .deck { background:var(--deck); color:#fff; }
+  .hero { position:relative; overflow:hidden; padding:84px 0 92px; }
+  #field { position:absolute; inset:0; width:100%; height:100%; pointer-events:none;
+           -webkit-mask-image:radial-gradient(120% 100% at 78% 44%, #000 12%, transparent 72%);
+                   mask-image:radial-gradient(120% 100% at 78% 44%, #000 12%, transparent 72%); }
+  /* 아래 섹션으로 넘어가는 경계를 지운다 */
+  .hero::after { content:""; position:absolute; left:0; right:0; bottom:0; height:170px;
+                 background:linear-gradient(transparent, var(--deck)); pointer-events:none; }
+  .hero .wrap { position:relative; }
+  .hero-in { position:relative; z-index:2; max-width:700px; }
+
+  .hero h1 { font-size:clamp(34px, 5.6vw, 62px); font-weight:800; letter-spacing:-.038em;
+             line-height:1.06; text-wrap:balance; margin-top:18px; }
+  .hero h1 .n { font-variant-numeric:tabular-nums; color:#5fd6c6; }
+  .hero h1 .l2 { display:block; color:var(--deck-ink); font-weight:400; letter-spacing:-.03em; }
+  .hero .sub { font-size:16.5px; color:var(--deck-ink); margin-top:20px; max-width:470px; }
+  .hero .sub b { color:#fff; font-weight:600; }
+  /* 격자가 무엇인지 밝히는 각주 — 데이터인 척하지 않는다 */
+  .hero .fieldnote { position:absolute; right:0; bottom:-4px; z-index:2; text-align:right;
+                     max-width:200px; line-height:1.5; }
+  @media (max-width:1080px){ .hero .fieldnote { display:none; } }
+  .search-hero { margin-top:28px; display:flex; gap:8px; max-width:470px; }
+  .search-hero .box { flex:1; position:relative; }
+  .search-hero input { width:100%; font:inherit; font-size:14px; padding:12px 14px 12px 40px;
+                       border-radius:8px; border:1px solid var(--deck-line);
+                       background:rgba(255,255,255,.05); color:#fff; outline:none;
+                       transition:border-color .12s, background .12s, box-shadow .12s; }
+  .search-hero input::placeholder { color:var(--deck-dim); }
+  .search-hero input:focus { border-color:var(--accent); background:rgba(255,255,255,.08);
+                             box-shadow:0 0 0 3px rgba(184,73,42,.28); }
+  .search-hero .ico { position:absolute; left:13px; top:50%; transform:translateY(-50%);
+                      color:var(--deck-dim); display:flex; }
+  .search-hero button { font:inherit; font-size:13.5px; font-weight:600; color:#fff; background:var(--accent);
+                        border:0; border-radius:8px; padding:0 20px; cursor:pointer; }
+  .search-hero button:hover { background:var(--accent-deep); }
+  .hot { display:flex; gap:6px; flex-wrap:wrap; margin-top:13px; align-items:center; }
+  .hot a { font-size:12px; font-weight:500; color:var(--deck-ink); padding:3px 10px;
+           border:1px solid var(--deck-line); border-radius:999px; }
+  .hot a:hover { border-color:var(--accent); color:#fff; }
+
+  /* ─── 계기 스트립 (통계) — 카드 4장 대신 구획된 한 줄 ─── */
+  .strip { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+           box-shadow:var(--shadow-sm); margin-top:-26px; position:relative; z-index:3;
+           display:grid; grid-template-columns:repeat(4,1fr); }
+  .strip .cell { padding:15px 20px; border-left:1px solid var(--line); }
+  .strip .cell:first-child { border-left:0; }
+  .strip .v { font-size:22px; font-weight:800; letter-spacing:-.02em; margin-top:5px;
+              font-variant-numeric:tabular-nums; }
+  .strip .v .u { font-size:12px; font-weight:600; color:var(--muted); }
+  .strip .k { font-size:11.5px; color:var(--muted); margin-top:1px; }
+  @media (max-width:820px){
+    .strip { grid-template-columns:repeat(2,1fr); }
+    .strip .cell:nth-child(3) { border-left:0; }
+    .strip .cell:nth-child(n+3) { border-top:1px solid var(--line); }
+  }
+
+  /* ─── sections ─── */
+  section { padding:54px 0 0; }
+  .sec-head { display:flex; align-items:baseline; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .sec-head h2 { font-size:19px; font-weight:700; letter-spacing:-.015em; }
+  .sec-head .hint { font-size:12.5px; color:var(--faint); }
+  .sec-head .more { margin-left:auto; font-size:13px; font-weight:600; color:var(--accent-deep); }
+  .sec-head .more:hover { text-decoration:underline; text-underline-offset:3px; }
+
+  /* product cards */
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px;
+          box-shadow:var(--shadow-xs); display:flex; flex-direction:column; gap:8px;
+          transition:border-color .12s, box-shadow .12s, transform .12s; }
+  a.card:hover { border-color:var(--accent-line); box-shadow:var(--shadow-md); transform:translateY(-1px); }
+  .card .top { display:flex; align-items:flex-start; gap:10px; }
+  .card .t { font-weight:700; font-size:14px; letter-spacing:-.01em; }
+  .card .t small { display:block; font-family:var(--mono); font-size:10.5px; font-weight:400;
+                   color:var(--faint); margin-top:2px; }
+  .card .badge { margin-left:auto; flex:none; font-family:var(--mono); font-size:10px; font-weight:600;
+                 padding:2px 8px; border-radius:4px; background:var(--accent-soft);
+                 color:var(--accent-deep); border:1px solid var(--accent-line); white-space:nowrap; }
+  .card .badge.dim { background:var(--panel); color:var(--muted); border-color:var(--line-strong);
+                     font-family:inherit; }
+  .card .q { font-size:13.5px; color:var(--muted); flex:1; }
+  .card .meta { display:flex; gap:12px; font-size:12px; color:var(--faint);
+                font-variant-numeric:tabular-nums; border-top:1px solid var(--line); padding-top:9px; }
+  .card .meta b { color:var(--ink); font-weight:600; }
+  .card .meta .free { margin-left:auto; color:var(--green-ink); font-weight:600; }
+
+  /* domains — 카드 대신 촘촘한 줄 */
+  /* 칸 사이 1px 간격 + 컨테이너 배경 = 줄이 접혀도 가로·세로 구분선이 항상 맞는다 */
+  .domains { display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:1px;
+             background:var(--line); border:1px solid var(--line); border-radius:10px;
+             overflow:hidden; box-shadow:var(--shadow-xs); }
+  .dom { padding:13px 16px; background:var(--panel); display:flex; flex-direction:column; gap:2px; }
+  a.dom:hover { background:#f2f6f4; }
+  .dom .t { font-weight:700; font-size:13.5px; display:flex; align-items:center; gap:7px; }
+  .dom .t i { width:6px; height:6px; border-radius:50%; background:#2aa79a; flex:none; }
+  .dom.soon .t { color:var(--muted); } .dom.soon .t i { background:var(--line-strong); }
+  .dom .d { font-size:11.5px; color:var(--faint); }
+  .dom .n { font-family:var(--mono); font-size:10px; font-weight:600; color:var(--accent-deep); margin-top:4px;
+            display:flex; align-items:baseline; gap:7px; }
+  /* 공간 단위 — 도메인마다 다르다는 사실이 카드 안에서 바로 읽혀야 한다 */
+  .dom .n .u { font-family:inherit; font-weight:500; color:var(--teal-deep); margin-left:auto;
+               white-space:nowrap; }
+  .dom.soon .n, .dom.soon .n .u { color:var(--faint); }
+
+  /* skeleton · 상태 */
+  .sk { position:relative; overflow:hidden; background:#e9eeec; border-radius:5px; color:transparent; }
+  .sk::after { content:""; position:absolute; inset:0; transform:translateX(-100%);
+               background:linear-gradient(90deg, transparent, rgba(255,255,255,.7), transparent);
+               animation:shimmer 1.3s infinite; }
+  @keyframes shimmer { to { transform:translateX(100%); } }
+  .sk-card { height:140px; background:var(--panel); border:1px solid var(--line); border-radius:10px; }
+  .state { grid-column:1/-1; padding:22px; text-align:center; font-size:12.5px; color:var(--muted);
+           border:1px dashed var(--line-strong); border-radius:10px; background:var(--panel); }
+  .state a { color:var(--accent-deep); font-weight:600; text-decoration:underline; text-underline-offset:3px; }
+
+  /* how it works */
+  .how { display:grid; grid-template-columns:1fr 1.15fr; gap:24px; align-items:start; }
+  @media (max-width:940px){ .how { grid-template-columns:1fr; } }
+  .hstep { display:flex; gap:14px; padding:14px 0; border-bottom:1px solid var(--line); }
+  .hstep:last-child { border-bottom:0; }
+  .hstep .num2 { width:26px; height:26px; flex:none; border-radius:7px; background:var(--accent-soft);
+                 color:var(--accent-deep); font-weight:800; font-size:12px; display:flex;
+                 align-items:center; justify-content:center; font-family:var(--mono); }
+  .hstep .tt { font-weight:700; font-size:14px; }
+  .hstep .dd { font-size:13px; color:var(--muted); margin-top:2px; }
+  .hstep .dd code { font-family:var(--mono); font-size:11px; background:var(--bg);
+                    border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+  /* 데모 — 질문에서 응답까지를 3박자로 보여준다. 화면의 명령이 실제로 호출되는 것과 같다 */
+  .demo { background:var(--deck); border:1px solid var(--deck-line); border-radius:10px;
+          overflow:hidden; box-shadow:var(--shadow-md); }
+  .demo .bar { display:flex; align-items:center; gap:8px; padding:10px 15px;
+               border-bottom:1px solid var(--deck-line); }
+  .demo .bar i { width:7px; height:7px; border-radius:50%; background:#294a45; flex:none; }
+  .demo .qs { margin-left:auto; display:flex; gap:6px; }
+  .demo .qs button { width:7px; height:7px; padding:0; border:0; border-radius:50%;
+                     background:#294a45; cursor:pointer; transition:background .15s; }
+  .demo .qs button[aria-selected="true"] { background:#5fd6c6; }
+  .demo .body { padding:14px 16px 16px; }
+  .demo .q { font-size:14px; font-weight:600; color:#fff; line-height:1.45; }
+  .demo .cmd { font-family:var(--mono); font-size:12px; line-height:1.6; color:#e4e9f1;
+               margin-top:9px; word-break:break-all; min-height:2.2em; }
+  .demo .cmd .g { color:#7fd6a8; font-weight:700; } .demo .cmd .b { color:#5fd6c6; }
+  .demo .caret { display:inline-block; width:7px; height:12px; background:#5fd6c6;
+                 vertical-align:-1px; animation:blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  /* 좁은 화면에서 표가 본문을 밀지 않게 — 가로 스크롤은 표 안에서만 */
+  .demo .out { overflow-x:auto; }
+  .demo table { width:100%; border-collapse:collapse; margin-top:12px; font-size:12.5px; }
+  .demo th { text-align:left; font-family:var(--mono); font-size:9.5px; font-weight:600;
+             letter-spacing:.06em; text-transform:uppercase; color:var(--deck-dim);
+             padding:0 12px 6px 0; white-space:nowrap; }
+  .demo td { padding:6px 12px 6px 0; color:var(--deck-ink); border-top:1px solid var(--deck-line);
+             font-variant-numeric:tabular-nums; max-width:220px; overflow:hidden;
+             text-overflow:ellipsis; white-space:nowrap; }
+  .demo td.k { color:#fff; font-weight:600; }
+  .demo tr.in td { animation:rowin .3s ease both; }
+  @keyframes rowin { from { opacity:0; transform:translateY(5px); } }
+  .demo .fo { margin-top:11px; font-size:12px; color:var(--deck-dim); line-height:1.5; }
+  .demo .fo b { color:#5fd6c6; font-weight:600; }
+  .demo .fo code { font-family:var(--mono); font-size:10.5px; }
+
+  /* cta */
+  .cta { margin:56px 0 0; background:var(--deck); border-radius:12px; padding:34px 38px;
+         display:flex; align-items:center; gap:24px; flex-wrap:wrap; position:relative; overflow:hidden; }
+  .cta::before { content:""; position:absolute; inset:0; pointer-events:none;
+    background-image:linear-gradient(var(--deck-line) 1px, transparent 1px),
+                     linear-gradient(90deg, var(--deck-line) 1px, transparent 1px);
+    background-size:44px 44px;
+    -webkit-mask-image:radial-gradient(520px 200px at 88% 20%, #000, transparent 72%);
+            mask-image:radial-gradient(520px 200px at 88% 20%, #000, transparent 72%); }
+  .cta > * { position:relative; }
+  .cta h3 { color:#fff; font-size:19px; font-weight:800; letter-spacing:-.015em; }
+  .cta p { color:var(--deck-ink); font-size:13.5px; margin-top:4px; }
+  .cta .btns { margin-left:auto; display:flex; gap:10px; flex-wrap:wrap; }
+  .btn-p, .btn-g { display:inline-flex; align-items:center; font-size:13.5px; font-weight:600;
+                   border-radius:8px; padding:10px 18px; }
+  .btn-p { background:var(--accent); color:#fff; } .btn-p:hover { background:var(--accent-deep); }
+  .btn-g { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.25); }
+  .btn-g:hover { border-color:#fff; }
+
+  footer { margin-top:54px; border-top:1px solid var(--line); background:var(--panel); }
+  .foot-in { display:flex; gap:22px; flex-wrap:wrap; padding:22px 0; font-size:12px; color:var(--faint); }
+  .foot-in b { color:var(--muted); font-weight:600; }
+  .foot-in code { font-family:var(--mono); font-size:10.5px; }
+  .foot-in .r { margin-left:auto; }
+  .foot-in a { color:var(--muted); }
+  .foot-in a:hover { color:var(--accent-deep); }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior:auto; }
+    * { animation-duration:.01ms !important; animation-iteration-count:1 !important;
+        transition-duration:.01ms !important; }
+    a.card:hover { transform:none; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="logo" aria-hidden="true">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></a>
+    <!-- 목적지는 /catalog 한 곳뿐이다 — 플레이그라운드·API 키는 그 페이지 안의 섹션이라
+         헤더에 따로 걸면 같은 문서로 가는 링크가 셋이 된다. 섹션 이동은 카탈로그 사이드바 몫. -->
+    <div class="nav-links">
+      <a class="active" href="/">홈</a>
+      <a class="keep" href="/catalog">카탈로그</a>
+    </div>
+    <span class="spacer"></span>
+    <!-- 'LOCAL' 은 우리 배포 환경이지 이용자가 알 일이 아니다. 남길 가치가 있는 건
+         "완성된 상용 서비스가 아니다"라는 사실뿐이라 그것만 남긴다. -->
+    <span class="env-pill"><i aria-hidden="true"></i>프로토타입</span>
+    <a class="nav-cta" href="/catalog#auth">무료로 시작</a>
+  </div>
+</nav>
+
+<header class="deck hero">
+  <canvas id="field" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <div class="hero-in">
+      <div class="lab">Seoul Open Data · Multi-domain API</div>
+      <h1>흩어진 서울 데이터를<span class="l2">같은 축 위에</span></h1>
+      <p class="sub">문화·인구·교통·상권·날씨를 <b>행정동 코드 하나</b>로 붙여 씁니다.
+         커버리지는 도메인마다 다르고, <b>제품마다 그대로 적어둡니다</b> — 문화 426동 전역,
+         실시간 도시데이터 121곳처럼.</p>
+      <form class="search-hero" id="heroSearch">
+        <div class="box">
+          <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span>
+          <input type="search" id="heroQ" placeholder="행사, 혼잡, 박스오피스…" aria-label="데이터 검색">
+        </div>
+        <button type="submit">검색</button>
+      </form>
+      <div class="hot">
+        <a href="/catalog?q=행사">행사 일정</a>
+        <a href="/catalog?q=혼잡">혼잡 패턴</a>
+        <a href="/catalog?q=박스오피스">박스오피스</a>
+        <a href="/catalog?q=외식">동네 상권</a>
+      </div>
+    </div>
+    <p class="lab fieldnote">격자 한 칸 = 행정동 하나<br>커버리지는 도메인마다 다름</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="strip">
+    <div class="cell"><div class="lab">Products</div><div class="v sk" id="statProducts">0종</div><div class="k">제공 중인 데이터 제품</div></div>
+    <!-- 여기에 "426개 행정동"을 커버리지로 적었었는데, 그건 culture 한 도메인의 커버리지다.
+         citydata 는 실시간 관측 121곳, weather 는 KMA 격자 80칸이라 플랫폼 공통값이 아니다.
+         공통인 것은 커버리지가 아니라 **조인 축**(행정동 코드, #48 합의)이라 그것만 적는다.
+         도메인별 실측 커버리지는 아래 도메인 격자에서 각각 밝힌다. 총 행수도 쓰지 않는다 —
+         그레인이 다른 제품을 더한 값이라 의미가 없다(제품별 행수는 카드에 유지) -->
+    <div class="cell"><div class="lab">Join axis</div><div class="v">행정동<span class="u"> 코드</span></div><div class="k">도메인 공통 조인 키</div></div>
+    <div class="cell"><div class="lab">Freshness</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
+    <div class="cell"><div class="lab">Free tier</div><div class="v">1,000<span class="u">회/일</span></div><div class="k">키당 무료 호출</div></div>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <section>
+    <div class="sec-head"><h2>데이터 제품</h2><span class="hint">질문에 바로 답하는 형태로 정제됨</span>
+      <a class="more" href="/catalog" id="allLink">카탈로그 전체 보기 →</a></div>
+    <div class="cards" id="cards">
+      <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
+      <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>도메인</h2><span class="hint">서울을 여섯 각도로 · 공간 단위는 도메인마다 다릅니다</span></div>
+    <div class="domains" id="domains"></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>시작하기</h2><span class="hint">가입 없음 · 이메일만 · 아래 데모는 문화·행사 데이터입니다</span></div>
+    <div class="how">
+      <div>
+        <div class="hstep"><div class="num2">1</div><div>
+          <div class="tt">미리보기로 실물 확인</div>
+          <div class="dd">카탈로그에서 아무 제품이나 열면 <b>키 없이 샘플 5행</b>을 바로 볼 수 있습니다.</div>
+        </div></div>
+        <div class="hstep"><div class="num2">2</div><div>
+          <div class="tt">API 키 발급</div>
+          <div class="dd">이메일 하나로 즉시 발급됩니다. 서버에는 키의 <code>SHA-256 해시</code>만 저장돼요.</div>
+        </div></div>
+        <div class="hstep"><div class="num2">3</div><div>
+          <div class="tt">호출</div>
+          <div class="dd">REST · JSON 표준. 컬럼 필터와 기간(<code>from</code>/<code>to</code>) 조회를 지원합니다.</div>
+        </div></div>
+      </div>
+      <!-- 데모: 화면에 뜬 명령을 실제로 호출한다(무인증 /api/preview). 응답도 실물 -->
+      <div class="demo" id="demo">
+        <div class="bar">
+          <i aria-hidden="true"></i>
+          <span class="lab">질문 → 호출 → 응답</span>
+          <div class="qs" id="demoDots" role="tablist" aria-label="데모 시나리오"></div>
+        </div>
+        <div class="body">
+          <div class="q" id="demoQ">&nbsp;</div>
+          <div class="cmd" id="demoCmd"></div>
+          <div class="out" id="demoOut"></div>
+          <div class="fo" id="demoFoot">&nbsp;</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="cta">
+    <div>
+      <h3>지금 카탈로그에서 직접 확인하세요</h3>
+      <p>모든 제품이 미리보기 무료 — 마음에 들면 그때 키를 받으면 됩니다.</p>
+    </div>
+    <div class="btns">
+      <a class="btn-g" href="/catalog#auth">API 키 발급</a>
+      <a class="btn-p" href="/catalog">카탈로그 둘러보기</a>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <!-- 계약 버전·배치 시각·내부 이슈 번호는 우리 사정이다. 이용자에게 남는 정보만 둔다. -->
+    <span>매일 1회 갱신</span>
+    <span><a href="/legal#attribution">데이터 출처</a></span>
+    <span><a href="/legal#terms">이용약관</a></span>
+    <span><a href="/legal#privacy">개인정보 처리방침</a></span>
+    <span class="r">프로토타입 · 가용성을 보장하지 않습니다</span>
+  </div>
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const nf = new Intl.NumberFormat("ko-KR");
+const HOME_CARDS = 6;  // 홈은 큐레이션 — 나머지는 카탈로그에서
+
+// 표시명 사전 — _catalog 에 표시명 컬럼이 없어 클라이언트가 갖는다.
+// catalog.html 과 같은 생성물(fixtures/build_fixtures.py)을 읽으므로 양쪽을 따로 고칠 일이 없다.
+// 계약에 display 필드가 생기면 서버 응답으로 일원화하고 이 파일은 지운다.
+let DISPLAY = {};
+// 공간 단위는 도메인마다 다르다 — 여기에 실측값을 적어 "426동 전역"이 플랫폼 전체인 것처럼
+// 읽히지 않게 한다. 근거: culture=dim_admin_dong 426 scaffold · citydata=통합 API 121장소
+// (citydata_bronze.py) · weather=config/seoul_kma_grids.csv 80칸 · transit/commerce=gold 그레인이
+// 행정동 · traffic=6종 중 5종이 도로 링크 그레인(나머지 1종 돌발×기상만 행정동).
+// id 는 domainOf() 가 product_id 앞머리에서 뽑는 값과 같아야 한다 — 다르면 그 도메인 제품이
+// 집계에 안 붙고 'SOON' 으로 뜬다(citydata 를 population 으로 적었던 게 그 경우였다)
+// 이름은 서로 헷갈리지 않아야 한다 — 'traffic=교통'은 '대중교통'의 부분 문자열이라 나란히
+// 놓이면 상위 범주처럼 읽혔다. 담고 있는 것(도로 속도·정체 5종)으로 부른다.
+const DOMAINS = [
+  { id:"culture",    name:"문화·행사", desc:"공연·전시·축제·예매",     unit:"행정동 426 전역" },
+  { id:"citydata",   name:"인구·도시", desc:"실시간 인구·도시데이터",   unit:"관측 121곳" },
+  { id:"transit",    name:"대중교통",  desc:"버스·지하철 접근성",       unit:"행정동" },
+  { id:"commerce",   name:"상권",      desc:"업종·매출 분석",           unit:"행정동" },
+  { id:"weather",    name:"날씨",      desc:"기상 관측·예보",           unit:"기상 격자 80" },
+  { id:"traffic",    name:"도로 소통",  desc:"속도·정체·돌발",           unit:"도로 링크" },
+];
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const domainOf = (p) => (p.product_id || p.name || "").replace(/^gold_/, "").split("_")[0];
+const titleOf = (p) => (DISPLAY[p.product_id] || {}).title || p.product_id || p.name;
+
+// 신선도는 카탈로그가 내려주는 exported_at 실측 — 고정 문구 금지(파이프라인 시각과 어긋난다)
+function relTime(iso) {
+  const t = new Date(iso);
+  if (isNaN(t)) return null;
+  const mins = Math.floor((Date.now() - t.getTime()) / 60000);
+  if (mins < 1) return "방금";
+  if (mins < 60) return mins + "분 전";
+  const h = Math.floor(mins / 60);
+  if (h < 48) return h + "시간 전";
+  return Math.floor(h / 24) + "일 전";
+}
+function kstStamp(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  return new Date(d.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ") + " KST";
+}
+
+// ── 데모: 질문 → 호출 → 응답 3박자.
+// 화면에 타이핑되는 명령과 실제로 호출하는 주소가 같다(무인증 /api/preview). 응답도 실물이라
+// 픽스처가 비면 그대로 "표시할 행이 없습니다"가 뜬다 — 꾸며낸 행을 넣지 않는다.
+const DEMOS = [
+  { table: "gold_culture_event_schedule",
+    q: "이번에 서울에서 무슨 행사가 열리나?",
+    cols: [["title", "행사"], ["gu", "자치구"], ["event_start_date", "시작일"]],
+    foot: "행사 하나가 한 행. <b>기간 겹침</b> 조회를 지원해 '이번 주말에 열리는 것'을 한 번에 받습니다." },
+  { table: "gold_culture_activity_by_dong",
+    q: "어느 동네에 문화 활동이 몰리나?",
+    cols: [["admin_dong", "행정동"], ["event_date", "날짜"], ["activities_count", "활동"], ["free_events_count", "무료"]],
+    foot: "<b>admin_dong_code</b>(행안부 10자리)를 그대로 실어 인구·상권·교통 데이터에 바로 조인됩니다." },
+  { table: "gold_culture_boxoffice_daily",
+    q: "지금 잘 팔리는 공연은?",
+    cols: [["rank_no", "순위"], ["performance_name", "공연"], ["genre", "장르"]],
+    foot: "일자 × 순위 스냅샷이라 <b>순위 변동</b>을 시계열로 추적할 수 있습니다." },
+];
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const PREVIEW_CACHE = {};
+let demoRun = 0;          // 시나리오 전환 시 진행 중인 재생을 무효화하는 토큰
+let demoIdx = 0;
+let demoVisible = true;
+
+async function previewRows(table) {
+  if (!PREVIEW_CACHE[table]) {
+    PREVIEW_CACHE[table] = fetch("/api/preview/" + table)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((j) => j.rows || [])
+      .catch(() => null);
+  }
+  return PREVIEW_CACHE[table];
+}
+
+function demoDots() {
+  $("demoDots").innerHTML = DEMOS.map((d, i) =>
+    "<button role='tab' aria-selected='" + (i === demoIdx) + "' aria-label='" + esc(d.q) + "'></button>").join("");
+  [...$("demoDots").children].forEach((b, i) => (b.onclick = () => playDemo(i, true)));
+}
+
+async function playDemo(i, manual) {
+  const run = ++demoRun;
+  demoIdx = i;
+  const d = DEMOS[i];
+  demoDots();
+  $("demoQ").textContent = d.q;
+  $("demoOut").innerHTML = "";
+  $("demoFoot").innerHTML = "&nbsp;";
+
+  const cmd = "curl " + location.origin + "/api/preview/" + d.table;
+  const paint = (n) => {
+    const shown = cmd.slice(0, n);
+    $("demoCmd").innerHTML =
+      "<span class='g'>" + esc(shown.slice(0, 4)) + "</span><span class='b'>" + esc(shown.slice(4)) + "</span>" +
+      (n < cmd.length ? "<span class='caret'></span>" : "");
+  };
+
+  if (REDUCED) paint(cmd.length);
+  else {
+    for (let n = 0; n <= cmd.length; n += 2) {
+      if (run !== demoRun) return;
+      paint(n);
+      await sleep(11);
+    }
+    paint(cmd.length);
+    await sleep(220);
+  }
+
+  const rows = await previewRows(d.table);
+  if (run !== demoRun) return;
+  if (!rows) { $("demoFoot").textContent = "응답을 받지 못했습니다 — 서버 상태를 확인해주세요."; return; }
+  if (!rows.length) { $("demoFoot").textContent = "이 제품에 표시할 행이 없습니다."; return; }
+
+  const show = rows.slice(0, 3);
+  $("demoOut").innerHTML =
+    "<table><thead><tr>" + d.cols.map((c) => "<th>" + esc(c[1]) + "</th>").join("") +
+    "</tr></thead><tbody>" + show.map((r) =>
+      "<tr><td class='k'>" + esc(r[d.cols[0][0]] ?? "—") + "</td>" +
+      d.cols.slice(1).map((c) => "<td>" + esc(r[c[0]] ?? "—") + "</td>").join("") + "</tr>").join("") +
+    "</tbody></table>";
+
+  if (!REDUCED) {
+    const trs = $("demoOut").querySelectorAll("tbody tr");
+    for (const [n, tr] of [...trs].entries()) {
+      tr.style.visibility = "hidden";
+      setTimeout(() => { tr.style.visibility = ""; tr.classList.add("in"); }, n * 110);
+    }
+    await sleep(trs.length * 110);
+  }
+  if (run !== demoRun) return;
+  $("demoFoot").innerHTML = d.foot;
+
+  if (manual || REDUCED) return;   // 직접 고른 뒤에는 자동 전환하지 않는다
+  await sleep(4200);
+  if (run !== demoRun || !demoVisible) return;
+  playDemo((i + 1) % DEMOS.length);
+}
+
+// ── 히어로 배경: 426칸 격자
+// 칸 수만 사실이다(서울 행정동 426개). 칸의 밝기는 장식이며 어떤 실측값도 나타내지 않는다 —
+// 그래서 지도라고 부르지 않고, 화면에도 "격자 한 칸 = 행정동 하나"까지만 적는다.
+function bootField() {
+  const cv = $("field");
+  const ctx = cv.getContext("2d");
+  const CELLS = 426;
+  const TEAL = [95, 214, 198], EMBER = [214, 106, 62];
+  let cols = 0, rows = 0, cw = 0, ch = 0, dpr = 1, sparks = [], raf = 0, t0 = 0;
+
+  function layout() {
+    const r = cv.getBoundingClientRect();
+    if (!r.width || !r.height) return false;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(r.width * dpr);
+    cv.height = Math.round(r.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // 426칸을 화면비에 맞춰 나눈다 — 칸 수는 고정, 격자 모양만 반응형
+    rows = Math.max(5, Math.round(Math.sqrt(CELLS / (r.width / r.height))));
+    cols = Math.ceil(CELLS / rows);
+    const gap = 5;
+    cw = (r.width - gap * (cols - 1)) / cols + gap;
+    ch = (r.height - gap * (rows - 1)) / rows + gap;
+    return true;
+  }
+
+  function paint(now) {
+    const t = (now - t0) / 1000;
+    const r = cv.getBoundingClientRect();
+    ctx.clearRect(0, 0, r.width, r.height);
+    const gap = 5, sw = cw - gap, sh = ch - gap, rad = Math.min(2.5, sw / 4);
+    for (let i = 0; i < CELLS; i++) {
+      const c = i % cols, rw = (i / cols) | 0;
+      const x = c * cw, y = rw * ch;
+      const wave = 0.5 + 0.5 * Math.sin(t * 0.55 - (c * 0.19 + rw * 0.31));
+      let a = 0.055 + wave * 0.085;
+      let col = TEAL;
+      for (const s of sparks) {
+        if (s.i !== i) continue;
+        const k = 1 - (t - s.t) / s.life;
+        if (k > 0) { a = Math.max(a, 0.10 + k * 0.62); col = s.col; }
+      }
+      ctx.fillStyle = "rgba(" + col[0] + "," + col[1] + "," + col[2] + "," + a.toFixed(3) + ")";
+      ctx.beginPath();
+      ctx.roundRect(x, y, sw, sh, rad);
+      ctx.fill();
+    }
+    sparks = sparks.filter((s) => t - s.t < s.life);
+    if (sparks.length < 9 && Math.random() < 0.09) {
+      sparks.push({ i: (Math.random() * CELLS) | 0, t, life: 1.4 + Math.random() * 1.2,
+                    col: Math.random() < 0.18 ? EMBER : TEAL });
+    }
+  }
+
+  function loop(now) { paint(now); raf = requestAnimationFrame(loop); }
+  function stop() { if (raf) { cancelAnimationFrame(raf); raf = 0; } }
+  function start() {
+    if (raf || !layout()) return;
+    t0 = performance.now();
+    // 애니메이션을 끈 사용자도 격자에 리듬이 보이게 — 밝은 칸 몇 개를 미리 심어 한 장으로 완성한다
+    if (REDUCED && !sparks.length) {
+      for (let k = 0; k < 14; k++)
+        sparks.push({ i: (Math.random() * CELLS) | 0, t: 0, life: 1e6,
+                      col: k % 6 === 0 ? EMBER : TEAL });
+    }
+    paint(t0);                 // 첫 프레임은 rAF 를 기다리지 않는다 — 빈 격자가 한 순간도 보이지 않게
+    if (REDUCED) return;       // 정지 화면 한 장만
+    raf = requestAnimationFrame(loop);
+  }
+
+  // roundRect 가 없는 구형 브라우저 — 격자를 포기하고 조용히 빠진다(배경일 뿐이다)
+  if (!ctx || !ctx.roundRect) { cv.style.display = "none"; return; }
+  addEventListener("resize", () => { if (layout()) paint(performance.now()); });
+  document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
+  new IntersectionObserver((es) => (es[0].isIntersecting ? start() : stop()),
+                           { threshold: 0 }).observe(cv);
+  start();
+}
+
+function bootDemo() {
+  demoDots();
+  // 화면 밖이거나 탭이 가려지면 멈춘다 — 안 보는 애니메이션에 호출을 쓰지 않는다
+  document.addEventListener("visibilitychange", () => { demoVisible = !document.hidden; });
+  new IntersectionObserver((es) => {
+    const on = es[0].isIntersecting;
+    if (on && !demoVisible) { demoVisible = true; playDemo(demoIdx); }
+    demoVisible = on;
+  }, { threshold: 0.25 }).observe($("demo"));
+  playDemo(0);
+}
+
+$("heroSearch").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = $("heroQ").value.trim();
+  location.href = q ? "/catalog?q=" + encodeURIComponent(q) : "/catalog";
+});
+
+function setStat(id, text) {
+  const el = $(id);
+  el.classList.remove("sk");
+  el.innerHTML = text;
+}
+function failState(id, msg) {
+  $(id).innerHTML = "<div class='state'>" + msg +
+    " — <a href='/catalog'>카탈로그에서 직접 보기</a></div>";
+}
+
+// ── 카탈로그: 통계 · 제품 카드 · 도메인
+async function bootCatalog() {
+  let products;
+  // 표시명은 부가 정보다 — 못 읽어도 카탈로그는 그대로 뜬다(제목이 product_id 로 내려앉을 뿐)
+  try { DISPLAY = await (await fetch("/product-display.json")).json(); } catch { DISPLAY = {}; }
+  try {
+    const res = await fetch("/api/catalog");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    products = (await res.json()).products || [];
+  } catch {
+    setStat("statProducts", "—"); setStat("statFresh", "—");
+    $("statFreshK").textContent = "마지막 갱신 · 확인 불가";
+    failState("domains", "도메인 정보를 불러오지 못했습니다");
+    failState("cards", "제품 목록을 불러오지 못했습니다");
+    return;
+  }
+
+  setStat("statProducts", products.length + "<span class='u'>종</span>");
+  const stamps = products.map((p) => p.exported_at).filter(Boolean).sort();
+  const newest = stamps[stamps.length - 1];
+  setStat("statFresh", (newest && relTime(newest)) || "—");
+  $("statFreshK").textContent = newest ? "마지막 갱신 · " + kstStamp(newest) : "마지막 갱신 · 정보 없음";
+
+  const counts = {};
+  for (const p of products) counts[domainOf(p)] = (counts[domainOf(p)] || 0) + 1;
+  const ordered = [...DOMAINS].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
+  $("domains").innerHTML = ordered.map((d) => {
+    const n = counts[d.id] || 0;
+    const inner = "<span class='t'><i aria-hidden='true'></i>" + esc(d.name) + "</span>" +
+      "<span class='d'>" + esc(d.desc) + "</span>" +
+      "<span class='n'>" + (n ? n + " PRODUCTS" : "SOON") +
+      (d.unit ? "<span class='u'>" + esc(d.unit) + "</span>" : "") + "</span>";
+    return n ? "<a class='dom' href='/catalog'>" + inner + "</a>"
+             : "<div class='dom soon'>" + inner + "</div>";
+  }).join("");
+
+  const sorted = [...products].sort((a, b) => (b.row_count || 0) - (a.row_count || 0));
+  const shown = sorted.slice(0, HOME_CARDS);
+  $("allLink").textContent = "전체 " + products.length + "종 보기 →";
+  if (!shown.length) { failState("cards", "아직 공개된 제품이 없습니다"); return; }
+  $("cards").innerHTML = shown.map((p) => {
+    const d = DISPLAY[p.product_id] || {};
+    return "<a class='card' href='/catalog?q=" + encodeURIComponent(p.name) + "'>" +
+      "<span class='top'><span class='t'>" + esc(titleOf(p)) + "<small>" + esc(p.name) + "</small></span>" +
+      (p.time_axis ? "<span class='badge'>" + esc(p.time_axis) + "</span>"
+                   : "<span class='badge dim'>명부형</span>") + "</span>" +
+      "<span class='q'>" + esc(p.product_question || "—") + "</span>" +
+      "<span class='meta'><span><b>" + nf.format(p.row_count || 0) + "</b> 행</span>" +
+      (d.unit ? "<span>" + esc(d.unit) + "</span>" : "") +
+      "<span class='free'>미리보기 무료</span></span></span></a>";
+  }).join("");
+}
+
+bootField();
+bootCatalog();
+bootDemo();
+</script>
+</body>
+</html>
