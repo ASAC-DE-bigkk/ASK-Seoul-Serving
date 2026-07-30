@@ -1,5 +1,5 @@
 {
-  "name": "ask-seoul-serving-gateway",
+  "name": "ask-seoul-marketplace",
   "private": true,
   "description": "V1 마켓플레이스 프로토타입 — 키 발급 + 쿼터 + 6개 도메인 서빙 API (ASK-Seoul#58, 로컬 전용)",
   "scripts": {

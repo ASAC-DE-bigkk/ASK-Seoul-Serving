@@ -1,7 +1,7 @@
 """로컬 D1 시드 생성기 — 팀 D1(읽기 전용)에서 서빙 제품 전종 샘플을 추출해 seed.sql 을 쓴다.
 
 사용법 (레포 루트 sample/ 에서, .env 의 CLOUDFLARE_API_TOKEN 필요):
-    python serving-gateway/fixtures/build_fixtures.py
+    python marketplace/fixtures/build_fixtures.py
 
 산출물 seed.sql·public/product-display.json 은 커밋한다 — 팀원은 토큰 없이
 `npm run seed` 만으로 로컬 D1 이 선다.

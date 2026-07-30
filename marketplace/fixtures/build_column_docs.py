@@ -23,7 +23,7 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 GATEWAY = HERE.parent
-# sample/serving-gateway/fixtures → ask-seoul/
+# sample/marketplace/fixtures → ask-seoul/
 REPO = GATEWAY.parent.parent
 CONTRACT = REPO / "ASAC-DBT/domains/culture/models/gold/_culture_gold__models.yml"
 OUT = GATEWAY / "public/column-docs.json"

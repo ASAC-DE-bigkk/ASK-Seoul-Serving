@@ -1,4 +1,4 @@
-# serving-gateway — V1 마켓플레이스 프로토타입 (ASK-Seoul#58)
+# marketplace — V1 마켓플레이스 프로토타입 (ASK-Seoul#58)
 
 팀 D1 에 적재된 6개 도메인 서빙 제품(등록 62종 중 **공개 59종** — 아래 '공개 게이트' 참고)을
 **키 발급 + 일일 쿼터** 게이트 뒤에서 제공하는
@@ -15,7 +15,7 @@ Workers + Static Assets + D1 웹서비스. #476 게이트웨이 역할(키 검�
 ## 실행
 
 ```bash
-cd serving-gateway
+cd marketplace
 npm install          # wrangler
 npm run seed         # migrations + fixtures/seed.sql → 로컬 D1
 npm run dev          # http://localhost:8787

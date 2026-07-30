@@ -1,4 +1,4 @@
--- serving-gateway 키·쿼터 스키마 (ASK-Seoul#58 확정안)
+-- marketplace 키·쿼터 스키마 (ASK-Seoul#58 확정안)
 -- 키 원문은 어디에도 저장하지 않는다 — SHA-256 해시 + 표시용 접두 8자만.
 
 CREATE TABLE IF NOT EXISTS _keys (

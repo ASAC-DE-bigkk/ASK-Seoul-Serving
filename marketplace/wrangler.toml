@@ -1,4 +1,4 @@
-# serving-gateway — V1 마켓플레이스 프로토타입 (ASK-Seoul#58)
+# marketplace — V1 마켓플레이스 프로토타입 (ASK-Seoul#58)
 # ⚠️ 로컬 전용: wrangler dev --local 로만 구동한다. deploy 는 멘토 게이트(#476 ①·ASAC-DAG#521-(B)).
 # 로컬 모드는 아래 database_id 를 쓰지 않고 Miniflare 로컬 sqlite 를 만든다 —
 # 시드는 `npm run seed` (migrations + fixtures 를 --local 로 적용).

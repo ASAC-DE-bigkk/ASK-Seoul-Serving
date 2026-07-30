@@ -1,4 +1,4 @@
-// serving-gateway — 키 발급 + 쿼터 + culture 데이터 API (ASK-Seoul#58, 로컬 전용 프로토타입)
+// marketplace — 키 발급 + 쿼터 + culture 데이터 API (ASK-Seoul#58, 로컬 전용 프로토타입)
 // 게이트 순서: 키 검증 → 쿼터 카운트 → _catalog 게이트 → 조회 (#476 게이트웨이 역할의 실물 검증)
 // 키 원문 무저장 — SHA-256 해시만 (#58 스키마 확정안)
 

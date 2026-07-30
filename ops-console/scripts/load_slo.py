@@ -28,7 +28,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 CONSOLE = HERE.parent
 OUT = CONSOLE / "fixtures" / "slo_live.sql"
-PERSIST = "../serving-gateway/.wrangler/state"   # 게이트웨이와 공유하는 로컬 D1 상태
+PERSIST = "../marketplace/.wrangler/state"   # 게이트웨이와 공유하는 로컬 D1 상태
 
 TRINO_URL = os.environ.get("TRINO_URL", "http://127.0.0.1:30586")
 TRINO_USER = os.environ.get("TRINO_USER", "ops-console")
