@@ -31,7 +31,7 @@ OUT = CONSOLE / "fixtures" / "slo_live.sql"
 PERSIST = "../marketplace/.wrangler/state"   # 게이트웨이와 공유하는 로컬 D1 상태
 
 TRINO_URL = os.environ.get("TRINO_URL", "http://127.0.0.1:30586")
-TRINO_USER = os.environ.get("TRINO_USER", "ops-console")
+TRINO_USER = os.environ.get("TRINO_USER", "ops-dashboard")
 CATALOG = os.environ.get("TRINO_CATALOG", "iceberg_dev")
 
 # 도메인별 SLO 마트. 실측(2026-07-28): *_slo_daily 는 culture 하나뿐이라 목록이 1줄이다.

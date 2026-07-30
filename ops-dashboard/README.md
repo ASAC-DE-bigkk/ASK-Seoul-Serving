@@ -1,4 +1,4 @@
-# ops-console — 운영자용 통합 품질 콘솔 (ASK-Seoul#58)
+# ops-dashboard — 운영자용 통합 품질 콘솔 (ASK-Seoul#58)
 
 파이프라인 품질과 서빙 품질을 **한 화면**에서 본다. [마켓플레이스](../marketplace/)와
 **다른 Worker · 다른 호스트**다 — 청중이 다르고(외부 고객 vs 운영자), 배포 단위가 갈려야
@@ -72,7 +72,7 @@ D1 은 게이트웨이와 **같은 로컬 상태를 공유**한다(`--persist-to
 `_request_log` 가 저쪽에 쌓이기 때문이다.
 
 ```bash
-cd ops-console
+cd ops-dashboard
 npm install
 npm run seed         # _ops_slo/_ops_domain + 합성 SLO 14일 → 공유 D1
 echo "OPS_TOKEN=$(openssl rand -hex 16)" > .dev.vars    # .gitignore 대상

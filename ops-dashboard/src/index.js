@@ -1,4 +1,4 @@
-// ops-console — 운영자용 통합 품질 콘솔 (ASK-Seoul#58, 로컬 전용)
+// ops-dashboard — 운영자용 통합 품질 콘솔 (ASK-Seoul#58, 로컬 전용)
 //
 // 한 화면에서 두 가지를 본다:
 //   · 파이프라인 품질 — 수집·변환이 제 몫을 했나 (_ops_slo, gold_*_slo_daily 스냅샷)

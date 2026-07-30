@@ -1,5 +1,5 @@
 {
-  "name": "ask-seoul-ops-console",
+  "name": "ask-seoul-ops-dashboard",
   "private": true,
   "description": "운영자용 통합 품질 콘솔 — 파이프라인 + 서빙 (ASK-Seoul#58, 로컬 전용)",
   "scripts": {
