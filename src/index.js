@@ -204,15 +204,32 @@ async function countUsage(env, keyRow) {
 // NULL(미선언)은 공개하지 않는다 — 옵트인이 안전한 기본값이다.
 const PUBLIC = "external = 1";
 
+// 도메인 간 공통 조인축(#48) — 서로 다른 제품의 같은 컬럼끼리 그대로 조인된다.
+// UI(catalog.html) 의 JOIN 배지와 같은 목록인데, 화면에만 있으면 API 소비자(특히 AI 에이전트)는
+// 크로스도메인 분석의 열쇠를 모른 채 추측해야 한다 — 그래서 응답 메타로도 내보낸다.
+const JOIN_AXES = ["admin_dong_code", "gu_code", "stat_region_cd"];
+
 async function handleCatalog(env) {
   const { results } = await env.DB.prepare(
-    "SELECT name, product_id, external, product_question, time_axis, columns, row_count, exported_at " +
+    "SELECT name, product_id, external, description, product_question, time_axis, columns, " +
+    "row_count, freshness, exported_at " +
     `FROM _catalog WHERE ${PUBLIC} ORDER BY name`
   ).all();
+  // description 을 반드시 실어야 한다 — 제품의 주의사항("기상청 공식 특보가 아님" 등)이
+  // 여기에 있고, 화면을 안 거치는 소비자에게는 이 응답이 그걸 전달할 유일한 경로다.
   return json({
     // 출처·이용조건은 응답에서도 닿아야 한다 — 화면을 거치지 않고 API 만 쓰는 소비자가 있다
     attribution: "공공 원천의 2차 가공물 — 출처·이용조건 /legal#attribution",
-    products: results.map((r) => ({ ...r, columns: JSON.parse(r.columns) })),
+    docs: "/llms.txt",
+    column_docs: "/column-docs.json",
+    join_axes: JOIN_AXES,
+    products: results.map((r) => {
+      const columns = JSON.parse(r.columns);
+      return {
+        ...r, columns,
+        join_keys: columns.map((c) => c.name).filter((n) => JOIN_AXES.includes(n)),
+      };
+    }),
   });
 }
 
@@ -389,7 +406,7 @@ async function route(request, env, url, trace) {
   }
 
   return problem(404, "not found",
-    "GET /api/catalog · /api/preview/<table> · /api/data/<table> · /api/me, POST·DELETE /api/keys");
+    "GET /api/catalog · /api/preview/<table> · /api/data/<table> · /api/me, POST·DELETE /api/keys — 문법·한도 안내는 GET /llms.txt");
 }
 
 export default {

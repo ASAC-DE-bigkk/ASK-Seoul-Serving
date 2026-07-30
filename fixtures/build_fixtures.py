@@ -30,15 +30,24 @@ DATABASE = "9db0e851-558e-489f-9e76-f131d25aa267"
 API = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT}/d1/database/{DATABASE}/query"
 SAMPLE_ROWS = 50
 
-# (table, product_id, product_question, time_axis) — ASAC-DBT#346 meta.serving 계약값
+# (table, product_id, product_question, time_axis, description) — ASAC-DBT#346 meta.serving 계약값.
+# description 은 dbt 계약(_culture_gold__models.yml)의 모델 설명에서 옮겼다 — 그레인과 주의사항이
+# 여기 실려야 API 만 쓰는 소비자(특히 AI)가 한계를 안다. 내부 이슈 번호는 외부 문구 기준대로 뺐다.
 CULTURE_PRODUCTS = [
-    ("gold_culture_activity_by_dong", "culture_activity_by_dong", "어느 행정동에서 언제 문화 활동이 얼마나 열리나?", "event_date"),
-    ("gold_culture_calendar_density", "culture_calendar_density", "구별로 어느 날짜에 행사가 몰리나(밀집도)?", "event_date"),
-    ("gold_culture_event_schedule", "culture_event_schedule", "이번 주말·특정 기간 서울에서 무슨 문화행사가 열리나?", "event_start_date"),
-    ("gold_culture_event_crowd", "culture_event_crowd", "무슨 요일 몇 시에 행사 주변이 붐비나?", None),
-    ("gold_culture_boxoffice_daily", "culture_boxoffice_daily", "지금 서울에서 예매 상위 공연은 무엇인가?", "snapshot_date"),
-    ("gold_culture_dine_around", "culture_dine_around", "행사 많은 동네 주변 외식 상권은 어디인가?", None),
-    ("gold_culture_booking_curve", "culture_booking_curve", "공연 예매 인기가 개막까지 어떤 궤적으로 차오르나?", None),
+    ("gold_culture_activity_by_dong", "culture_activity_by_dong", "어느 행정동에서 언제 문화 활동이 얼마나 열리나?", "event_date",
+     "행정동(admin_dong_code) × 일자 문화활동 집계. 426개 행정동 전체가 스카폴드로 존재해 활동 0건인 동도 0으로 조회된다. 스포츠 예약은 제외."),
+    ("gold_culture_calendar_density", "culture_calendar_density", "구별로 어느 날짜에 행사가 몰리나(밀집도)?", "event_date",
+     "일×자치구 문화 밀도·경쟁 지수(그레인 gu_code×event_date). 시민에겐 '볼 게 많은 날'=total_events, 주최자에겐 '피해야 할 날'=concentration."),
+    ("gold_culture_event_schedule", "culture_event_schedule", "이번 주말·특정 기간 서울에서 무슨 문화행사가 열리나?", "event_start_date",
+     "문화행사 목록 질의 표면(행사 1행). 6개 소스 union 후 크로스소스 중복 제거(전문 소스 우선). '이번 주말 행사'는 기간 겹침 질의라 from/to(시작일 기준)만으로는 진행 중 장기 행사를 놓칠 수 있다 — event_end_date 를 함께 볼 것."),
+    ("gold_culture_event_crowd", "culture_event_crowd", "무슨 요일 몇 시에 행사 주변이 붐비나?", None,
+     "행사 자치구의 요일×시간대 평시 혼잡 베이스라인(gu_code×day_of_week×hour_of_day). 실시간 도시데이터 핫스팟(~120곳) 한정 평시 값 — 특정 행사일의 실측 증가분이 아니다."),
+    ("gold_culture_boxoffice_daily", "culture_boxoffice_daily", "지금 서울에서 예매 상위 공연은 무엇인가?", "snapshot_date",
+     "KOPIS 예매 랭킹 일 스냅샷(snapshot_date×rank_no). 스냅샷이 매일 쌓여 예매 추이 시계열의 원천이 된다."),
+    ("gold_culture_dine_around", "culture_dine_around", "행사 많은 동네 주변 외식 상권은 어디인가?", None,
+     "동별 문화 밀도 × 요식업 스톡 프로필(행정동 1행, 426동 스카폴드). dine_around_score 는 두 축 백분위의 기하평균 — 요식업 데이터 없는 동은 score 가 null."),
+    ("gold_culture_booking_curve", "culture_booking_curve", "공연 예매 인기가 개막까지 어떤 궤적으로 차오르나?", None,
+     "공연별 예매 순위 궤적 요약(1공연 1행). KOPIS 는 순위만 제공 — 예매율·판매좌석·매진 데이터는 없어 '순위 궤적'으로만 본다."),
 ]
 
 # 표시명·그레인 — 계약에 display 필드가 없어서 서빙까지 실려오지 않는다(#476 제안).
@@ -202,14 +211,14 @@ def collect() -> list[dict]:
         })
 
     known = {p["table"] for p in products}
-    for table, product_id, question, time_axis in CULTURE_PRODUCTS:
+    for table, product_id, question, time_axis, description in CULTURE_PRODUCTS:
         if table in known:  # 계약이 머지되어 라이브에 실리면 그쪽이 정본
             continue
         products.append({
             "table": table,
             "product_id": product_id,
             "external": 1,
-            "description": f"culture 외부 gold — {product_id}",
+            "description": description,
             "product_question": question,
             "tests": "[]",
             "time_axis": time_axis,
