@@ -183,19 +183,23 @@
   .domains { display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:1px;
              background:var(--line); border:1px solid var(--line); border-radius:10px;
              overflow:hidden; box-shadow:var(--shadow-xs); }
-  .dom { padding:13px 16px; background:var(--panel); display:flex; flex-direction:column; gap:2px; }
+  .dom { padding:13px 16px; background:var(--panel); display:flex; flex-direction:column; gap:3px; }
   a.dom:hover { background:#f2f6f4; }
-  .dom .t { font-weight:700; font-size:13.5px; display:flex; align-items:center; gap:7px; }
-  .dom .t i { width:6px; height:6px; border-radius:50%; background:#2aa79a; flex:none; }
+  /* 제품 수는 이름과 같은 줄로 올렸다 — 아래에 두면 공간 단위와 나란히 놓여
+     서로 다른 두 값이 한 줄에서 양끝으로 벌어지고, 서체·색까지 갈라져 지저분했다 */
+  .dom .t { font-weight:700; font-size:13.5px; display:flex; align-items:baseline; gap:7px; }
+  .dom .t i { width:6px; height:6px; border-radius:50%; background:#2aa79a; flex:none;
+              align-self:center; }
+  .dom .t .c { margin-left:auto; font-size:11.5px; font-weight:600; color:var(--muted);
+               font-variant-numeric:tabular-nums; white-space:nowrap; }
   .dom.soon .t { color:var(--muted); } .dom.soon .t i { background:var(--line-strong); }
-  .dom .d { font-size:11.5px; color:var(--faint); }
-  .dom .n { font-family:var(--mono); font-size:10.5px; font-weight:600; color:var(--accent-deep); margin-top:4px;
-            display:flex; align-items:baseline; gap:7px; }
-  /* 공간 단위 — 도메인마다 다르다는 사실이 카드 안에서 바로 읽혀야 한다.
-     한글이라 mono 를 상속받으면 안 된다(위 .lab 주석 참고) */
-  .dom .n .u { font-family:var(--sans); font-size:12px; font-weight:600; color:var(--teal-deep);
-               margin-left:auto; white-space:nowrap; }
-  .dom.soon .n, .dom.soon .n .u { color:var(--faint); }
+  .dom .d { font-size:12px; color:var(--faint); }
+  /* 지역을 나누는 단위 — 도메인마다 다르다는 사실이 이 서비스의 정직한 지점이라 카드에 남긴다.
+     다만 "행정동"·"관측 121곳" 같은 내부 어휘로는 안 읽혀서 일상어로 쓰고,
+     정확한 원 표현은 title 로 옮겼다(마우스를 올리면 나온다) */
+  .dom .u { margin-top:4px; font-size:11.5px; font-weight:600; color:var(--teal-deep);
+            white-space:nowrap; }
+  .dom.soon .u { color:var(--faint); }
 
   /* skeleton · 상태 */
   .sk { position:relative; overflow:hidden; background:#e9eeec; border-radius:5px; color:transparent; }
@@ -361,7 +365,7 @@
   </section>
 
   <section>
-    <div class="sec-head"><h2>도메인</h2><span class="hint">서울을 여섯 각도로 · 공간 단위는 도메인마다 다릅니다</span></div>
+    <div class="sec-head"><h2>도메인</h2><span class="hint">서울을 여섯 각도로 · 지역을 나누는 단위는 도메인마다 다릅니다</span></div>
     <div class="domains" id="domains"></div>
   </section>
 
@@ -440,13 +444,22 @@ let DISPLAY = {};
 // 집계에 안 붙고 'SOON' 으로 뜬다(citydata 를 population 으로 적었던 게 그 경우였다)
 // 이름은 서로 헷갈리지 않아야 한다 — 'traffic=교통'은 '대중교통'의 부분 문자열이라 나란히
 // 놓이면 상위 범주처럼 읽혔다. 담고 있는 것(도로 속도·정체 5종)으로 부른다.
+// unit 은 화면에 보이는 일상어, note 는 마우스를 올렸을 때 나오는 정확한 표현이다.
+// 원래는 unit 자리에 "행정동"·"관측 121곳"을 그대로 적었는데, 라벨 없이 값만 있어
+// 처음 보는 사람에게는 무슨 축인지 안 읽혔다(사용자 피드백).
 const DOMAINS = [
-  { id:"culture",    name:"문화·행사", desc:"공연·전시·축제·예매",     unit:"행정동 426 전역" },
-  { id:"citydata",   name:"인구·도시", desc:"실시간 인구·도시데이터",   unit:"관측 121곳" },
-  { id:"transit",    name:"대중교통",  desc:"버스·지하철 접근성",       unit:"행정동" },
-  { id:"commerce",   name:"상권",      desc:"업종·매출 분석",           unit:"행정동" },
-  { id:"weather",    name:"날씨",      desc:"기상 관측·예보",           unit:"기상 격자 80" },
-  { id:"traffic",    name:"도로 소통",  desc:"속도·정체·돌발",           unit:"도로 링크" },
+  { id:"culture",    name:"문화·행사", desc:"공연·전시·축제·예매",     unit:"동네 단위 · 서울 전역",
+    note:"행정동 단위 — 서울 426개 동 전역" },
+  { id:"citydata",   name:"인구·도시", desc:"실시간 인구·도시데이터",   unit:"주요 지점 121곳",
+    note:"서울시 실시간 도시데이터 관측 장소 121곳" },
+  { id:"transit",    name:"대중교통",  desc:"버스·지하철 접근성",       unit:"동네 단위",
+    note:"행정동 단위" },
+  { id:"commerce",   name:"상권",      desc:"업종·매출 분석",           unit:"동네 단위",
+    note:"행정동 단위" },
+  { id:"weather",    name:"날씨",      desc:"기상 관측·예보",           unit:"기상 구역 80곳",
+    note:"기상청 예보 격자 80칸" },
+  { id:"traffic",    name:"도로 소통",  desc:"속도·정체·돌발",           unit:"도로 구간 단위",
+    note:"TOPIS 도로 링크 단위 — 6종 중 5종(돌발×기상만 행정동)" },
 ];
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
@@ -704,10 +717,10 @@ async function bootCatalog() {
   const ordered = [...DOMAINS].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
   $("domains").innerHTML = ordered.map((d) => {
     const n = counts[d.id] || 0;
-    const inner = "<span class='t'><i aria-hidden='true'></i>" + esc(d.name) + "</span>" +
+    const inner = "<span class='t'><i aria-hidden='true'></i>" + esc(d.name) +
+        "<span class='c'>" + (n ? "제품 " + n + "개" : "준비 중") + "</span></span>" +
       "<span class='d'>" + esc(d.desc) + "</span>" +
-      "<span class='n'>" + (n ? n + " PRODUCTS" : "SOON") +
-      (d.unit ? "<span class='u'>" + esc(d.unit) + "</span>" : "") + "</span>";
+      (d.unit ? "<span class='u' title=\"" + esc(d.note || d.unit) + "\">" + esc(d.unit) + "</span>" : "");
     return n ? "<a class='dom' href='/catalog'>" + inner + "</a>"
              : "<div class='dom soon'>" + inner + "</div>";
   }).join("");
