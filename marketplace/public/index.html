@@ -18,7 +18,8 @@
        제네릭 SaaS 블루를 쓰지 않는 이유: 이 제품의 소재가 서울이기 때문이다.
        중성색도 순회색이 아니라 청록 쪽으로 아주 살짝 기울여 놓았다. */
     --bg:#f6f7f6; --panel:#ffffff;
-    --ink:#12211f; --muted:#48605c; --faint:#8fa3a0; --line:#e6eae8; --line-strong:#ccd5d2;
+    /* muted·faint — 1x 모니터 실측에서 흐릿하게 읽혀 한 단계 어둡게(catalog.html 과 동일 보정) */
+    --ink:#12211f; --muted:#3d534f; --faint:#75898b; --line:#e6eae8; --line-strong:#ccd5d2;
     --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
     --teal:#0f6f68; --teal-deep:#0a534e; --teal-soft:#e9f4f2; --teal-line:#a9d5cf;
     --green-soft:#ecfdf3; --green-ink:#0a6b45; --red-ink:#b42318; --red-soft:#fef3f2;
@@ -39,7 +40,7 @@
   body { font-family:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
                      system-ui,-apple-system,'Noto Sans KR',sans-serif;
          background:var(--bg); color:var(--ink); font-size:15px; line-height:1.7; word-break:keep-all;
-         -webkit-font-smoothing:antialiased; text-size-adjust:100%; }
+         text-size-adjust:100%; }
   a { color:inherit; text-decoration:none; }
   .wrap { max-width:1140px; margin:0 auto; padding:0 24px; }
   :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:6px; }
