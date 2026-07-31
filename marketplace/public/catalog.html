@@ -187,11 +187,19 @@
                     overflow-x:auto; white-space:pre; }
   .uchip { font-family:var(--sans); font-size:11.5px; padding:1px 6px; border-radius:3px;
            background:var(--panel); border:1px solid var(--line-strong); color:var(--muted); margin-left:6px; }
-  /* 목록 페이저 — 행과 같은 좌우 여백, 가운데에 위치 표시 */
-  .lpager { display:flex; align-items:center; justify-content:center; gap:14px; padding:12px 18px;
-            background:var(--panel); }
-  .lpager span { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
-  .lpager button[disabled] { opacity:.45; cursor:default; }
+  /* 목록 페이저 — 번호를 직접 눌러 이동한다. 위에 버튼 줄, 아래에 위치 표시 */
+  .lpager { display:flex; flex-direction:column; align-items:center; gap:7px;
+            padding:14px 18px; background:var(--panel); }
+  .lpager .nums { display:flex; align-items:center; gap:4px; flex-wrap:wrap; justify-content:center; }
+  /* 전역 button 규칙(padding 7/14)을 눌러 정사각에 가깝게 — 숫자는 폭이 좁아 그대로 두면 납작해진다 */
+  .lpager button { min-width:33px; height:33px; padding:0 9px; font-size:13px; font-weight:600;
+                   border:1px solid var(--line-strong); border-radius:6px; background:var(--panel);
+                   color:var(--muted); font-variant-numeric:tabular-nums; }
+  .lpager button:hover:not([disabled]):not(.on) { border-color:var(--accent-line); color:var(--accent-deep); }
+  .lpager button.on { background:var(--accent); border-color:var(--accent); color:#fff; cursor:default; }
+  .lpager button[disabled] { opacity:.4; cursor:default; }
+  .lpager .gap { color:var(--faint); padding:0 3px; font-size:13px; }
+  .lpager .info { font-size:12px; color:var(--faint); font-variant-numeric:tabular-nums; }
   .badge { font-family:var(--mono); font-size:11px; font-weight:600; padding:2px 8px; border-radius:4px;
            white-space:nowrap; background:var(--accent-soft); color:var(--accent-deep);
            border:1px solid var(--accent-line); justify-self:start; }
@@ -229,6 +237,9 @@
   .play { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:20px;
           box-shadow:var(--shadow-xs); }
   .play-grid { display:grid; grid-template-columns:240px 1fr; gap:24px; }
+  /* grid 칸의 기본 min-width 는 auto(=내용의 최소 너비)라, 데이터 선택 목록의 긴 항목명이
+     칸을 통째로 밀어 좁은 화면에서 페이지가 옆으로 스크롤됐다. 0 으로 풀어 줄어들게 한다 */
+  .play-grid > * { min-width:0; }
   @media (max-width:760px){ .play-grid { grid-template-columns:1fr; } }
   .field { margin-bottom:12px; }
   .field label { display:block; font-size:11px; font-weight:600; letter-spacing:.05em;
@@ -501,6 +512,26 @@ function visible() {
   });
 }
 
+// 보여줄 페이지 번호 — 적으면 전부, 많아지면 처음·끝·현재 주변만 남기고 접는다.
+// 번호가 줄을 넘기기 시작하면 고르기가 오히려 어려워진다(지금은 최대 6쪽이라 전부 보이지만,
+// 제품이 늘면 자동으로 접힌다). "…" 는 자리를 알리는 표시일 뿐 누를 수 없다.
+function pageList(cur, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const keep = new Set([1, total, cur - 1, cur, cur + 1]);
+  // 양 끝에 붙어 있을 땐 반대쪽으로 창을 넓힌다 — 안 그러면 1쪽에서 "1 2 … 12" 처럼 앙상해진다
+  if (cur <= 4) [2, 3, 4, 5].forEach((n) => keep.add(n));
+  if (cur >= total - 3) [total - 1, total - 2, total - 3, total - 4].forEach((n) => keep.add(n));
+  const nums = [...keep].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
+  const out = [];
+  let prev = 0;
+  for (const n of nums) {
+    if (prev && n - prev > 1) out.push("…");
+    out.push(n);
+    prev = n;
+  }
+  return out;
+}
+
 function renderList() {
   const list = visible();
   const dn = activeDomain === "all" ? "전체 제품" : (DOMAINS.find((d) => d.id === activeDomain) || {}).name;
@@ -592,12 +623,24 @@ function renderList() {
     const end = Math.min(page * PAGE_SIZE, list.length);
     const pg = document.createElement("div");
     pg.className = "lpager";
+    const btn = (to, label, extra) =>
+      "<button data-go='" + to + "'" + (extra || "") + ">" + label + "</button>";
     pg.innerHTML =
-      "<button class='btn-g btn-sm' data-pg='prev'" + (page <= 1 ? " disabled" : "") + ">← 이전</button>" +
-      "<span>" + page + " / " + pages + " 페이지 · " + list.length + "개 중 " + start + "~" + end + "</span>" +
-      "<button class='btn-g btn-sm' data-pg='next'" + (page >= pages ? " disabled" : "") + ">다음 →</button>";
-    pg.querySelectorAll("[data-pg]").forEach((b) => b.addEventListener("click", () => {
-      page += b.dataset.pg === "next" ? 1 : -1;
+      "<div class='nums'>" +
+      btn(page - 1, "← 이전", page <= 1 ? " disabled" : "") +
+      pageList(page, pages).map((n) =>
+        n === "…"
+          ? "<span class='gap' aria-hidden='true'>…</span>"
+          : btn(n, n, (n === page ? " class='on' aria-current='page'" : "") +
+                      " aria-label='" + n + "페이지'")
+      ).join("") +
+      btn(page + 1, "다음 →", page >= pages ? " disabled" : "") +
+      "</div>" +
+      "<div class='info'>" + list.length + "개 중 " + start + "~" + end + "</div>";
+    pg.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => {
+      const to = Number(b.dataset.go);
+      if (to === page || to < 1 || to > pages) return;
+      page = to;
       renderList();
       goHash("#catalog");   // 페이지를 넘기면 목록 머리로 — 안 올리면 플레이그라운드 한복판에 남는다
     }));
