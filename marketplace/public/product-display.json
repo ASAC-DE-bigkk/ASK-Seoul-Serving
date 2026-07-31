@@ -1,249 +1,311 @@
 {
  "citydata_air_anomaly": {
+  "desc": "장소별로 지금 미세먼지가 평소보다 나쁜지 알려줍니다.",
   "title": "대기질 이상 탐지",
   "unit": "장소 = 1행"
  },
  "citydata_air_trend": {
+  "desc": "장소별로 최근 한 시간 사이 공기가 좋아지는 중인지 나빠지는 중인지 알려줍니다.",
   "title": "대기질 추세(실시간)",
   "unit": "장소 = 1행"
  },
  "citydata_charger_availability": {
+  "desc": "장소 주변 전기차 충전소에서 지금 충전 가능한 자리 수를 알려줍니다.",
   "title": "EV 충전소 가용 현황",
   "unit": "장소 × 충전소"
  },
  "citydata_cmrcl_daily": {
+  "desc": "장소별 하루 결제 건수와 소비가 가장 활발한 시간을 보여줍니다.",
   "title": "장소별 일 소비 활력",
   "unit": "장소 × 날짜"
  },
  "citydata_hot_commerce": {
+  "desc": "사람이 몰리고 소비도 늘어나는 뜨는 상권을 지수로 보여줍니다.",
   "title": "뜨는 상권 지수",
   "unit": "장소 = 1행"
  },
  "citydata_place_latest": {
+  "desc": "장소별 혼잡도와 소비, 교통, 날씨의 최신 상태를 한 줄에 모았습니다.",
   "title": "장소 최신 크로스 신호",
   "unit": "장소 = 1행"
  },
  "citydata_place_scorecard": {
+  "desc": "장소의 현재 상태와 이상 신호, 추세를 한 장의 성적표로 요약합니다.",
   "title": "장소 종합 스코어카드",
   "unit": "장소 = 1행"
  },
  "citydata_ppltn_anomaly": {
+  "desc": "장소별로 지금 평소보다 유난히 붐비는지 알려줍니다.",
   "title": "혼잡 이상 탐지",
   "unit": "장소 = 1행"
  },
  "citydata_ppltn_daily": {
+  "desc": "장소별 하루 평균 인구와 가장 붐빈 시간을 보여줍니다.",
   "title": "장소별 하루 혼잡",
   "unit": "장소 × 날짜"
  },
  "citydata_ppltn_dow_hour": {
-  "title": "요일×시간 혼잡 롤업",
+  "desc": "장소별로 요일과 시간대에 따라 평소 얼마나 붐비는지 보여줍니다.",
+  "title": "요일별 시간대 혼잡",
   "unit": "장소 × 요일 × 시간"
  },
  "citydata_ppltn_forecast": {
+  "desc": "장소별로 주말과 평일의 시간대별 예상 혼잡도를 알려줍니다.",
   "title": "주말 혼잡 예보",
   "unit": "장소 × 주말 × 시간"
  },
  "citydata_ppltn_hourly": {
+  "desc": "장소별 시간 단위 혼잡도와 가장 붐빈 시각을 보여줍니다.",
   "title": "장소별 시간 혼잡",
   "unit": "장소 × 시간"
  },
  "citydata_ppltn_trend": {
+  "desc": "장소별로 지금 사람이 몰리는 중인지 빠지는 중인지 알려줍니다.",
   "title": "붐빔 추세(실시간)",
   "unit": "장소 = 1행"
  },
  "citydata_ppltn_x_commerce_dong": {
+  "desc": "행정동별 유동인구와 가게 수를 비교해 기회 상권을 찾도록 돕습니다.",
   "title": "유동 대비 상가 공급",
   "unit": "행정동 = 1행"
  },
  "citydata_ppltn_x_culture_daily": {
-  "title": "유동인구 × 문화행사",
+  "desc": "행사가 있는 날 그 동네가 평소보다 얼마나 더 붐비는지 보여줍니다.",
+  "title": "유동인구와 문화행사",
   "unit": "행정동 × 날짜"
  },
  "citydata_purchasing_power_daily": {
+  "desc": "장소별로 유동인구에 비해 소비가 얼마나 활발한지 보여줍니다.",
   "title": "구매력·붐빔대비구매",
   "unit": "장소 × 날짜"
  },
  "citydata_sbike_availability": {
+  "desc": "장소 주변 따릉이 대여소에 지금 남은 자전거 수를 알려줍니다.",
   "title": "따릉이 가용 현황",
   "unit": "장소 × 대여소"
  },
  "commerce_address_succession": {
+  "desc": "폐업한 자리에 다음으로 어떤 업종이 들어왔는지 보여줍니다.",
   "title": "자리 승계 업종 이력",
   "unit": "폐업업종 × 개업업종"
  },
  "commerce_age_band": {
+  "desc": "업종과 자치구별로 가게들이 얼마나 오래 영업했는지 분포를 보여줍니다.",
   "title": "신상 상권 vs 노포 상권",
   "unit": "업력밴드 × 업종 × 구"
  },
  "commerce_area_profile": {
+  "desc": "업종과 자치구별 가게 면적 분포를 보여줍니다.",
   "title": "이 업종 가게 크기",
   "unit": "업종 × 자치구"
  },
  "commerce_change_activity": {
+  "desc": "간판이나 자리를 자주 바꾸는 업종이 어디인지 보여줍니다.",
   "title": "간판·자리 자주 바꾸는 업종",
   "unit": "업종 = 1행"
  },
  "commerce_churn_yearly": {
+  "desc": "연도별로 업종과 자치구의 개업과 폐업이 얼마나 활발했는지 보여줍니다.",
   "title": "상권 역동성(연도별)",
   "unit": "연 × 업종 × 구"
  },
  "commerce_cohort_survival": {
+  "desc": "같은 해에 창업한 가게들이 몇 년 뒤까지 살아남는지 생존율을 보여줍니다.",
   "title": "창업 생존율 곡선",
   "unit": "개업코호트 × 경과연차"
  },
  "commerce_data_quality": {
+  "desc": "상권 데이터의 전화번호나 좌표 같은 항목이 얼마나 채워져 있는지 진단합니다.",
   "title": "데이터 신뢰도 진단",
   "unit": "데이터셋 = 1행"
  },
  "commerce_dong_category_matrix": {
+  "desc": "행정동마다 어떤 업종의 가게가 얼마나 있는지 보여줍니다.",
   "title": "행정동 업종 분포",
   "unit": "행정동 × 중분류"
  },
  "commerce_dong_summary": {
+  "desc": "행정동별 가게 수와 영업, 폐업 현황을 한 줄로 요약합니다.",
   "title": "우리 동네 상권 요약",
   "unit": "행정동 = 1행"
  },
  "commerce_env_facility_operation": {
+  "desc": "자치구별 환경 배출시설의 연간 가동 일수와 시간을 보여줍니다.",
   "title": "우리 구 배출시설 가동",
   "unit": "자치구 × 연도"
  },
  "commerce_flow_monthly": {
+  "desc": "월 단위로 업종과 지역별 개업과 폐업 추이를 보여줍니다.",
   "title": "개·폐업 흐름(월)",
   "unit": "월 × 업종 × 지역"
  },
  "commerce_flow_yearly": {
+  "desc": "연 단위로 업종과 지역별 개업과 폐업의 장기 추세를 보여줍니다.",
   "title": "개·폐업 흐름(연)",
   "unit": "연 × 업종 × 지역"
  },
  "commerce_geo_grid_detail": {
+  "desc": "약 500미터 격자 단위로 업종별 가게 밀집도를 보여줍니다.",
   "title": "상권 밀집 히트맵(상세)",
   "unit": "500m 격자 × 업종"
  },
  "commerce_geo_grid_overview": {
+  "desc": "약 500미터 격자 단위로 가게 밀집도를 한눈에 보여줍니다.",
   "title": "상권 밀집 히트맵(개요)",
   "unit": "500m 격자"
  },
  "commerce_gu_specialization": {
+  "desc": "자치구마다 서울 평균보다 유난히 많은 특화 업종을 보여줍니다.",
   "title": "우리 구 특화 업종",
   "unit": "자치구 × 업종"
  },
  "commerce_lifespan": {
+  "desc": "업종과 자치구별로 가게가 개업부터 폐업까지 며칠을 버텼는지 보여줍니다.",
   "title": "업종별 영업 수명",
   "unit": "업종 × 자치구"
  },
  "commerce_multi_site": {
+  "desc": "체인이나 다점포로 추정되는 가게 비율을 업종별로 보여줍니다.",
   "title": "체인·다점포 비율",
   "unit": "업종 = 1행"
  },
  "commerce_phone_succession": {
+  "desc": "폐업한 사장님이 다른 자리에서 어떤 업종으로 다시 창업했는지 보여줍니다.",
   "title": "폐업 사장님의 재도전",
   "unit": "업종 전환 조합"
  },
  "commerce_seasonality": {
+  "desc": "개업과 폐업이 일 년 중 어느 달에 몰리는지 보여줍니다.",
   "title": "개·폐업 계절성",
   "unit": "월 × 업종"
  },
  "commerce_status_duration": {
+  "desc": "가게가 휴업 상태로 얼마나 오래 머무는지 업종별로 보여줍니다.",
   "title": "휴업 지속 기간",
   "unit": "업종 × 상태군"
  },
  "commerce_status_transition": {
+  "desc": "휴업한 가게가 다시 열었는지 폐업했는지 전환 경로를 보여줍니다.",
   "title": "휴업 후 전환 경로",
   "unit": "상태전이 × 업종"
  },
  "commerce_uptae_rollup": {
+  "desc": "일반음식점 안의 한식과 커피숍처럼 업종 안의 세부 업태 구성을 보여줍니다.",
   "title": "업종 속 세부 업태",
   "unit": "업태 × 업종"
  },
  "culture_activity_by_dong": {
+  "desc": "행정동마다 날짜별로 문화 활동이 몇 건 열리는지 집계한 데이터입니다.",
   "title": "행정동별 문화 활동",
   "unit": "행정동 × 날짜"
  },
  "culture_booking_curve": {
+  "desc": "공연별로 예매 순위가 개막까지 어떻게 변해왔는지 요약합니다.",
   "title": "공연 예매 오픈 궤적",
   "unit": "공연 = 1행"
  },
  "culture_boxoffice_daily": {
+  "desc": "공연 예매 순위를 매일 기록한 박스오피스 데이터입니다.",
   "title": "공연 예매 박스오피스",
   "unit": "일 × 순위"
  },
  "culture_calendar_density": {
+  "desc": "자치구별로 어느 날짜에 행사가 얼마나 몰리는지 보여줍니다.",
   "title": "구별 행사 캘린더 밀집도",
   "unit": "자치구 × 날짜"
  },
  "culture_dine_around": {
+  "desc": "행사가 많은 동네 주변에 음식점이 얼마나 있는지 점수로 보여줍니다.",
   "title": "행사 동네 외식 상권",
   "unit": "행정동 = 1행"
  },
  "culture_event_crowd": {
+  "desc": "행사가 열리는 자치구가 요일과 시간대별로 평소 얼마나 붐비는지 보여줍니다.",
   "title": "요일·시간대 혼잡 패턴",
   "unit": "구 × 요일 × 시간"
  },
  "culture_event_schedule": {
+  "desc": "서울에서 열리는 문화행사의 일정과 장소를 행사 단위로 모은 목록입니다.",
   "title": "문화행사 일정",
   "unit": "행사 = 1행"
  },
  "traffic_flow_anomaly_current": {
+  "desc": "도로 구간별로 지금 속도가 평소 같은 요일과 시간대보다 느린지 알려줍니다.",
   "title": "링크 속도 이상 탐지",
   "unit": "도로링크 = 1행"
  },
  "traffic_flow_change_latest": {
+  "desc": "도로 구간별로 직전 관측에 비해 속도가 얼마나 변했는지 보여줍니다.",
   "title": "직전 관측 대비 속도 변화",
   "unit": "도로링크 = 1행"
  },
  "traffic_flow_congestion_hotspots_hourly": {
+  "desc": "시간대별로 가장 정체가 심한 도로 구간 순위를 보여줍니다.",
   "title": "시간대 정체 핫스팟",
   "unit": "시간 × 링크순위"
  },
  "traffic_flow_link_latest": {
+  "desc": "도로 구간별로 가장 최근에 관측된 속도와 통행시간을 보여줍니다.",
   "title": "링크별 최신 속도",
   "unit": "도로링크 = 1행"
  },
  "traffic_flow_link_time_profile": {
+  "desc": "도로 구간별 요일과 시간대의 평소 속도 기준을 보여줍니다.",
   "title": "링크 요일·시간 속도 기준선",
   "unit": "링크 × 요일 × 시간"
  },
  "traffic_incident_x_weather_current_hourly": {
-  "title": "돌발 × 기상 맥락",
+  "desc": "사고나 공사 같은 돌발 교통 상황에 그 시각의 기상 예보를 함께 보여줍니다.",
+  "title": "돌발상황과 기상 맥락",
   "unit": "행정동 × 시간"
  },
  "transit_dong_hourly": {
-  "title": "동×시간대 교통 상태판",
+  "desc": "행정동과 시간대별로 버스, 지하철, 주차장 상태를 한 줄에 모았습니다.",
+  "title": "동별 시간대 교통 상태판",
   "unit": "행정동 × 시간"
  },
  "transit_dong_now": {
+  "desc": "우리 동네의 지금 버스, 지하철, 주차장 상태를 요약합니다.",
   "title": "지금 우리 동네 교통",
   "unit": "행정동 = 1행"
  },
  "transit_event_access": {
+  "desc": "행사장까지 가는 대중교통과 주차 정보를 행사별로 안내합니다.",
   "title": "행사장 가는 길 안내판",
   "unit": "행사 = 1행"
  },
  "transit_forecast_card": {
+  "desc": "내일 이 시간의 교통 상태를 지역별로 예측해 보여줍니다.",
   "title": "내일 이 시간 교통",
   "unit": "지역 × 미래시각"
  },
  "transit_parking_full_risk": {
+  "desc": "주차장별로 지금 만차가 될 위험이 얼마나 되는지 알려줍니다.",
   "title": "주차장 만차 리스크",
   "unit": "주차장 = 1행"
  },
  "transit_parking_profile": {
-  "title": "주차장 요일×시간 점유",
+  "desc": "주차장별 요일과 시간대의 평소 자리 점유율을 보여줍니다.",
+  "title": "주차장 요일별 점유 패턴",
   "unit": "주차장 × 요일 × 시간"
  },
  "weather_place_current_outlook": {
+  "desc": "장소별로 지금 시각 이후 가장 가까운 예보를 알려줍니다.",
   "title": "지금 이 장소 예보",
   "unit": "장소 = 1행"
  },
  "weather_place_forecast_change_daily": {
+  "desc": "예보가 발표될 때마다 기온과 강수확률이 어떻게 수정됐는지 보여줍니다.",
   "title": "예보 수정 내역(일별)",
   "unit": "장소 × 예보일"
  },
  "weather_place_precipitation_window": {
+  "desc": "장소별로 비나 눈이 이어질 것으로 예보된 시간 구간을 보여줍니다.",
   "title": "연속 강수 예보 구간",
   "unit": "장소 × 구간"
  },
  "weather_place_risk_window": {
+  "desc": "폭염이나 한파, 호우 같은 위험 기상 후보 구간을 장소별로 알려줍니다.",
   "title": "기상 주의 구간(후보)",
   "unit": "장소 × 구간"
  }

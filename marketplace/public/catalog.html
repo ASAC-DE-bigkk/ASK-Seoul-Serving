@@ -179,6 +179,11 @@
                     overflow-x:auto; white-space:pre; }
   .uchip { font-family:var(--mono); font-size:10px; padding:1px 6px; border-radius:3px;
            background:var(--panel); border:1px solid var(--line-strong); color:var(--muted); margin-left:6px; }
+  /* 목록 페이저 — 행과 같은 좌우 여백, 가운데에 위치 표시 */
+  .lpager { display:flex; align-items:center; justify-content:center; gap:14px; padding:12px 18px;
+            background:var(--panel); }
+  .lpager span { font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .lpager button[disabled] { opacity:.45; cursor:default; }
   .badge { font-family:var(--mono); font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:4px;
            white-space:nowrap; background:var(--accent-soft); color:var(--accent-deep);
            border:1px solid var(--accent-line); justify-self:start; }
@@ -367,6 +372,10 @@ let DISPLAY = {};
 let PRODUCTS = [];
 let activeDomain = "all";
 let query = "";
+// 목록 페이지네이션 — 59종을 한 번에 쏟으면 스크롤이 길어 도메인·검색으로 못 좁힌 사용자가
+// 길을 잃는다. 10개 단위로 끊고, 조건(도메인·검색)이 바뀌면 1페이지로 돌아간다.
+let page = 1;
+const PAGE_SIZE = 10;
 
 const domainOf = (p) => (p.product_id || p.name || "").replace(/^gold_/, "").split("_")[0];
 const titleOf = (p) => (DISPLAY[p.product_id] || {}).title || p.product_id || p.name;
@@ -420,7 +429,7 @@ function renderNav() {
   const all = document.createElement("li");
   all.className = activeDomain === "all" ? "active" : "";
   all.innerHTML = "<span class='dot'></span>전체<span class='cnt'>" + PRODUCTS.length + "</span>";
-  all.onclick = () => { activeDomain = "all"; renderNav(); renderList(); };
+  all.onclick = () => selectDomain("all");
   ul.appendChild(all);
   for (const d of DOMAINS) {
     const n = counts[d.id] || 0;
@@ -428,9 +437,18 @@ function renderNav() {
     li.className = (activeDomain === d.id ? "active " : "") + (n ? "" : "soon");
     li.innerHTML = "<span class='dot'></span>" + d.name +
       (n ? "<span class='cnt'>" + n + "</span>" : "<span class='soon-tag'>준비 중</span>");
-    if (n) li.onclick = () => { activeDomain = d.id; renderNav(); renderList(); };
+    if (n) li.onclick = () => selectDomain(d.id);
     ul.appendChild(li);
   }
+}
+
+// 도메인 클릭 = "이 도메인 전부 보기" 의도다. 홈 제품 카드가 넘긴 검색어(?q=테이블명)가
+// 남아 있으면 다른 도메인이 전부 0건으로 걸러져 탭이 죽은 것처럼 보였다(버그) — 전환 시 비운다.
+function selectDomain(id) {
+  activeDomain = id;
+  query = ""; $("q").value = "";
+  page = 1;
+  renderNav(); renderList();
 }
 
 function renderStart() {
@@ -459,9 +477,10 @@ function visible() {
   return PRODUCTS.filter((p) => {
     if (activeDomain !== "all" && domainOf(p) !== activeDomain) return false;
     if (!query) return true;
-    // 검색 표면: 표시명·기술명·설명 + usage 질문들(product_question 은 usage 로 흡수됐다)
+    // 검색 표면: 표시명·기술명·설명(쉬운 문장 + 계약 원문) + usage 질문들
     const uq = (USAGE[p.name] || []).map((u) => u.question).join(" ");
-    const hay = (titleOf(p) + " " + (p.product_question || "") + " " + (p.description || "") + " " + uq + " " + p.name).toLowerCase();
+    const hay = (titleOf(p) + " " + ((DISPLAY[p.product_id] || {}).desc || "") + " " +
+      (p.product_question || "") + " " + (p.description || "") + " " + uq + " " + p.name).toLowerCase();
     return hay.includes(query);
   });
 }
@@ -474,15 +493,19 @@ function renderList() {
   const body = $("plistBody");
   body.innerHTML = "";
   if (!list.length) { body.innerHTML = "<div class='empty' style='border:0'>조건에 맞는 제품이 없습니다</div>"; return; }
-  for (const p of list) {
+  const pages = Math.ceil(list.length / PAGE_SIZE);
+  if (page > pages) page = pages;   // 필터가 좁아져 현재 페이지가 사라졌으면 마지막 페이지로
+  const slice = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  for (const p of slice) {
     const d = DISPLAY[p.product_id] || {};
     const row = document.createElement("div");
     row.className = "prow";
     const usage = USAGE[p.name] || [];
     row.innerHTML =
       "<div class='t'>" + titleOf(p) + "<small>" + p.name + "</small></div>" +
-      // 설명이 질문보다 정보량이 크다 — 그레인·주의사항이 여기 실린다. 질문은 usage 로 흡수.
-      "<div class='desc'>" + esc(p.description || p.product_question || "—") + "</div>" +
+      // 목록 설명은 쉬운 한 줄 문장(display 사전 desc)을 우선한다 — 계약 description 은
+      // 그레인 기호·내부 용어 중심이라 처음 보는 사용자에게 안 읽힌다(멘토 피드백).
+      "<div class='desc'>" + esc(d.desc || p.description || p.product_question || "—") + "</div>" +
       (usage.length
         ? "<span class='ubadge'>질문 " + usage.length + "건</span>"
         : "<span class='ubadge none'>usage 준비 중</span>") +
@@ -547,6 +570,22 @@ function renderList() {
       finally { btn.disabled = false; }
     });
     body.appendChild(row); body.appendChild(detail);
+  }
+  if (pages > 1) {
+    const start = (page - 1) * PAGE_SIZE + 1;
+    const end = Math.min(page * PAGE_SIZE, list.length);
+    const pg = document.createElement("div");
+    pg.className = "lpager";
+    pg.innerHTML =
+      "<button class='btn-g btn-sm' data-pg='prev'" + (page <= 1 ? " disabled" : "") + ">← 이전</button>" +
+      "<span>" + page + " / " + pages + " 페이지 · " + list.length + "개 중 " + start + "~" + end + "</span>" +
+      "<button class='btn-g btn-sm' data-pg='next'" + (page >= pages ? " disabled" : "") + ">다음 →</button>";
+    pg.querySelectorAll("[data-pg]").forEach((b) => b.addEventListener("click", () => {
+      page += b.dataset.pg === "next" ? 1 : -1;
+      renderList();
+      goHash("#catalog");   // 페이지를 넘기면 목록 머리로 — 안 올리면 플레이그라운드 한복판에 남는다
+    }));
+    body.appendChild(pg);
   }
   body.querySelectorAll("[data-try]").forEach((b) => b.addEventListener("click", () => {
     $("pTable").value = b.dataset.try;
@@ -739,7 +778,7 @@ $("toggleRaw").addEventListener("click", () => {
   r.style.display = show ? "block" : "none";
   $("tableWrap").style.display = show ? "none" : "block";
 });
-$("q").addEventListener("input", () => { query = $("q").value.trim().toLowerCase(); renderList(); });
+$("q").addEventListener("input", () => { query = $("q").value.trim().toLowerCase(); page = 1; renderList(); });
 // 폐기 — 되돌릴 수 없으니 한 번 더 묻는다(발급의 rotate 확인과 같은 규칙).
 // 폐기한 키로도 삭제는 되어야 해서(서버가 allowRevoked 로 받는다), 폐기 뒤에 '완전 삭제'가 열린다.
 async function callRevoke(purge) {
