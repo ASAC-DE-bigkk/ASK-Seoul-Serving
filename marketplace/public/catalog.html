@@ -512,24 +512,26 @@ function visible() {
   });
 }
 
-// 보여줄 페이지 번호 — 적으면 전부, 많아지면 처음·끝·현재 주변만 남기고 접는다.
-// 번호가 줄을 넘기기 시작하면 고르기가 오히려 어려워진다(지금은 최대 6쪽이라 전부 보이지만,
-// 제품이 늘면 자동으로 접힌다). "…" 는 자리를 알리는 표시일 뿐 누를 수 없다.
+// 번호를 한 줄에 몇 칸까지 펼칠지. 넘으면 접는다 — 번호가 줄을 넘기기 시작하면
+// 고르기가 오히려 어려워진다. 지금 제품 수로는 최대 6쪽이라 늘 전부 보이고,
+// 제품이 늘면 이 값을 넘는 순간부터 자동으로 접힌다.
+const MAX_PAGE_BUTTONS = 10;
+
+// 보여줄 페이지 번호. 접힐 때도 칸 수를 MAX_PAGE_BUTTONS 로 **고정**한다 —
+// 페이지를 넘길 때마다 페이저 폭이 들쭉날쭉하면 다음에 누를 번호가 발밑에서 움직인다.
+// "…" 는 자리를 알리는 표시일 뿐 누를 수 없다.
+const range = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
 function pageList(cur, total) {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  const keep = new Set([1, total, cur - 1, cur, cur + 1]);
-  // 양 끝에 붙어 있을 땐 반대쪽으로 창을 넓힌다 — 안 그러면 1쪽에서 "1 2 … 12" 처럼 앙상해진다
-  if (cur <= 4) [2, 3, 4, 5].forEach((n) => keep.add(n));
-  if (cur >= total - 3) [total - 1, total - 2, total - 3, total - 4].forEach((n) => keep.add(n));
-  const nums = [...keep].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
-  const out = [];
-  let prev = 0;
-  for (const n of nums) {
-    if (prev && n - prev > 1) out.push("…");
-    out.push(n);
-    prev = n;
-  }
-  return out;
+  const MAX = MAX_PAGE_BUTTONS;
+  if (total <= MAX) return range(1, total);
+  const run = MAX - 2;              // 한쪽 끝에 붙었을 때 연속으로 보여줄 개수(끝쪽 1칸 + "…" 1칸을 뺀 나머지)
+  if (cur <= run - 1) return [...range(1, run), "…", total];
+  if (cur >= total - (run - 2)) return [1, "…", ...range(total - run + 1, total)];
+  // 가운데 — 양쪽에 "…" 가 하나씩 붙으므로 창은 MAX-4 칸
+  const win = MAX - 4;
+  const start = cur - Math.floor((win - 1) / 2);
+  return [1, "…", ...range(start, start + win - 1), "…", total];
 }
 
 function renderList() {
