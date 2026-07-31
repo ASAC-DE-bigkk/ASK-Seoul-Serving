@@ -18,14 +18,17 @@
     --amber-soft:#fffaeb; --amber-ink:#b54708; --red-soft:#fef3f2; --red-ink:#b42318;
     --shadow-xs:0 1px 2px rgba(16,24,40,.05);
     --shadow-sm:0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
-    --mono:ui-monospace,'Cascadia Code',Consolas,monospace;
+    --mono:ui-monospace,'Cascadia Code',Consolas,'Malgun Gothic',monospace;
+    /* mono 는 라틴 식별자 전용이다 — Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
+       굴림 계열에 대체되고 작은 급수에서 뭉개진다(실측). 한글 라벨은 --sans 로 되돌린다 */
+    --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
+           system-ui,-apple-system,'Noto Sans KR',sans-serif;
   }
   * { box-sizing:border-box; margin:0; }
   html { scroll-behavior:smooth; }
   /* 서체 스택·급수는 랜딩과 같은 규칙 — 근거는 index.html 주석 참고 */
   /* antialiased 는 macOS 에서 획을 더 가늘게 만든다 — 선명도 개선으로 제거(Windows 에선 무효) */
-  body { font-family:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
-                     system-ui,-apple-system,'Noto Sans KR',sans-serif;
+  body { font-family:var(--sans);
          background:var(--bg); color:var(--ink); font-size:15px; line-height:1.65; word-break:keep-all;
          text-size-adjust:100%; }
   .shell { display:grid; grid-template-columns:248px 1fr; min-height:100vh; }
@@ -85,9 +88,11 @@
               padding:3px 10px; border-radius:6px; border:1px solid var(--line-strong);
               color:var(--muted); background:var(--panel); white-space:nowrap; letter-spacing:.01em; }
   .env-pill i { width:6px; height:6px; border-radius:50%; background:#f79009; }
-  .keychip { font-family:var(--mono); font-size:11.5px; padding:4px 10px; border-radius:6px;
+  /* 미연결 상태는 한글("키 미연결")이고 연결 상태는 키 접두(라틴)다 — 서체를 상태별로 나눈다 */
+  .keychip { font-family:var(--sans); font-size:12px; padding:4px 10px; border-radius:6px;
              border:1px solid var(--line-strong); color:var(--muted); cursor:pointer; background:var(--panel); }
-  .keychip.on { border-color:var(--accent-line); background:var(--accent-soft); color:var(--accent-deep); font-weight:600; }
+  .keychip.on { font-family:var(--mono); border-color:var(--accent-line); background:var(--accent-soft);
+                color:var(--accent-deep); font-weight:600; }
 
   .content { padding:24px 28px 64px; max-width:1160px; }
   .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; }
@@ -180,7 +185,7 @@
   .usage-item pre { font-family:var(--mono); font-size:11.5px; line-height:1.55; background:#f2f6f4;
                     border:1px solid var(--line); border-radius:4px; padding:8px 10px; margin:8px 0 0;
                     overflow-x:auto; white-space:pre; }
-  .uchip { font-family:var(--mono); font-size:10.5px; padding:1px 6px; border-radius:3px;
+  .uchip { font-family:var(--sans); font-size:11.5px; padding:1px 6px; border-radius:3px;
            background:var(--panel); border:1px solid var(--line-strong); color:var(--muted); margin-left:6px; }
   /* 목록 페이저 — 행과 같은 좌우 여백, 가운데에 위치 표시 */
   .lpager { display:flex; align-items:center; justify-content:center; gap:14px; padding:12px 18px;

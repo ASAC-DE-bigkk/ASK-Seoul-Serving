@@ -29,7 +29,10 @@
     --shadow-xs:0 1px 2px rgba(16,24,40,.05);
     --shadow-sm:0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
     --shadow-md:0 6px 16px rgba(11,18,32,.10);
-    --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono',monospace;
+    --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono','Malgun Gothic',monospace;
+    /* 본문 서체를 변수로 — 한글 라벨이 mono 에서 빠져나올 때 되돌아올 곳이 필요하다 */
+    --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
+           system-ui,-apple-system,'Noto Sans KR',sans-serif;
   }
   * { box-sizing:border-box; margin:0; }
   html { scroll-behavior:smooth; }
@@ -37,17 +40,21 @@
      대부분의 방문자 PC 에는 Pretendard 가 없어 Windows=맑은 고딕 / macOS=Apple SD Gothic Neo 로
      떨어진다. system-ui(Segoe UI)에는 한글이 없어 글리프 단위 폴백이 일어나므로, 한글 폴백을
      운에 맡기지 않고 직접 지정한다. 웹폰트는 쓰지 않는다 — 한글 폰트는 무거워 첫 화면을 늦춘다 */
-  body { font-family:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
-                     system-ui,-apple-system,'Noto Sans KR',sans-serif;
+  body { font-family:var(--sans);
          background:var(--bg); color:var(--ink); font-size:15px; line-height:1.7; word-break:keep-all;
          text-size-adjust:100%; }
   a { color:inherit; text-decoration:none; }
   .wrap { max-width:1140px; margin:0 auto; padding:0 24px; }
   :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:6px; }
   .deck :focus-visible, .nav :focus-visible { outline-color:#5fd6c6; }
-  /* 데이터를 가리키는 미세 라벨 — 이 페이지의 서체 규칙 */
+  /* 데이터를 가리키는 미세 라벨 — 이 페이지의 서체 규칙.
+     mono 는 라틴 전용이다: Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
+     굴림 계열에 대체되고, 10px 대 + 자간 .12em 이 겹쳐 뭉개진다(실측). 한글이 실리는
+     라벨은 .lab.ko 로 본문 서체·큰 급수·좁은 자간으로 뺀다 */
   .lab { font-family:var(--mono); font-size:10.5px; font-weight:600; letter-spacing:.12em;
          text-transform:uppercase; color:var(--faint); }
+  .lab.ko { font-family:var(--sans); font-size:12px; letter-spacing:.01em;
+            text-transform:none; }
   .deck .lab { color:var(--deck-dim); }
   .num { font-variant-numeric:tabular-nums; }
 
@@ -67,8 +74,9 @@
   .nav-links a:hover { background:rgba(255,255,255,.06); color:#fff; }
   .nav-links a.active { color:#fff; font-weight:600; background:rgba(255,255,255,.08); }
   .nav .spacer { flex:1; }
-  .env-pill { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px;
-              font-weight:600; letter-spacing:.08em; padding:4px 10px; border-radius:5px;
+  /* 한글 라벨이라 자간을 벌리지 않는다 — 라틴 대문자용 .08em 을 한글에 주면 낱글자로 흩어져 읽힌다 */
+  .env-pill { display:inline-flex; align-items:center; gap:6px; font-family:var(--sans); font-size:11.5px;
+              font-weight:600; letter-spacing:.01em; padding:4px 10px; border-radius:5px;
               border:1px solid var(--deck-line); color:var(--deck-ink); white-space:nowrap; }
   .env-pill i { width:5px; height:5px; border-radius:50%; background:#f79009; }
   .nav-cta { font-size:12.5px; font-weight:600; color:#fff; background:var(--accent);
@@ -181,11 +189,12 @@
   .dom .t i { width:6px; height:6px; border-radius:50%; background:#2aa79a; flex:none; }
   .dom.soon .t { color:var(--muted); } .dom.soon .t i { background:var(--line-strong); }
   .dom .d { font-size:11.5px; color:var(--faint); }
-  .dom .n { font-family:var(--mono); font-size:10px; font-weight:600; color:var(--accent-deep); margin-top:4px;
+  .dom .n { font-family:var(--mono); font-size:10.5px; font-weight:600; color:var(--accent-deep); margin-top:4px;
             display:flex; align-items:baseline; gap:7px; }
-  /* 공간 단위 — 도메인마다 다르다는 사실이 카드 안에서 바로 읽혀야 한다 */
-  .dom .n .u { font-family:inherit; font-weight:500; color:var(--teal-deep); margin-left:auto;
-               white-space:nowrap; }
+  /* 공간 단위 — 도메인마다 다르다는 사실이 카드 안에서 바로 읽혀야 한다.
+     한글이라 mono 를 상속받으면 안 된다(위 .lab 주석 참고) */
+  .dom .n .u { font-family:var(--sans); font-size:12px; font-weight:600; color:var(--teal-deep);
+               margin-left:auto; white-space:nowrap; }
   .dom.soon .n, .dom.soon .n .u { color:var(--faint); }
 
   /* skeleton · 상태 */
@@ -322,7 +331,7 @@
         <a href="/catalog?q=외식">동네 상권</a>
       </div>
     </div>
-    <p class="lab fieldnote">격자 한 칸 = 행정동 하나<br>커버리지는 도메인마다 다름</p>
+    <p class="lab ko fieldnote">격자 한 칸 = 행정동 하나<br>커버리지는 도메인마다 다름</p>
   </div>
 </header>
 
@@ -366,7 +375,7 @@
         </div></div>
         <div class="hstep"><div class="num2">2</div><div>
           <div class="tt">API 키 발급</div>
-          <div class="dd">이메일 하나로 즉시 발급됩니다. 서버에는 키의 <code>SHA-256 해시</code>만 저장돼요.</div>
+          <div class="dd">이메일 하나로 즉시 발급됩니다. 서버에는 키의 <code>SHA-256</code> 해시만 저장돼요.</div>
         </div></div>
         <div class="hstep"><div class="num2">3</div><div>
           <div class="tt">호출</div>
@@ -377,7 +386,7 @@
       <div class="demo" id="demo">
         <div class="bar">
           <i aria-hidden="true"></i>
-          <span class="lab">질문 → 호출 → 응답</span>
+          <span class="lab ko">질문 → 호출 → 응답</span>
           <div class="qs" id="demoDots" role="tablist" aria-label="데모 시나리오"></div>
         </div>
         <div class="body">

@@ -11,12 +11,14 @@
     --ink:#12211f; --muted:#3d534f; --faint:#75898b; --line:#e6eae8; --line-strong:#ccd5d2;
     --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
     --amber-soft:#fffaeb; --amber-ink:#b54708;
-    --mono:ui-monospace,'Cascadia Code',Consolas,monospace;
+    --mono:ui-monospace,'Cascadia Code',Consolas,'Malgun Gothic',monospace;
+    /* mono 는 라틴 식별자 전용 — 한글이 섞이면 글자 단위로 굴림 계열에 대체돼 뭉개진다 */
+    --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
+           system-ui,-apple-system,'Noto Sans KR',sans-serif;
   }
   * { box-sizing:border-box; margin:0; }
   html { scroll-behavior:smooth; }
-  body { font-family:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
-                     system-ui,-apple-system,'Noto Sans KR',sans-serif;
+  body { font-family:var(--sans);
          background:var(--bg); color:var(--ink); font-size:14.5px; line-height:1.7; }
   a { color:var(--accent-deep); text-decoration:none; }
   a:hover { text-decoration:underline; text-underline-offset:3px; }
