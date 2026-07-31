@@ -320,7 +320,7 @@
 
       <div class="sec-title" id="catalog"><h2 id="listTitle">전체 제품</h2><span class="hint" id="listHint"></span></div>
       <div class="plist">
-        <div class="phead"><span>제품명</span><span>제품 설명</span><span>USAGE</span><span></span></div>
+        <div class="phead"><span>제품명</span><span>제품 설명</span><span>활용 예시</span><span></span></div>
         <div id="plistBody"></div>
       </div>
 
@@ -516,7 +516,7 @@ function renderList() {
       "<div class='desc'>" + esc(d.desc || p.description || p.product_question || "—") + "</div>" +
       (usage.length
         ? "<span class='ubadge'>질문 " + usage.length + "건</span>"
-        : "<span class='ubadge none'>usage 준비 중</span>") +
+        : "<span class='ubadge none'>예시 준비 중</span>") +
       "<div class='act'><button class='btn-g btn-sm' data-try='" + p.name + "'>써보기</button></div>";
     const detail = document.createElement("div");
     detail.className = "pdetail";
@@ -524,7 +524,7 @@ function renderList() {
     // usage — 검증된 질의 예시. sql 은 참조 구현이다(#600 §4.3): 그대로 실행하는 값이
     // 아니라 "이 테이블로 어디까지 답할 수 있는가"의 명세로 보여준다.
     const usageHtml = usage.length
-      ? "<div class='dhead'>USAGE · 검증된 질문 " + usage.length + "건</div>" +
+      ? "<div class='dhead'>활용 예시 · 실제로 돌려본 질문 " + usage.length + "건</div>" +
         usage.map((u) =>
           "<div class='usage-item'>" +
           "<div class='uq'>" + esc(u.question) +
