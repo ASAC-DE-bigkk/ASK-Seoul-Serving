@@ -79,7 +79,20 @@
   .updated { margin-top:44px; padding-top:16px; border-top:1px solid var(--line);
              font-size:12px; color:var(--faint); }
   footer { margin-top:0; border-top:1px solid var(--line); background:var(--panel); }
-  .foot-in { display:flex; flex-wrap:wrap; gap:16px; padding:18px 0; font-size:12px; color:var(--faint); }
+  /* 바닥 — site.css·index.html 과 같은 구조·같은 값 */
+  .foot-in { display:grid; grid-template-columns:1.6fr 1fr 1fr 1fr; gap:24px;
+             max-width:1080px; margin:0 auto; padding:30px 24px 22px; }
+  @media (max-width:760px){ .foot-in { grid-template-columns:1fr 1fr; gap:20px; } }
+  .fcol { display:flex; flex-direction:column; gap:5px; font-size:12.5px; }
+  .fcol b { font-size:12.5px; font-weight:700; color:var(--ink); margin-bottom:2px; }
+  .fcol span { color:var(--faint); }
+  .fcol a { color:var(--muted); }
+  .fcol a:hover { color:var(--accent-deep); }
+  .foot-btm { display:flex; flex-wrap:wrap; gap:8px 18px; max-width:1080px; margin:0 auto;
+              padding:14px 24px 22px; border-top:1px solid var(--line);
+              font-size:12px; color:var(--faint); }
+  .foot-btm .r { margin-left:auto; }
+  @media (max-width:640px){ .foot-btm .r { margin-left:0; } }
 </style>
 </head>
 <body>
@@ -88,8 +101,10 @@
   <div class="wrap nav-in">
     <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="logo" aria-hidden="true">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></a>
     <div class="nav-links">
-      <a href="/">홈</a>
       <a href="/catalog">카탈로그</a>
+      <a href="/docs">API 문서</a>
+      <a href="/guide">이용안내</a>
+      <a href="/status">상태</a>
     </div>
     <span class="spacer"></span>
     <span class="env-pill">프로토타입</span>
@@ -176,7 +191,7 @@
     <p>위 규칙을 위반하거나 서비스 운영에 지장을 주는 경우 <b>사전 통지 없이 키를 폐기할 수 있습니다.</b> 폐기된 키는 <code>403</code>을 반환합니다.</p>
 
     <h3>문의</h3>
-    <p>키 폐기와 정보 삭제는 아래 3절의 방법으로 <b>직접 처리하실 수 있습니다.</b> 그 밖의 문의·오류 신고 창구는 정식 공개 시 안내합니다 — 프로토타입 단계라 상시 창구를 운영하지 않습니다.</p>
+    <p>키 폐기와 정보 삭제는 아래 3절의 방법으로 <b>직접 처리하실 수 있습니다</b> — 문의를 기다리실 필요가 없습니다. 그 밖의 문의·오류 신고는 <a href="/support">문의 페이지</a>의 창구를 이용해 주세요. 다만 상시 대기하는 지원 인력이 없어 <b>응답 시점을 약속드리지는 못합니다.</b></p>
   </section>
 
   <section id="privacy">
@@ -218,7 +233,7 @@
       <b>알려진 한계 (프로토타입)</b><br>
       ① 발급 요청 IP 기록에 자동 만료가 걸려 있지 않습니다. ② 이메일은 암호화 없이 저장됩니다.
       ③ 이메일 소유 확인(인증 메일) 절차가 없어, 타인의 주소로도 발급이 가능합니다.
-      ④ 상시 문의 창구가 없습니다 — 삭제는 직접 하실 수 있지만, 그 밖의 요청을 받을 곳이 아직 없습니다.
+      ④ 상시 대기하는 지원 인력이 없습니다 — 삭제는 직접 하실 수 있고 <a href="/support">문의 창구</a>도 열려 있지만, 답변 시점을 약속드리지는 못합니다.
       정식 공개 전에 해소해야 할 항목으로 두고 있으며, 그때까지 <b>민감한 주소 대신 임시 주소</b>를 쓰셔도 무방합니다.
     </div>
   </section>
@@ -227,11 +242,33 @@
 </main>
 
 <footer>
-  <div class="wrap foot-in">
-    <span><a href="/">홈</a></span>
-    <span><a href="/catalog">카탈로그</a></span>
-    <span class="spacer"></span>
-    <span>프로토타입 · 가용성을 보장하지 않습니다</span>
+  <div class="foot-in">
+    <div class="fcol">
+      <b>ASK: SEOUL</b>
+      <span>서울 공공데이터를 행정동 코드 하나로 붙여 쓰는 API 허브</span>
+    </div>
+    <div class="fcol">
+      <b>서비스</b>
+      <a href="/catalog">데이터 카탈로그</a>
+      <a href="/docs">API 문서</a>
+      <a href="/status">서비스 상태</a>
+    </div>
+    <div class="fcol">
+      <b>이용</b>
+      <a href="/guide">이용안내</a>
+      <a href="/guide#faq">자주 묻는 질문</a>
+      <a href="/support">문의하기</a>
+    </div>
+    <div class="fcol">
+      <b>정책</b>
+      <a href="/legal#attribution">데이터 출처</a>
+      <a href="/legal#terms">이용약관</a>
+      <a href="/legal#privacy">개인정보 처리방침</a>
+    </div>
+  </div>
+  <div class="foot-btm">
+    <span>© 2026 ASK: SEOUL · ASAC 데이터 엔지니어링 2기 팀 프로젝트</span>
+    <span class="r">프로토타입 · 가용성을 보장하지 않습니다</span>
   </div>
 </footer>
 

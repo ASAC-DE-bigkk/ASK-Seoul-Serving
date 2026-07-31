@@ -10,6 +10,10 @@ compatibility_date = "2026-07-01"
 directory = "public"
 # API 라우트(/api/*)는 Worker 로, 그 외 정적 파일은 Assets 가 서빙
 run_worker_first = ["/api/*"]
+# 없는 경로는 사람용 404 화면으로 — 이 설정이 없으면 정적 자산에 없는 모든 경로가
+# Worker 의 마지막 분기까지 흘러가 application/problem+json 으로 떨어진다.
+# 오타 URL 로 들어온 사람이 JSON 덩어리를 보게 되던 원인이었다(/api/* 는 그대로 JSON 이 맞다).
+not_found_handling = "404-page"
 
 [[d1_databases]]
 binding = "DB"

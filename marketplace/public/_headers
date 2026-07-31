@@ -1,0 +1,23 @@
+# 정적 자산 응답 헤더 — Worker 를 거치지 않고 Assets 가 직접 서빙하므로 여기서 붙인다.
+# (API 응답의 헤더는 src/index.js 가 붙인다)
+
+/*
+  # 브라우저가 content-type 을 무시하고 내용을 넘겨짚지 않게 한다 — 업로드 기능은 없지만
+  # 데이터 응답이 JSON 이 아닌 무언가로 해석될 여지를 아예 없앤다
+  X-Content-Type-Options: nosniff
+  # 다른 사이트가 이 화면을 프레임에 넣어 클릭을 가로채지 못하게 한다
+  X-Frame-Options: DENY
+  # 외부로 나갈 때 경로·쿼리를 넘기지 않는다(검색어가 담긴 /catalog?q=… 가 새어나가지 않게)
+  Referrer-Policy: strict-origin-when-cross-origin
+  # 쓰지 않는 장치 권한은 미리 닫아 둔다
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=()
+  # 인라인 스타일·스크립트를 쓰는 화면이라 'unsafe-inline' 이 필요하다.
+  # 대신 외부 출처를 전부 막아, 스크립트가 주입되더라도 남의 서버로 데이터를 보낼 수 없다.
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+
+# 카탈로그가 읽는 생성물 — 발행 주기가 하루라 짧게 캐시하고 재검증한다
+/*.json
+  Cache-Control: public, max-age=300, must-revalidate
+
+/site.css
+  Cache-Control: public, max-age=3600

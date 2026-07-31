@@ -1,4 +1,6 @@
 node_modules/
 .wrangler/
+# 픽스처 생성기를 import 해 돌릴 때 생긴다 — 산출물은 seed.sql·product-display.json 뿐이다
+__pycache__/
 # 운영자 토큰 등 로컬 시크릿 — 절대 커밋하지 않는다
 .dev.vars

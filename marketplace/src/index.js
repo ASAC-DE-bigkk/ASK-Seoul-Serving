@@ -10,14 +10,28 @@ const MAX_LIMIT = 5000;
 // (30만 행 / limit 5000 = 61회) 2분에 나눠 받게 되는데, 그 정도가 적정 속도다.
 const BURST_PER_MIN = 60;
 
-const json = (obj, status = 200) =>
+const json = (obj, status = 200, headers = {}) =>
   new Response(JSON.stringify(obj), {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
       "access-control-allow-origin": "*",
+      ...headers,
     },
   });
+
+// 남은 한도를 응답 헤더로 알린다 — 본문을 파싱해야만 알 수 있으면 클라이언트는 한도를
+// 못 지킨다(429 를 맞고 나서야 안다). 헤더면 미들웨어·SDK 층에서 자동으로 감속할 수 있다.
+// 이름은 사실상 표준인 X-RateLimit-* 을 따른다. Reset 은 KST 자정의 epoch 초.
+function quotaHeaders(used, quota) {
+  const kstMidnight = new Date(Date.now() + 9 * 3600 * 1000);
+  kstMidnight.setUTCHours(24, 0, 0, 0);
+  return {
+    "x-ratelimit-limit": String(quota),
+    "x-ratelimit-remaining": String(Math.max(0, quota - used)),
+    "x-ratelimit-reset": String(Math.floor((kstMidnight.getTime() - 9 * 3600 * 1000) / 1000)),
+  };
+}
 
 const problem = (status, title, detail, extras = {}, headers = {}) =>
   new Response(JSON.stringify({ type: "about:blank", title, status, detail, ...extras }), {
@@ -221,6 +235,7 @@ async function handleCatalog(env) {
     // 출처·이용조건은 응답에서도 닿아야 한다 — 화면을 거치지 않고 API 만 쓰는 소비자가 있다
     attribution: "공공 원천의 2차 가공물 — 출처·이용조건 /legal#attribution",
     docs: "/llms.txt",
+    openapi: "/openapi.json",
     column_docs: "/column-docs.json",
     join_axes: JOIN_AXES,
     products: results.map((r) => {
@@ -322,7 +337,7 @@ async function handleData(env, table, params, keyRow, trace = {}) {
     next_cursor: hasMore ? encodeCursor(meta.exported_at, lastRid) : null,
     usage: { used: usage.used, daily_quota: usage.quota },
     rows,
-  });
+  }, 200, quotaHeaders(usage.used, usage.quota));
 }
 
 async function handleMe(env, keyRow) {
@@ -330,13 +345,14 @@ async function handleMe(env, keyRow) {
   const row = await env.DB.prepare(
     "SELECT count FROM _usage WHERE key_hash = ? AND day = ?"
   ).bind(keyRow.key_hash, day).first();
+  const used = row ? row.count : 0;
   return json({
     key_prefix: keyRow.key_prefix,
     email: keyRow.email,
     day,
-    used_today: row ? row.count : 0,
+    used_today: used,
     daily_quota: keyRow.daily_quota,
-  });
+  }, 200, quotaHeaders(used, keyRow.daily_quota));
 }
 
 // 요청 로그 — 무엇이 실제로 쓰이는지 재는 유일한 근거. 실패해도 서빙을 깨뜨리지 않는다.
@@ -346,12 +362,12 @@ const LOG_SWEEP_RATE = 0.02;  // 크론 없이, 로그 100건당 ~2회 낡은 �
 async function logRequest(env, trace) {
   try {
     await env.DB.prepare(
-      "INSERT INTO _request_log (ts, route, table_name, status, key_hash, filters, row_count, ms) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO _request_log (ts, route, table_name, status, key_hash, filters, row_count, ms, request_id) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       new Date().toISOString(), trace.route, trace.table ?? null, trace.status,
       trace.keyHash ?? null, trace.filterCols ? trace.filterCols.join(",") : null,
-      trace.rows ?? null, trace.ms
+      trace.rows ?? null, trace.ms, trace.requestId ?? null
     ).run();
     if (Math.random() < LOG_SWEEP_RATE) {
       const cutoff = new Date(Date.now() - LOG_RETENTION_DAYS * 86400000).toISOString();
@@ -406,8 +422,16 @@ async function route(request, env, url, trace) {
   }
 
   return problem(404, "not found",
-    "GET /api/catalog · /api/preview/<table> · /api/data/<table> · /api/me, POST·DELETE /api/keys — 문법·한도 안내는 GET /llms.txt");
+    "GET /api/catalog · /api/preview/<table> · /api/data/<table> · /api/me, POST·DELETE /api/keys — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
 }
+
+// 요청 ID — 문의가 들어왔을 때 그 요청 하나를 로그에서 집어내는 열쇠다.
+// 이게 없으면 지원 대화가 "언제쯤 어떤 걸 부르셨나요"로 시작한다.
+const newRequestId = () => {
+  const b = new Uint8Array(8);
+  crypto.getRandomValues(b);
+  return "req_" + [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+};
 
 export default {
   async fetch(request, env, ctx) {
@@ -424,8 +448,17 @@ export default {
       });
 
     const started = Date.now();
-    const trace = { route: null };
-    const res = await route(request, env, url, trace);
+    const trace = { route: null, requestId: newRequestId() };
+    let res = await route(request, env, url, trace);
+
+    // 오류는 본문에도 요청 ID 를 넣는다 — 사람이 복사해 오는 건 헤더가 아니라 JSON 이다
+    if (res.status >= 400 && (res.headers.get("content-type") || "").includes("problem+json")) {
+      const body = await res.json();
+      res = new Response(JSON.stringify({ ...body, request_id: trace.requestId }),
+        { status: res.status, headers: res.headers });
+    }
+    res = new Response(res.body, res);
+    res.headers.set("x-request-id", trace.requestId);
 
     // 라우트가 정해진 API 요청만 기록한다 (정적 자산·404 잡음 제외)
     if (trace.route) {

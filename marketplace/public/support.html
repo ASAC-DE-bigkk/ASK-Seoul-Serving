@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>문의하기 — ASK: SEOUL</title>
+<meta name="description" content="ASK: SEOUL 데이터 API 문의 창구 — 자가 해결 경로, 문의 방법, 오류 신고 시 함께 보내주실 정보.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/site.css">
+<style>
+  .chan { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin:16px 0; }
+  .chan .c { background:var(--panel); border:1px solid var(--line); border-radius:9px;
+             padding:16px 18px; box-shadow:var(--shadow-xs); display:flex; flex-direction:column; }
+  .chan .c h4 { font-size:14px; font-weight:650; }
+  .chan .c p { font-size:12.5px; margin:5px 0 0; flex:1; }
+  .chan .c .go { margin-top:12px; font-size:13px; font-weight:600; padding:7px 13px; border-radius:7px;
+                 background:var(--accent); color:#fff; align-self:flex-start; }
+  .chan .c .go:hover { background:var(--accent-deep); text-decoration:none; }
+  .chan .c .go.g { background:var(--panel); color:var(--muted); border:1px solid var(--line-strong); }
+  .chan .c .go.g:hover { border-color:var(--accent-line); color:var(--accent-deep); }
+  /* 문의 전 자가 해결 — 대부분의 문의가 여기서 끝난다 */
+  .selfhelp { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin:14px 0; }
+  .selfhelp a { display:block; background:var(--panel); border:1px solid var(--line); border-radius:8px;
+                padding:13px 15px; box-shadow:var(--shadow-xs); }
+  .selfhelp a:hover { border-color:var(--accent-line); text-decoration:none; }
+  .selfhelp a b { display:block; font-size:13.5px; color:var(--ink); font-weight:650; }
+  .selfhelp a span { font-size:12.5px; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-in">
+    <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="logo" aria-hidden="true">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></a>
+    <div class="nav-links">
+      <a href="/catalog">카탈로그</a>
+      <a href="/docs">API 문서</a>
+      <a href="/guide">이용안내</a>
+      <a href="/status">상태</a>
+    </div>
+    <span class="spacer"></span>
+    <span class="env-pill"><i aria-hidden="true"></i>프로토타입</span>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <h1>문의하기</h1>
+    <p class="lede">오류 신고, 데이터가 이상해 보이는 경우, 새 데이터 요청, 그 밖의 질문을 받습니다.
+      다만 상시 대기하는 창구가 아니라는 점을 먼저 밝혀 둡니다 — 아래 응답 안내를 읽어봐 주세요.</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section id="self" style="margin-top:32px">
+    <h2>먼저 여기서 해결되는 것들 <span class="en">Self-serve</span></h2>
+    <p>문의로 가장 많이 오는 것들은 기다리지 않고 지금 바로 처리하실 수 있습니다.</p>
+    <div class="selfhelp">
+      <a href="/guide#faq"><b>자주 묻는 질문</b><span>한도, 갱신 주기, 라이선스, 오류 코드</span></a>
+      <a href="/status"><b>데이터가 갱신되지 않아요</b><span>제품별 마지막 발행 시각 확인</span></a>
+      <a href="/catalog#auth"><b>키 재발급 · 폐기 · 삭제</b><span>직접 누르시면 즉시 처리됩니다</span></a>
+      <a href="/docs#errors"><b>오류 코드가 무슨 뜻인가요</b><span>상태 코드별 원인과 대처</span></a>
+    </div>
+  </section>
+
+  <section id="channel">
+    <h2>문의 창구 <span class="en">Channels</span></h2>
+    <div class="chan">
+      <div class="c">
+        <h4>GitHub 이슈 <span class="pill ok" style="margin-left:4px"><i aria-hidden="true"></i>운영 중</span></h4>
+        <p>가장 확실한 창구입니다. 공개 저장소라 다른 이용자도 같은 문제와 답변을 볼 수 있고,
+          처리 과정이 그대로 남습니다. 오류 신고와 데이터 이상 제보는 이쪽을 권합니다.</p>
+        <a class="go" href="https://github.com/ASAC-DE-bigkk/ASK-Seoul-Serving/issues/new" target="_blank" rel="noopener noreferrer">이슈 남기기</a>
+      </div>
+      <div class="c">
+        <h4>개인정보 관련 요청</h4>
+        <p>키 폐기와 이메일·사용량 삭제는 <b>문의 없이 직접</b> 하실 수 있고, 그게 가장 빠릅니다.
+          공개된 곳에 개인정보를 적지 않으셔도 되도록 셀프 경로를 먼저 만들어 두었습니다.</p>
+        <a class="go g" href="/catalog#auth">직접 처리하기</a>
+      </div>
+    </div>
+    <div class="note warn">
+      <b>공개 저장소입니다.</b> 이슈에 API 키 원문, 이메일 주소, 그 밖의 개인정보를 적지 말아 주세요.
+      요청을 특정할 때는 아래의 <code>request_id</code> 만으로 충분합니다.
+    </div>
+  </section>
+
+  <section id="report">
+    <h2>오류를 신고하실 때 <span class="en">Bug report</span></h2>
+    <p class="lead">아래 세 가지가 있으면 저희가 그 요청 하나를 로그에서 바로 집어낼 수 있습니다.
+      없으면 “언제쯤 무엇을 부르셨는지”부터 되짚어야 해서 확인이 훨씬 늦어집니다.</p>
+    <div class="deflist">
+      <div class="row"><span class="nm">request_id</span><span class="ty">필수</span>
+        <span class="ds">오류 응답 본문의 <code>request_id</code> 값, 또는 응답 헤더 <code>X-Request-Id</code>.
+          <code>req_</code> 로 시작하는 문자열입니다.</span></div>
+      <div class="row"><span class="nm">호출한 주소</span><span class="ty">필수</span>
+        <span class="ds">쿼리 문자열까지 포함한 전체 경로. <b>키는 빼고</b> 보내주세요.</span></div>
+      <div class="row"><span class="nm">받은 응답</span><span class="ty">권장</span>
+        <span class="ds">HTTP 상태 코드와 응답 본문. 기대하신 결과와 실제 결과를 함께 적어주시면 가장 좋습니다.</span></div>
+    </div>
+    <p>오류 응답은 이런 형태이고, 여기 <code>request_id</code> 가 들어 있습니다.</p>
+    <pre><code>{
+  <span class="s">"type"</span>: <span class="s">"about:blank"</span>,
+  <span class="s">"title"</span>: <span class="s">"unknown filter"</span>,
+  <span class="s">"status"</span>: 400,
+  <span class="s">"detail"</span>: <span class="s">"'gu_name' 컬럼 없음 — 사용 가능: gu_code, ..."</span>,
+  <span class="s">"request_id"</span>: <span class="s">"req_8f2a1c9e4b7d3a06"</span>   <span class="c">← 이 값을 알려주세요</span>
+}</code></pre>
+  </section>
+
+  <section id="sla">
+    <h2>응답에 대해 <span class="en">Response</span></h2>
+    <div class="note">
+      <b>정직하게 적어 둡니다.</b> 이 서비스는 학습·연구 목적으로 운영하는 프로토타입이고,
+      상시 대기하는 지원 인력이 없습니다. 문의에 언제까지 답하겠다는 약속을 드릴 수 없습니다.
+    </div>
+    <p>다만 아래는 지키려 합니다.</p>
+    <ul>
+      <li><b>데이터가 틀렸다는 제보</b>는 가장 먼저 봅니다. 잘못된 값을 계속 내보내는 것이 이 서비스가 할 수 있는 가장 나쁜 일이라고 보기 때문입니다.</li>
+      <li><b>서비스가 멈췄다는 제보</b>가 그다음입니다.</li>
+      <li>새 데이터 요청과 기능 제안은 받아 두고, 우선순위에 맞춰 처리합니다. 바로 반영된다고 약속드리기는 어렵습니다.</li>
+    </ul>
+    <p>급하게 판단이 필요하시면 <a href="/status">서비스 상태</a>에서 지금 API 가 살아 있는지, 데이터가 언제 발행됐는지를
+      문의 없이 바로 확인하실 수 있습니다.</p>
+  </section>
+
+  <div class="updated">문의 창구는 서비스 단계가 바뀌면 함께 갱신합니다</div>
+</main>
+
+<footer>
+  <div class="foot-in">
+    <div class="fcol">
+      <b>ASK: SEOUL</b>
+      <span>서울 공공데이터를 행정동 코드 하나로 붙여 쓰는 API 허브</span>
+    </div>
+    <div class="fcol">
+      <b>서비스</b>
+      <a href="/catalog">데이터 카탈로그</a>
+      <a href="/docs">API 문서</a>
+      <a href="/status">서비스 상태</a>
+    </div>
+    <div class="fcol">
+      <b>이용</b>
+      <a href="/guide">이용안내</a>
+      <a href="/guide#faq">자주 묻는 질문</a>
+      <a href="/support">문의하기</a>
+    </div>
+    <div class="fcol">
+      <b>정책</b>
+      <a href="/legal#attribution">데이터 출처</a>
+      <a href="/legal#terms">이용약관</a>
+      <a href="/legal#privacy">개인정보 처리방침</a>
+    </div>
+  </div>
+  <div class="foot-btm">
+    <span>© 2026 ASK: SEOUL · ASAC 데이터 엔지니어링 2기 팀 프로젝트</span>
+    <span class="r">프로토타입 · 가용성을 보장하지 않습니다</span>
+  </div>
+</footer>
+
+</body>
+</html>
