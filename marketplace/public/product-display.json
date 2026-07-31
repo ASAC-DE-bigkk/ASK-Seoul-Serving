@@ -68,7 +68,7 @@
   "unit": "장소 × 대여소"
  },
  "commerce_address_succession": {
-  "title": "이 자리엔 다음에 뭐가?",
+  "title": "자리 승계 업종 이력",
   "unit": "폐업업종 × 개업업종"
  },
  "commerce_age_band": {
@@ -96,7 +96,7 @@
   "unit": "데이터셋 = 1행"
  },
  "commerce_dong_category_matrix": {
-  "title": "우리 동네엔 뭐가 많나",
+  "title": "행정동 업종 분포",
   "unit": "행정동 × 중분류"
  },
  "commerce_dong_summary": {
@@ -128,7 +128,7 @@
   "unit": "자치구 × 업종"
  },
  "commerce_lifespan": {
-  "title": "이 업종 얼마나 버티나",
+  "title": "업종별 영업 수명",
   "unit": "업종 × 자치구"
  },
  "commerce_multi_site": {
@@ -144,11 +144,11 @@
   "unit": "월 × 업종"
  },
  "commerce_status_duration": {
-  "title": "휴업하면 얼마나 쉬나",
+  "title": "휴업 지속 기간",
   "unit": "업종 × 상태군"
  },
  "commerce_status_transition": {
-  "title": "휴업 다음은 재개? 폐업?",
+  "title": "휴업 후 전환 경로",
   "unit": "상태전이 × 업종"
  },
  "commerce_uptae_rollup": {

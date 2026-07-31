@@ -150,7 +150,7 @@
 
   .plist { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden;
            margin-bottom:30px; box-shadow:var(--shadow-xs); }
-  .phead, .prow { display:grid; grid-template-columns:minmax(220px,1.4fr) minmax(200px,2fr) 110px 110px 90px;
+  .phead, .prow { display:grid; grid-template-columns:minmax(200px,1.2fr) minmax(260px,2.4fr) 110px 90px;
                   gap:14px; align-items:center; padding:10px 18px; }
   .phead { background:#f2f6f4; border-bottom:1px solid var(--line); font-size:10.5px; font-weight:600;
            letter-spacing:.06em; color:var(--muted); }
@@ -161,7 +161,24 @@
   .prow .t small { display:block; font-family:var(--mono); font-size:10.5px; font-weight:400;
                    color:var(--faint); margin-top:1px; }
   .prow .q { font-size:12.5px; color:var(--muted); }
+  /* 설명은 2줄 클램프 — 전문은 펼침(스키마 설명·usage)에서 */
+  .prow .desc { font-size:12.5px; color:var(--muted); line-height:1.5; display:-webkit-box;
+                -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .prow .n { font-size:12.5px; font-variant-numeric:tabular-nums; text-align:right; }
+  /* usage 배지 — 검증된 질의 예시 보유 신호. 없는 제품은 흐리게(#600 공백이 보이게) */
+  .ubadge { font-size:11px; font-weight:600; padding:2px 9px; border-radius:10px; white-space:nowrap;
+            background:var(--accent-soft); color:var(--accent-deep); border:1px solid var(--accent-line);
+            justify-self:start; }
+  .ubadge.none { background:transparent; color:var(--faint); border:1px dashed var(--line-strong); font-weight:400; }
+  .usage-item { border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin-top:8px; }
+  .usage-item .uq { font-weight:600; font-size:12.5px; }
+  .usage-item .umeta { font-size:11px; color:var(--muted); margin-top:2px; }
+  .usage-item .uins { font-size:11.5px; color:var(--muted); margin-top:6px; }
+  .usage-item pre { font-family:var(--mono); font-size:11px; line-height:1.55; background:#f2f6f4;
+                    border:1px solid var(--line); border-radius:4px; padding:8px 10px; margin:8px 0 0;
+                    overflow-x:auto; white-space:pre; }
+  .uchip { font-family:var(--mono); font-size:10px; padding:1px 6px; border-radius:3px;
+           background:var(--panel); border:1px solid var(--line-strong); color:var(--muted); margin-left:6px; }
   .badge { font-family:var(--mono); font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:4px;
            white-space:nowrap; background:var(--accent-soft); color:var(--accent-deep);
            border:1px solid var(--accent-line); justify-self:start; }
@@ -290,7 +307,7 @@
 
       <div class="sec-title" id="catalog"><h2 id="listTitle">전체 제품</h2><span class="hint" id="listHint"></span></div>
       <div class="plist">
-        <div class="phead"><span>제품</span><span>답하는 질문</span><span>행 수</span><span>조회 축</span><span></span></div>
+        <div class="phead"><span>제품명</span><span>제품 설명</span><span>USAGE</span><span></span></div>
         <div id="plistBody"></div>
       </div>
 
@@ -359,6 +376,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;
 // fixtures/build_column_docs.py 가 같은 계약에서 뽑아 둔다(손으로 옮긴 사전이 아니다).
 // 계약 v1.2 에 컬럼 설명이 들어가면 이 파일과 생성기는 지운다.
 let COLUMN_DOCS = {};
+let USAGE = {};
 // 조인 키 표시 — 이 데이터를 남의 데이터에 붙이는 지점
 const JOIN_KEY = /^(admin_dong_code|gu_code|stat_region_cd)$/;
 
@@ -383,6 +401,9 @@ async function boot() {
   // 설명·표시명이 없어도 카탈로그는 그대로 뜬다 — 부가 정보라 실패를 삼킨다
   try { COLUMN_DOCS = await (await fetch("/column-docs.json")).json(); } catch { COLUMN_DOCS = {}; }
   try { DISPLAY = await (await fetch("/product-display.json")).json(); } catch { DISPLAY = {}; }
+  // 검증된 질의 예시(usage) — 라이브 d1_usage_patterns(commerce) + culture Phase 0 검증분.
+  // #600 채택 시 이 정적 자산은 게시 테이블 조회(안 B 번들)로 교체된다.
+  try { USAGE = await (await fetch("/usage-patterns.json")).json(); } catch { USAGE = {}; }
   const q0 = new URLSearchParams(location.search).get("q");
   if (q0) { $("q").value = q0; query = q0.trim().toLowerCase(); }
   renderNav(); renderStart(); renderList(); renderSelect();
@@ -438,7 +459,9 @@ function visible() {
   return PRODUCTS.filter((p) => {
     if (activeDomain !== "all" && domainOf(p) !== activeDomain) return false;
     if (!query) return true;
-    const hay = (titleOf(p) + " " + (p.product_question || "") + " " + p.name).toLowerCase();
+    // 검색 표면: 표시명·기술명·설명 + usage 질문들(product_question 은 usage 로 흡수됐다)
+    const uq = (USAGE[p.name] || []).map((u) => u.question).join(" ");
+    const hay = (titleOf(p) + " " + (p.product_question || "") + " " + (p.description || "") + " " + uq + " " + p.name).toLowerCase();
     return hay.includes(query);
   });
 }
@@ -455,20 +478,38 @@ function renderList() {
     const d = DISPLAY[p.product_id] || {};
     const row = document.createElement("div");
     row.className = "prow";
+    const usage = USAGE[p.name] || [];
     row.innerHTML =
       "<div class='t'>" + titleOf(p) + "<small>" + p.name + "</small></div>" +
-      "<div class='q'>" + (p.product_question || "—") + "</div>" +
-      "<div class='n'>" + nf.format(p.row_count || 0) + "</div>" +
-      (p.time_axis ? "<span class='badge'>" + p.time_axis + "</span>" : "<span class='badge dim'>명부형</span>") +
+      // 설명이 질문보다 정보량이 크다 — 그레인·주의사항이 여기 실린다. 질문은 usage 로 흡수.
+      "<div class='desc'>" + esc(p.description || p.product_question || "—") + "</div>" +
+      (usage.length
+        ? "<span class='ubadge'>질문 " + usage.length + "건</span>"
+        : "<span class='ubadge none'>usage 준비 중</span>") +
       "<div class='act'><button class='btn-g btn-sm' data-try='" + p.name + "'>써보기</button></div>";
     const detail = document.createElement("div");
     detail.className = "pdetail";
     const cols = p.columns || [];
+    // usage — 검증된 질의 예시. sql 은 참조 구현이다(#600 §4.3): 그대로 실행하는 값이
+    // 아니라 "이 테이블로 어디까지 답할 수 있는가"의 명세로 보여준다.
+    const usageHtml = usage.length
+      ? "<div class='dhead'>USAGE · 검증된 질문 " + usage.length + "건</div>" +
+        usage.map((u) =>
+          "<div class='usage-item'>" +
+          "<div class='uq'>" + esc(u.question) +
+          (u.verified_rows != null ? "<span class='uchip'>검증 " + u.verified_rows + "행</span>" : "") + "</div>" +
+          (u.axes ? "<div class='umeta'>" + esc(u.axes) + "</div>" : "") +
+          "<pre>" + esc(u.sql || "") + "</pre>" +
+          (u.insight ? "<div class='uins'>실행 예시 — " + esc(u.insight) + "</div>" : "") +
+          "</div>").join("")
+      : "";
     detail.innerHTML =
-      "<div class='dhead'>엔드포인트</div>" +
+      usageHtml +
+      "<div class='dhead'" + (usage.length ? " style='margin-top:14px'" : "") + ">엔드포인트</div>" +
       "<div class='endpoint'><span class='m'>GET</span> /api/data/" + p.name + "?limit=100" +
       (p.time_axis ? "&from=2026-07-01&to=2026-07-31" : "") + "</div>" +
       "<div class='dhead' style='margin-top:12px'>스키마 · " + cols.length + "컬럼" + (d.unit ? " · 그레인: " + d.unit : "") +
+      " · " + nf.format(p.row_count || 0) + "행 · " + (p.time_axis ? "시간축 " + p.time_axis : "명부형") +
       (p.exported_at ? " · 마지막 갱신 " + fmtFresh(p.exported_at) : "") + "</div>" +
       "<div class='cols'>" + cols.map((c) => {
         const ds = (COLUMN_DOCS[p.name] || {})[c.name];
