@@ -30,11 +30,12 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 
 ## 3. 이 프로젝트의 실체
 
-**운영자용 통합 품질 콘솔** (ASK-Seoul#58). 한 화면에서 세 가지를 본다.
+**운영자용 통합 품질 콘솔** (ASK-Seoul#58). 한 화면에서 네 가지를 본다.
 
 | 탭 | 묻는 질문 | 원본 |
 |---|---|---|
 | 파이프라인 품질 | 수집·변환이 제 몫을 했나 | `_ops_slo` (gold_*_slo_daily 스냅샷) |
+| 실행 기록 | 무엇이 돌았고, 무엇이 조용한가 | 조회 DB 4종 `_ops_run_event` 외 (ASK-Seoul#78, → [0009](docs/decision/0009-ops-records-consumption.md)) |
 | 서빙 품질 | 외부에 잘 나가고 있나 | `_request_log` (게이트웨이가 쌓는다) |
 | 키 관리 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_request_log` |
 
@@ -42,9 +43,10 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 
 ```text
 단일 Worker (src/index.js)          — GET /api/summary, GET·POST /api/keys
-+ Static Assets (public/index.html) — 탭 3개짜리 단일 페이지
++ Static Assets (public/index.html) — 탭 4개짜리 단일 페이지
 + 공유 로컬 D1                       — 게이트웨이(../marketplace)와 같은 상태 (--persist-to)
-+ migrations/ + fixtures/           — _ops_slo·_ops_domain 정본과 시드
++ migrations/                       — 0001 _ops_slo·_ops_domain(정본) · 0002 조회 DB 4종(미러)
++ fixtures/                         — 합성 샘플 시드 (slo_sample · ops_records_sample)
 + scripts/load_slo.py               — Trino → D1 임시 로더 (export task 명세를 겸함)
 ```
 
@@ -98,12 +100,14 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 | 테이블 | 정본 | 이 프로젝트의 권한 |
 |---|---|---|
 | `_ops_slo`, `_ops_domain` | **여기** (`migrations/0001`) | 스키마·내용 모두 |
+| `_ops_run_event`, `_ops_daily_metric`, `_ops_pipeline_state`, `_ops_pipeline_expectation` | ASAC-DAG (`common/ops/d1_ops.py`, ops-d1/v1) | **읽기 전용** — 로컬 미러는 `migrations/0002`, 정본 따라만 갱신 |
 | `_keys` | 게이트웨이 | `status`·`daily_quota` 갱신, 삭제 — 정해진 조치만 |
 | `_usage`, `_burst` | 게이트웨이 | 키 삭제 시 연쇄 삭제만 |
 | `_request_log` | 게이트웨이 | 읽기 전용 |
 
-`_ops_*` 스키마 변경은 `migrations/0001` 파일 갱신 — DROP+CREATE 리셋 규약
-([0007](docs/decision/0007-schema-single-file-reset.md)). 팀 D1 승격 시 증분으로 전환한다.
+마이그레이션은 **증분(추가만)** — DROP 금지, 변경은 ALTER 추가 파일로
+([0007](docs/decision/0007-schema-single-file-reset.md), #78 D-6). 내용 리프레시는
+픽스처·로더가 자기 범위를 DELETE 하고 다시 넣는다.
 
 ## 7. 검증
 
@@ -118,7 +122,8 @@ npm run dev    # :8788 — 게이트웨이(:8787)와 동시 구동 가능
 - 쓰기 경로를 고쳤으면 **토큰 미설정(503)·토큰 없음(401)·잘못된 토큰(401)** 을 다 본다.
 - 게이트웨이 테이블이 없는 상태(마켓플레이스 미시드)에서도 콘솔이 뜨는지 본다
   (`meta.missing` 강등).
-- 화면을 고쳤으면 탭 3개와 배지(샘플·읽기 전용·탭 경고 점) 동작을 본다.
+- 화면을 고쳤으면 탭 4개와 배지(샘플·읽기 전용·탭 경고 점) 동작을 본다.
+- 검증 명령 세트와 실행 기록 탭의 시나리오별 확인법은 [docs/runbook.md](docs/runbook.md).
 
 ## 8. 완료 기준
 
@@ -137,7 +142,8 @@ npm run dev    # :8788 — 게이트웨이(:8787)와 동시 구동 가능
 인증 방식 변경                     → 0004 개정 (Access/OAuth 승격 포함)
 게이트웨이 테이블 쓰기 확대        → 0003 개정
 저장소·인프라 추가(Queue·R2·DO·AE …) → 0008 의 도입 신호 확인 후 신규 결정
-_ops_* 증분 마이그레이션 전환      → 0007 개정
+마이그레이션에 DROP·이름 변경      → 금지 — 0007 규약(증분·추가만, #78 D-6)
+조회 DB 4종 스키마 변경            → 정본(ASAC-DAG)이 먼저 — 미러·화면은 0009 대로 추종
 키 상태 모델 확장                  → 0006 개정 (게이트웨이와 공동)
 ```
 

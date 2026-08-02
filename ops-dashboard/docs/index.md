@@ -8,6 +8,7 @@ ops-dashboard 의 문서는 **세 층**이고, 층마다 구속력이 다르다.
 | [결정 — decision/](#결정--docsdecision) | 현재 구조가 왜 이 모양인지 | **있음** — 어기려면 개정이 먼저 |
 | [방향 — direction.md](direction.md) | 어디로 가는가, 승격 경로 | 방향 제시 |
 | [참조 — reference/](#참조--docsreference) | "이런 방법이 있다" 카탈로그 | **없음** — 채택 근거 아님 |
+| [가이드 — runbook.md](runbook.md) | 구동·검증·조치의 절차 (설명+명령어) | 절차 안내 |
 
 ## 결정 — docs/decision/
 
@@ -21,8 +22,9 @@ ops-dashboard 의 문서는 **세 층**이고, 층마다 구속력이 다르다.
 | [0004](decision/0004-read-open-write-token.md) | 읽기 공개·쓰기 토큰 | 보안 판단은 서버, 이메일은 서버측 마스킹 |
 | [0005](decision/0005-slo-snapshot-to-d1.md) | SLO 스냅샷 복사 | Trino 는 Worker 가 못 닿는다 — `is_sample` 규약 포함 |
 | [0006](decision/0006-key-hash-identifier.md) | 조치 식별자 `key_hash` | prefix 는 충돌한다 — 상태는 active/revoked 두 개 |
-| [0007](decision/0007-schema-single-file-reset.md) | `_ops_*` 단일 파일 리셋 | 잃을 상태가 없는 동안만 — 승격 시 증분 전환 |
+| [0007](decision/0007-schema-single-file-reset.md) | 마이그레이션 증분(추가만) | DROP 금지 — 팀 조회 DB 실존으로 리셋 규약 폐지 (#78 D-6, 2026-08 개정) |
 | [0008](decision/0008-deferred-scope.md) | 후속으로 미룬 것 | 안 하기로 한 것의 전체 목록 + 도입 신호 |
+| [0009](decision/0009-ops-records-consumption.md) | 운영 기록 소비 | 조회 DB 4종을 읽기 전용으로 — 실행 기록 탭 (#78 적용 3단계) |
 
 ## 방향 — docs/direction.md
 
@@ -39,6 +41,12 @@ decision/ 이 정한다.
 |---|---|
 | [cloudflare_api_dashboard_role_plan_revised.md](reference/cloudflare_api_dashboard_role_plan_revised.md) | 2인 분업 전제의 초기 계획서 + 과설계 검토(§13~19) — MVP 축소 판단의 원형 |
 | [cloudflare_api_dashboard_role_plan_with_iac.md](reference/cloudflare_api_dashboard_role_plan_with_iac.md) | 위 문서 + IaC 전략(§20~39): Terraform/Wrangler 경계, State, CI/CD |
+| [ops-records-log-patterns.md](reference/ops-records-log-patterns.md) | 운영 기록 로그의 형태 패턴(F/V/D 표)과 인사이트 카탈로그 I-1~I-14 |
+
+## 가이드 — docs/runbook.md
+
+[runbook.md](runbook.md) — 구동 · API 검증 세트 · 실행 기록 탭 시나리오 확인 · 실적재 전환 ·
+증분 마이그레이션 절차 · 운영 조치(키·멈춤 후보) · 트러블슈팅. 전부 설명+명령어 단위.
 
 ## 팀 규약 (외부 정본)
 

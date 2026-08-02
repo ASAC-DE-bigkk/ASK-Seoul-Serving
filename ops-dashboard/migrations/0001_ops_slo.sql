@@ -9,12 +9,10 @@
 -- 화면이 그걸 실측인 척하면 안 되므로 행마다 표시하고, UI 는 '샘플' 배지를 띄운다.
 -- 실적재가 붙으면 is_sample=0 이 들어오고 배지는 저절로 사라진다.
 
--- 프로토타입이라 스키마 정본을 이 파일 하나로 유지한다 — 컬럼이 늘 때 ALTER 누적 대신
--- 통째로 다시 만든다. 내용물은 로더(scripts/load_slo.py)나 픽스처가 매번 다시 채우므로
--- 잃을 상태가 없다. 팀 D1 로 승격되면 그때부터 증분 마이그레이션으로 바꾼다.
-DROP TABLE IF EXISTS _ops_slo;
-DROP TABLE IF EXISTS _ops_domain;
-
+-- ⚠️ DROP 금지 — 증분 규약 (ASK-Seoul#78 D-6, decision/0007 개정).
+-- 팀 조회 DB 에 _ops_* 가족이 실존하므로, 이 파일이 팀 D1 에 닿는 날 DROP 은 팀 데이터를
+-- 지운다. 스키마 변경은 ALTER 추가 파일(0003, 0004 …)로만. 내용물 리프레시는 픽스처·로더가
+-- 자기 범위를 DELETE 하고 다시 넣는다. 로컬 통리셋이 필요하면 .wrangler 상태를 지울 것.
 CREATE TABLE IF NOT EXISTS _ops_slo (
   domain               TEXT    NOT NULL,
   event_date           TEXT    NOT NULL,  -- KST 집계일

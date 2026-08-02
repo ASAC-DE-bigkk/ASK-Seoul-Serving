@@ -185,6 +185,10 @@
         <span class="dot" id="dot-pipeline"></span>파이프라인 품질
         <span class="sub">수집·변환</span>
       </button>
+      <button role="tab" id="tab-runs" aria-controls="pane-runs" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-runs"></span>실행 기록
+        <span class="sub">정기런·멈춤</span>
+      </button>
       <button role="tab" id="tab-serving" aria-controls="pane-serving" aria-selected="false" tabindex="-1">
         <span class="dot" id="dot-serving"></span>서빙 품질
         <span class="sub">외부 응답</span>
@@ -212,6 +216,38 @@
       <div class="card">
         <div class="hd"><h3>살펴야 할 날</h3><p>정기런 실패 + <b>초록 위장</b>(통과로 보였지만 빈 run)</p></div>
         <div class="bd" id="badDays"></div>
+      </div>
+    </div>
+    </section>
+
+    <!-- 실행 기록 — 조회 DB 4종(ASK-Seoul#78 §8)의 소비 화면. 콘솔은 읽기만 한다(decision/0009). -->
+    <section class="pane" id="pane-runs" role="tabpanel" aria-labelledby="tab-runs" tabindex="0" hidden>
+    <h2 class="sec">실행 기록 <span>무엇이 돌았고, 무엇이 조용한가 · 조회 DB _ops_run_event 외 3종</span></h2>
+    <div class="kpis" id="runsKpis"></div>
+    <div class="grid">
+      <div class="card wide">
+        <div class="hd"><h3>도메인 × 단계</h3><p>최근 창의 성공/기록 — 빈 칸(—)은 그 도메인·단계가 아직 기록을 안 남긴다는 <b>관측</b>이다</p></div>
+        <div class="bd" id="runsMatrix"></div>
+      </div>
+      <div class="card wide">
+        <div class="hd"><h3>감시 대상 DAG</h3><p>침묵 한도를 넘긴 것이 멈춤 후보 · '미확인'은 정상이 아니라 아직 점검 전이라는 뜻</p></div>
+        <div class="bd" id="runsStalls"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>최근 실패</h3><p>최종 실패만 진짜 실패다 — 재시도 중·정보 없음은 따로 읽는다</p></div>
+        <div class="bd" id="runsFails"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>빈 실행</h3><p>성공인데 실측 0행 — 초록 위장의 일반형</p></div>
+        <div class="bd" id="runsEmpty"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>지연 상위</h3><p>예정보다 늦게 시작한 실행</p></div>
+        <div class="bd" id="runsSlow"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>환경</h3><p>한 조회 DB 에 두 환경이 섞이면 dev 가 운영 지표를 오염시킨다</p></div>
+        <div class="bd" id="runsEnv"></div>
       </div>
     </div>
     </section>
@@ -288,7 +324,7 @@ const kpis = (el, items) => {
 };
 
 // ── 탭. 상태는 URL 해시에 둔다 — 새로고침·링크 공유에도 보던 자리가 유지된다.
-const PANES = ["pipeline", "serving", "keys"];
+const PANES = ["pipeline", "runs", "serving", "keys"];
 function showTab(name) {
   if (!PANES.includes(name)) name = PANES[0];
   for (const p of PANES) {
@@ -314,11 +350,25 @@ for (const p of PANES) {
 addEventListener("hashchange", () => showTab(location.hash.slice(1)));
 
 function render(d) {
+  // 실행 기록 묶음 — 배너(환경 섞임)가 먼저 필요해서 위에서 만든다
+  const R = d.runs || { daily:[], expectations:[], failures:[], empty_runs:[], environments:[], slowest:[], load:null };
+  const envMix = (R.environments || []).length > 1;
+
   // ── 배너: 샘플 데이터·누락 섹션을 밝힌다. data-pane 이 붙은 것은 해당 탭에서만 보인다
   const b = [];
   if (d.meta.pipeline_is_sample)
     b.push("<div class='banner warn' data-pane='pipeline'><b>파이프라인 값은 합성 샘플입니다</b> — 팀 D1 쓰기가 막혀 있어 " +
            "실제 SLO 마트를 가져오지 못했습니다. 이 값으로 운영 판단을 하지 마세요.</div>");
+  if (d.meta.runs_is_sample)
+    b.push("<div class='banner warn' data-pane='runs'><b>실행 기록 값은 합성 샘플입니다</b> — 팀 조회 DB 적재분이 아닙니다. " +
+           "이 값으로 운영 판단을 하지 마세요.</div>");
+  if (d.meta.missing.includes("runs"))
+    b.push("<div class='banner info' data-pane='runs'>조회 DB 표(<code>_ops_run_event</code> 외 3종)가 없습니다 — " +
+           "<code>npm run seed</code> 를 실행하세요. 팀 적재기가 만드는 표와 같은 모양입니다.</div>");
+  if (envMix)
+    b.push("<div class='banner warn' data-pane='runs'><b>환경이 섞여 있습니다</b> — 한 조회 DB 에 " +
+           R.environments.map((r) => esc(r.environment)).join(" · ") +
+           " 기록이 함께 있습니다. dev 가 운영 지표를 오염시킵니다.</div>");
   if (d.meta.missing.includes("serving"))
     b.push("<div class='banner info' data-pane='serving'>서빙 로그를 찾지 못했습니다 — 게이트웨이 D1 상태를 공유하도록 " +
            "<code>--persist-to</code> 설정을 확인하세요.</div>");
@@ -381,6 +431,115 @@ function render(d) {
     { t:"viol", r:true, get:(r) => r.violation_count },
   ], badDays, "살펴야 할 날이 없습니다");
 
+  // ── 실행 기록 — 집계표(_ops_daily_metric)를 창 범위로 접고, 성공률이 가리는 두 축
+  // (재시도로 살림·빈 실행)과 "모른다 ≠ 0"(미측정 행수)을 같은 줄에 세운다.
+  const LAYERS = [["raw","수집"], ["bronze","정제"], ["silver","변환"], ["gold","집계"], ["d1","서빙"]];
+  const agg = {};
+  for (const r of R.daily) {
+    const a = agg[r.domain + "|" + r.layer] ||
+      (agg[r.domain + "|" + r.layer] = { ev:0, ok:0, fail:0, empty:0, retried:0, unk:0, obs:0 });
+    a.ev += r.event_count; a.ok += r.success_count; a.fail += r.failed_count;
+    a.empty += r.empty_run_count; a.retried += r.retried_run_count;
+    a.unk += r.rows_unknown_count; a.obs += r.rows_observed_count;
+  }
+  const rTot = Object.values(agg).reduce((a, x) => ({ ok:a.ok+x.ok, fail:a.fail+x.fail,
+    empty:a.empty+x.empty, retried:a.retried+x.retried, unk:a.unk+x.unk, obs:a.obs+x.obs }),
+    { ok:0, fail:0, empty:0, retried:0, unk:0, obs:0 });
+  const judged = rTot.ok + rTot.fail;
+  kpis("runsKpis", [
+    ["성공", judged ? Math.round(rTot.ok / judged * 100) + "%" : "—",
+     judged ? rTot.ok + "/" + judged + " 기록 단위 (skip 제외)" : "집계 없음",
+     judged && rTot.ok / judged < 0.9 ? "bad" : "good"],
+    ["재시도로 살림", nf.format(rTot.retried), "성공률이 가리는 열화", rTot.retried > 0 ? "bad" : "good"],
+    ["빈 실행", nf.format(rTot.empty), "성공인데 실측 0행 — 초록 위장", rTot.empty > 0 ? "bad" : "good"],
+    ["행수 미측정", nf.format(rTot.unk), "측정 " + nf.format(rTot.obs) + "건 · 모른다 ≠ 0", ""],
+  ]);
+
+  // 매트릭스 — 셀이 비어 있으면(—) 그 도메인·단계는 기록을 안 남긴다는 뜻. 공백도 관측이다.
+  const rDomains = [...new Set([...R.daily.map((r) => r.domain), ...R.expectations.map((r) => r.domain)])].sort();
+  $("runsMatrix").innerHTML = rDomains.length
+    ? "<table><thead><tr><th>domain</th>" + LAYERS.map(([k, lab]) =>
+        "<th class='r'>" + lab + " " + k + "</th>").join("") + "</tr></thead><tbody>" +
+      rDomains.map((dom) => "<tr><td class='name'>" + esc(dom) + "</td>" + LAYERS.map(([k]) => {
+        const a = agg[dom + "|" + k];
+        if (!a) return "<td class='r'><span class='pill dim'>—</span></td>";
+        const cls = a.fail > 0 ? "bad" : a.empty > 0 ? "warn" : "ok";
+        return "<td class='r'><span class='pill " + cls + "' title='성공 " + a.ok + " · 실패 " + a.fail +
+          " · 빈 실행 " + a.empty + " · 재시도로 살림 " + a.retried + "'>" + a.ok + "/" + a.ev + "</span></td>";
+      }).join("") + "</tr>").join("") + "</tbody></table>" +
+      "<div class='cal-legend'><span><span class='pill ok'>n/m</span> 성공/기록</span>" +
+      "<span><span class='pill warn'>노랑</span> 빈 실행 포함</span>" +
+      "<span><span class='pill bad'>빨강</span> 실패 포함</span>" +
+      "<span><span class='pill dim'>—</span> 기록 없음 = 관측 공백</span></div>" +
+      (R.load ? "<p style='margin-top:10px;font-size:11.5px;color:var(--faint)'>기간 내 기록 " +
+        nf.format(R.load.total || 0) + "건 · 단계 미기록 " + nf.format(R.load.layerless || 0) +
+        "건(관문 이전 기록 — 매트릭스에 안 잡힌다) · 최근 적재 " + esc(fmtTs(R.load.last_ingest) || "—") + "</p>" : "")
+    : "<div class='empty'>집계가 없습니다 — 적재가 시작되면 채워집니다</div>";
+
+  // 멈춤 판정 — 침묵 시간이 한도(max_delay_minutes)를 넘으면 후보로 세운다.
+  // '기록 없음'은 그 자체가 경보다(감시 대상인데 조회 DB 가 모른다). 미확인은 C-9 대로
+  // 정상도 장애도 아닌 제3의 상태로 보여준다 — 판정을 뭉개지 않는다.
+  const now = Date.now();
+  const fmtAge = (m) => m == null ? "—"
+    : m < 90 ? Math.round(m) + "분" : m < 2880 ? (m / 60).toFixed(1) + "시간" : Math.round(m / 1440) + "일";
+  const stalls = R.expectations.map((r) => {
+    let ageMin = null, state = "한도 안", cls = "ok";
+    if (!r.last_observed_at) { state = "기록 없음"; cls = "bad"; }
+    else {
+      ageMin = (now - Date.parse(r.last_observed_at)) / 60000;
+      if (r.max_delay_minutes != null && ageMin > r.max_delay_minutes) { state = "멈춤 후보"; cls = "bad"; }
+    }
+    return { ...r, ageMin, state, cls };
+  }).sort((a, b) => (a.cls === "bad" ? 0 : 1) - (b.cls === "bad" ? 0 : 1) || a.domain.localeCompare(b.domain));
+  const stallN = stalls.filter((x) => x.cls === "bad").length;
+  const obsPill = (s) => s === "complete" ? "<span class='pill ok'>점검 완료</span>"
+    : s === "partial" ? "<span class='pill warn'>부분</span>"
+    : s === "unverified" ? "<span class='pill dim' title='아직 점검이 안 지난 구간 — 정상이라는 뜻이 아니다'>미확인</span>"
+    : "<span class='pill dim'>—</span>";
+  $("runsStalls").innerHTML = table([
+    { t:"dag", name:true, get:(r) => esc(r.dag_id) + " <span class='pill dim'>" + esc(r.domain) + "</span>" },
+    { t:"기대", get:(r) => esc(r.trigger_type === "trigger" ? "상류: " + (r.upstream || "—")
+        : (r.expected_interval || r.trigger_type)) },
+    { t:"침묵 한도", r:true, get:(r) => fmtAge(r.max_delay_minutes) },
+    { t:"마지막 기록", r:true, get:(r) => r.ageMin == null ? "—" : fmtAge(r.ageMin) + " 전" },
+    { t:"판정", get:(r) => "<span class='pill " + r.cls + "'>" + r.state + "</span>" },
+    { t:"점검", get:(r) => obsPill(r.observation_state) },
+    { t:"owner", get:(r) => esc(r.owner || "—") },
+  ], stalls, "기대치 등록이 없습니다 — 정본은 DAG 선언이고 이 표는 사본입니다");
+
+  $("runsFails").innerHTML = table([
+    { t:"date", get:(r) => esc(md(r.observed_date_kst)) },
+    { t:"dag · task", name:true, get:(r) => esc((r.dag_id || "—") + " · " + (r.task_id || "—")) },
+    { t:"layer", get:(r) => r.layer ? esc(r.layer) : "<span class='pill dim'>없음</span>" },
+    { t:"시도", get:(r) => r.is_final_try === 1 ? "<span class='pill bad'>최종 실패</span>"
+        : r.is_final_try === 0 ? "<span class='pill warn'>재시도 중</span>"
+        : "<span class='pill dim'>정보 없음</span>" },
+    { t:"근거", name:true, get:(r) => esc(r.error_ref || "—") },
+  ], R.failures, "실패 기록이 없습니다");
+
+  $("runsEmpty").innerHTML = table([
+    { t:"date", get:(r) => esc(md(r.observed_date_kst)) },
+    { t:"dag · task", name:true, get:(r) => esc((r.dag_id || "—") + " · " + (r.task_id || "—")) },
+    { t:"layer", get:(r) => esc(r.layer || "—") },
+    { t:"행수 근거", get:(r) => esc(r.rows_source) },
+  ], R.empty_runs, "빈 실행이 없습니다");
+
+  $("runsSlow").innerHTML = table([
+    { t:"dag · task", name:true, get:(r) => esc((r.dag_id || "—") + " · " + (r.task_id || "—")) },
+    { t:"지연", r:true, get:(r) => r.delay_min != null
+        ? "<span class='pill " + (r.delay_min >= 30 ? "warn" : "dim") + "'>" + r.delay_min + "분</span>" : "—" },
+    { t:"소요", r:true, get:(r) => r.dur_min != null ? r.dur_min + "분" : "—" },
+    { t:"date", r:true, get:(r) => esc(md(r.observed_date_kst)) },
+  ], R.slowest, "지연 기록이 없습니다");
+
+  $("runsEnv").innerHTML = table([
+    { t:"env", get:(r) => "<span class='pill " + (r.environment === "prod" ? "ok" : "warn") + "'>" +
+        esc(r.environment) + "</span>" },
+    { t:"기록", r:true, get:(r) => nf.format(r.events) },
+    { t:"도메인", r:true, get:(r) => r.domains },
+    { t:"마지막", r:true, get:(r) => fmtTs(r.last_seen) },
+  ], R.environments, "기록이 없습니다");
+
   // ── 서빙
   const s = d.serving;
   const calls = s.routes.reduce((a, r) => a + r.calls, 0);
@@ -442,8 +601,10 @@ function render(d) {
   // ── 탭 라벨의 상태 점 — 탭으로 가린 쪽이 아픈지를 전환 없이 알려준다.
   // 판정 기준은 KPI 의 경고 조건과 같다(정기런 실패·계약 위반 / 에러율 5% 이상·0행 발생).
   const pipeBad = badDays.length > 0 || viol > 0;
+  const runsBad = stallN > 0 || rTot.fail > 0 || rTot.empty > 0 || envMix;
   const servBad = errPct >= 5 || emptyN > 0;
   $("dot-pipeline").className = "dot " + (slo.length ? (pipeBad ? "bad" : "ok") : "");
+  $("dot-runs").className = "dot " + ((R.daily.length || R.expectations.length) ? (runsBad ? "bad" : "ok") : "");
   $("dot-serving").className = "dot " + (calls ? (servBad ? "bad" : "ok") : "");
   showTab(location.hash.slice(1) || PANES[0]);   // 배너 가시성도 여기서 맞춰진다
 }
