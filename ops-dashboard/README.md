@@ -9,6 +9,7 @@
 | 파이프라인 품질 (`#pipeline`) | 수집·변환이 제 몫을 했나 | `_ops_slo` (gold_*_slo_daily 스냅샷) |
 | 실행 기록 (`#runs`) | 무엇이 돌았고, 무엇이 조용한가 | 조회 DB 4종 `_ops_run_event` 외 (ASK-Seoul#78) |
 | 서빙 품질 (`#serving`) | 외부에 잘 나가고 있나 | `_request_log` (게이트웨이가 쌓는다) |
+| 이용 행동 (`#usage`) | 누가·무엇이·어떻게 쓰나 | `_request_log` + `_keys` + 행동 스펙 초안(#9) |
 | 키 관리 (`#keys`) | 누가 쓰고 있고, 손댈 것이 있나 | `_keys` + `_usage` + `_request_log` |
 
 탭은 URL 해시에 실린다 — 새로고침·링크 공유에도 보던 자리가 유지된다.
@@ -39,6 +40,20 @@
 로컬은 합성 샘플로 화면 계약을 검증하고(경고 배너가 뜬다), 팀 조회 DB 로 승격해도 표
 이름·컬럼이 같아 화면 코드는 그대로다. 시나리오별 확인 방법은
 [runbook §3](docs/runbook.md).
+
+## 이용 행동 탭 — 행동 로그 스펙 초안(#9)의 소비 화면
+
+"누가·무엇이·어떻게 쓰나"를 본다. 두 부류가 섞여 있다
+([decision/0010](docs/decision/0010-behavior-log-console-first.md)):
+
+- **지금 데이터로 즉시 동작** — 발급→첫 데이터 호출 여정(전환율·평균 소요), 익명 vs 인증
+  추이, **요청 추적**(`GET /api/trace?request_id=…` — 지원 문의에서 받은 `X-Request-Id` 로
+  그 요청 한 건을 특정).
+- **수집 반영 후 자동 점등** — 손님 구성(사람/AI 대행/AI 크롤러/CLI), AI 에이전트별 제품
+  수요, 페이지 접근. 축(`ua_class`·`agent_name`·`page_path` …)의 정의는 행동 로그 공통 스펙
+  초안(ASK-Seoul-Serving#9, [reference/behavior-log-spec-draft.md](docs/reference/behavior-log-spec-draft.md))이며
+  **게이트웨이 반영 전까지 '수집 전'으로 표시**된다 — 콘솔은 게이트웨이 스키마를 만들지도
+  미러하지도 않는다.
 
 ## 키 관리 탭 — 이 콘솔에서 유일하게 **쓰는** 화면
 

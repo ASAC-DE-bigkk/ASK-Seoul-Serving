@@ -145,6 +145,31 @@ async function summary(env, params, writable = false) {
       "ORDER BY calls DESC LIMIT 10", since),
   ]);
 
+  // ── 이용 행동 (행동 로그 스펙 초안 #9 — 콘솔 선반영, decision/0010)
+  // 지금 데이터로 답이 되는 것(여정·익명 비중)과 수집 후 점등되는 것(ua_class 등)을 나눈다.
+  // 초안 컬럼이 아직 없으면 safeRows 가 실패를 삼키고 그 카드는 '수집 전'으로 남는다 —
+  // 콘솔은 게이트웨이 스키마를 만들지도 미러하지도 않는다(0010: ALTER 미러는 정본
+  // 마이그레이션과 duplicate column 으로 충돌해 저쪽 시드를 깨뜨린다).
+  const [funnel, udaily, uclients, uagents, upages] = await Promise.all([
+    safeRows(env,
+      "SELECT COUNT(*) AS issued, SUM(first_call IS NOT NULL) AS activated, " +
+      "ROUND(AVG(CASE WHEN first_call IS NOT NULL THEN (julianday(first_call) - julianday(created_at)) * 24 END), 1) AS avg_hours_to_first " +
+      "FROM (SELECT k.created_at, (SELECT MIN(r.ts) FROM _request_log r " +
+      "WHERE r.key_hash = k.key_hash AND r.route = 'data') AS first_call FROM _keys k)"),
+    safeRows(env, "SELECT substr(ts,1,10) AS day, SUM(key_hash IS NOT NULL) AS keyed, " +
+      "SUM(key_hash IS NULL) AS anon FROM _request_log WHERE ts >= datetime('now', ?) " +
+      "GROUP BY day ORDER BY day", since),
+    safeRows(env, "SELECT ua_class, COUNT(*) AS calls FROM _request_log " +
+      "WHERE ts >= datetime('now', ?) AND ua_class IS NOT NULL GROUP BY ua_class ORDER BY calls DESC", since),
+    safeRows(env, "SELECT agent_name, agent_mode, COUNT(*) AS calls, SUM(route='data') AS data_calls, " +
+      "COUNT(DISTINCT table_name) AS products FROM _request_log " +
+      "WHERE ts >= datetime('now', ?) AND agent_name IS NOT NULL " +
+      "GROUP BY agent_name, agent_mode ORDER BY calls DESC LIMIT 10", since),
+    safeRows(env, "SELECT page_path, COUNT(*) AS hits FROM _request_log " +
+      "WHERE route = 'page' AND ts >= datetime('now', ?) AND page_path IS NOT NULL " +
+      "GROUP BY page_path ORDER BY hits DESC LIMIT 12", since),
+  ]);
+
   return json({
     window_days: days,
     generated_at: new Date().toISOString(),
@@ -154,6 +179,8 @@ async function summary(env, params, writable = false) {
       // 샘플이 한 행이라도 섞여 있으면 화면 전체에 배지를 띄운다 — 조용히 섞이는 게 제일 나쁘다
       pipeline_is_sample: slo.rows.some((r) => r.is_sample === 1),
       runs_is_sample: rsmp.ok && (rsmp.rows[0]?.n || 0) > 0,
+      // 로그 테이블은 있는데 초안 컬럼만 없다 = 스펙 반영 전 (테이블 자체가 없으면 serving 누락으로 이미 표시)
+      usage_spec_pending: routes.ok && !uclients.ok,
     },
     pipeline: { domains: domains.rows, slo: slo.rows },
     runs: { daily: rdaily.rows, expectations: rexp.rows, failures: rfail.rows,
@@ -161,6 +188,10 @@ async function summary(env, params, writable = false) {
             load: rload.rows[0] || null },
     serving: { routes: routes.rows, daily: daily.rows, products: products.rows,
                failures: failures.rows, empty: empty.rows, keys: keys.rows },
+    usage: { funnel: funnel.ok ? funnel.rows[0] : null, daily: udaily.rows,
+             clients: { pending: !uclients.ok, rows: uclients.rows },
+             agents: { pending: !uagents.ok, rows: uagents.rows },
+             pages: { pending: !upages.ok, rows: upages.rows } },
   });
 }
 
@@ -256,7 +287,23 @@ export default {
       if (request.method === "POST") return requireWrite(env, request) || keyAction(env, request);
       return problem(405, "method not allowed", "GET(목록) · POST(조치)");
     }
-    if (url.pathname.startsWith("/api/")) return problem(404, "not found", "GET /api/summary · /api/keys");
+    // 요청 추적 — 지원 문의의 "그 요청" 한 건을 request_id 로 특정한다. 무인증(읽기 공개)인
+    // 근거: request_id 는 그 응답을 받은 사람만 아는 16-hex 난수이고, 응답에는 키 8자
+    // 축약·컬럼명 축만 실린다(decision/0010).
+    if (url.pathname === "/api/trace") {
+      if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
+      const rid = (url.searchParams.get("request_id") || "").trim();
+      if (!/^req_[0-9a-f]{16}$/.test(rid))
+        return problem(400, "invalid request_id",
+          "req_ + 16자리 hex — 게이트웨이 응답 헤더 X-Request-Id(오류 본문 request_id) 값");
+      const res = await safeRows(env,
+        "SELECT ts, route, table_name, status, substr(key_hash, 1, 8) AS key_id, " +
+        "filters, row_count, ms FROM _request_log WHERE request_id = ? LIMIT 5", rid);
+      if (!res.ok) return problem(503, "log unavailable",
+        "_request_log 를 조회할 수 없다 — 게이트웨이 D1 상태 공유와 request_id 컬럼(마이그레이션 0004) 적용 여부를 확인할 것");
+      return json({ request_id: rid, found: res.rows.length, rows: res.rows });
+    }
+    if (url.pathname.startsWith("/api/")) return problem(404, "not found", "GET /api/summary · /api/keys · /api/trace");
     return env.ASSETS ? env.ASSETS.fetch(request) : problem(404, "not found", "정적 자산 없음");
   },
 };

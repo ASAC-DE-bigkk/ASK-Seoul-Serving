@@ -49,6 +49,14 @@ curl -s "$BASE/api/summary?days=14" | jq '.runs | {failures, empty_runs, environ
 
 # ③ 키 목록 — 이메일이 마스킹돼 나오는지 (email 원문 키가 없어야 정상)
 curl -s "$BASE/api/keys" | jq '.keys[0]'
+
+# ④ 이용 행동 — 여정(즉시)과 스펙 종속 축('수집 전') 구분
+curl -s "$BASE/api/summary?days=14" | jq '{spec_pending: .meta.usage_spec_pending,
+  funnel: .usage.funnel, clients_pending: .usage.clients.pending}'
+
+# ⑤ 요청 추적 — 게이트웨이 응답 헤더 X-Request-Id 값으로 그 요청 한 건을 특정
+RID=$(curl -si http://localhost:8787/api/catalog | tr -d '\r' | awk -F': ' '/^x-request-id/{print $2}')
+curl -s "$BASE/api/trace?request_id=$RID" | jq '{found, rows}'
 ```
 
 **쓰기 문 3종 세트** — 쓰기 경로를 고쳤다면 반드시 셋 다 본다
