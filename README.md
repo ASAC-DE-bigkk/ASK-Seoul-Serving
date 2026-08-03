@@ -42,8 +42,13 @@ dbt manifest·Airflow 메타DB를 직접 읽는 경로는 존재하지 않는다
 ## 로컬에서 띄우기
 
 원격 배포 없이 `wrangler dev`(Miniflare 로컬 sqlite D1)로만 돈다. **팀 D1에 쓰지 않는다.**
-사전 준비(Node 20+)·트러블슈팅·OS별 차이는 **[docs/setup.md](docs/setup.md)** 가 정본이다 —
-두 프로젝트가 같은 D1을 공유하므로 실행 절차도 **API·대시보드 담당자가 함께 관리하는 문서 하나**다.
+
+두 프로젝트가 같은 D1을 공유하므로 실행 규약은 **API·대시보드 담당자가 함께 관리하는 문서**에 있다.
+
+| 문서 | 무엇 |
+|---|---|
+| [docs/setup.md](docs/setup.md) | 사전 준비(Node 20+)·OS별 실행 절차·증상별 해결 |
+| [docs/environments.md](docs/environments.md) | 환경 규약 — 설정 배치, local/prod 도메인·D1, 실행 파라미터 배분 |
 
 ```bash
 # macOS / Linux

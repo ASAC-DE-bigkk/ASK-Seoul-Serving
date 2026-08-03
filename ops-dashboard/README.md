@@ -71,15 +71,16 @@
 D1 은 게이트웨이와 **같은 로컬 상태를 공유**한다(`--persist-to`). 서빙 품질 원본인
 `_request_log` 가 저쪽에 쌓이기 때문이다 — 그래서 **`../marketplace` 를 먼저 시드**해야 한다.
 
-사전 준비(Node 20+)·OS별 차이·증상별 해결은 **[../docs/setup.md](../docs/setup.md)** 가 정본이다.
-게이트웨이와 공유하는 문서라 실행 규약을 바꾸면 저쪽 담당자와 같이 고친다.
+사전 준비(Node 20+)·OS별 차이·증상별 해결은 **[../docs/setup.md](../docs/setup.md)**,
+환경별 설정 배치(로컬/운영 도메인·D1·시크릿)는 **[../docs/environments.md](../docs/environments.md)**
+가 정본이다. 둘 다 게이트웨이와 공유하는 문서라 실행 규약을 바꾸면 저쪽 담당자와 같이 고친다.
 
 ```bash
 # macOS / Linux
 cd ops-dashboard
 npm install
 npm run seed         # _ops_slo/_ops_domain + 합성 SLO 14일 → 공유 D1
-node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" > .dev.vars
+node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" > config/local/.dev.vars
 npm run dev          # http://localhost:8788
 ```
 
@@ -88,15 +89,18 @@ npm run dev          # http://localhost:8788
 cd ops-dashboard
 npm install
 npm run seed
-node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" | Set-Content .dev.vars -Encoding ascii
+node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" | Set-Content config\local\.dev.vars -Encoding ascii
 npm run dev          # http://localhost:8788
 ```
 
-`.dev.vars` 는 `.gitignore` 대상이다(커밋 금지). 변수의 의미는
-[.dev.vars.example](.dev.vars.example) 에 적어 뒀다.
+**시크릿은 `config/local/` 안에 둔다** — 프로젝트 루트가 아니다. wrangler 가 `-c` 로 준 설정
+파일 **옆에서** `.dev.vars` 를 찾기 때문이고, 루트에 두면 조용히 안 읽혀 조치만 503 이 된다.
+`.gitignore` 대상이며(커밋 금지), 변수의 의미는
+[config/local/.dev.vars.example](config/local/.dev.vars.example) 에 적어 뒀다.
+설정 배치 전반은 [../docs/environments.md](../docs/environments.md) 가 정본이다.
 
 **Windows 에서 `-Encoding ascii` 를 빼지 말 것.** 빠지면 `.dev.vars` 가 UTF-16LE 로 저장돼
-wrangler 가 토큰을 못 읽는데, 기동 로그에는 `Using secrets defined in .dev.vars` 가 그대로
+wrangler 가 토큰을 못 읽는데, 기동 로그에는 `Using secrets defined in config\local\.dev.vars` 가 그대로
 떠서 **조치만 503 이 되는 조용한 실패**가 된다([setup.md §3](../docs/setup.md)).
 
 ## 왜 SLO 를 복사하나

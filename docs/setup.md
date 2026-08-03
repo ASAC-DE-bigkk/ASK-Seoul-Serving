@@ -23,13 +23,18 @@
 | | 로컬 (이 문서) | 배포 |
 |---|---|---|
 | 프로세스 | 두 개를 내가 띄운다 | 각자 Worker로 따로 나간다 |
-| D1 공유 방법 | `--persist-to` 로 파일 상태를 겹친다 | 각 `wrangler.toml` 이 **같은 `database_id`** 를 바인딩한다 |
+| 호스트 | `localhost:8787` / `:8788` | `ask-seoul.kr` / `ops.ask-seoul.kr` |
+| 설정 파일 | `config/local/wrangler.toml` | `config/prod/wrangler.toml` |
+| D1 공유 방법 | `--persist-to` 로 파일 상태를 겹친다 | 두 설정이 **같은 `database_id`** 를 바인딩한다 |
 | 순서 | marketplace 시드 먼저 | 순서 의존 없음 — 콘솔은 저쪽 **Worker** 가 아니라 **테이블**에 의존한다 |
 | 절차 문서 | **이 문서 하나** | 프로젝트마다 따로 ([marketplace/docs/deploy-runbook.md](../marketplace/docs/deploy-runbook.md)) |
 
 `--persist-to`는 **로컬 전용 장치**라 배포판에 대응물이 없다. 배포에서 같은 역할을 하는 건
-두 `wrangler.toml`이 같은 D1을 가리키는 것이고, 지금 둘 다 `ask-seoul-dev-d1`
-(`9db0e851-…`)로 같다 — #20 결정 A(팀 D1 1개 유지)와 정합한다.
+두 설정이 같은 D1을 가리키는 것이다.
+
+**환경마다 달라지는 값이 어디에 있는지는 [environments.md](environments.md)가 정본이다** —
+설정 배치, 로컬/운영 도메인·D1 값, `-c` 를 쓸 때 같이 움직이는 함정 셋(상대 경로·`.dev.vars`·
+로컬 상태 위치). 이 문서는 그 구조 위에서 **OS별로 어떻게 실행하는가**만 다룬다.
 
 원격 배포는 아직 하지 않는다(`wrangler deploy` 금지 — 멘토 게이트 ASAC-DAG#476 ①).
 아래는 전부 `wrangler dev` 로컬 구동이다.
@@ -88,7 +93,7 @@ npm config get script-shell   # null 이어야 정상 — 아래 6절 참고
 ```bash
 # 1) API — D1 상태의 주인. 먼저.
 cd marketplace
-cp .dev.vars.example .dev.vars     # ISSUANCE_SALT
+cp config/local/.dev.vars.example config/local/.dev.vars   # ISSUANCE_SALT
 npm install
 npm run seed
 npm run dev &                      # http://localhost:8787
@@ -97,7 +102,7 @@ npm run dev &                      # http://localhost:8787
 cd ../ops-dashboard
 npm install
 npm run seed
-node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" > .dev.vars
+node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" > config/local/.dev.vars
 npm run dev                        # http://localhost:8788
 ```
 
@@ -110,7 +115,7 @@ npm run dev                        # http://localhost:8788
 ```powershell
 # 1) API — D1 상태의 주인. 먼저.
 cd marketplace
-Copy-Item .dev.vars.example .dev.vars
+Copy-Item config\local\.dev.vars.example config\local\.dev.vars
 npm install
 npm run seed
 Start-Process powershell -ArgumentList '-NoExit','-Command','npm run dev'   # :8787, 새 창
@@ -119,7 +124,7 @@ Start-Process powershell -ArgumentList '-NoExit','-Command','npm run dev'   # :8
 cd ..\ops-dashboard
 npm install
 npm run seed
-node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" | Set-Content .dev.vars -Encoding ascii
+node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" | Set-Content config\local\.dev.vars -Encoding ascii
 npm run dev                        # http://localhost:8788
 ```
 
@@ -134,8 +139,12 @@ npm warn allow-scripts   esbuild@... / workerd@...
 
 ## 3. `OPS_TOKEN` — Windows에서 가장 많이 깨지는 곳
 
-`ops-dashboard`의 폐기·복구·쿼터·삭제는 `.dev.vars`의 `OPS_TOKEN`으로 잠겨 있다.
+`ops-dashboard`의 폐기·복구·쿼터·삭제는 `config/local/.dev.vars`의 `OPS_TOKEN`으로 잠겨 있다.
 미설정이면 조치가 `503`으로 닫힌다(열리는 게 아니라 닫힌다 — 설계).
+
+> **위치가 프로젝트 루트가 아니라 `config/local/` 이다.** wrangler 는 `-c` 로 준 설정 파일
+> **옆에서** `.dev.vars` 를 찾는다. 루트에 두면 조용히 안 읽히고 조치만 503 이 된다
+> ([environments.md §4-②](environments.md)).
 
 ### 토큰 생성 — openssl 없이
 
@@ -144,17 +153,17 @@ npm warn allow-scripts   esbuild@... / workerd@...
 
 ```bash
 # macOS / Linux
-node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" > .dev.vars
+node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" > config/local/.dev.vars
 ```
 
 ```powershell
 # Windows — -Encoding ascii 를 빼지 말 것 (아래 표)
-node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" | Set-Content .dev.vars -Encoding ascii
+node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" | Set-Content config\local\.dev.vars -Encoding ascii
 ```
 
 위 명령은 `.dev.vars`를 **통째로 새로 쓴다.** 변수의 의미는
-[`ops-dashboard/.dev.vars.example`](../ops-dashboard/.dev.vars.example)에 있으니, 주석까지
-남기고 싶으면 그 파일을 복사한 뒤 에디터로 값만 채운다(에디터 편집이 가장 안전하다).
+[`ops-dashboard/config/local/.dev.vars.example`](../ops-dashboard/config/local/.dev.vars.example)에
+있으니, 주석까지 남기고 싶으면 그 파일을 복사한 뒤 에디터로 값만 채운다(에디터 편집이 가장 안전하다).
 
 ### 왜 인코딩을 지정해야 하나 (실측)
 
@@ -165,9 +174,12 @@ node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('he
 | `Set-Content -Encoding Unicode` | UTF-16LE | ❌ 못 읽음 | 조치가 전부 **503** |
 
 UTF-16LE가 위험한 이유는 **조용히** 실패하기 때문이다. 기동 로그에는
-`Using secrets defined in .dev.vars`가 **그대로 뜨고**, 화면도 정상으로 보이고, 오직 조치만
-`503 ops write disabled`로 막힌다. PowerShell `>`의 기본 인코딩은 프로필·버전에 따라 달라지므로
-(이 레포 실측 환경에서는 UTF-8 BOM) **`>`에 의존하지 말고 `-Encoding ascii`를 명시**한다.
+`Using secrets defined in config\local\.dev.vars`가 **그대로 뜨고**, 화면도 정상으로 보이고,
+오직 조치만 `503 ops write disabled`로 막힌다. PowerShell `>`의 기본 인코딩은 프로필·버전에 따라
+달라지므로(이 레포 실측 환경에서는 UTF-8 BOM) **`>`에 의존하지 말고 `-Encoding ascii`를 명시**한다.
+
+기동 로그의 그 줄 자체가 없으면 인코딩이 아니라 **위치** 문제다 — 파일이 `config/local/` 에
+있는지 본다.
 
 ## 4. 뜬 다음 확인
 
@@ -189,7 +201,7 @@ curl -s "http://localhost:8787/api/catalog" -o /dev/null -w "%{http_code}\n"
 틀린 토큰 `401`):
 
 ```powershell
-$tok = ((Get-Content .dev.vars -Raw) -replace '^OPS_TOKEN=','').Trim()
+$tok = ((Get-Content config\local\.dev.vars -Raw) -replace '^OPS_TOKEN=','').Trim()
 $body = '{"action":"quota","key_hash":"nonexistent","daily_quota":10}'
 # 토큰 없음 → 401
 Invoke-WebRequest "http://localhost:8788/api/keys" -Method POST -Body $body -ContentType 'application/json' -UseBasicParsing
@@ -239,10 +251,13 @@ curl -s -X POST -H "X-Trino-User: ops" -H "Content-Type: text/plain" \
 | `'openssl'은(는) ... 인식되지 않습니다` | Windows에 openssl 없음 | `node -e` 로 토큰 생성 (3절) |
 | `The token '&&' is not a valid statement separator` | PowerShell 5.1엔 `&&` 없음 | `;` 로 바꾸거나 한 줄씩 (2절) |
 | 조치만 `503 ops write disabled` | `.dev.vars`가 UTF-16LE | `-Encoding ascii`로 다시 쓰기 (3절) |
+| 조치만 `503` + 기동 로그에 `Using secrets...` 줄이 **아예 없음** | `.dev.vars`가 프로젝트 루트에 있음 | `config/local/.dev.vars` 로 옮긴다 ([environments.md §4-②](environments.md)) |
 | 조치가 `401` | 토큰 불일치 | 화면 우상단 `잠금 해제`에 `.dev.vars` 값 그대로 입력 |
-| `meta.missing`에 `_keys`·`_request_log` | marketplace 미시드 | marketplace에서 `npm run seed` 먼저 (0절) |
+| `meta.missing`에 `_keys`·`_request_log` | marketplace 미시드 **또는** `--persist-to` 누락 | marketplace `npm run seed` 먼저 (0절) / [environments.md §4-③](environments.md) |
+| `Missing entry-point`·`could not resolve` | `-c` 없이 실행 (루트 config 없음) | `-c config/local/wrangler.toml` 을 붙인다 — `npm run *` 은 이미 들어 있다 |
+| dev 가 `:8789` 등 엉뚱한 포트로 뜸 | 8787/8788 을 이전 프로세스가 쥐고 있음 | 아래 포트 항목 — 포트는 `[dev] port` 로 고정돼 있으나 점유 시 밀린다 |
 | `npm run seed`가 `&&`에서 멈춤 | npm의 script-shell이 PowerShell로 잡힘 | `npm config delete script-shell` |
-| `Address already in use :8787/:8788` | 이전 dev가 살아 있음 | `Get-NetTCPConnection -LocalPort 8788 -State Listen` 로 PID 확인 후 종료 |
+| `Address already in use :8787/:8788` | 이전 dev가 살아 있음 | `Get-Process workerd \| Stop-Process -Force` (전부 정리) |
 | `Catalog '...' not found` | Trino 카탈로그 이름 차이 | `SHOW CATALOGS` 로 확인 후 `$env:TRINO_CATALOG` (5절) |
 | 첫 `wrangler dev`에서 방화벽 팝업 | workerd가 포트 대기 | **개인 네트워크만** 허용 |
 
@@ -257,6 +272,7 @@ curl -s -X POST -H "X-Trino-User: ops" -H "Content-Type: text/plain" \
 | wrangler | 4.114.0 (ops-dashboard) · 4.115.0 (marketplace) |
 | Python | 3.13.12 |
 | 확인 결과 | 두 Worker 동시 구동(:8787 · :8788) · `meta.missing=[]` · 토큰 401/401/400 · Trino 실적재 35행 |
+| 환경별 config | `config/local` 로 시드·구동·토큰 게이트 재확인 · `config/prod` 는 `deploy --dry-run` 으로 빌드까지만 |
 
 macOS 절차는 기존 매뉴얼을 그대로 옮긴 것으로, **이 문서 작성 시점에 재검증하지는 않았다.**
 macOS에서 어긋나는 부분을 발견하면 이 문서를 고치고 상대 담당자에게 알린다.

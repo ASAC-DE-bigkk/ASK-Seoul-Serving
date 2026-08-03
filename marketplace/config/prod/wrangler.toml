@@ -1,0 +1,38 @@
+# marketplace — 운영 배포 (ASK-Seoul#58)
+#
+# ⚠️ **이 파일이 있다고 배포가 허용된 게 아니다.** `wrangler deploy` 는 공개 URL 신설이라
+#    멘토 게이트(#476 ①·ASAC-DAG#521-(B))다. 승인 후 절차는 ../../docs/deploy-runbook.md.
+#    package.json 에 deploy 스크립트를 두지 않는 것도 같은 이유다 — 사람이 런북을 보고 친다.
+#
+# config/local 과 **같은 파일 이름, 다른 디렉토리**다. 다른 것은 아래 셋뿐이다.
+#   ① routes — 운영 호스트  ② D1 — 운영 D1  ③ 이 주석
+# 나머지(main·assets·run_worker_first·not_found_handling)는 local 과 같아야 한다.
+# 한쪽만 고치면 배포본에서만 죽는다 — 규약과 대비표: ../../../docs/setup.md
+#
+# ⚠️ 경로는 **이 파일 기준**으로 풀린다.
+name = "ask-seoul-gateway"
+main = "../../src/index.js"
+compatibility_date = "2026-07-01"
+
+# API 는 기준 도메인 자체(apex). 콘솔은 ops. 서브도메인으로 갈린다
+# (ops.ask-seoul.kr — ../../../ops-dashboard/config/prod/wrangler.toml).
+# 같은 zone 을 쓰지만 Worker·배포·롤백은 따로다 — 사고 반경이 갈리는 게 분리의 목적이다
+# (ops-dashboard decision/0001).
+routes = [
+  { pattern = "ask-seoul.kr", custom_domain = true }
+]
+
+[assets]
+directory = "../../public"
+run_worker_first = ["/api/*", "/v1/*"]
+not_found_handling = "404-page"
+
+# 운영 D1. 로컬/dev(9db0e851-…)와 다른 데이터베이스다 — 여기 쓰는 것은 외부 이용자의
+# 실제 키·이메일·요청 로그다. 마이그레이션은 런북 1번에서 사람이 --remote 로 적용한다.
+#
+# ⚠️ database_name 은 **미확인 값**이다. 바인딩의 정본은 database_id 라 Worker 동작에는
+#    영향이 없지만, `wrangler d1 execute <name>` 은 이 이름을 쓴다 — 실제 이름 확인 후 교체할 것.
+[[d1_databases]]
+binding = "DB"
+database_name = "ask-seoul-prod-d1"
+database_id = "59a8409e-3be6-467b-8214-7938c59c8729"

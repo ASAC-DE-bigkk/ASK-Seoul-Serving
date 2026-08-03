@@ -1,0 +1,43 @@
+# marketplace — 로컬 개발 (ASK-Seoul#58)
+#
+# 환경별 설정은 **같은 파일 이름을 다른 디렉토리**에 둔다 — config/local · config/prod.
+# 명령이 -c 로 어느 쪽을 읽을지 고르고, 배포도 같은 파일을 참조한다.
+# 규약과 대비표: ../../../docs/setup.md
+#
+# ⚠️ 경로는 **이 파일 기준**으로 풀린다. main·assets 가 ../../ 로 시작하는 이유다.
+# ⚠️ --persist-to 는 반드시 명시한다. 빼면 로컬 상태가 config/local/.wrangler/state 로
+#    잡혀서, 콘솔(../ops-dashboard)이 붙는 .wrangler/state 와 어긋난다.
+#    npm scripts 에 이미 넣어 뒀다 — 직접 wrangler 를 칠 때도 같이 넘길 것.
+#
+# ⚠️ 로컬 전용: wrangler dev 로만 구동한다. deploy 는 멘토 게이트(#476 ①·ASAC-DAG#521-(B)).
+# 로컬 모드는 아래 database_id 를 쓰지 않고 Miniflare 로컬 sqlite 를 만든다 —
+# 시드는 `npm run seed` (migrations + fixtures 를 --local 로 적용).
+name = "ask-seoul-gateway"
+main = "../../src/index.js"
+compatibility_date = "2026-07-01"
+
+# 포트는 **여기에 박는다** — 명령줄(--port)이 아니라. 로컬에만 있는 값이고
+# (운영은 routes 가 대신한다), 문서·스모크·콘솔 링크가 8787 을 전제로 한다.
+# 기본값에 맡기면 포트가 이미 잡혀 있을 때 wrangler 가 조용히 8788·8789 로 넘어가
+# "떴는데 아무도 못 찾는" 상태가 된다(콘솔 :8788 과 충돌한 실사례).
+[dev]
+port = 8787
+
+[assets]
+directory = "../../public"
+# API 라우트는 Worker 로, 그 외 정적 파일은 Assets 가 서빙.
+# 새 API 네임스페이스를 만들면 **여기 먼저 등록**해야 한다 — 빠지면 요청이 워커에 닿지도
+# 못하고 정적 404 페이지로 떨어진다(경로가 없는 것처럼 보여 원인 찾기가 오래 걸린다).
+# ⚠️ config/prod/wrangler.toml 에도 **같이** 반영할 것. 한쪽만 고치면 배포본에서만 죽는다.
+# /skill/v1/* 은 그 담당이 착수할 때 추가한다(ASAC-DAG#642 경로 분리).
+run_worker_first = ["/api/*", "/v1/*"]
+# 없는 경로는 사람용 404 화면으로 — 이 설정이 없으면 정적 자산에 없는 모든 경로가
+# Worker 의 마지막 분기까지 흘러가 application/problem+json 으로 떨어진다.
+# 오타 URL 로 들어온 사람이 JSON 덩어리를 보게 되던 원인이었다(/api/* 는 그대로 JSON 이 맞다).
+not_found_handling = "404-page"
+
+# dev D1. 로컬(--local)은 이 값을 쓰지 않지만, dev 환경이 붙을 때의 대상이다.
+[[d1_databases]]
+binding = "DB"
+database_name = "ask-seoul-dev-d1"
+database_id = "9db0e851-558e-489f-9e76-f131d25aa267"

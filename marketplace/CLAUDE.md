@@ -36,8 +36,11 @@
 
 - **`wrangler deploy` 금지.** 로컬 전용(`wrangler dev --local`)이다. 공개 URL 신설은
   멘토 게이트(#476 ①). package.json 에 deploy 스크립트를 만들지 않는다.
-- **팀(원격) D1 에 쓰지 않는다.** wrangler.toml 의 database_id 는 로컬 모드에서 쓰이지
-  않으며, 시드·검증은 전부 Miniflare 로컬 상태만 만진다.
+- **팀(원격) D1 에 쓰지 않는다.** `config/local/wrangler.toml` 의 database_id 는 로컬 모드에서
+  쓰이지 않으며, 시드·검증은 전부 Miniflare 로컬 상태만 만진다.
+- **설정은 환경별로 갈린다** — `config/local/` · `config/prod/`, 같은 파일 이름 다른 디렉토리.
+  루트에 `wrangler.toml` 을 되살리지 않는다(`-c` 누락이 조용히 통과하게 된다).
+  배치·함정은 [../docs/environments.md](../docs/environments.md) 가 정본이다.
 - **키 원문은 어디에도 저장하지 않는다.** SHA-256 해시 + 표시용 접두 8자만. 발급 응답에서
   한 번 보여주는 게 전부다.
 - **`_request_log` 에 값을 남기지 않는다** — 필터는 컬럼명만, 식별자는 key_hash 만,
@@ -110,7 +113,7 @@ OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) �
 바로 구현하지 않는다. 결정 문서(신규 또는 개정)로 사유·비용·단순 대안·롤백을 먼저 적는다.
 
 ```text
-공개 배포(어떤 형태든)              → 멘토 게이트(#476 ①) — wrangler.toml 주석이 정본
+공개 배포(어떤 형태든)              → 멘토 게이트(#476 ①) — config/prod/wrangler.toml 주석이 정본
 키 상태 모델 확장(2값 초과)          → 콘솔 0006 과 공동 개정
 _request_log 컬럼 추가(#9·intent 축) → 새 ALTER 파일 + 시드 체인 + 콘솔 통지, 전부 nullable
 공유 계약(오류·KST·key_hash …) 변경  → decision/0001 개정 + 콘솔 담당 리뷰

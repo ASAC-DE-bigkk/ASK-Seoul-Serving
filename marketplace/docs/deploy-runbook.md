@@ -9,10 +9,16 @@
 
 ## 0. 전제 확인
 
+> **설정은 환경별로 갈려 있다.** 아래 명령이 전부 `-c config/prod/wrangler.toml` 을 다는 이유다.
+> 프로젝트 루트에 `wrangler.toml` 은 **없다** — `-c` 를 빠뜨리면 조용히 로컬 설정으로 도는 대신
+> 즉시 멈춘다. 배치와 근거는 [../../docs/environments.md](../../docs/environments.md).
+
 | 항목 | 확인 방법 | 기대 |
 |---|---|---|
 | 멘토 승인 | #476 ① 코멘트 | 있음 |
-| 대상 D1 | `wrangler.toml` `[[d1_databases]]` | `ask-seoul-dev-d1` (팀 D1 1개 유지 — #20 결정 A) |
+| 대상 D1 | `config/prod/wrangler.toml` `[[d1_databases]]` | `59a8409e-3be6-467b-8214-7938c59c8729` (운영 D1) |
+| D1 이름 | 같은 파일 `database_name` | ⚠️ **미확인 placeholder** — 실제 이름으로 교체 후 진행할 것 |
+| 호스트 | 같은 파일 `routes` | `ask-seoul.kr` (콘솔은 `ops.` 서브도메인 — 다른 Worker) |
 | Cloudflare 계정 | 팀 계정 로그인 | `npx wrangler whoami` |
 | 코드 | 머지된 `dev` | 로컬 `npm test` · `npm run verify:log` 통과 |
 
@@ -32,12 +38,14 @@ npm run verify:log  # 요청 로그 유실 검증(C-10)
 > ⚠️ **팀(원격) D1 쓰기다.** 스키마 생성만 하고 기존 표(`_catalog`·제품 테이블)는 건드리지
 > 않지만, 실행 전에 팀에 알린다. 이 명령은 **직접 실행한다** — 에이전트가 대신 돌리지 않는다.
 
+`<PROD_D1>` 는 `config/prod/wrangler.toml` 의 `database_name` — 그 값이 확인된 뒤에 실행한다.
+
 ```bash
 cd marketplace
-npx wrangler d1 execute ask-seoul-dev-d1 --remote --file=migrations/0001_keys_usage.sql
-npx wrangler d1 execute ask-seoul-dev-d1 --remote --file=migrations/0002_request_log.sql
-npx wrangler d1 execute ask-seoul-dev-d1 --remote --file=migrations/0003_burst.sql
-npx wrangler d1 execute ask-seoul-dev-d1 --remote --file=migrations/0004_request_id.sql
+npx wrangler d1 execute <PROD_D1> --remote -c config/prod/wrangler.toml --file=migrations/0001_keys_usage.sql
+npx wrangler d1 execute <PROD_D1> --remote -c config/prod/wrangler.toml --file=migrations/0002_request_log.sql
+npx wrangler d1 execute <PROD_D1> --remote -c config/prod/wrangler.toml --file=migrations/0003_burst.sql
+npx wrangler d1 execute <PROD_D1> --remote -c config/prod/wrangler.toml --file=migrations/0004_request_id.sql
 ```
 
 전부 `CREATE TABLE IF NOT EXISTS` 라 여러 번 돌려도 안전하다. 단 `0004` 는 `ALTER` 라
@@ -46,7 +54,7 @@ npx wrangler d1 execute ask-seoul-dev-d1 --remote --file=migrations/0004_request
 확인:
 
 ```bash
-npx wrangler d1 execute ask-seoul-dev-d1 --remote \
+npx wrangler d1 execute <PROD_D1> --remote -c config/prod/wrangler.toml \
   --command "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '\_%' ESCAPE '\'"
 ```
 
@@ -56,22 +64,27 @@ npx wrangler d1 execute ask-seoul-dev-d1 --remote \
 
 `ISSUANCE_SALT` 가 없으면 **발급이 503 으로 닫힌다**(무염 해시 방지 — 의도된 fail-closed).
 
+운영 시크릿은 **파일이 아니라 Cloudflare 에 넣는다** — `config/local/.dev.vars` 는 로컬 전용이고
+배포에 실리지 않는다.
+
 ```bash
 cd marketplace
-openssl rand -hex 32          # 값 생성 — 출력은 어디에도 남기지 말 것
-npx wrangler secret put ISSUANCE_SALT   # 프롬프트에 위 값을 붙여넣는다
+# 값 생성 — 출력은 어디에도 남기지 말 것. openssl 이 없는 환경(Windows)은 node 로:
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+npx wrangler secret put ISSUANCE_SALT -c config/prod/wrangler.toml   # 프롬프트에 위 값을 붙여넣는다
 ```
 
 ## 3. 배포
 
 ```bash
 cd marketplace
-npx wrangler deploy
+npx wrangler deploy -c config/prod/wrangler.toml
 ```
 
-출력에 나오는 `https://<name>.<subdomain>.workers.dev` 가 타겟 주소다.
+`config/prod/wrangler.toml` 의 `routes` 가 `ask-seoul.kr` 을 Custom Domain 으로 잡는다.
 **이 주소는 한 번 정해지면 사실상 못 바꾼다**(소비자가 붙으면 변경 = 파손) — #476 ② 결정과
-어긋나지 않는지 배포 전에 다시 확인한다.
+어긋나지 않는지 배포 전에 다시 확인한다. 콘솔은 `ops.ask-seoul.kr` 로 **별도 Worker · 별도
+배포**다 — 여기서 같이 나가지 않는다.
 
 ## 4. 스모크 (배포 직후 필수)
 
@@ -95,15 +108,15 @@ SMOKE_KEY=ask_… npm run smoke -- https://<배포주소>
 | 실패 항목 | 원인 | 조치 |
 |---|---|---|
 | `발급 경로 활성` 이 503 | `ISSUANCE_SALT` 미설정 | 2번 다시 |
-| `catalog` 가 0종 | D1 바인딩이 다른 DB / `external=1` 제품 없음 | `wrangler.toml` 확인 |
+| `catalog` 가 0종 | D1 바인딩이 다른 DB / `external=1` 제품 없음 | `config/prod/wrangler.toml` 의 `database_id` 확인 |
 | `data 401` 이 500 | `_keys` 테이블 없음 | 1번 다시 |
 | `X-Request-Id` 누락 | 구 버전 배포본 | 코드 SHA 확인 후 재배포 |
 
 ## 5. 되돌리기
 
 ```bash
-npx wrangler deployments list                 # 이전 배포 확인
-npx wrangler rollback --message "<사유>"       # 직전 배포로
+npx wrangler deployments list -c config/prod/wrangler.toml           # 이전 배포 확인
+npx wrangler rollback -c config/prod/wrangler.toml --message "<사유>" # 직전 배포로
 ```
 
 데이터는 롤백되지 않는다 — 1번에서 만든 표는 그대로 남는다(비어 있어도 무해하다).
