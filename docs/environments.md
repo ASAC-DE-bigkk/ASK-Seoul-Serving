@@ -37,19 +37,26 @@ name = "..."                  # ← 여기부터 기본 환경 = 로컬 개발
 | D1 id | `9db0e851-558e-489f-9e76-f131d25aa267` | `59a8409e-3be6-467b-8214-7938c59c8729` |
 | D1 실제 접속 | 기본은 Miniflare 로컬 sqlite · **원격 dev D1 을 읽으려면 `--remote`** | 바인딩으로 붙는다 |
 | Worker 시크릿 | `.dev.vars` (프로젝트 루트) | `wrangler secret put <이름> --env production` |
-| wrangler 자격증명 | `.env` | `.env.production` (`--env-file` 로 지정) |
+| wrangler 자격증명 | `.env` (프로젝트 루트) | 배포하는 사람의 자격증명 / CI 시크릿 |
 
-### 파일 두 개를 헷갈리지 않는다
+### 시크릿 파일 두 개 — 역할은 다르고 규칙은 같다
 
 | 파일 | 누가 읽나 | 무엇 |
 |---|---|---|
 | `.dev.vars` | **Worker 안** | `env.OPS_TOKEN`·`env.ISSUANCE_SALT` — 화면·발급 기능용 |
-| `.env` | **wrangler 자신** | `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID` — 원격 D1·배포용 |
+| `.env` | **wrangler 라는 도구** | `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID` — 원격 D1 접속용 |
 
-wrangler 는 같은 디렉토리의 `.env` 를 **자동으로 읽는다**(플래그 불필요). 운영 자격증명은
-`.env.production` 에 따로 두고 `--env-file` 로 명시한다 — 플래그를 빠뜨렸을 때 운영에 붙는
-사고를 막는 게 파일을 가르는 이유다. 둘 다 `.gitignore` 대상이고, 값이 빈 `.env.example` 만
-추적한다. 권한은 필요한 만큼만 준다(조회만이면 `D1:Read`).
+역할이 갈리는 만큼 헷갈리기 쉽지만, **규칙은 하나다 — 로컬은 파일, 배포는 파일 밖.**
+wrangler 는 같은 디렉토리의 `.env` 를 자동으로 읽는다(플래그 불필요).
+
+**환경별 시크릿 파일을 만들지 않는다.** `.dev.vars.production`·`.env.production` 같은 것을
+두면 *운영 시크릿이 로컬 파일에 있다*는 뜻이 되고, 그 자체가 유출 경로다. 배포용 Worker
+시크릿은 Cloudflare 가 보관하고(`wrangler secret put`), 자격증명은 배포하는 사람·CI 가 가진다.
+**어느 D1 을 만질지는 토큰이 아니라 `--env production`(wrangler.toml)이 정한다** — 그래서
+자격증명을 환경별로 가를 이유도 없다.
+
+둘 다 `.gitignore` 대상이고 값이 빈 `.env.example`·`.dev.vars.example` 만 추적한다.
+권한은 필요한 만큼만 준다(조회만이면 `D1:Read`) — 토큰이 새면 그 권한만큼이 사고 반경이다.
 
 ### 원격 dev D1 을 읽어야 할 때
 
