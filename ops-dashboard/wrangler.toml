@@ -26,12 +26,26 @@ port = 8788
 directory = "public"
 run_worker_first = ["/api/*"]
 
+# 화면이 "지금 어느 환경의 무슨 DB 를 보고 있나"를 말할 수 있게 하는 값. 없으면 운영자가
+# 숫자만 보고 어느 쪽 데이터인지 추측하게 된다 — 로컬 샘플을 운영 실적으로 오해하는 게
+# 이 콘솔에서 제일 나쁜 사고다. [env.production.vars] 에도 **같이** 넣는다(env 는 상속되지 않는다).
+[vars]
+ENV_LABEL = "로컬 개발"
+ENV_D1 = "ask-seoul-dev-d1"
+
 # dev D1. 로컬(--local)은 이 값을 쓰지 않지만, database_id 가 로컬 상태의 키라서
 # 게이트웨이와 **같아야** 같은 로컬 DB 를 본다(decision/0003). prod 로 바꾸지 않는다.
 [[d1_databases]]
 binding = "DB"
 database_name = "ask-seoul-dev-d1"
 database_id = "9db0e851-558e-489f-9e76-f131d25aa267"
+# 경로는 이 파일 기준이 아니라 프로젝트 루트 기준이다(설정이 루트에 있으므로 같다).
+migrations_dir = "migrations"
+# ⚠️ 장부를 게이트웨이와 **분리한다.** 같은 D1 을 공유하므로(decision/0003) 기본 이름
+# `d1_migrations` 를 쓰면 두 프로젝트의 기록이 한 표에 섞인다. 파일명이 겹치는 순간
+# (양쪽 다 `0002_*.sql` 을 만들 수 있다) 한쪽이 "이미 적용됨"으로 조용히 건너뛴다.
+# 소유가 갈리면 장부도 갈려야 한다 — 콘솔 표는 콘솔 장부가 센다.
+migrations_table = "d1_migrations_ops_dashboard"
 
 # ── 배포 전용 환경 (2026-08-03) ──────────────────────────────────────────────
 # 게이트웨이 [env.production](../marketplace/wrangler.toml)과 같은 규약. 콘솔의 운영
@@ -48,6 +62,10 @@ name = "ask-seoul-ops-dashboard"
 [env.production.assets]
 directory = "public"
 run_worker_first = ["/api/*"]
+
+[env.production.vars]
+ENV_LABEL = "운영"
+ENV_D1 = "ask-seoul-prod-d1"
 
 # 운영 D1(8/3 신설, 게이트웨이 [env.production] 과 같은 값이어야 한다 — 갈리면 콘솔의
 # 서빙 품질·키 관리 탭이 통째로 빈다). _ops_slo·_ops_domain 은 여기 소유라 콘솔 공개 전에

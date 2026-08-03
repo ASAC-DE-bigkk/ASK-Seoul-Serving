@@ -40,11 +40,11 @@ SLO_TABLES = {"culture": f"{CATALOG}.culture.gold_culture_slo_daily"}
 
 DOMAINS = [
     ("culture",  "문화·행사", True,  None),
-    ("citydata", "인구·도시", False, "SLO 마트 미보유"),
-    ("transit",  "대중교통",  False, "SLO 마트 미보유"),
-    ("commerce", "상권",      False, "SLO 마트 미보유"),
-    ("weather",  "날씨",      False, "SLO 마트 미보유"),
-    ("traffic",  "교통",      False, "SLO 마트 미보유"),
+    ("citydata", "인구·도시", False, "품질 측정 기준이 아직 없음"),
+    ("transit",  "대중교통",  False, "품질 측정 기준이 아직 없음"),
+    ("commerce", "상권",      False, "품질 측정 기준이 아직 없음"),
+    ("weather",  "날씨",      False, "품질 측정 기준이 아직 없음"),
+    ("traffic",  "교통",      False, "품질 측정 기준이 아직 없음"),
 ]
 
 COLUMNS = [
