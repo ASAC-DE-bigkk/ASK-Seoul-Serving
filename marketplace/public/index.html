@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ASK: SEOUL — 서울 데이터 API 허브</title>
-<meta name="description" content="모으고 붙이는 일은 끝내 뒀습니다. 서울의 문화·인구·대중교통·도로·상권·날씨가 같은 행정동 코드 위에 정제된 API 허브. 미리보기는 키 없이, 키 발급은 이메일만. 커버리지는 제품마다 명시합니다.">
+<meta name="description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨를 행정동 코드로 붙이고 기간으로 자르는 API 허브. 미리보기는 키 없이, 키 발급은 이메일만. 커버리지는 제품마다 명시합니다.">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0d1211" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ASK: SEOUL">
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
-<meta property="og:description" content="모으고 붙이는 일은 저희가 끝냈습니다. 여섯 도메인이 같은 행정동 코드 위에 — 미리보기는 키 없이 바로.">
+<meta property="og:description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 행정동 코드로 붙이고 기간으로 자릅니다 — 미리보기는 키 없이 바로.">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
 <script>
@@ -374,21 +374,17 @@
   <div class="wrap">
     <div class="hero-in">
       <div class="lab">Seoul Open Data · Multi-domain API</div>
-      <!-- 읽는 사람의 이득으로 연다. 앞선 두 판("흩어진 서울 데이터를", "서울의 여섯 도메인,")은
-           둘 다 **우리가 무엇인지**만 말하고 **왜 써야 하는지**를 말하지 않았다.
-           이 서비스가 실제로 없애주는 일 = 여러 포털에서 받아 형식·지역코드를 맞춰 붙이는 일.
-           그걸 그대로 문장의 주어로 세운다.
-           "축은 하나"류로 세는 문장을 쓰지 않는 이유는 그대로다 — /api/catalog 의 join_axes 는
-           셋이고 조인 키가 없는 제품도 62종 중 20종이라 한 클릭에 들통난다(실측 2026-08-03). -->
-      <h1>모으고 붙이는 일은<span class="l2">저희가 끝냈습니다</span></h1>
-      <!-- 두 문장이 각각 값어치와 문턱을 맡는다: 무엇을 받는가 / 얼마나 쉽게 시작하는가.
-           문턱 문장이 이 페이지에서 제일 센 유인이다 — 평가하러 온 개발자에게는
-           "가입 없이 지금 확인 가능"이 어떤 수사보다 강하다(둘 다 실제 동작이다:
-           /api/preview 는 무인증, /api/keys 는 이메일만 받는다).
-           커버리지 단서를 여기서 뺀 건 숨긴 게 아니라 자리를 옮긴 것이다 — 도메인 섹션 힌트
-           ("지역을 나누는 단위는 도메인마다 다릅니다")와 제품 카드의 unit 이 폭에 상관없이 말한다. -->
-      <p class="sub">문화·인구·대중교통·도로·상권·날씨가 <b>같은 행정동 코드</b> 위에 정제돼 있습니다.
-         미리보기는 <b>키 없이</b>, 키 발급은 <b>이메일만</b>.</p>
+      <!-- 축은 둘이고 성격이 다르다(#48 합의): 공간축 = 도메인을 **붙이는** 조인 축(행정동 코드),
+           시간축 = 기간으로 **자르는** where 필터. 그래서 "하나의 축"도 "축은 행정동 코드"도
+           반쪽이었다 — 시간축을 빼고 말하면 이 제품이 실제로 하는 일의 절반이 사라진다.
+           실측(2026-08-03, /api/catalog): 62종 중 공간 조인 키 42 · 시간축 33 · 둘 다 28 ·
+           둘 다 없는 명부형 15. 시간축 컬럼명은 제품마다 달라(18종) 하나로 못 부른다 —
+           그래서 컬럼명이 아니라 "기간"이라고 쓴다. 제품별 실제 축은 카드의 배지가 밝힌다. -->
+      <h1>흩어진 서울 공공데이터를<span class="l2">같은 두 축 위에</span></h1>
+      <!-- 첫 문장이 두 축을 동사로 말한다(붙이고/자릅니다) — 축 이름을 나열하는 것보다
+           무엇을 할 수 있는지가 먼저 읽힌다. 둘째 문장은 과장하지 않는다는 신호로 남긴다. -->
+      <p class="sub">문화·인구·교통·상권·날씨를 <b>행정동 코드</b>로 붙이고 <b>기간</b>으로 자릅니다.
+         커버리지는 도메인마다 다르고, 제품마다 적어둡니다.</p>
       <form class="search-hero" id="heroSearch">
         <div class="box">
           <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span>
