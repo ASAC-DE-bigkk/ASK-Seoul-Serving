@@ -6,9 +6,10 @@
   "scripts": {
     "seed": "wrangler d1 execute ask-seoul-dev-d1 --local --file=migrations/0001_keys_usage.sql && wrangler d1 execute ask-seoul-dev-d1 --local --file=migrations/0002_request_log.sql && wrangler d1 execute ask-seoul-dev-d1 --local --file=migrations/0003_burst.sql && (wrangler d1 execute ask-seoul-dev-d1 --local --file=migrations/0004_request_id.sql || echo '0004: request_id 컬럼 이미 있음 — 건너뜀 (ALTER 는 IF NOT EXISTS 가 없다)') && wrangler d1 execute ask-seoul-dev-d1 --local --file=fixtures/seed.sql && wrangler d1 execute ask-seoul-dev-d1 --local --file=fixtures/handoff_meta_sample.sql",
     "dev": "wrangler dev",
+    "sync": "node scripts/sync-partials.mjs",
     "verify:log": "node scripts/verify-request-log.mjs",
     "smoke": "node scripts/smoke.mjs",
-    "test": "node --test \"scripts/*.test.mjs\"",
+    "test": "node --test \"scripts/*.test.mjs\" && node scripts/sync-partials.mjs --check",
     "usage": "wrangler d1 execute ask-seoul-dev-d1 --local --file=scripts/usage-report.sql"
   },
   "devDependencies": {

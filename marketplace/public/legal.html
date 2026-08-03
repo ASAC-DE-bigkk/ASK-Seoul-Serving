@@ -30,9 +30,11 @@
 </head>
 <body>
 
-<nav class="nav">
-  <div class="wrap nav-in">
+<nav class="nav"><!-- partials/nav.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
+  <div class="nav-in">
     <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="logo" aria-hidden="true">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></a>
+    <!-- 카탈로그 안의 섹션(플레이그라운드·API 키)은 헤더에 걸지 않는다 — 같은 문서로 가는
+         링크가 여럿이 되기 때문. 섹션 이동은 카탈로그 사이드바 몫이고, 여기엔 별도 문서만 건다. -->
     <div class="nav-links">
       <a href="/catalog">카탈로그</a>
       <a href="/docs">API 문서</a>
@@ -178,7 +180,8 @@
   <p class="updated">최종 갱신 2026-08-03</p>
 </main>
 
-<footer>
+<footer><!-- partials/footer.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
+  <!-- 계약 버전·배치 시각·내부 이슈 번호는 우리 사정이다. 이용자에게 남는 정보만 둔다. -->
   <div class="foot-in">
     <div class="fcol">
       <b>ASK: SEOUL</b>
