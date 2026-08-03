@@ -113,7 +113,12 @@
   td { padding:7px 10px 7px 0; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums;
        white-space:nowrap; }
   tr:last-child td { border-bottom:0; }
-  td.name { font-family:var(--mono); font-size:11.5px; white-space:normal; word-break:break-all; }
+  /* break-all 은 좁은 칸에서 한 글자씩 세로로 쪼갠다(`commerce_collect_raw` 가 세로로
+     늘어지던 실사례). 밑줄로 끊고, 그래도 좁으면 가로 스크롤에 맡긴다. */
+  td.name { font-family:var(--mono); font-size:11.5px; white-space:nowrap;
+            overflow-wrap:anywhere; word-break:normal; }
+  /* 식별자 칸은 최소 너비를 줘서 표가 이름부터 찌그러지지 않게 한다 */
+  td.name, th.name { min-width:180px; }
   td.r, th.r { text-align:right; }
   .pill { font-family:var(--mono); font-size:10px; font-weight:600; padding:1px 7px; border-radius:4px; }
   .pill.bad { background:var(--red-soft); color:var(--red-ink); }
@@ -264,6 +269,33 @@
 
     <section class="pane" id="pane-pipeline" role="tabpanel" aria-labelledby="tab-pipeline" tabindex="0">
     <h2 class="sec">데이터 준비 상태 <span>서울시 원본을 받아 가공하는 작업이 매일 제때 끝났나</span></h2>
+    <div class="kpis" id="runKpis"></div>
+    <div class="grid">
+      <div class="card wide">
+        <div class="hd">
+          <h3>날짜별 · 분야별 실행 기록</h3>
+          <p>파이프라인이 실행할 때마다 남긴 기록입니다 — 이 화면의 실측 근거입니다</p>
+        </div>
+        <div class="bd"><div class="scroll" id="runDaily"></div></div>
+      </div>
+      <div class="card">
+        <div class="hd">
+          <h3>파이프라인 현재 상태</h3>
+          <p>작업(DAG) 하나가 한 줄 — 마지막 실행이 어땠나</p>
+        </div>
+        <div class="bd"><div class="scroll" id="pipeState"></div></div>
+      </div>
+      <div class="card">
+        <div class="hd">
+          <h3>실행 주기 등록</h3>
+          <p>얼마나 자주 돌아야 하는지 등록된 값 — 감시 대상이 아닌 것은 회색입니다</p>
+        </div>
+        <div class="bd"><div class="scroll" id="pipeExpect"></div></div>
+      </div>
+    </div>
+
+    <div id="sloSection" hidden>
+    <h2 class="sec" style="margin-top:26px">품질 기준(SLO) <span>별도 지표 — 아직 합성 예시입니다</span></h2>
     <div class="kpis" id="pipeKpis"></div>
     <div class="grid">
       <div class="card wide">
@@ -278,6 +310,7 @@
         <div class="hd"><h3>확인이 필요한 날</h3><p>갱신에 실패했거나, <b>성공했다고 나왔지만 실제로 받은 데이터가 0건</b>이던 날</p></div>
         <div class="bd" id="badDays"></div>
       </div>
+    </div>
     </div>
     </section>
 
@@ -390,7 +423,8 @@ const domLabel = (d) => DOM_LABEL[d] || d;
 function table(cols, rows, empty) {
   if (!rows || !rows.length) return "<div class='empty'>" + empty + "</div>";
   return "<table><thead><tr>" +
-    cols.map((c) => "<th" + (c.r ? " class='r'" : "") + ">" + esc(c.t) + "</th>").join("") +
+    cols.map((c) => "<th class='" + (c.name ? "name " : "") + (c.r ? "r" : "") + "'>" +
+      esc(c.t) + "</th>").join("") +
     "</tr></thead><tbody>" + rows.map((r) => "<tr>" +
       cols.map((c) => "<td class='" + (c.name ? "name " : "") + (c.cls ? c.cls + " " : "") +
         (c.r ? "r" : "") + "'>" + (c.get(r) ?? "—") + "</td>").join("") + "</tr>").join("") +
@@ -459,7 +493,11 @@ function render(d) {
   const b = [];
   // 출처는 세 상태다. "샘플이냐"만 말하면 '데이터가 없다'와 '합성이 섞였다'가 같은 문구가 되고,
   // 운영자는 어느 쪽인지 모른 채 원인을 찾게 된다. 무엇 때문인지와 **다음에 뭘 하면 되는지**까지 적는다.
-  const src = d.meta.pipeline_source;
+  // SLO 는 이제 **별도 지표**다(실측 근거는 실행 기록 쪽). 행이 없으면 섹션을 통째로
+  // 접고 배너도 띄우지 않는다 — 없는 보조 지표를 두 번 알리면 진짜 신호가 묻힌다.
+  const hasSlo = d.pipeline.slo.length > 0;
+  $("sloSection").hidden = !hasSlo;
+  const src = hasSlo ? d.meta.pipeline_source : null;
   if (src === "sample")
     b.push("<div class='banner warn' data-pane='pipeline'><b>이 숫자는 실측이 아니라 합성 예시입니다</b> " +
            "(" + d.meta.pipeline_sample_rows + "일치). 파이프라인은 이미 실행 기록을 운영 DB 에 " +
@@ -475,7 +513,9 @@ function render(d) {
   if (d.meta.missing.includes("serving"))
     b.push("<div class='banner info' data-pane='serving'>요청 기록을 찾지 못했습니다 — API 서버와 같은 데이터를 보도록 " +
            "설정(<code>--persist-to</code>)이 맞는지 확인하세요.</div>");
-  if (d.meta.missing.includes("pipeline"))
+  // _ops_slo 표 자체가 없는 경우(원격 dev D1 등) — 실행 기록이 있으면 화면이 비지 않으므로
+  // 조용히 접는다. 실행 기록까지 없을 때만 loadPipeline 쪽이 안내한다.
+  if (d.meta.missing.includes("pipeline") && hasSlo)
     b.push("<div class='banner info' data-pane='pipeline'>데이터 준비 기록이 아직 없습니다 — <code>npm run seed</code> 를 먼저 실행하세요.</div>");
   if (!CAN_WRITE)
     b.push("<div class='banner info' data-pane='keys'>지금은 <b>보기 전용</b>입니다 — 차단·해제·한도 변경·삭제는 오른쪽 위 <b>잠금 해제</b> 뒤에 할 수 있습니다.</div>");
@@ -608,6 +648,122 @@ function render(d) {
   $("dot-pipeline").className = "dot " + (slo.length ? (pipeBad ? "bad" : "ok") : "");
   $("dot-serving").className = "dot " + (calls ? (servBad ? "bad" : "ok") : "");
   showTab(parseHash().pane || PANES[0]);   // 배너 가시성도 여기서 맞춰진다
+}
+
+// ── 파이프라인 실행 기록 (팀 조회 DB 4종) ──────────────────────────────────────────
+// 이 화면의 실측 근거다. SLO(_ops_slo)는 아직 합성이라 아래쪽에 별도 지표로 내린다.
+// 원칙 하나 — **모른다 ≠ 0**: 못 잰 값은 0 이 아니라 "미확인"으로 그린다. 0 으로 그리면
+// 관측 공백이 "이상 없음"으로 위장된다(#78 F-3).
+const OBS_KO = { complete: "점검 완료", partial: "일부 미확인", unverified: "점검 전" };
+
+function renderPipeline(p) {
+  const rows = p.run_event_daily || [];
+  const totalEv = rows.reduce((a, r) => a + r.events, 0);
+  const totalOk = rows.reduce((a, r) => a + (r.success || 0), 0);
+  const totalNg = rows.reduce((a, r) => a + (r.failed || 0), 0);
+  const layerUnknown = p.meta.unknown ? p.meta.unknown.layer_unknown : null;
+
+  kpis("runKpis", [
+    ["실행 기록", nf.format(totalEv), "최근 " + p.window_days + "일 · 파이프라인이 남긴 건수", ""],
+    ["성공률", totalEv ? Math.round(totalOk / totalEv * 100) + "%" : "—",
+     totalEv ? totalOk + " / " + totalEv + "건 성공" : "기록 없음",
+     totalEv && totalOk / totalEv < 0.9 ? "bad" : "good"],
+    ["실패", nf.format(totalNg), "다시 봐야 하는 실행", totalNg > 0 ? "bad" : "good"],
+    // 미확인은 실패가 아니다 — 그래서 색을 달리 하고 "0 건"과 구분해 적는다
+    ["단계 미확인", layerUnknown == null ? "—" : nf.format(layerUnknown),
+     "어느 단계인지 기록이 없는 건수", layerUnknown ? "bad" : ""],
+  ]);
+
+  $("runDaily").innerHTML = table([
+    { t:"날짜", get:(r) => esc(r.day) },
+    { t:"분야", get:(r) => "<span class='pill dim'>" + esc(domLabel(r.domain)) + "</span>" },
+    { t:"작업 수", r:true, get:(r) => num(r.dags) },
+    { t:"실행", r:true, get:(r) => nf.format(r.events) },
+    { t:"성공", r:true, get:(r) => num(r.success) },
+    { t:"실패", r:true, get:(r) => r.failed ? "<span class='pill bad'>" + r.failed + "</span>" : num(0) },
+    { t:"단계 미확인", r:true, get:(r) => r.layer_unknown
+        ? "<span class='pill warn'>" + r.layer_unknown + "</span>" : num(0) },
+    { t:"건수 미확인", r:true, get:(r) => r.rows_unknown
+        ? "<span class='pill warn'>" + r.rows_unknown + "</span>" : num(0) },
+  ], rows, "이 기간에 실행 기록이 없습니다");
+
+  // 기대치를 dag_id 로 붙여 "감시 대상인가"를 상태 표에서 바로 본다
+  const expBy = {};
+  for (const e of p.expectation || []) expBy[e.dag_id] = e;
+  const st = (p.pipeline_state || []).slice().sort((a, b) =>
+    (a.last_status === "failed" ? -1 : 1) - (b.last_status === "failed" ? -1 : 1) ||
+    String(a.domain).localeCompare(String(b.domain)));
+
+  $("pipeState").innerHTML = table([
+    { t:"작업", get:(r) => esc(r.dag_id), name:true },
+    { t:"분야", get:(r) => esc(domLabel(r.domain)) },
+    { t:"마지막 결과", get:(r) => r.last_status === "success"
+        ? "<span class='pill ok'>성공</span>"
+        : r.last_status === "failed" ? "<span class='pill bad'>실패</span>"
+        : "<span class='pill dim'>" + esc(r.last_status || "기록 없음") + "</span>" },
+    { t:"마지막 실행", get:(r) => esc(r.last_observed_date_kst || "—") },
+    // 점검 상태 — "점검 전"은 정상이라는 뜻이 아니다(#78 C-9). 회색이 아니라 노랑으로 둔다.
+    { t:"점검", get:(r) => r.observation_state === "complete"
+        ? "<span class='pill ok'>" + OBS_KO.complete + "</span>"
+        : "<span class='pill warn'>" + esc(OBS_KO[r.observation_state] || r.observation_state) + "</span>" },
+    { t:"감시", get:(r) => expBy[r.dag_id]
+        ? (expBy[r.dag_id].monitored ? "<span class='pill ok'>대상</span>"
+                                     : "<span class='pill dim'>제외</span>")
+        : "<span class='pill warn'>미등록</span>" },
+  ], st, "등록된 파이프라인 상태가 없습니다");
+
+  $("pipeExpect").innerHTML = table([
+    { t:"작업", get:(r) => esc(r.dag_id), name:true },
+    { t:"분야", get:(r) => esc(domLabel(r.domain)) },
+    { t:"도는 방식", get:(r) => esc(r.trigger_type || "—") },
+    { t:"주기", get:(r) => esc(r.expected_interval || (r.upstream ? "상류: " + r.upstream : "—")) },
+    { t:"허용 지연", r:true, get:(r) => r.max_delay_minutes != null
+        ? nf.format(r.max_delay_minutes) + "분" : "<span class='zero'>미설정</span>" },
+    { t:"감시", get:(r) => r.monitored
+        ? "<span class='pill ok'>대상</span>" : "<span class='pill dim'>제외</span>" },
+  ], p.expectation, "등록된 실행 주기가 없습니다");
+
+  // 탭 점: 실패가 있거나 집계가 비었으면 붉게
+  const bad = totalNg > 0 || (p.meta.source && p.meta.source.aggregate_missing);
+  $("dot-pipeline").className = "dot " + (totalEv ? (bad ? "bad" : "ok") : "");
+  return p;
+}
+
+// 실행 기록 쪽 배너는 요약(/api/summary)이 아니라 이 응답을 보고 붙인다 — 데이터가 늦게
+// 오므로 render() 의 배너 묶음에 끼워 넣지 않고 뒤에서 앞에 덧댄다.
+function pipelineBanners(p) {
+  const b = [];
+  const src = p.meta.source || {};
+  if (src.aggregate_missing)
+    b.push("<div class='banner warn' data-pane='pipeline'><b>집계표가 비어 있습니다</b> — " +
+           "실행 기록(<code>_ops_run_event</code>)은 들어오는데 날짜별 집계" +
+           "(<code>_ops_daily_metric</code>)가 0행입니다. 화면은 기록을 직접 세어 보여주고 " +
+           "있지만, 규약상 집계는 파이프라인이 만듭니다(ASK-Seoul#78 D-7) — 집계 단계가 " +
+           "도는지 확인이 필요합니다.</div>");
+  const u = p.meta.unknown || {};
+  if (u.layer_unknown)
+    b.push("<div class='banner info' data-pane='pipeline'>실행 기록 " + nf.format(u.events_total) +
+           "건 중 <b>" + nf.format(u.layer_unknown) + "건은 어느 단계인지 기록이 없습니다.</b> " +
+           "실패가 아니라 <b>미확인</b>이며, 화면은 이걸 0 으로 세지 않습니다 — " +
+           "관측 공백을 '이상 없음'으로 보이게 하지 않기 위해서입니다.</div>");
+  if (b.length) $("banners").insertAdjacentHTML("afterbegin", b.join(""));
+  // 새로 넣은 배너에도 현재 탭 가시성 규칙을 적용한다
+  const cur = parseHash().pane || PANES[0];
+  for (const el of document.querySelectorAll("#banners [data-pane]"))
+    el.hidden = el.dataset.pane !== cur;
+}
+
+async function loadPipeline() {
+  try {
+    const res = await fetch("/api/pipeline?days=" + $("days").value);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return renderPipeline(await res.json());
+  } catch {
+    $("runDaily").innerHTML =
+      "<div class='empty'>실행 기록을 불러오지 못했습니다 — 팀 조회 DB 에 연결되어 있는지 확인하세요" +
+      "(로컬 Miniflare 에는 이 표가 없습니다. <code>npm run dev:remote</code>).</div>";
+    return null;
+  }
 }
 
 // ── API 사용량 ─────────────────────────────────────────────────────────────────────
@@ -931,8 +1087,9 @@ async function load() {
   $("app").hidden = false;
   render(data);
   syncMode();
-  // render() 가 showTab 으로 끝나므로 그 뒤에 채운다. 두 요청은 서로 무관하니 같이 보낸다.
-  await Promise.all([loadKeys(), loadUsage()]);
+  // render() 가 showTab 으로 끝나므로 그 뒤에 채운다. 세 요청은 서로 무관하니 같이 보낸다.
+  const [, , pipe] = await Promise.all([loadKeys(), loadUsage(), loadPipeline()]);
+  if (pipe) pipelineBanners(pipe);
 }
 // 데이터를 못 받은 상태 — 그릴 것이 없으니 화면을 접고 사유만 보여준다
 function fail(msg) {

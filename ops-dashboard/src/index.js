@@ -130,6 +130,90 @@ async function summary(env, params, writable = false) {
   });
 }
 
+// ── 파이프라인 실행 기록 (팀 조회 DB 4종) ──────────────────────────────────────────
+// 정본은 ASAC-DAG `common/ops/d1_ops.py` 이고 **콘솔은 읽기 전용 소비자**다
+// (ASK-Seoul#78 §8 · decision/0005·0007). 여기서 만들거나 고치는 표가 아니다.
+//
+// 화면이 읽어야 할 표는 `_ops_daily_metric`(날짜×도메인×단계 집계)이지만, 그게 비어 있어도
+// `_ops_run_event`(기록 원본)에는 값이 있을 수 있다 — 실측(2026-08-03) 그 상태였다.
+// 그래서 **둘 다 읽고, 어느 쪽이 비었는지를 화면에 그대로 알린다.** 집계가 비었다는 사실
+// 자체가 관측 공백이고, 콘솔의 존재 이유가 그걸 채워서가 아니라 **보여주는** 것이다.
+//
+// 🔴 `모른다 ≠ 0` (#78 공통 원칙·F-3): 측정 못 한 값은 NULL 로 두고 0 과 구분해 내보낸다.
+//    0 으로 그리면 관측 공백이 "이상 없음"으로 위장된다.
+async function pipeline(env, params) {
+  const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
+  const sinceDate = `-${days} days`;
+
+  const [metric, events, state, expectation, layerGap] = await Promise.all([
+    // 집계표 — D-7 이 지정한 화면용 표. 자연키(날짜·도메인·단계)로 이미 접혀 있다.
+    safeRows(env,
+      "SELECT observed_date_kst AS day, domain, layer, event_count, success_count, failed_count, " +
+      "skipped_count, degraded_count, retried_run_count, empty_run_count, " +
+      "row_count_sum, rows_observed_count, rows_unknown_count, duration_s_sum " +
+      "FROM _ops_daily_metric WHERE observed_date_kst >= date('now','+9 hours',?) " +
+      "ORDER BY observed_date_kst, domain, layer", sinceDate),
+    // 기록 원본 — 집계가 비었을 때 "그래도 기록은 있다"를 보이기 위한 것이지, 콘솔이 집계를
+    // 대신 만드는 게 아니다. 파이프라인의 집계 로직을 여기서 재현하면 정본이 둘이 된다.
+    safeRows(env,
+      "SELECT observed_date_kst AS day, domain, " +
+      "COUNT(*) AS events, " +
+      "SUM(status='success') AS success, SUM(status='failed') AS failed, " +
+      "COUNT(DISTINCT dag_id) AS dags, " +
+      // layer 가 NULL 인 기록 — #78 이 세라고 한 '단계 미기록 건수'. 0 과 구분해야 한다.
+      "SUM(layer IS NULL) AS layer_unknown, " +
+      "SUM(row_count IS NULL) AS rows_unknown " +
+      "FROM _ops_run_event WHERE observed_date_kst >= date('now','+9 hours',?) " +
+      "GROUP BY observed_date_kst, domain ORDER BY observed_date_kst, domain", sinceDate),
+    // DAG 현재 상태 — observation_state 가 C-9 의 complete/partial/unverified.
+    // unverified 는 "아직 점검이 안 지난 구간"이지 정상이라는 뜻이 **아니다.**
+    safeRows(env,
+      "SELECT dag_id, domain, last_status, last_observed_at, last_observed_date_kst, " +
+      "event_count_observed, observation_state, reconciled_through, updated_at " +
+      "FROM _ops_pipeline_state ORDER BY domain, dag_id"),
+    // 기대치 — 정본은 DAG 선언이고 이 표는 사본(S-1). 감시 대상만 비교에 쓴다(S-4).
+    safeRows(env,
+      "SELECT dag_id, domain, trigger_type, expected_interval, upstream, max_delay_minutes, " +
+      "schedule_timezone, monitored, owner, owner_confirmed_on FROM _ops_pipeline_expectation " +
+      "ORDER BY domain, dag_id"),
+    safeRows(env,
+      "SELECT COUNT(*) AS total, SUM(layer IS NULL) AS layer_unknown " +
+      "FROM _ops_run_event WHERE observed_date_kst >= date('now','+9 hours',?)", sinceDate),
+  ]);
+
+  const missing = [];
+  if (!metric.ok) missing.push("daily_metric");
+  if (!events.ok) missing.push("run_event");
+  if (!state.ok) missing.push("pipeline_state");
+  if (!expectation.ok) missing.push("expectation");
+
+  // 기록은 있는데 집계가 비었나 — 이게 실제로 일어나는 상태라 화면이 구분해서 말해야 한다.
+  const hasEvents = events.rows.some((r) => r.events > 0);
+  const gap = layerGap.rows[0] || {};
+
+  return json({
+    window_days: days,
+    generated_at: new Date().toISOString(),
+    meta: {
+      missing,
+      env: { label: env.ENV_LABEL || "알 수 없음", d1: env.ENV_D1 || "알 수 없음" },
+      // 표별 상태를 그대로 내보낸다. 화면이 "왜 비었나"를 말할 수 있어야 한다.
+      source: {
+        daily_metric_rows: metric.rows.length,
+        run_event_days: events.rows.length,
+        // 집계표가 비었는데 원본에는 기록이 있는 상태 — 관측 공백의 한 종류다
+        aggregate_missing: metric.ok && metric.rows.length === 0 && hasEvents,
+      },
+      // 모른다 ≠ 0 — 단계를 못 적은 기록이 몇 건인지 그대로 센다
+      unknown: { events_total: gap.total ?? null, layer_unknown: gap.layer_unknown ?? null },
+    },
+    daily_metric: metric.rows,
+    run_event_daily: events.rows,
+    pipeline_state: state.rows,
+    expectation: expectation.rows,
+  });
+}
+
 // ── API 사용 현황 ─────────────────────────────────────────────────────────────────
 // "어떤 API 가 얼마나 쓰이나"를 API 단위·도메인 단위로 본다. 위의 서빙 품질이 "잘 나가고
 // 있나"(실패·0행)를 본다면 여기는 "무엇이 쓰이나"(수요)를 본다.
@@ -311,6 +395,10 @@ export default {
       if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
       return summary(env, url.searchParams, canWrite(env, request));
     }
+    if (url.pathname === "/api/pipeline") {
+      if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
+      return pipeline(env, url.searchParams);
+    }
     if (url.pathname === "/api/usage") {
       if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
       return usage(env, url.searchParams);
@@ -333,7 +421,8 @@ export default {
       return problem(405, "method not allowed", "GET(목록) · POST(조치)");
     }
     if (url.pathname.startsWith("/api/"))
-      return problem(404, "not found", "GET /api/summary · /api/usage · /api/usage/<api> · /api/keys");
+      return problem(404, "not found",
+        "GET /api/summary · /api/pipeline · /api/usage · /api/usage/<api> · /api/keys");
     return env.ASSETS ? env.ASSETS.fetch(request) : problem(404, "not found", "정적 자산 없음");
   },
 };

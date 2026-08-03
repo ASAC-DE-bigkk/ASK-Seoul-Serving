@@ -42,7 +42,7 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 구성은 이것이 전부다:
 
 ```text
-단일 Worker (src/index.js)          — GET /api/summary · /api/usage · /api/usage/<api>, GET·POST /api/keys
+단일 Worker (src/index.js)          — GET /api/summary · /api/pipeline · /api/usage · /api/usage/<api>, GET·POST /api/keys
 + Static Assets (public/index.html) — 탭 3개짜리 단일 페이지
 + 공유 로컬 D1                       — 게이트웨이(../marketplace)와 같은 상태 (--persist-to)
 + migrations/ + fixtures/           — _ops_slo·_ops_domain 정본과 시드

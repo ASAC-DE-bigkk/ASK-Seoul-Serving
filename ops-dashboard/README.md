@@ -129,6 +129,37 @@ npm run dev          # http://localhost:8788
 wrangler 가 토큰을 못 읽는데, 기동 로그에는 `Using secrets defined in .dev.vars` 가 그대로
 떠서 **조치만 503 이 되는 조용한 실패**가 된다([setup.md §3](../docs/setup.md)).
 
+## 데이터 준비 상태 탭 — 실측 근거는 파이프라인 실행 기록이다
+
+파이프라인·dbt 가 실행하면서 D1 에 남기는 **운영 기록 4종**을 읽는다(`GET /api/pipeline`).
+정본은 ASAC-DAG `common/ops/d1_ops.py` 이고 **콘솔은 읽기 전용 소비자**다(#78 §8 · [0005](docs/decision/0005-slo-snapshot-to-d1.md)).
+
+| 표 | 화면에서 |
+|---|---|
+| `_ops_daily_metric` | 날짜×분야×단계 집계 — 규약이 지정한 화면용 표(D-7) |
+| `_ops_run_event` | 실행 기록 원본 — 집계가 비었을 때 "그래도 기록은 있다"를 보인다 |
+| `_ops_pipeline_state` | 작업(DAG)별 마지막 결과 + 점검 상태 |
+| `_ops_pipeline_expectation` | 얼마나 자주 돌아야 하는지(감시 대상 여부) |
+
+**이 표들은 로컬 Miniflare 에 없다** — 팀 dev D1 에 있다. 그래서 보려면 원격 바인딩으로 띄운다.
+
+```bash
+cp .env.example .env      # CLOUDFLARE_API_TOKEN (D1:Read 면 충분)
+npm run dev:remote        # wrangler dev --remote
+```
+
+⚠️ `--remote` 는 읽기 전용 모드가 아니다 — 그 상태에서 키 차단·삭제를 누르면 팀 dev D1 에
+적용된다([0002](docs/decision/0002-local-only-mentor-gate.md) 불변 경계). **보기 위한 모드다.**
+
+### 모른다 ≠ 0
+
+측정하지 못한 값은 0 이 아니라 **미확인**으로 그린다(#78 F-3). `layer` 가 NULL 인 기록,
+`row_count` 가 NULL 인 기록을 따로 세서 KPI·표·배너에 올린다 — 0 으로 그리면 관측 공백이
+"이상 없음"으로 위장된다. 실측(2026-08-03): 186건 중 **52건이 단계 미기록**.
+
+집계표(`_ops_daily_metric`)가 비었는데 원본에는 기록이 있으면 그 사실을 배너로 알린다.
+콘솔이 집계를 대신 만들지는 않는다 — 만드는 순간 정본이 둘이 된다.
+
 ## "이 숫자는 합성 예시입니다" 배너는 무엇을 보고 뜨나
 
 **환경(dev/prod)이나 D1 이 아니라 `_ops_slo` 행의 `is_sample` 값**을 본다. 서버가 세 상태로
