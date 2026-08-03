@@ -4,7 +4,7 @@
 #
 # 환경 규약은 게이트웨이와 같다 — 기본(위) = 로컬, 배포 = [env.production] 을
 # `--env production` 으로 **명시해야만** 선택된다. 플래그가 없으면 언제나 로컬이라
-# 실수의 방향이 안전한 쪽으로 기운다. 배치 근거: ../docs/environments.md · decision/0009.
+# 실수의 방향이 안전한 쪽으로 기운다. 배치 근거: ../docs/environments.md · decision/0011.
 #
 # ⚠️ 로컬 전용: wrangler dev 로만 구동. deploy 는 decision/0002(로컬 전용) 개정 +
 # 멘토 게이트(#476 ①) + Cloudflare Access 승격(#20 결정 B-1)이 전부 선행이다.

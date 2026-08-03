@@ -25,7 +25,7 @@ name = "..."                  # ← 여기부터 기본 환경 = 로컬 개발
 빠뜨린 실수는 로컬로 떨어지고(안전), prod 를 건드리려면 명시적 의도가 필요하다.
 환경별 파일 분리(`config/local`·`config/prod` + `-c`)안도 검토했지만, 그쪽은 모든 wrangler
 호출에 `-c` 를 **사람이 매번** 붙여야 해서 누락이 곧 버그가 된다 — 검증 스크립트 3곳이
-실제로 깨졌다. 전말은 [ops-dashboard decision/0009](../ops-dashboard/docs/decision/0009-per-env-config.md).
+실제로 깨졌다. 전말은 [ops-dashboard decision/0011](../ops-dashboard/docs/decision/0011-per-env-config.md).
 
 ## 2. 환경별 실체
 
