@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ASK: SEOUL — 서울 데이터 API 허브</title>
-<meta name="description" content="서울의 문화·인구·대중교통·도로·상권·날씨 데이터가 행정동 코드로 이어지는 API 허브. 커버리지는 도메인마다 다르며 제품마다 명시합니다. 이메일만으로 즉시 키 발급.">
+<meta name="description" content="모으고 붙이는 일은 끝내 뒀습니다. 서울의 문화·인구·대중교통·도로·상권·날씨가 같은 행정동 코드 위에 정제된 API 허브. 미리보기는 키 없이, 키 발급은 이메일만. 커버리지는 제품마다 명시합니다.">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0d1211" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ASK: SEOUL">
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
-<meta property="og:description" content="서울의 여섯 도메인, 축은 행정동 코드. 문화·인구·대중교통·도로·상권·날씨가 같은 키로 이어집니다.">
+<meta property="og:description" content="모으고 붙이는 일은 저희가 끝냈습니다. 여섯 도메인이 같은 행정동 코드 위에 — 미리보기는 키 없이 바로.">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
 <script>
@@ -374,25 +374,21 @@
   <div class="wrap">
     <div class="hero-in">
       <div class="lab">Seoul Open Data · Multi-domain API</div>
-      <!-- 문제(흩어져 있다)가 아니라 역량(여섯 도메인)으로 연다.
-           "축은 하나입니다"로 쓰지 않은 이유: 이 페이지가 서빙하는 /api/catalog 의
-           join_axes 가 셋이고(admin_dong_code·gu_code·stat_region_cd), 조인 키가 아예
-           없는 제품이 62종 중 20종이다(실측 2026-08-03). 문서(/docs)에도 셋으로 적혀 있어
-           헤드라인만 "하나"라고 하면 한 클릭 만에 들통난다. 축이 몇 개인지 세는 대신
-           무엇인지를 말한다 — 공통 공간축은 행정동 코드가 맞다(#48 합의).
-           ⚠️ "여섯"은 DOMAINS 표(6개)와 물려 있다. 도메인이 늘면 여기도 같이 고친다. -->
-      <h1>서울의 여섯 도메인,<span class="l2">축은 행정동 코드</span></h1>
-      <!-- 두 문장이 각각 한 가지만 한다: 무엇을 파는가 / 무엇을 팔지 않는가.
-           예전엔 한 문장에 값어치와 단서와 예시("문화 426동 전역, 실시간 도시데이터 121곳처럼")가
-           같이 들어 있어 길고 방어적으로 읽혔다. 예시는 아래 도메인 격자가 도메인마다
-           제 단위로 이미 밝히고 있어 여기서 빼도 잃는 정보가 없다(칸의 unit·title 참고).
-           커버리지 단서 자체는 남긴다 — 이 팀이 과장하지 않는다는 신호이고, 히어로에서
-           빠지면 신뢰가 카탈로그까지 내려가야 생긴다. -->
-      <!-- 헤드라인이 축을 이미 말했으므로 여기서 "행정동 코드"를 되풀이하지 않는다("같은 키로"가 받는다).
-           목록은 여섯 개여야 한다 — 헤드라인이 "여섯"이라고 세는 순간 다섯 개를 나열하면 어긋난다.
-           DOMAINS 표와 같은 순서·같은 여섯이다(대중교통과 도로 소통은 다른 도메인이라 묶지 않는다). -->
-      <p class="sub">문화·인구·대중교통·도로·상권·날씨가 <b>같은 키</b>로 이어집니다.
-         커버리지는 도메인마다 다르고, <b>제품마다 적어둡니다</b>.</p>
+      <!-- 읽는 사람의 이득으로 연다. 앞선 두 판("흩어진 서울 데이터를", "서울의 여섯 도메인,")은
+           둘 다 **우리가 무엇인지**만 말하고 **왜 써야 하는지**를 말하지 않았다.
+           이 서비스가 실제로 없애주는 일 = 여러 포털에서 받아 형식·지역코드를 맞춰 붙이는 일.
+           그걸 그대로 문장의 주어로 세운다.
+           "축은 하나"류로 세는 문장을 쓰지 않는 이유는 그대로다 — /api/catalog 의 join_axes 는
+           셋이고 조인 키가 없는 제품도 62종 중 20종이라 한 클릭에 들통난다(실측 2026-08-03). -->
+      <h1>모으고 붙이는 일은<span class="l2">저희가 끝냈습니다</span></h1>
+      <!-- 두 문장이 각각 값어치와 문턱을 맡는다: 무엇을 받는가 / 얼마나 쉽게 시작하는가.
+           문턱 문장이 이 페이지에서 제일 센 유인이다 — 평가하러 온 개발자에게는
+           "가입 없이 지금 확인 가능"이 어떤 수사보다 강하다(둘 다 실제 동작이다:
+           /api/preview 는 무인증, /api/keys 는 이메일만 받는다).
+           커버리지 단서를 여기서 뺀 건 숨긴 게 아니라 자리를 옮긴 것이다 — 도메인 섹션 힌트
+           ("지역을 나누는 단위는 도메인마다 다릅니다")와 제품 카드의 unit 이 폭에 상관없이 말한다. -->
+      <p class="sub">문화·인구·대중교통·도로·상권·날씨가 <b>같은 행정동 코드</b> 위에 정제돼 있습니다.
+         미리보기는 <b>키 없이</b>, 키 발급은 <b>이메일만</b>.</p>
       <form class="search-hero" id="heroSearch">
         <div class="box">
           <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span>
