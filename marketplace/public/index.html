@@ -209,6 +209,39 @@
   .sec-head .more { margin-left:auto; font-size:13px; font-weight:600; color:var(--accent-deep); }
   .sec-head .more:hover { text-decoration:underline; text-underline-offset:3px; }
 
+  /* ─── 적재 띠 ───
+     "매일 한 번 발행이 돌고 도메인마다 제 몫이 쌓인다"는 리듬만 보인다.
+     세로 두께 = 도메인별 제품 수(실측). 가로는 발행 회차이지 시각 눈금이 아니다.
+     칸 높이를 회차마다 흔들지 않는 이유: 흔들면 값이 있는 그래프로 읽히는데 그런 시계열을
+     우리는 갖고 있지 않다(발행 이력이 아니라 현재 스냅샷만 있다). 변하는 건 밝기뿐이다.
+     행 수를 세로로 쌓지 않는 이유는 위 strip 주석과 같다 — 그레인이 다른 값은 더하지 않는다. */
+  .ingest { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+            padding:15px 18px 13px; box-shadow:var(--shadow-xs); }
+  .ingest .top { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:11px; }
+  .ingest .sum { font-size:13px; font-weight:600; }
+  .ingest .now { margin-left:auto; display:inline-flex; align-items:center; gap:7px;
+                 font-size:12px; font-weight:600; color:var(--accent-deep); white-space:nowrap; }
+  .ingest .now i { width:6px; height:6px; flex:none; border-radius:50%; background:var(--accent);
+                   animation:beat 2.4s ease-out infinite; }
+  @keyframes beat { 0% { box-shadow:0 0 0 0 var(--accent-line); }
+                    70% { box-shadow:0 0 0 8px transparent; }
+                    100% { box-shadow:0 0 0 0 transparent; } }
+  /* 라벨 열과 캔버스가 같은 높이를 6등분해 나눠 갖는다 — 레인 정렬을 이 한 가지 사실로 맞춘다 */
+  .band { display:grid; grid-template-columns:104px 1fr; gap:12px; height:138px; }
+  .band .lanes { display:grid; grid-template-rows:repeat(6,1fr); }
+  .band .lane { display:flex; align-items:center; gap:6px; min-width:0; }
+  .band .lane .nm { font-size:12px; font-weight:600; white-space:nowrap;
+                    overflow:hidden; text-overflow:ellipsis; }
+  .band .lane.off .nm { color:var(--faint); font-weight:500; }
+  .band .lane .c { margin-left:auto; font-size:11px; color:var(--faint); white-space:nowrap; }
+  .band .cv { position:relative; }
+  .band canvas { position:absolute; inset:0; width:100%; height:100%; }
+  .ingest .fine { margin-top:10px; color:var(--faint); line-height:1.55; }
+  @media (max-width:700px){
+    .band { grid-template-columns:82px 1fr; height:116px; }
+    .band .lane .c { display:none; }
+  }
+
   /* product cards */
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px;
@@ -418,6 +451,26 @@
 </div>
 
 <main class="wrap">
+
+  <section>
+    <div class="sec-head"><h2>적재</h2><span class="hint">파이프라인이 매일 한 번 돌고, 도메인마다 제 몫이 쌓입니다</span>
+      <a class="more" href="/status">상태 자세히 →</a></div>
+    <div class="ingest">
+      <div class="top">
+        <span class="lab">Ingest</span>
+        <span class="sum sk" id="ingestSum">불러오는 중</span>
+        <span class="now"><i aria-hidden="true"></i><span id="ingestNow">적재중</span></span>
+      </div>
+      <div class="band">
+        <div class="lanes" id="ingestLanes"></div>
+        <div class="cv"><canvas id="stream" aria-hidden="true"></canvas></div>
+      </div>
+      <!-- 각주가 길지만 줄이지 않는다 — 이 그림이 무엇이 아닌지를 밝히는 게 그림 자체보다 중요하다.
+           히어로 격자의 fieldnote 와 같은 역할이다. -->
+      <p class="lab ko fine">가로는 발행 회차입니다 — 시각 눈금도, 실측 시계열 그래프도 아닙니다.
+        세로 두께는 도메인별 <b>제품 수</b>(실측)이고, 행 수는 제품마다 그레인이 달라 더하지 않습니다.</p>
+    </div>
+  </section>
 
   <section>
     <div class="sec-head"><h2>데이터 제품</h2><span class="hint">질문에 바로 답하는 형태로 정제됨</span>
@@ -775,6 +828,107 @@ function failState(id, msg) {
     " — <a href='/catalog'>카탈로그에서 직접 보기</a></div>";
 }
 
+// ── 적재 띠: 발행 리듬을 보이는 배경 애니메이션.
+// 실측인 값은 도메인별 제품 수 하나뿐이고 그것만 세로 두께로 나간다. 회차마다 높이를 흔들면
+// 값이 있는 그래프로 읽히는데 우리에겐 그럴 이력이 없다 — 그래서 변하는 건 밝기뿐이다.
+// bootCatalog 이 받아온 목록을 넘겨받는다(같은 걸 두 번 부르지 않는다).
+function bootIngest(products, newest) {
+  const cv = $("stream"), ctx = cv && cv.getContext("2d");
+
+  const counts = {};
+  for (const p of products) counts[domainOf(p)] = (counts[domainOf(p)] || 0) + 1;
+  const lanes = DOMAINS.map((d) => ({ name: d.name, n: counts[d.id] || 0 }))
+                       .sort((a, b) => b.n - a.n);
+
+  $("ingestLanes").innerHTML = lanes.map((l) =>
+    "<div class='lane" + (l.n ? "" : " off") + "'><span class='nm'>" + esc(l.name) + "</span>" +
+    "<span class='c num'>" + (l.n ? l.n + "종" : "준비 중") + "</span></div>").join("");
+
+  const live = lanes.filter((l) => l.n).length;
+  setStat("ingestSum", products.length + "종 · " + live + "개 도메인");
+  // 헤드의 "적재중"은 장식이 아니라 마지막 발행 시각이다 — 파이프라인이 멈추면 여기서 먼저 티가 난다
+  if (newest) $("ingestNow").textContent = "적재중 · 마지막 " + (relTime(newest) || "—");
+
+  if (!ctx || !ctx.roundRect) { if (cv) cv.style.display = "none"; return; }
+
+  // 두께: 제품 수에 선형 비례하되 바닥(0.30)을 준다 — 적은 도메인이 실선으로 눌리지 않게.
+  // 처음엔 제곱근으로 눌렀는데 레인 높이가 23px 뿐이라 22종과 17종이 1px 차이로 붙어버렸다(실측).
+  // 바닥이 이미 작은 쪽을 지켜주므로 압축까지 겹칠 이유가 없다.
+  const max = Math.max(1, ...lanes.map((l) => l.n));
+  const weight = lanes.map((l) => (l.n ? 0.30 + 0.70 * (l.n / max) : 0));
+
+  const COLW = 13, SPEED = 11;      // px, px/s — 하루 한 번의 리듬이라 느리게 흐른다
+  let dpr = 1, raf = 0, t0 = 0;
+
+  // 캔버스는 CSS 변수를 못 쓴다. 이 띠는 히어로 격자와 달리 --panel 위에 놓여 라이트에서
+  // 바탕이 흰색이 되므로, 민트를 그대로 쓰면 옅은 칸(알파 .10)이 통째로 사라진다(실측).
+  // 글자에 쓰는 --accent-deep 과 같은 진청록으로 갈아끼고 알파도 조금 올린다.
+  const DARK = [60, 224, 196], LIGHT = [11, 110, 96];
+  const isLight = () => document.documentElement.dataset.theme === "light";
+  const ink = () => (isLight() ? LIGHT : DARK);
+  const base = () => (isLight() ? 0.14 : 0.10);
+  const span = () => (isLight() ? 0.66 : 0.55);
+
+  function layout() {
+    const r = cv.getBoundingClientRect();
+    if (!r.width || !r.height) return false;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(r.width * dpr);
+    cv.height = Math.round(r.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return true;
+  }
+
+  function paint(now) {
+    const t = (now - t0) / 1000;
+    const r = cv.getBoundingClientRect();
+    ctx.clearRect(0, 0, r.width, r.height);
+    const laneH = r.height / lanes.length;
+    const shift = (t * SPEED) % COLW;              // 오른쪽에서 태어나 왼쪽으로 흐른다
+    const cols = Math.ceil(r.width / COLW) + 1;
+    const col = ink(), b = base(), s = span();
+
+    for (let c = 0; c < cols; c++) {
+      const x = r.width - shift - (c + 1) * COLW;
+      if (x + COLW < 0) continue;
+      // 오른쪽 끝일수록 밝다 = 최근 회차. 왼쪽으로 갈수록 잦아들며 화면 밖 이력으로 이어진다
+      const age = 1 - (r.width - x) / r.width;
+      const lit = Math.pow(Math.max(0, age), 1.6);
+      for (let i = 0; i < lanes.length; i++) {
+        const w = weight[i];
+        if (!w) continue;
+        const h = laneH * 0.80 * w;
+        const y = i * laneH + (laneH - h) / 2;
+        ctx.fillStyle = "rgba(" + col[0] + "," + col[1] + "," + col[2] + "," +
+                        (b + lit * s).toFixed(3) + ")";
+        ctx.beginPath();
+        ctx.roundRect(x, y, COLW - 3, h, Math.min(2, (COLW - 3) / 3));
+        ctx.fill();
+      }
+    }
+  }
+
+  function loop(now) { paint(now); raf = requestAnimationFrame(loop); }
+  function stop() { if (raf) { cancelAnimationFrame(raf); raf = 0; } }
+  function start() {
+    if (raf || !layout()) return;
+    t0 = performance.now();
+    paint(t0);                 // 첫 프레임은 rAF 를 기다리지 않는다
+    if (REDUCED) return;       // 흐르지 않는 한 장 — 두께 차이는 그대로 읽힌다
+    raf = requestAnimationFrame(loop);
+  }
+
+  addEventListener("resize", () => { if (layout()) paint(performance.now()); });
+  document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
+  new IntersectionObserver((es) => (es[0].isIntersecting ? start() : stop()),
+                           { threshold: 0 }).observe(cv);
+  // 테마를 바꾸면 색을 다시 골라야 한다. 멈춰 있을 때(화면 밖·reduced-motion)도 마지막 한 장이
+  // 남아 있으므로 여기서 직접 다시 그린다 — 안 그리면 이전 모드 색이 그대로 남는다.
+  new MutationObserver(() => paint(raf ? performance.now() : t0))
+    .observe(document.documentElement, { attributeFilter: ["data-theme"] });
+  start();
+}
+
 // ── 카탈로그: 통계 · 제품 카드 · 도메인
 async function bootCatalog() {
   let products;
@@ -789,6 +943,10 @@ async function bootCatalog() {
     $("statFreshK").textContent = "마지막 갱신 · 확인 불가";
     failState("domains", "도메인 정보를 불러오지 못했습니다");
     failState("cards", "제품 목록을 불러오지 못했습니다");
+    // 적재 띠는 실측 위에서만 그린다 — 숫자를 못 읽었으면 흐르는 그림도 띄우지 않는다
+    setStat("ingestSum", "적재 현황을 불러오지 못했습니다");
+    $("ingestNow").textContent = "확인 불가";
+    $("stream").style.display = "none";
     return;
   }
 
@@ -797,6 +955,8 @@ async function bootCatalog() {
   const newest = stamps[stamps.length - 1];
   setStat("statFresh", (newest && relTime(newest)) || "—");
   $("statFreshK").textContent = newest ? "마지막 갱신 · " + kstStamp(newest) : "마지막 갱신 · 정보 없음";
+
+  bootIngest(products, newest);
 
   const counts = {};
   for (const p of products) counts[domainOf(p)] = (counts[domainOf(p)] || 0) + 1;
