@@ -12,8 +12,8 @@
 | 항목 | 확인 방법 | 기대 |
 |---|---|---|
 | 멘토 승인 | #476 ① 코멘트 | 있음 |
-| 대상 D1 | `wrangler.toml` `[[d1_databases]]` | `ask-seoul-dev-d1` (팀 D1 1개 유지 — #20 결정 A) |
-| Cloudflare 계정 | 팀 계정 로그인 | `npx wrangler whoami` |
+| 대상 D1 | `wrangler.toml` `[env.production]` | `ask-seoul-prod-d1` — 파이프라인이 게시하는 prod D1(ASAC-DAG#668, 8/3 신설). 기본 환경의 dev D1 은 로컬 전용이다 |
+| Cloudflare 계정 | 팀 계정 로그인 | `npx wrangler whoami` — **publisher 와 같은 계정**이어야 바인딩이 같은 DB 로 풀린다(개인 계정 배포 금지) |
 | 코드 | 머지된 `dev` | 로컬 `npm test` · `npm run verify:log` 통과 |
 
 **로컬에서 먼저 통과시킨다** — 배포본이 아니라 코드가 맞는지는 여기서 본다.
@@ -27,17 +27,17 @@ npm run verify:log  # 요청 로그 유실 검증(C-10)
 ## 1. 팀 D1 에 운영 테이블 만들기 (최초 1회)
 
 게이트웨이가 쓰는 `_keys`·`_usage`·`_burst`·`_issuance_log`·`_request_log` 는 지금까지
-`--local` 로만 적용해서 **팀 D1 에는 없다.** 이걸 안 하면 배포해도 키 발급·인증이 전부 죽는다.
+`--local` 로만 적용해서 **prod D1 에는 없다.** 이걸 안 하면 배포해도 키 발급·인증이 전부 죽는다.
 
 > ⚠️ **팀(원격) D1 쓰기다.** 스키마 생성만 하고 기존 표(`_catalog`·제품 테이블)는 건드리지
 > 않지만, 실행 전에 팀에 알린다. 이 명령은 **직접 실행한다** — 에이전트가 대신 돌리지 않는다.
 
 ```bash
 cd marketplace
-npx wrangler d1 execute ask-seoul-dev-d1 --remote --file=migrations/0001_keys_usage.sql
-npx wrangler d1 execute ask-seoul-dev-d1 --remote --file=migrations/0002_request_log.sql
-npx wrangler d1 execute ask-seoul-dev-d1 --remote --file=migrations/0003_burst.sql
-npx wrangler d1 execute ask-seoul-dev-d1 --remote --file=migrations/0004_request_id.sql
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --file=migrations/0001_keys_usage.sql
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --file=migrations/0002_request_log.sql
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --file=migrations/0003_burst.sql
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --file=migrations/0004_request_id.sql
 ```
 
 전부 `CREATE TABLE IF NOT EXISTS` 라 여러 번 돌려도 안전하다. 단 `0004` 는 `ALTER` 라
@@ -46,7 +46,7 @@ npx wrangler d1 execute ask-seoul-dev-d1 --remote --file=migrations/0004_request
 확인:
 
 ```bash
-npx wrangler d1 execute ask-seoul-dev-d1 --remote \
+npx wrangler d1 execute ask-seoul-prod-d1 --remote \
   --command "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '\_%' ESCAPE '\'"
 ```
 
@@ -59,15 +59,18 @@ npx wrangler d1 execute ask-seoul-dev-d1 --remote \
 ```bash
 cd marketplace
 openssl rand -hex 32          # 값 생성 — 출력은 어디에도 남기지 말 것
-npx wrangler secret put ISSUANCE_SALT   # 프롬프트에 위 값을 붙여넣는다
+npx wrangler secret put ISSUANCE_SALT --env production   # 프롬프트에 위 값을 붙여넣는다
 ```
 
 ## 3. 배포
 
 ```bash
 cd marketplace
-npx wrangler deploy
+npx wrangler deploy --env production
 ```
+
+`--env production` 이 prod D1(`ask-seoul-prod-d1`) 바인딩을 선택한다 — 플래그 없이 돌리면
+기본 환경(dev D1)이 배포되므로 **반드시 플래그를 붙인다.**
 
 출력에 나오는 `https://<name>.<subdomain>.workers.dev` 가 타겟 주소다.
 **이 주소는 한 번 정해지면 사실상 못 바꾼다**(소비자가 붙으면 변경 = 파손) — #476 ② 결정과
@@ -102,8 +105,8 @@ SMOKE_KEY=ask_… npm run smoke -- https://<배포주소>
 ## 5. 되돌리기
 
 ```bash
-npx wrangler deployments list                 # 이전 배포 확인
-npx wrangler rollback --message "<사유>"       # 직전 배포로
+npx wrangler deployments list --env production   # 이전 배포 확인
+npx wrangler rollback --env production --message "<사유>"   # 직전 배포로
 ```
 
 데이터는 롤백되지 않는다 — 1번에서 만든 표는 그대로 남는다(비어 있어도 무해하다).
@@ -116,6 +119,6 @@ npx wrangler rollback --message "<사유>"       # 직전 배포로
 - **운영 콘솔은 이 배포에 포함되지 않는다.** ops-dashboard 는 로컬 전용이라
   (decision/0002) 배포된 게이트웨이의 요청 로그·키를 화면으로 볼 수 없다. 조회가 필요하면
   `wrangler d1 execute --remote` 로 직접 질의한다. 콘솔 공개는 #20 결정 B.
-- **키·이메일이 팀 D1 에 쌓인다.** 통합 검증 단계라 팀원 테스트 키뿐이지만, 누군가 그 D1 을
-  리셋하면 발급된 키가 같이 사라진다. 정식 공개 전에 prod D1 로 옮기면서 해소한다(#20 결정 A).
+- **키·이메일이 prod D1 에 쌓인다.** 파이프라인 게시본과 같은 DB 다 — 운영 표(`_keys` 등)는
+  게이트웨이 스키마 정본(0001 §스키마)이지만, 이 D1 을 리셋하면 발급된 키가 같이 사라진다.
 - **요청 로그는 30일 후 자동 삭제**된다(로그 100건당 약 2회 sweep). 발급 IP 해시는 24시간.

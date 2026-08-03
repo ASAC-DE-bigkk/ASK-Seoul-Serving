@@ -39,8 +39,11 @@
 
 - **`wrangler deploy` 금지.** 로컬 전용(`wrangler dev --local`)이다. 공개 URL 신설은
   멘토 게이트(#476 ①). package.json 에 deploy 스크립트를 만들지 않는다.
+  게이트 통과 후의 배포는 `--env production`(prod D1 `ask-seoul-prod-d1` 바인딩) 만 쓴다
+  — 절차는 docs/deploy-runbook.md.
 - **팀(원격) D1 에 쓰지 않는다.** wrangler.toml 의 database_id 는 로컬 모드에서 쓰이지
-  않으며, 시드·검증은 전부 Miniflare 로컬 상태만 만진다.
+  않으며, 시드·검증은 전부 Miniflare 로컬 상태만 만진다. 기본 환경의 dev D1 바인딩은
+  콘솔과 로컬 상태를 공유하는 키(database_id)라 **prod 로 바꾸지 않는다**(wrangler.toml 주석).
 - **키 원문은 어디에도 저장하지 않는다.** SHA-256 해시 + 표시용 접두 8자만. 발급 응답에서
   한 번 보여주는 게 전부다.
 - **`_request_log` 에 값을 남기지 않는다** — 필터는 컬럼명만, 식별자는 key_hash 만,

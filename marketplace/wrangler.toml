@@ -22,3 +22,22 @@ not_found_handling = "404-page"
 binding = "DB"
 database_name = "ask-seoul-dev-d1"
 database_id = "9db0e851-558e-489f-9e76-f131d25aa267"
+
+# ── 배포 전용 환경 (2026-08-03, ASAC-DAG#668) ────────────────────────────────
+# 파이프라인이 prod D1(ask-seoul-prod-d1)을 신설해 62개 제품 게시를 시작했다.
+# 기본(위) 바인딩은 dev D1 을 유지한다 — 로컬 Miniflare 상태가 database_id 로
+# 키잉되어 콘솔(../ops-dashboard)과 같은 로컬 DB 를 공유하기 때문(decision/0003).
+# 여길 바꾸면 로컬 협업 상태가 갈라진다. 배포는 `wrangler deploy --env production`
+# 만 쓴다 — 여전히 멘토 게이트(#476 ①) 이후의 일이다(docs/deploy-runbook.md).
+[env.production]
+name = "ask-seoul-gateway"
+
+[env.production.assets]
+directory = "public"
+run_worker_first = ["/api/*", "/v1/*"]
+not_found_handling = "404-page"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "ask-seoul-prod-d1"
+database_id = "59a8409e-3be6-467b-8214-7938c59c8729"
