@@ -26,6 +26,13 @@ port = 8788
 directory = "public"
 run_worker_first = ["/api/*"]
 
+# 화면이 "지금 어느 환경의 무슨 DB 를 보고 있나"를 말할 수 있게 하는 값. 없으면 운영자가
+# 숫자만 보고 어느 쪽 데이터인지 추측하게 된다 — 로컬 샘플을 운영 실적으로 오해하는 게
+# 이 콘솔에서 제일 나쁜 사고다. [env.production.vars] 에도 **같이** 넣는다(env 는 상속되지 않는다).
+[vars]
+ENV_LABEL = "로컬 개발"
+ENV_D1 = "ask-seoul-dev-d1"
+
 # dev D1. 로컬(--local)은 이 값을 쓰지 않지만, database_id 가 로컬 상태의 키라서
 # 게이트웨이와 **같아야** 같은 로컬 DB 를 본다(decision/0003). prod 로 바꾸지 않는다.
 [[d1_databases]]
@@ -48,6 +55,10 @@ name = "ask-seoul-ops-dashboard"
 [env.production.assets]
 directory = "public"
 run_worker_first = ["/api/*"]
+
+[env.production.vars]
+ENV_LABEL = "운영"
+ENV_D1 = "ask-seoul-prod-d1"
 
 # 운영 D1(8/3 신설, 게이트웨이 [env.production] 과 같은 값이어야 한다 — 갈리면 콘솔의
 # 서빙 품질·키 관리 탭이 통째로 빈다). _ops_slo·_ops_domain 은 여기 소유라 콘솔 공개 전에

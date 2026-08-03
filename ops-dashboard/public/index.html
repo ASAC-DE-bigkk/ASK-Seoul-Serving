@@ -44,6 +44,12 @@
                border:1px solid rgba(255,255,255,.14); border-radius:6px; padding:5px 11px; }
   .top .mode:hover { color:#fff; border-color:rgba(255,255,255,.3); }
   .top .mode.on { background:var(--ok-soft); color:var(--ok); border-color:#b7e4cb; }
+  /* 환경 표시 — 운영은 색으로 즉시 구분된다. 로컬과 운영을 헷갈리는 게 제일 나쁜 사고다 */
+  .top .envtag { font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:5px;
+                 background:rgba(255,255,255,.07); color:var(--deck-ink);
+                 border:1px solid var(--deck-line); white-space:nowrap; }
+  .top .envtag.prod { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .top .envtag small { font-family:var(--mono); font-size:10px; opacity:.75; margin-left:5px; }
 
   .wrap { max-width:1220px; margin:0 auto; padding:20px 26px 64px; }
   .banner { border-radius:8px; padding:10px 14px; font-size:12.5px; margin-bottom:16px; }
@@ -208,6 +214,9 @@
 <div class="top">
   <span class="mark">OPS</span>
   <h1>품질 콘솔</h1>
+  <!-- 지금 보고 있는 데이터의 출처. 숫자만 보고 어느 환경인지 추측하게 두면
+       로컬 값을 운영 실적으로 오해하는 사고가 난다 — 그래서 늘 보이는 자리에 둔다 -->
+  <span class="envtag" id="envTag" hidden></span>
   <span class="sp"></span>
   <label class="lab" for="days" style="color:var(--deck-dim)">기간</label>
   <select id="days">
@@ -436,11 +445,31 @@ addEventListener("hashchange", () => {
 });
 
 function render(d) {
+  // ── 지금 보고 있는 데이터의 출처(환경 + D1). wrangler.toml 의 [vars] 에서 온다.
+  const ev = (d.meta && d.meta.env) || null;
+  if (ev) {
+    const tag = $("envTag");
+    tag.hidden = false;
+    tag.className = "envtag" + (ev.label === "운영" ? " prod" : "");
+    tag.innerHTML = esc(ev.label) + "<small>" + esc(ev.d1) + "</small>";
+    tag.title = "이 화면은 " + ev.label + " 환경의 " + ev.d1 + " 데이터를 읽고 있습니다";
+  }
+
   // ── 배너: 샘플 데이터·누락 섹션을 밝힌다. data-pane 이 붙은 것은 해당 탭에서만 보인다
   const b = [];
-  if (d.meta.pipeline_is_sample)
-    b.push("<div class='banner warn' data-pane='pipeline'><b>이 화면의 숫자는 실제 기록이 아니라 예시 값입니다</b> — " +
-           "실제 데이터를 가져오는 경로가 아직 연결되지 않았습니다. 이 값으로 판단하지 마세요.</div>");
+  // 출처는 세 상태다. "샘플이냐"만 말하면 '데이터가 없다'와 '합성이 섞였다'가 같은 문구가 되고,
+  // 운영자는 어느 쪽인지 모른 채 원인을 찾게 된다. 무엇 때문인지와 **다음에 뭘 하면 되는지**까지 적는다.
+  const src = d.meta.pipeline_source;
+  if (src === "sample")
+    b.push("<div class='banner warn' data-pane='pipeline'><b>이 숫자는 실측이 아니라 합성 예시입니다</b> " +
+           "(" + d.meta.pipeline_sample_rows + "일치). 이 표의 원본인 <code>_ops_slo</code> 는 " +
+           "<b>파이프라인이 직접 채우지 않고</b> 요약을 밀어 넣어야 하는데, 그 정규 경로(도메인 DAG 의 " +
+           "export 작업)가 아직 없습니다. 그래서 <code>npm run seed</code> 가 넣은 합성 값이 보입니다.<br>" +
+           "실측으로 바꾸려면 Trino 를 띄운 뒤 <code>python scripts/load_slo.py</code> — 넣는 순간 이 배너는 사라집니다.</div>");
+  else if (src === "none")
+    b.push("<div class='banner info' data-pane='pipeline'>이 기간에 <b>데이터 준비 기록이 없습니다</b> — " +
+           "<code>_ops_slo</code> 가 비어 있습니다. 로컬이면 <code>npm run seed</code>, " +
+           "실측을 넣으려면 <code>python scripts/load_slo.py</code> 를 실행하세요.</div>");
   if (d.meta.missing.includes("serving"))
     b.push("<div class='banner info' data-pane='serving'>요청 기록을 찾지 못했습니다 — API 서버와 같은 데이터를 보도록 " +
            "설정(<code>--persist-to</code>)이 맞는지 확인하세요.</div>");

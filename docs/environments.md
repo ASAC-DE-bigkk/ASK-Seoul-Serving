@@ -79,12 +79,17 @@ npx wrangler deploy --env production
 
 ## 4. 함정 셋
 
-### ① `[env.production]` 은 상속되지 않는다 — assets 를 양쪽에 적는다
+### ① `[env.production]` 은 상속되지 않는다 — assets·vars 를 양쪽에 적는다
 
-env 섹션은 기본 환경을 **물려받지 않는 항목이 많다.** `[assets]`·`run_worker_first` 를
-기본에만 적으면 배포본에서 정적 서빙·라우팅이 조용히 달라진다. 그래서 두 파일 다
-`[env.production.assets]` 를 **중복 명시**한다. 새 API 네임스페이스를 `run_worker_first` 에
-추가할 때 **두 곳을 같이** 고친다 — 한쪽만 고치면 배포본에서만 그 경로가 정적 404 로 떨어진다.
+env 섹션은 기본 환경을 **물려받지 않는 항목이 많다.** `[assets]`·`run_worker_first`·`[vars]` 를
+기본에만 적으면 배포본에서 정적 서빙·라우팅·화면 표시가 조용히 달라진다. 그래서
+`[env.production.assets]`·`[env.production.vars]` 를 **중복 명시**한다. 새 API 네임스페이스를
+`run_worker_first` 에 추가할 때 **두 곳을 같이** 고친다 — 한쪽만 고치면 배포본에서만
+그 경로가 정적 404 로 떨어진다.
+
+콘솔은 `[vars]` 로 `ENV_LABEL`·`ENV_D1` 을 넘겨 화면 상단에 **지금 어느 환경의 무슨 DB 를
+보고 있는지**를 띄운다. 숫자만 보고 추측하게 두면 로컬 값을 운영 실적으로 오해하는
+사고가 나기 때문이다. 값이 비면 화면에 "알 수 없음"이 뜬다 — 그것도 신호다.
 
 ### ② 시크릿 파일(`.dev.vars`)은 wrangler 설정 파일 옆에서 찾는다
 

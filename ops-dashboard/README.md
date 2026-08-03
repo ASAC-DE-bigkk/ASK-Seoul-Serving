@@ -129,6 +129,25 @@ npm run dev          # http://localhost:8788
 wrangler 가 토큰을 못 읽는데, 기동 로그에는 `Using secrets defined in .dev.vars` 가 그대로
 떠서 **조치만 503 이 되는 조용한 실패**가 된다([setup.md §3](../docs/setup.md)).
 
+## "이 숫자는 합성 예시입니다" 배너는 무엇을 보고 뜨나
+
+**환경(dev/prod)이나 D1 이 아니라 `_ops_slo` 행의 `is_sample` 값**을 본다. 서버가 세 상태로
+갈라 내보내고(`meta.pipeline_source`), 화면은 그에 맞는 문구와 **다음에 할 일**을 적는다.
+
+| `pipeline_source` | 언제 | 화면 |
+|---|---|---|
+| `none` | 그 기간에 `_ops_slo` 행이 없다 | "기록이 없습니다" + `npm run seed` / `load_slo.py` 안내 |
+| `sample` | `is_sample=1` 이 섞였다 | 합성 배너 + 실측으로 바꾸는 법 |
+| `live` | 전부 `is_sample=0` | 배너 없음 |
+
+**환경을 바꿔도 이 값은 안 바뀐다.** `_ops_slo` 를 채우는 정규 경로(도메인 DAG 의 export 작업)가
+아직 없어서, 어느 D1 이든 그 테이블에는 **우리가 넣은 것만** 들어 있기 때문이다 — 로컬은
+`npm run seed` 의 합성값, 실측은 `scripts/load_slo.py`. 아래 '왜 SLO 를 복사하나'가 그 사정이다.
+
+지금 어느 환경의 무슨 DB 를 보고 있는지는 **화면 상단 배지**에 늘 떠 있다
+(`wrangler.toml` 의 `[vars] ENV_LABEL·ENV_D1`, 운영은 붉은색). 숫자만 보고 추측하게 두면
+로컬 값을 운영 실적으로 오해하는 사고가 난다.
+
 ## 왜 SLO 를 복사하나
 
 Trino 는 `http://trino:8080` — **Docker 내부 주소라 Cloudflare Worker 가 닿지 못한다.**

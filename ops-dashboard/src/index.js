@@ -101,14 +101,28 @@ async function summary(env, params, writable = false) {
       "ORDER BY calls DESC LIMIT 10", since),
   ]);
 
+  // 데이터 출처를 세 상태로 갈라서 내보낸다. "샘플이냐 아니냐"만 알려주면 화면이
+  // "데이터가 없다"와 "합성이 섞였다"를 같은 문구로 말하게 되고, 운영자는 어느 쪽인지
+  // 모른 채 원인을 찾게 된다.
+  //   none  — _ops_slo 에 이 기간 행이 아예 없다 (시드 전이거나 실적재가 안 돌았다)
+  //   sample— 합성 샘플이 섞여 있다 (is_sample=1)
+  //   live  — 전부 실측이다
+  const sampleRows = slo.rows.filter((r) => r.is_sample === 1).length;
+  const pipelineSource = !slo.rows.length ? "none" : (sampleRows ? "sample" : "live");
+
   return json({
     window_days: days,
     generated_at: new Date().toISOString(),
     meta: {
       missing,
       can_write: writable,
+      // 이 콘솔이 지금 어느 환경의 무슨 DB 를 보고 있나. 숫자만 보고 추측하게 두면
+      // 로컬 샘플을 운영 실적으로 오해하는 사고가 난다(wrangler.toml [vars]).
+      env: { label: env.ENV_LABEL || "알 수 없음", d1: env.ENV_D1 || "알 수 없음" },
       // 샘플이 한 행이라도 섞여 있으면 화면 전체에 배지를 띄운다 — 조용히 섞이는 게 제일 나쁘다
-      pipeline_is_sample: slo.rows.some((r) => r.is_sample === 1),
+      pipeline_is_sample: pipelineSource === "sample",
+      pipeline_source: pipelineSource,
+      pipeline_sample_rows: sampleRows,
     },
     pipeline: { domains: domains.rows, slo: slo.rows },
     serving: { routes: routes.rows, daily: daily.rows, products: products.rows,
