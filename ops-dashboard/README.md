@@ -69,15 +69,37 @@
 ## 실행
 
 D1 은 게이트웨이와 **같은 로컬 상태를 공유**한다(`--persist-to`). 서빙 품질 원본인
-`_request_log` 가 저쪽에 쌓이기 때문이다.
+`_request_log` 가 저쪽에 쌓이기 때문이다 — 그래서 **`../marketplace` 를 먼저 시드**해야 한다.
+
+사전 준비(Node 20+)·OS별 차이·증상별 해결은 **[../docs/setup.md](../docs/setup.md)**,
+환경별 설정 배치(로컬/운영 도메인·D1·시크릿)는 **[../docs/environments.md](../docs/environments.md)**
+가 정본이다. 둘 다 게이트웨이와 공유하는 문서라 실행 규약을 바꾸면 저쪽 담당자와 같이 고친다.
 
 ```bash
+# macOS / Linux
 cd ops-dashboard
 npm install
 npm run seed         # _ops_slo/_ops_domain + 합성 SLO 14일 → 공유 D1
-echo "OPS_TOKEN=$(openssl rand -hex 16)" > .dev.vars    # .gitignore 대상
+node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" > .dev.vars
 npm run dev          # http://localhost:8788
 ```
+
+```powershell
+# Windows (PowerShell) — openssl 은 없다. && 도 없다.
+cd ops-dashboard
+npm install
+npm run seed
+node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" | Set-Content .dev.vars -Encoding ascii
+npm run dev          # http://localhost:8788
+```
+
+`.dev.vars` 는 `.gitignore` 대상이다(커밋 금지). 변수의 의미는
+[.dev.vars.example](.dev.vars.example) 에 적어 뒀다. 환경 배치(로컬/운영 도메인·D1·시크릿)는
+[../docs/environments.md](../docs/environments.md) 가 정본이다.
+
+**Windows 에서 `-Encoding ascii` 를 빼지 말 것.** 빠지면 `.dev.vars` 가 UTF-16LE 로 저장돼
+wrangler 가 토큰을 못 읽는데, 기동 로그에는 `Using secrets defined in .dev.vars` 가 그대로
+떠서 **조치만 503 이 되는 조용한 실패**가 된다([setup.md §3](../docs/setup.md)).
 
 ## 왜 SLO 를 복사하나
 
@@ -88,10 +110,24 @@ Trino 는 `http://trino:8080` — **Docker 내부 주소라 Cloudflare Worker �
 ## 실적재
 
 ```bash
-python scripts/load_slo.py            # Trino 조회 → fixtures/slo_live.sql → 로컬 D1 적용
-python scripts/load_slo.py --dry-run  # SQL 만 생성
-TRINO_URL=http://127.0.0.1:30586 python scripts/load_slo.py   # 포트가 다르면
+# macOS / Linux
+python3 scripts/load_slo.py            # Trino 조회 → fixtures/slo_live.sql → 로컬 D1 적용
+python3 scripts/load_slo.py --dry-run  # SQL 만 생성
+TRINO_URL=http://127.0.0.1:30586 python3 scripts/load_slo.py   # 포트가 다르면
 ```
+
+```powershell
+# Windows — VAR=값 접두 문법이 없다. $env: 로 미리 넣는다.
+python scripts\load_slo.py
+python scripts\load_slo.py --dry-run
+$env:TRINO_URL = 'http://127.0.0.1:30586'
+$env:TRINO_CATALOG = 'iceberg'         # 기본값은 iceberg_dev — 환경마다 다르다
+python scripts\load_slo.py
+```
+
+카탈로그 이름은 docker-compose 구성에 따라 다르다. `Catalog 'iceberg_dev' not found` 는
+**Trino 접속은 됐다는 뜻**이고 이름만 틀린 것이다 — `SHOW CATALOGS` 로 확인한다
+([setup.md §5](../docs/setup.md)).
 
 의존성 없이 Trino REST(`v1/statement`)를 직접 호출한다. 실측(2026-07-28):
 `iceberg_dev.culture.gold_culture_slo_daily` **29행 · 2026-06-30 ~ 07-28**.

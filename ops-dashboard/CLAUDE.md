@@ -71,6 +71,9 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 - **쓰기 경로는 언제나 서버의 `requireWrite`를 거친다.** 화면의 `can_write` 는 버튼 노출용일
   뿐이다 — 보안 판단은 서버가 한다. → [0004](docs/decision/0004-read-open-write-token.md)
 - **비밀값(`OPS_TOKEN` 등)은 `.dev.vars`.** 커밋·출력 금지.
+- **환경은 `wrangler.toml` 한 파일 안에서 갈린다** — 기본 = 로컬, `[env.production]` = 배포.
+  플래그 없으면 언제나 로컬이다. env 섹션은 상속되지 않으니 assets·`run_worker_first` 는
+  두 곳을 같이 고친다. → [../docs/environments.md](../docs/environments.md) · [0009](docs/decision/0009-per-env-config.md)
 - **샘플 데이터는 `is_sample=1`** 로 박고 화면에 배지를 띄운다. 실측인 척 조용히 섞이는 게
   최악이다. → [0005](docs/decision/0005-slo-snapshot-to-d1.md)
 
@@ -113,6 +116,10 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 npm run seed   # _ops_* 리셋 + 합성 시드 → 공유 로컬 D1
 npm run dev    # :8788 — 게이트웨이(:8787)와 동시 구동 가능
 ```
+
+OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) — 게이트웨이 담당자와
+함께 관리하는 문서다(같은 로컬 D1을 공유하므로 실행 절차가 하나다). 실행·시드·포트·비밀값
+규약을 바꾸면 같은 커밋에서 그 문서를 고치고 상대 담당자에게 알린다.
 
 - API 는 curl 로: `/api/summary?days=14`, `/api/keys` (GET 무인증 / POST 는 Bearer).
 - 쓰기 경로를 고쳤으면 **토큰 미설정(503)·토큰 없음(401)·잘못된 토큰(401)** 을 다 본다.

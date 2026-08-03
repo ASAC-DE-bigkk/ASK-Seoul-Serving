@@ -13,7 +13,7 @@
 - 구동은 `wrangler dev` (로컬 Miniflare sqlite D1)뿐. **`wrangler deploy` 금지.**
 - package.json 에 deploy 스크립트를 두지 않는다 — 실수로 누를 버튼 자체를 없앤다.
 - 모든 시드·로더(`npm run seed`, `scripts/load_slo.py`)는 **로컬 상태만** 만진다.
-  wrangler.toml 의 `database_id` 는 로컬 모드에서 사용되지 않는다.
+  `wrangler.toml` 기본 환경의 `database_id` 는 로컬 모드에서 사용되지 않는다.
 
 ## 대가
 
