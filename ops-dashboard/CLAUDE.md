@@ -34,14 +34,15 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 
 | 탭 | 묻는 질문 | 원본 |
 |---|---|---|
-| 파이프라인 품질 | 수집·변환이 제 몫을 했나 | `_ops_slo` (gold_*_slo_daily 스냅샷) |
-| 서빙 품질 | 외부에 잘 나가고 있나 | `_request_log` (게이트웨이가 쌓는다) |
-| 키 관리 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_request_log` |
+| 데이터 준비 상태 | 수집·변환이 제 몫을 했나 | `_ops_slo` (gold_*_slo_daily 스냅샷) |
+| 응답 상태 | 외부에 잘 나가고 있나 | `_request_log` (게이트웨이가 쌓는다) |
+| API 사용량 | 무엇이 얼마나 쓰이나 | `_request_log` + `_catalog` |
+| 이용자 키 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_request_log` |
 
 구성은 이것이 전부다:
 
 ```text
-단일 Worker (src/index.js)          — GET /api/summary, GET·POST /api/keys
+단일 Worker (src/index.js)          — GET /api/summary · /api/usage · /api/usage/<api>, GET·POST /api/keys
 + Static Assets (public/index.html) — 탭 3개짜리 단일 페이지
 + 공유 로컬 D1                       — 게이트웨이(../marketplace)와 같은 상태 (--persist-to)
 + migrations/ + fixtures/           — _ops_slo·_ops_domain 정본과 시드
@@ -94,6 +95,13 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 - **응답은 `no-store`**, 페이지는 `noindex`, 토큰은 sessionStorage(URL 에 싣지 않는다).
 - 조회 윈도우는 `days` 파라미터(기본 14, 최대 90). 목록성 쿼리는 LIMIT 을 둔다.
 - 위험 조치(폐기·삭제)는 화면에서 2단 확인. 삭제는 복구 불가를 명시한다.
+- **화면 문구에 내부 용어를 쓰지 않는다.** SLO·route·status·preview·quota 같은 말은 화면에
+  내보내지 않는다. 번역은 `public/index.html` 의 `ROUTE_KO`·`STATUS_KO` 한 곳에서 하고,
+  `_ops_domain.note` 처럼 **DB 에 저장되는 사람이 읽을 문구**도 같은 기준으로 쓴다
+  (그건 화면에서 못 고친다 — 정본이 fixtures·load_slo.py 다).
+- **요청 값·응답 본문을 화면에 끌어오지 않는다.** `_request_log` 는 필터 **컬럼명**만 남긴다
+  (게이트웨이 수집 원칙). API 사용량 상세는 축·건수·소요시간·request_id 까지이고,
+  화면이 "값은 저장하지 않는다"를 직접 밝힌다.
 - 주석은 "왜"를 적는다 — 이 리포의 기존 주석 밀도와 문체를 따른다.
 
 ## 6. 데이터 소유권

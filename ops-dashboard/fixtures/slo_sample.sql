@@ -10,11 +10,11 @@ DELETE FROM _ops_domain;
 
 -- 도메인 등록부 — has_slo 는 실측이다(ASAC-DBT 에서 *_slo_daily 검색: culture 만 존재)
 INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('culture','문화·행사',1,NULL);
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('citydata','인구·도시',0,'SLO 마트 미보유');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('transit','대중교통',0,'SLO 마트 미보유');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('commerce','상권',0,'SLO 마트 미보유');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('weather','날씨',0,'SLO 마트 미보유');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('traffic','교통',0,'SLO 마트 미보유');
+INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('citydata','인구·도시',0,'품질 측정 기준이 아직 없음');
+INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('transit','대중교통',0,'품질 측정 기준이 아직 없음');
+INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('commerce','상권',0,'품질 측정 기준이 아직 없음');
+INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('weather','날씨',0,'품질 측정 기준이 아직 없음');
+INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('traffic','교통',0,'품질 측정 기준이 아직 없음');
 
 -- culture 14일치 (합성). 7/22 정기런 실패·7/25 부분 실패를 넣어 화면의 경고 경로를 확인한다
 INSERT INTO _ops_slo (domain,event_date,scheduled_slo_passed,eod_slo_passed,best_coverage_pct,failed_dataset_count,violation_count,total_rows,ingest_duration_min,transform_runs,transform_all_success,is_sample) VALUES ('culture','2026-07-15',1,1,99.5,0,0,41900,4.1,1,1,1);

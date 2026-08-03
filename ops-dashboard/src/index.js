@@ -116,6 +116,106 @@ async function summary(env, params, writable = false) {
   });
 }
 
+// ── API 사용 현황 ─────────────────────────────────────────────────────────────────
+// "어떤 API 가 얼마나 쓰이나"를 API 단위·도메인 단위로 본다. 위의 서빙 품질이 "잘 나가고
+// 있나"(실패·0행)를 본다면 여기는 "무엇이 쓰이나"(수요)를 본다.
+//
+// 도메인은 별도 컬럼이 아니라 _catalog.product_id 의 접두사다(commerce_age_band → commerce).
+// 파이프라인이 그 규칙으로 발행하고 _ops_domain 의 6개 도메인과 그대로 맞는다 —
+// 도메인 컬럼을 새로 만들거나 매핑 테이블을 두지 않는 이유다.
+const DOMAIN_EXPR = "substr(c.product_id, 1, instr(c.product_id, '_') - 1)";
+
+// 카탈로그를 왼쪽에 둔다 — **호출이 0인 API 도 목록에 나와야** "전체 리스트"가 된다.
+// 한 번도 안 불린 제품이야말로 알아야 하는 정보다.
+async function usage(env, params) {
+  const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
+  const since = `-${days} days`;
+
+  const [apis, domains, monthly] = await Promise.all([
+    safeRows(env,
+      "SELECT c.name, c.product_id, " + DOMAIN_EXPR + " AS domain, c.description, c.row_count AS rows_total, " +
+      "COUNT(r.rowid) AS calls, " +
+      "COALESCE(SUM(r.route = 'data'), 0) AS data_calls, " +
+      "COALESCE(SUM(r.route = 'preview'), 0) AS previews, " +
+      "COALESCE(SUM(r.status >= 400), 0) AS errors, " +
+      "COALESCE(SUM(r.status = 200 AND r.row_count = 0), 0) AS empty_hits, " +
+      "ROUND(AVG(r.ms), 1) AS avg_ms, MAX(r.ts) AS last_call " +
+      "FROM _catalog c LEFT JOIN _request_log r " +
+      "  ON r.table_name = c.name AND r.ts >= datetime('now', ?) " +
+      "GROUP BY c.name ORDER BY calls DESC, c.name", since),
+    // 도메인 비율 — 분모는 '카탈로그에 잡히는 호출'이다. catalog·me 처럼 제품이 없는 라우트는
+    // 도메인에 귀속되지 않으므로 여기서 빠진다(화면에 그 사실을 적는다).
+    safeRows(env,
+      "SELECT " + DOMAIN_EXPR + " AS domain, COUNT(DISTINCT c.name) AS api_count, " +
+      "COUNT(r.rowid) AS calls, COUNT(DISTINCT r.table_name) AS apis_used, " +
+      "COALESCE(SUM(r.status >= 400), 0) AS errors " +
+      "FROM _catalog c LEFT JOIN _request_log r " +
+      "  ON r.table_name = c.name AND r.ts >= datetime('now', ?) " +
+      "GROUP BY domain ORDER BY calls DESC, domain", since),
+    // 월별 — _request_log 는 30일 보존이라 실제로 잡히는 건 최대 두 달 조각이다.
+    // 그래도 내보내는 이유는 "지금 보이는 게 전부"라는 사실을 화면이 말해줄 수 있어서다.
+    safeRows(env,
+      "SELECT substr(r.ts,1,7) AS month, " + DOMAIN_EXPR + " AS domain, COUNT(*) AS calls " +
+      "FROM _request_log r JOIN _catalog c ON c.name = r.table_name " +
+      "WHERE r.ts >= datetime('now', ?) GROUP BY month, domain ORDER BY month, calls DESC", since),
+  ]);
+
+  return json({
+    window_days: days,
+    generated_at: new Date().toISOString(),
+    meta: {
+      missing: apis.ok ? [] : ["usage"],
+      // 요청 값·응답 본문은 애초에 저장하지 않는다(수집 원칙 ①·②). 화면이 "없는 게 아니라
+      // 안 남긴 것"이라고 말할 수 있도록 서버가 명시한다 — 사용자가 버그로 오해하지 않게.
+      detail_scope: "filters_axis_only",
+      log_retention_days: 30,
+    },
+    domains: domains.rows,
+    apis: apis.rows,
+    monthly: monthly.rows,
+  });
+}
+
+// 개별 API 상세. 값이 아니라 **축**을 보여준다 — 어떤 필터 조합으로 들어와서 몇 행이 나갔나.
+async function usageDetail(env, name, params) {
+  const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
+  const since = `-${days} days`;
+
+  // 사용자 입력이 테이블명으로 도는 유일한 지점 — 카탈로그 존재 확인으로 화이트리스트한다
+  // (게이트웨이 쪽과 같은 규약). 바인딩이라 주입은 아니지만, 없는 이름을 404 로 끊는 게 맞다.
+  const product = await env.DB.prepare(
+    "SELECT name, product_id, description, row_count, time_axis, columns FROM _catalog WHERE name = ?")
+    .bind(name).first().catch(() => null);
+  if (!product) return problem(404, "unknown api", "카탈로그에 없는 API 다");
+
+  const [daily, filters, statuses, recent] = await Promise.all([
+    safeRows(env, "SELECT substr(ts,1,10) AS day, COUNT(*) AS calls, " +
+      "SUM(status >= 400) AS errors, ROUND(AVG(row_count),1) AS avg_rows " +
+      "FROM _request_log WHERE table_name = ? AND ts >= datetime('now', ?) GROUP BY day ORDER BY day",
+      name, since),
+    // 필터 '축' — 컬럼명 조합이다. 값은 저장하지 않으므로 여기 나올 수 없다.
+    safeRows(env, "SELECT COALESCE(filters, '') AS filters, COUNT(*) AS calls, " +
+      "ROUND(AVG(row_count),1) AS avg_rows, SUM(status = 200 AND row_count = 0) AS empty_hits " +
+      "FROM _request_log WHERE table_name = ? AND ts >= datetime('now', ?) " +
+      "GROUP BY filters ORDER BY calls DESC LIMIT 20", name, since),
+    safeRows(env, "SELECT status, route, COUNT(*) AS calls FROM _request_log " +
+      "WHERE table_name = ? AND ts >= datetime('now', ?) GROUP BY status, route ORDER BY calls DESC",
+      name, since),
+    safeRows(env, "SELECT ts, route, status, COALESCE(filters,'') AS filters, row_count, ms, " +
+      "request_id, substr(key_hash,1,8) AS key_id FROM _request_log " +
+      "WHERE table_name = ? AND ts >= datetime('now', ?) ORDER BY ts DESC LIMIT 50", name, since),
+  ]);
+
+  return json({
+    window_days: days,
+    generated_at: new Date().toISOString(),
+    // columns 는 카탈로그가 가진 '이 제품이 어떤 컬럼을 가졌나'다 — 필터 축을 읽을 때의 사전.
+    api: { ...product, domain: String(product.product_id || "").split("_")[0] },
+    meta: { detail_scope: "filters_axis_only", log_retention_days: 30 },
+    daily: daily.rows, filters: filters.rows, statuses: statuses.rows, recent: recent.rows,
+  });
+}
+
 // ── 키 관리 ───────────────────────────────────────────────────────────────────────
 // 게이트웨이가 발급한 키를 운영자가 보고 손대는 자리. 게이트웨이의 셀프 폐기(DELETE /api/keys)와
 // 다른 점은 **키 원문 없이** 처리한다는 것 — 이용자는 키를 잃어버려도 우리는 조치할 수 있어야 한다.
@@ -197,6 +297,16 @@ export default {
       if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
       return summary(env, url.searchParams, canWrite(env, request));
     }
+    if (url.pathname === "/api/usage") {
+      if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
+      return usage(env, url.searchParams);
+    }
+    if (url.pathname.startsWith("/api/usage/")) {
+      if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
+      const name = decodeURIComponent(url.pathname.slice("/api/usage/".length));
+      if (!name) return problem(400, "missing api", "API 이름이 필요하다");
+      return usageDetail(env, name, url.searchParams);
+    }
     if (url.pathname === "/api/keys") {
       if (request.method === "GET") {
         const res = await listKeys(env);
@@ -208,7 +318,8 @@ export default {
       if (request.method === "POST") return requireWrite(env, request) || keyAction(env, request);
       return problem(405, "method not allowed", "GET(목록) · POST(조치)");
     }
-    if (url.pathname.startsWith("/api/")) return problem(404, "not found", "GET /api/summary · /api/keys");
+    if (url.pathname.startsWith("/api/"))
+      return problem(404, "not found", "GET /api/summary · /api/usage · /api/usage/<api> · /api/keys");
     return env.ASSETS ? env.ASSETS.fetch(request) : problem(404, "not found", "정적 자산 없음");
   },
 };
