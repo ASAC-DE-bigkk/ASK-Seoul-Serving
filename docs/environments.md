@@ -34,9 +34,15 @@ wrangler 가 그걸 조용히 집어서 **틀린 환경으로 돈다.** 지금�
 |---|---|---|
 | API (`marketplace`) | `http://localhost:8787` | `https://ask-seoul.kr` |
 | 대시보드 (`ops-dashboard`) | `http://localhost:8788` | `https://ops.ask-seoul.kr` |
-| D1 | `9db0e851-558e-489f-9e76-f131d25aa267` | `59a8409e-3be6-467b-8214-7938c59c8729` |
+| D1 이름 | `ask-seoul-dev-d1` | `ask-seoul-prod-d1` |
+| D1 id | `9db0e851-558e-489f-9e76-f131d25aa267` | `59a8409e-3be6-467b-8214-7938c59c8729` |
 | D1 실제 접속 | 안 한다 — Miniflare 로컬 sqlite | 바인딩으로 붙는다 |
 | 시크릿 | `config/local/.dev.vars` (파일) | `wrangler secret put` (Cloudflare 보관) |
+
+**두 D1 은 별개다.** 운영 D1 은 2026-08-03 에 신설됐고 **운영 테이블이 아직 없다** —
+`_keys`·`_request_log` 도, `_ops_slo` 도, 도메인 export 가 발행하는 `_catalog`·제품 테이블도
+그쪽에 있다고 전제하지 않는다. 배포 전에 마이그레이션을 `--remote` 로 적용하는 것이
+[deploy-runbook 1번](../marketplace/docs/deploy-runbook.md)이고, 콘솔도 같은 절차가 필요하다.
 
 기준 도메인은 `ask-seoul.kr` 하나다. **API 가 도메인 자체(apex), 대시보드가 `ops.` 서브도메인**이다.
 zone 은 하나지만 Worker·배포·롤백은 따로다 — 사고 반경이 갈리는 게 분리의 목적이다
@@ -128,9 +134,12 @@ prod 에 빠뜨리면 배포본에서만 그 경로가 Worker 에 닿지 못하�
 
 ## 6. 아직 열려 있는 것
 
-- **`database_name` 이 운영 쪽은 미확인이다.** 두 `config/prod/wrangler.toml` 에
-  `ask-seoul-prod-d1` 로 적어 뒀지만 확인된 이름이 아니다. 바인딩의 정본은 `database_id` 라
-  Worker 동작에는 영향이 없고, `wrangler d1 execute <name>` 만 이 값을 쓴다. **확인 후 교체할 것.**
+- **운영 D1 에 테이블을 만드는 일이 남았다.** 값은 확정됐지만(`ask-seoul-prod-d1`), 그 D1 은
+  비어 있다. 게이트웨이 마이그레이션(런북 1번)과 콘솔 `migrations/0001` 을 `--remote` 로
+  적용해야 하고, 둘 다 **사람이 직접 실행하는 팀 D1 쓰기**다.
+- **`_catalog`·제품 테이블이 운영 D1 에 있는지 확인되지 않았다.** 도메인 export 는 지금까지
+  dev D1 로 발행해 왔다(#20 결정 A). 없으면 배포해도 카탈로그가 0종이다 — 배포 실패가 아니라
+  **export 타겟 이관이 선행 과제**라는 뜻이고, 팀 조율이 필요하다.
 - **배포는 아직 허용되지 않았다.** `config/prod` 가 있다는 것과 배포해도 된다는 것은 다르다 —
   공개 URL 신설은 멘토 게이트(#476 ①)이고, 콘솔은 그에 더해 Cloudflare Access 승격
   (#20 결정 B-1)이 선행이다. 그래서 **`package.json` 에 deploy 스크립트를 두지 않는다.**

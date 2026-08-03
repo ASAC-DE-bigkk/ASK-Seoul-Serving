@@ -16,8 +16,8 @@
 | 항목 | 확인 방법 | 기대 |
 |---|---|---|
 | 멘토 승인 | #476 ① 코멘트 | 있음 |
-| 대상 D1 | `config/prod/wrangler.toml` `[[d1_databases]]` | `59a8409e-3be6-467b-8214-7938c59c8729` (운영 D1) |
-| D1 이름 | 같은 파일 `database_name` | ⚠️ **미확인 placeholder** — 실제 이름으로 교체 후 진행할 것 |
+| 대상 D1 | `config/prod/wrangler.toml` `[[d1_databases]]` | `ask-seoul-prod-d1` / `59a8409e-3be6-467b-8214-7938c59c8729` |
+| 운영 테이블 | 아래 1번 | ⚠️ **아직 없다** — 이 D1 은 2026-08-03 신설이다. 1번을 건너뛰면 배포해도 발급·인증이 죽는다 |
 | 호스트 | 같은 파일 `routes` | `ask-seoul.kr` (콘솔은 `ops.` 서브도메인 — 다른 Worker) |
 | Cloudflare 계정 | 팀 계정 로그인 | `npx wrangler whoami` |
 | 코드 | 머지된 `dev` | 로컬 `npm test` · `npm run verify:log` 통과 |
@@ -33,19 +33,22 @@ npm run verify:log  # 요청 로그 유실 검증(C-10)
 ## 1. 팀 D1 에 운영 테이블 만들기 (최초 1회)
 
 게이트웨이가 쓰는 `_keys`·`_usage`·`_burst`·`_issuance_log`·`_request_log` 는 지금까지
-`--local` 로만 적용해서 **팀 D1 에는 없다.** 이걸 안 하면 배포해도 키 발급·인증이 전부 죽는다.
+`--local` 로만 적용해서 **운영 D1 에는 없다.** 이걸 안 하면 배포해도 키 발급·인증이 전부 죽는다.
+
+`ask-seoul-prod-d1` 은 2026-08-03 에 신설된 별도 D1 이다(dev `9db0e851-…` 와 다르다).
+**제품 테이블·`_catalog` 도 여기엔 아직 없을 수 있다** — 아래 확인 쿼리로 실제 상태를 먼저 본다.
+`_catalog` 가 비어 있으면 스모크의 `catalog` 항목이 0종으로 떨어지고, 그건 배포 실패가 아니라
+**도메인 export 가 이 D1 을 향하지 않는다**는 뜻이다(#20 결정 A 의 "정식 공개 전 prod 이관").
 
 > ⚠️ **팀(원격) D1 쓰기다.** 스키마 생성만 하고 기존 표(`_catalog`·제품 테이블)는 건드리지
 > 않지만, 실행 전에 팀에 알린다. 이 명령은 **직접 실행한다** — 에이전트가 대신 돌리지 않는다.
 
-`<PROD_D1>` 는 `config/prod/wrangler.toml` 의 `database_name` — 그 값이 확인된 뒤에 실행한다.
-
 ```bash
 cd marketplace
-npx wrangler d1 execute <PROD_D1> --remote -c config/prod/wrangler.toml --file=migrations/0001_keys_usage.sql
-npx wrangler d1 execute <PROD_D1> --remote -c config/prod/wrangler.toml --file=migrations/0002_request_log.sql
-npx wrangler d1 execute <PROD_D1> --remote -c config/prod/wrangler.toml --file=migrations/0003_burst.sql
-npx wrangler d1 execute <PROD_D1> --remote -c config/prod/wrangler.toml --file=migrations/0004_request_id.sql
+npx wrangler d1 execute ask-seoul-prod-d1 --remote -c config/prod/wrangler.toml --file=migrations/0001_keys_usage.sql
+npx wrangler d1 execute ask-seoul-prod-d1 --remote -c config/prod/wrangler.toml --file=migrations/0002_request_log.sql
+npx wrangler d1 execute ask-seoul-prod-d1 --remote -c config/prod/wrangler.toml --file=migrations/0003_burst.sql
+npx wrangler d1 execute ask-seoul-prod-d1 --remote -c config/prod/wrangler.toml --file=migrations/0004_request_id.sql
 ```
 
 전부 `CREATE TABLE IF NOT EXISTS` 라 여러 번 돌려도 안전하다. 단 `0004` 는 `ALTER` 라
@@ -54,7 +57,7 @@ npx wrangler d1 execute <PROD_D1> --remote -c config/prod/wrangler.toml --file=m
 확인:
 
 ```bash
-npx wrangler d1 execute <PROD_D1> --remote -c config/prod/wrangler.toml \
+npx wrangler d1 execute ask-seoul-prod-d1 --remote -c config/prod/wrangler.toml \
   --command "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '\_%' ESCAPE '\'"
 ```
 

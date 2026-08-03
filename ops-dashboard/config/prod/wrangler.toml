@@ -33,7 +33,8 @@ run_worker_first = ["/api/*"]
 # 키 관리 탭이 통째로 빈다(원본이 게이트웨이 쪽 테이블이라 meta.missing 으로 강등된다).
 # _ops_slo·_ops_domain 은 여기 소유라 이 D1 에 만들어야 한다(migrations/0001).
 #
-# ⚠️ database_name 은 **미확인 값**이다 — 게이트웨이 운영 설정과 같이 교체할 것.
+# 운영 D1(2026-08-03 확인). 이 D1 은 새로 만들어졌고 `_ops_*` 도 게이트웨이 테이블도
+# 아직 **없다** — 콘솔을 올리려면 migrations/0001 을 --remote 로 먼저 적용해야 한다.
 [[d1_databases]]
 binding = "DB"
 database_name = "ask-seoul-prod-d1"
