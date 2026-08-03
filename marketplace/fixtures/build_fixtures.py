@@ -26,7 +26,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ACCOUNT = "0d39ddce1c07c97df66843ede19f56c4"
-DATABASE = "9db0e851-558e-489f-9e76-f131d25aa267"
+# 2026-08-03 부터 파이프라인 게시 대상이 prod D1(ask-seoul-prod-d1)로 이동(ASAC-DAG#668).
+# 픽스처 원천도 게시 정본을 따라간다 — 구 dev D1(9db0e851…)은 더 이상 갱신되지 않는다.
+DATABASE = "59a8409e-3be6-467b-8214-7938c59c8729"
 API = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT}/d1/database/{DATABASE}/query"
 SAMPLE_ROWS = 50
 
