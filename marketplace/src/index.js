@@ -91,10 +91,19 @@ async function issueKey(env, request) {
   // 같은 날 안에서만 같은 값이라 시간당 카운트는 성립하고, 날이 바뀌면 대응이 끊겨
   // 장기 추적 축이 되지 못한다. 자정 경계에서 카운터가 리셋돼 상한 2배까지 통과
   // 가능하지만 시간당 5회 상한이라 실해가 없다. 컬럼명 ip 는 유지 — 이름 변경은
-  // 증분 규약 위반이고 바뀌는 건 내용물뿐이다. ISSUANCE_SALT(.dev.vars) 미설정
-  // 로컬에선 약한 해시가 되지만 로컬의 IP 는 'local' 고정값이라 애초에 식별력이 없다.
+  // 증분 규약 위반이고 바뀌는 건 내용물뿐이다.
+  //
+  // 솔트가 없으면 해시가 아니라 인코딩이다 — IPv4 는 43억 조합이라 전수 대입으로 원문이
+  // 복원된다. 그래서 미설정이면 **발급만** 닫는다(조회 경로는 영향 없음). 기본값을 안전한
+  // 쪽에 두는 게 목적이라, 배포 때 시크릿을 잊으면 열린 채 도는 게 아니라 막힌 채 돈다.
+  // 콘솔의 'ops write disabled' 503 과 같은 방식.
+  const salt = String(env.ISSUANCE_SALT || "").trim();
+  if (!salt)
+    return problem(503, "issuance disabled",
+      "ISSUANCE_SALT 미설정 — 발급 기록의 IP 해시에 솔트가 없으면 원문 IP 를 복원할 수 있어 발급을 막는다. " +
+      "로컬은 marketplace/.dev.vars 에, 배포 환경은 `wrangler secret put ISSUANCE_SALT` 로 설정할 것");
   const rawIp = request.headers.get("cf-connecting-ip") || "local";
-  const ip = await sha256hex(`${kstDay()}|${env.ISSUANCE_SALT || ""}|${rawIp}`);
+  const ip = await sha256hex(`${kstDay()}|${salt}|${rawIp}`);
   const hourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
   const { results: recent } = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM _issuance_log WHERE ip = ? AND created_at > ?"
