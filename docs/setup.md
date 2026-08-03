@@ -2,16 +2,36 @@
 
 > **이 문서는 API 담당자와 대시보드 담당자가 함께 관리한다.**
 > `marketplace/`(API)와 `ops-dashboard/`(대시보드)는 코드를 공유하지 않지만
-> **같은 로컬 D1을 공유**한다. 그래서 실행 절차는 두 개가 아니라 하나다 — 한쪽 절차만
-> 고치면 다른 쪽이 조용히 깨진다. 실행·시드·포트·비밀값 규약을 바꾸는 변경은
+> **로컬에서는 같은 D1 상태를 공유**한다. 그래서 **로컬 실행 절차는** 두 개가 아니라 하나다 —
+> 한쪽 절차만 고치면 다른 쪽이 조용히 깨진다. 실행·시드·포트·비밀값 규약을 바꾸는 변경은
 > 같은 커밋에서 이 문서를 고치고, 상대 담당자에게 알린다.
 
-| 담당 | 프로젝트 | 포트 | 이 문서에서의 위치 |
+| 담당 | 프로젝트 | 로컬 포트 | 이 문서에서의 위치 |
 |---|---|---|---|
-| API | [marketplace/](../marketplace/) | `:8787` | **먼저 시드해야 하는 쪽** — D1 상태의 주인 |
-| 대시보드 | [ops-dashboard/](../ops-dashboard/) | `:8788` | 저쪽 D1을 `--persist-to`로 붙어 읽는다 |
+| API | [marketplace/](../marketplace/) | `:8787` | **먼저 시드해야 하는 쪽** — 로컬 D1 상태의 주인 |
+| 대시보드 | [ops-dashboard/](../ops-dashboard/) | `:8788` | 저쪽 상태에 `--persist-to`로 붙어 읽는다 |
 
-원격 배포는 하지 않는다(`wrangler deploy` 금지 — 멘토 게이트 ASAC-DAG#476 ①).
+## ⚠️ 이 문서의 범위 — 로컬 개발뿐이다
+
+**두 Worker는 별개 배포 단위다.** 별도 Worker · 별도 호스트가 기초 결정이고
+([ops-dashboard decision/0001](../ops-dashboard/docs/decision/0001-separate-worker-from-marketplace.md)),
+배포도 각자 나간다 — 청중이 다르고, 배포 단위가 갈려야 사고 반경도 갈리기 때문이다.
+
+이 문서가 말하는 "절차가 하나"는 **그 분리를 되돌리는 말이 아니라, 분리의 대가**다.
+0001이 "대가" 절에 이미 적어 둔 그대로다 — 호스트를 나눴으니 로컬에서는 상태를 붙여 줘야 한다.
+
+| | 로컬 (이 문서) | 배포 |
+|---|---|---|
+| 프로세스 | 두 개를 내가 띄운다 | 각자 Worker로 따로 나간다 |
+| D1 공유 방법 | `--persist-to` 로 파일 상태를 겹친다 | 각 `wrangler.toml` 이 **같은 `database_id`** 를 바인딩한다 |
+| 순서 | marketplace 시드 먼저 | 순서 의존 없음 — 콘솔은 저쪽 **Worker** 가 아니라 **테이블**에 의존한다 |
+| 절차 문서 | **이 문서 하나** | 프로젝트마다 따로 ([marketplace/docs/deploy-runbook.md](../marketplace/docs/deploy-runbook.md)) |
+
+`--persist-to`는 **로컬 전용 장치**라 배포판에 대응물이 없다. 배포에서 같은 역할을 하는 건
+두 `wrangler.toml`이 같은 D1을 가리키는 것이고, 지금 둘 다 `ask-seoul-dev-d1`
+(`9db0e851-…`)로 같다 — #20 결정 A(팀 D1 1개 유지)와 정합한다.
+
+원격 배포는 아직 하지 않는다(`wrangler deploy` 금지 — 멘토 게이트 ASAC-DAG#476 ①).
 아래는 전부 `wrangler dev` 로컬 구동이다.
 
 ## 0. 순서가 정해져 있다
@@ -24,6 +44,10 @@ marketplace 시드  →  ops-dashboard 시드  →  둘 다 dev
 `ops-dashboard`의 `seed`·`dev`는 `--persist-to ../marketplace/.wrangler/state`로 돈다.
 **marketplace를 먼저 시드하지 않으면** 콘솔은 뜨지만 서빙 품질·키 관리 탭이 비고
 `GET /api/summary`의 `meta.missing`에 테이블 이름이 실린다(설계상 강등이지, 고장이 아니다).
+
+이 순서는 **로컬 한정**이다. 콘솔이 기다리는 건 marketplace의 *실행*이 아니라 그쪽이 만든
+*테이블*이라, 배포에서는 마이그레이션이 그 자리를 대신한다(런북 2번). 배포된 게이트웨이가
+꺼져 있어도 콘솔은 뜬다 — 그게 별도 호스트로 나눈 이유다.
 
 ## 1. 사전 준비
 
