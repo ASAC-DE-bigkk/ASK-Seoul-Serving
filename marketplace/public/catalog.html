@@ -5,24 +5,56 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>데이터 카탈로그 — ASK: SEOUL 데이터 플랫폼</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
+<script>
+  /* 테마 확정 — 첫 페인트 전. 내려가면 라이트 사용자에게 다크가 번쩍인다(FOUC).
+     저장값이 없으면 OS 로 해석하되 저장하지 않는다 — 저장 여부가 "직접 골랐는가"의
+     유일한 기록이고, 그게 뒤에서 OS 변경을 따라갈지 가른다. index.html 과 같은 코드다. */
+  (function () {
+    var t;
+    try { t = localStorage.getItem("theme"); } catch (e) { /* 프라이빗 모드 등 차단 */ }
+    if (t !== "light" && t !== "dark") {
+      t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <style>
   :root {
-    /* 팔레트는 랜딩(index.html)과 같은 단청 계열 — 두 페이지가 어긋나면 다른 서비스로 보인다 */
-    --bg:#f6f7f6; --panel:#ffffff; --sidebar:#0e1a18; --sidebar-hi:#1a2d2a;
-    --sidebar-ink:#c2d6d1; --sidebar-dim:#71908a;
-    /* muted·faint — 1x(표준 해상도) 모니터 실측에서 #48605c/#8fa3a0 가 흐릿하게 읽혀 한 단계 어둡게.
-       색조(청록 기울기)는 유지 — 순회색이 되면 팔레트 의도가 죽는다 */
-    --ink:#12211f; --muted:#3d534f; --faint:#75898b; --line:#e6eae8; --line-strong:#ccd5d2;
-    --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
-    --green-soft:#ecfdf3; --green-ink:#0a6b45;
-    --amber-soft:#fffaeb; --amber-ink:#b54708; --red-soft:#fef3f2; --red-ink:#b42318;
-    --shadow-xs:0 1px 2px rgba(16,24,40,.05);
-    --shadow-sm:0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
+    /* 팔레트는 랜딩(index.html)과 같은 다크 단청 — 두 페이지가 어긋나면 다른 서비스로 보인다.
+       액센트는 민트 하나(테라코타 2색 체제 폐기), hover 는 어두워지지 않고 밝아진다 */
+    --bg:#070c0b; --panel:#0d1413; --panel-2:#111a18;
+    --sidebar:#0a100f; --sidebar-hi:#15201e;
+    --sidebar-ink:#c6d8d2; --sidebar-dim:#647a74;
+    --ink:#e7f2ee; --muted:#9db3ac; --faint:#647a74;
+    --line:rgba(231,242,238,.07); --line-strong:rgba(231,242,238,.14);
+    --accent:#3ce0c4; --accent-deep:#7deed8; --accent-ink:#04211b;
+    --accent-soft:rgba(60,224,196,.09); --accent-line:rgba(60,224,196,.30);
+    --green-soft:rgba(64,222,142,.10); --green-ink:#4ade80;
+    --amber-soft:rgba(251,191,36,.12); --amber-ink:#fbbf24; --red-soft:rgba(248,113,113,.10); --red-ink:#f87171;
+    --shadow-xs:0 0 0 0 transparent;
+    --shadow-sm:0 1px 3px rgba(0,0,0,.3);
+    /* hover 를 accent-deep 이 아니라 따로 둔 이유는 index.html 과 같다 — 두 모드에서
+       방향이 반대다(다크는 밝아지고, 라이트는 진해진다) */
+    --accent-hover:#7deed8;
     --mono:ui-monospace,'Cascadia Code',Consolas,'Malgun Gothic',monospace;
     /* mono 는 라틴 식별자 전용이다 — Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
        굴림 계열에 대체되고 작은 급수에서 뭉개진다(실측). 한글 라벨은 --sans 로 되돌린다 */
     --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
            system-ui,-apple-system,'Noto Sans KR',sans-serif;
+  }
+
+  /* ─── 라이트 모드 ── 랜딩(index.html)의 같은 블록과 값이 같아야 한다.
+     --sidebar* 는 덮어쓰지 않는다: 사이드바는 두 모드 모두 어둡다(랜딩의 nav 와 같은 이유). */
+  :root[data-theme="light"] {
+    --bg:#f6f7f6; --panel:#ffffff; --panel-2:#eef3f1;
+    --ink:#12211f; --muted:#3d534f;
+    /* 다크의 #75898b 를 그대로 쓰면 흰 바탕에서 3.5:1 로 AA 미달 — 흐림의 방향이 반대다 */
+    --faint:#5f7375;
+    --line:#e6eae8; --line-strong:#ccd5d2;
+    /* 흰 바탕 위 민트는 대비 1.7:1 로 글자에 못 쓴다 — 글자용만 진청록으로 내린다 */
+    --accent-deep:#0b6e60; --accent-hover:#23cdb0;
+    --green-ink:#15803d; --amber-ink:#b45309; --red-ink:#b91c1c;
+    --shadow-sm:0 1px 2px rgba(18,33,31,.06);
   }
   * { box-sizing:border-box; margin:0; }
   html { scroll-behavior:smooth; }
@@ -40,9 +72,9 @@
   .side .brand { display:flex; align-items:center; gap:10px; padding:6px 18px 16px;
                  border-bottom:1px solid rgba(255,255,255,.07); margin-bottom:8px; }
   .side .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
-                       background:linear-gradient(140deg,#0f6f68,#2aa79a);
+                       background:linear-gradient(140deg,#0f6f68,#2ee6c3);
                        display:flex; align-items:center; justify-content:center;
-                       font-weight:800; font-size:13.5px; color:#fff; letter-spacing:-.02em; }
+                       font-weight:800; font-size:13.5px; color:#04211b; letter-spacing:-.02em; }
   .side .brand .nm { font-weight:700; font-size:13.5px; color:#fff; letter-spacing:-.01em; line-height:1.25; }
   .side .brand .sub { display:block; font-weight:500; font-size:11px; color:var(--sidebar-dim);
                       letter-spacing:.02em; }
@@ -56,7 +88,7 @@
                     box-shadow:inset 2px 0 0 var(--accent); }
   .dnav li.soon { cursor:default; color:var(--sidebar-dim); }
   .dnav li.soon:hover { background:none; color:var(--sidebar-dim); }
-  .dnav .dot { width:6px; height:6px; border-radius:50%; background:#2aa79a; flex:none; }
+  .dnav .dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none; }
   .dnav li.soon .dot { background:#294a45; }
   .dnav .cnt { margin-left:auto; font-size:11px; font-variant-numeric:tabular-nums;
                background:rgba(255,255,255,.08); border-radius:4px; padding:1px 6px; color:var(--sidebar-ink); }
@@ -93,6 +125,15 @@
              border:1px solid var(--line-strong); color:var(--muted); cursor:pointer; background:var(--panel); }
   .keychip.on { font-family:var(--mono); border-color:var(--accent-line); background:var(--accent-soft);
                 color:var(--accent-deep); font-weight:600; }
+  /* 테마 토글 — topbar 는 본문과 같은 판(--panel)이라 여기는 deck 이 아니라 본문 토큰을 쓴다.
+     아이콘은 "누르면 갈 곳"을 보인다: 다크에서는 해(→라이트). */
+  .theme-btn { width:28px; height:28px; flex:none; display:flex; align-items:center; justify-content:center;
+               padding:0; border:1px solid var(--line-strong); border-radius:6px; background:var(--panel);
+               color:var(--muted); cursor:pointer; }
+  .theme-btn:hover { border-color:var(--accent-line); color:var(--accent-deep); }
+  .theme-btn .moon { display:none; }
+  :root[data-theme="light"] .theme-btn .sun { display:none; }
+  :root[data-theme="light"] .theme-btn .moon { display:block; }
 
   .content { padding:24px 28px 64px; max-width:1160px; }
   .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; }
@@ -125,8 +166,8 @@
   button { font:inherit; font-size:13.5px; font-weight:600; border:0; border-radius:6px; padding:7px 14px;
            cursor:pointer; transition:background .12s, border-color .12s; }
   button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-  .btn-p { background:var(--accent); color:#fff; box-shadow:var(--shadow-xs); }
-  .btn-p:hover { background:var(--accent-deep); }
+  .btn-p { background:var(--accent); color:var(--accent-ink); box-shadow:var(--shadow-xs); }
+  .btn-p:hover { background:var(--accent-hover); }
   .btn-g { background:var(--panel); color:var(--muted); border:1px solid var(--line-strong);
            box-shadow:var(--shadow-xs); }
   .btn-g:hover { border-color:var(--accent); color:var(--accent-deep); }
@@ -160,10 +201,10 @@
            margin-bottom:30px; box-shadow:var(--shadow-xs); }
   .phead, .prow { display:grid; grid-template-columns:minmax(200px,1.2fr) minmax(260px,2.4fr) 110px 90px;
                   gap:14px; align-items:center; padding:10px 18px; }
-  .phead { background:#f2f6f4; border-bottom:1px solid var(--line); font-size:11px; font-weight:600;
+  .phead { background:var(--panel-2); border-bottom:1px solid var(--line); font-size:11px; font-weight:600;
            letter-spacing:.06em; color:var(--muted); }
   .prow { border-bottom:1px solid var(--line); cursor:pointer; transition:background .1s; }
-  .prow:hover { background:#f2f6f4; }
+  .prow:hover { background:var(--panel-2); }
   .prow:last-child, .pdetail:last-child { border-bottom:0; }
   .prow .t { font-weight:600; font-size:13.5px; }
   .prow .t small { display:block; font-family:var(--mono); font-size:11px; font-weight:400;
@@ -182,7 +223,7 @@
   .usage-item .uq { font-weight:600; font-size:13px; }
   .usage-item .umeta { font-size:11.5px; color:var(--muted); margin-top:2px; }
   .usage-item .uins { font-size:12px; color:var(--muted); margin-top:6px; }
-  .usage-item pre { font-family:var(--mono); font-size:11.5px; line-height:1.55; background:#f2f6f4;
+  .usage-item pre { font-family:var(--mono); font-size:11.5px; line-height:1.55; background:var(--panel-2);
                     border:1px solid var(--line); border-radius:4px; padding:8px 10px; margin:8px 0 0;
                     overflow-x:auto; white-space:pre; }
   .uchip { font-family:var(--sans); font-size:11.5px; padding:1px 6px; border-radius:3px;
@@ -196,7 +237,7 @@
                    border:1px solid var(--line-strong); border-radius:6px; background:var(--panel);
                    color:var(--muted); font-variant-numeric:tabular-nums; }
   .lpager button:hover:not([disabled]):not(.on) { border-color:var(--accent-line); color:var(--accent-deep); }
-  .lpager button.on { background:var(--accent); border-color:var(--accent); color:#fff; cursor:default; }
+  .lpager button.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); cursor:default; }
   .lpager button[disabled] { opacity:.4; cursor:default; }
   .lpager .gap { color:var(--faint); padding:0 3px; font-size:13px; }
   .lpager .info { font-size:12px; color:var(--faint); font-variant-numeric:tabular-nums; }
@@ -206,7 +247,7 @@
   .badge.dim { background:var(--panel); color:var(--muted); border:1px solid var(--line-strong);
                font-family:inherit; }
   .prow .act { text-align:right; }
-  .pdetail { display:none; padding:16px 18px 20px; background:#f2f6f4; border-bottom:1px solid var(--line); }
+  .pdetail { display:none; padding:16px 18px 20px; background:var(--bg); border-bottom:1px solid var(--line); }
   .pdetail.open { display:block; }
   /* 스키마 표 — 컬럼명 · 타입 · 설명. 설명이 붙으면서 2열 격자로는 줄바꿈이 많아져 한 줄 = 한 컬럼 */
   .pdetail .cols { margin:10px 0 14px; border-top:1px solid var(--line); }
@@ -227,10 +268,13 @@
     .pdetail .col-item { grid-template-columns:1fr auto; }
     .pdetail .col-item .ds { grid-column:1/-1; }
   }
-  .endpoint { font-family:var(--mono); font-size:12.5px; background:#08110f; color:#e4e9f1;
+  /* 호출 예시는 두 모드 모두 어둡다 — 랜딩의 터미널 데모와 같은 이유(실행 화면으로 읽혀야 한다).
+     그래서 테두리도 본문 토큰이 아니라 판 위에서 흐린 흰선이다 — --line-strong 을 쓰면
+     라이트에서 어두운 블록을 밝은 테가 두르는 꼴이 된다 */
+  .endpoint { font-family:var(--mono); font-size:12.5px; background:#050908; color:#e4e9f1;
               border-radius:6px; padding:10px 13px; overflow-x:auto; white-space:pre;
-              border:1px solid #1d2939; }
-  .endpoint .m { color:#32d583; font-weight:700; }
+              border:1px solid rgba(255,255,255,.10); }
+  .endpoint .m { color:#4ade80; font-weight:700; }
   .pdetail .dhead { font-size:11px; font-weight:600; letter-spacing:.06em; color:var(--muted);
                     margin-bottom:5px; }
 
@@ -255,13 +299,13 @@
                 cursor:pointer; text-decoration:underline; text-underline-offset:3px; box-shadow:none; }
   .table-scroll { overflow-x:auto; border:1px solid var(--line); border-radius:6px; background:var(--panel); }
   table.data { border-collapse:collapse; width:100%; font-size:12.5px; font-variant-numeric:tabular-nums; }
-  table.data th { background:#f2f6f4; font-family:var(--mono); font-size:10.5px; color:var(--muted);
+  table.data th { background:var(--panel-2); font-family:var(--mono); font-size:10.5px; color:var(--muted);
                   font-weight:600; text-align:left; padding:7px 11px; white-space:nowrap;
                   border-bottom:1px solid var(--line); position:sticky; top:0; }
   table.data td { padding:6px 11px; border-bottom:1px solid var(--line); white-space:nowrap; }
   table.data tr:last-child td { border-bottom:0; }
-  table.data tbody tr:hover td { background:#f2f6f4; }
-  .raw-json { display:none; font-family:var(--mono); font-size:12px; background:#f2f6f4;
+  table.data tbody tr:hover td { background:var(--panel-2); }
+  .raw-json { display:none; font-family:var(--mono); font-size:12px; background:var(--panel-2);
               border:1px solid var(--line); border-radius:6px; padding:11px; overflow:auto; max-height:320px; }
   .empty { color:var(--faint); font-size:13px; padding:26px; text-align:center;
            border:1px dashed var(--line-strong); border-radius:6px; }
@@ -289,7 +333,7 @@
     </ul>
     <!-- 개발자용 페이지라 오류 형식(RFC 7807)은 남긴다 — 그건 붙일 때 실제로 필요한 정보다.
          반면 내부 계약 버전·배치 시각·이슈 번호는 이용자가 알 일이 아니라 뺐다. -->
-    <div class="foot">매일 1회 갱신<br>오류 응답 <code>RFC 7807</code><br>프로토타입 · 가용성 무보장
+    <div class="foot">매일 1회 갱신<br>오류 응답 <code>RFC 7807</code><br>가용성 무보장
       <br><a href="/legal#attribution">데이터 출처</a> · <a href="/legal#terms">이용약관</a> · <a href="/legal#privacy">개인정보</a>
       <br>© 2026 ASK: SEOUL</div>
   </aside>
@@ -299,8 +343,11 @@
       <h1 id="pageTitle">데이터 카탈로그</h1>
       <div class="search"><span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span><input type="search" id="q" placeholder="제품·질문·테이블명 검색"></div>
       <span class="spacer"></span>
-      <span class="env-pill"><i></i>프로토타입</span>
-      <span class="keychip" id="keychip" onclick="goHash('#auth')">키 미연결</span>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
+        <svg class="sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+        <svg class="moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+      </button>
+        <span class="keychip" id="keychip" onclick="goHash('#auth')">키 미연결</span>
     </div>
 
     <div class="content">
@@ -417,7 +464,7 @@ let USAGE = {};
 const JOIN_KEY = /^(admin_dong_code|gu_code|stat_region_cd)$/;
 
 // 앵커 이동 — 브라우저의 로드 시점 점프에 맡길 수 없다. 목록·시작하기가 JS 로 렌더되면서
-// 앵커 위쪽 높이가 바뀌기 때문(홈의 '무료로 시작'·하단 버튼이 쓰는 /catalog#auth 진입이 맨 위에 떨어지던 원인).
+// 앵커 위쪽 높이가 바뀌기 때문(홈의 '시작하기'·하단 버튼이 쓰는 /catalog#auth 진입이 맨 위에 떨어지던 원인).
 // 같은 해시를 다시 눌러도 동작하도록 hashchange 가 아니라 직접 스크롤한다.
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 function goHash(hash, behavior) {
@@ -487,7 +534,6 @@ function renderStart() {
     step(2, "데이터 고르기", "답하고 싶은 질문으로 찾아보세요", "#catalog") +
     step(3, "바로 호출하기", "curl 한 줄 · JSON 응답", "#playground");
   $("terms").innerHTML =
-    "<span><b>무료</b></span>" +
     "<span>키당 하루 <b>1,000회</b> · 분당 <b>60회</b></span>" +
     "<span>매일 1회 갱신</span>" +
     "<span>REST · JSON 표준</span>";
@@ -888,5 +934,6 @@ for (const id of ["pKey", "pLimit", "pFrom", "pTo"]) $(id).addEventListener("inp
 
 boot();
 </script>
+<script src="/theme.js" defer></script>
 </body>
 </html>

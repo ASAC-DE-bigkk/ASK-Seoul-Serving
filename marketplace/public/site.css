@@ -1,24 +1,47 @@
-/* site.css — 문서형 페이지(이용안내·API 문서·문의·상태·404)가 공유하는 뼈대.
+/* site.css — 문서형 페이지(이용안내·API 문서·문의·상태·약관·404)가 공유하는 뼈대.
    index.html·catalog.html 은 화면 성격이 달라(랜딩·콘솔) 자기 CSS 를 그대로 쓰고,
    여기서는 팔레트·서체·머리·바닥만 같은 값으로 맞춘다 — 값이 갈리면 다른 서비스로 보인다.
-   토큰 값을 고칠 일이 생기면 index.html 의 :root 와 함께 고쳐야 한다. */
+   토큰 값을 고칠 일이 생기면 index.html 의 :root 와 함께 고쳐야 한다.
+
+   테마: 다크가 기본이고 :root[data-theme="light"] 가 토큰만 덮는다. 적용은 각 페이지
+   <head> 의 인라인 조각이 페인트 전에 하고, 버튼 배선은 /theme.js 한 벌이 맡는다. */
 
 :root {
-  --bg:#f6f7f6; --panel:#ffffff;
-  --ink:#12211f; --muted:#3d534f; --faint:#75898b; --line:#e6eae8; --line-strong:#ccd5d2;
-  --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
-  --teal:#0f6f68; --teal-deep:#0a534e; --teal-soft:#e9f4f2; --teal-line:#a9d5cf;
-  --green-soft:#ecfdf3; --green-ink:#0a6b45; --green-line:#a6e9c8;
-  --amber-soft:#fffaeb; --amber-ink:#b54708; --amber-line:#fbdc9a;
-  --red-soft:#fef3f2; --red-ink:#b42318; --red-line:#f3b5b0;
-  --deck:#0e1a18; --deck-line:#1f302d; --deck-ink:#c2d6d1; --deck-dim:#71908a;
-  --shadow-xs:0 1px 2px rgba(16,24,40,.05);
-  --shadow-sm:0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
+  /* 다크 단청 — index.html 의 :root 와 같은 값이다. 액센트는 민트 하나(구 테라코타
+     2색 체제 폐기: 초점이 분산됐다). 흐린 색은 어두운 바탕에서 "밝은 쪽"이다 */
+  --bg:#070c0b; --panel:#0d1413; --panel-2:#111a18;
+  --ink:#e7f2ee; --muted:#9db3ac; --faint:#647a74;
+  --line:rgba(231,242,238,.07); --line-strong:rgba(231,242,238,.14);
+  /* hover 는 다크에서 밝아지고 라이트에서 진해진다 — 방향이 반대라 accent-deep 과 나눴다 */
+  --accent:#3ce0c4; --accent-deep:#7deed8; --accent-hover:#7deed8; --accent-ink:#04211b;
+  /* soft·line 은 rgba 라 두 모드에서 각자의 바탕 위에 그대로 얹힌다 — 모드별로 나눌 필요가 없다 */
+  --accent-soft:rgba(60,224,196,.09); --accent-line:rgba(60,224,196,.30);
+  --teal:#3ce0c4; --teal-deep:#7deed8; --teal-soft:rgba(60,224,196,.09); --teal-line:rgba(60,224,196,.30);
+  --green-soft:rgba(64,222,142,.10); --green-ink:#4ade80; --green-line:rgba(64,222,142,.30);
+  --amber-soft:rgba(251,191,36,.12); --amber-ink:#fbbf24; --amber-line:rgba(251,191,36,.30);
+  --red-soft:rgba(248,113,113,.10); --red-ink:#f87171; --red-line:rgba(248,113,113,.30);
+  --deck:#070c0b; --deck-line:rgba(214,240,235,.10); --deck-ink:#c6d8d2; --deck-dim:#647a74;
+  --shadow-xs:0 0 0 0 transparent;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.3);
   /* mono 는 라틴 식별자 전용 — Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
      굴림 계열에 대체돼 뭉개진다. 한글 라벨은 --sans 로 되돌린다 */
   --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono','Malgun Gothic',monospace;
   --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
          system-ui,-apple-system,'Noto Sans KR',sans-serif;
+}
+
+/* 라이트 — 덮지 않은 --deck* 는 그대로 어둡다. 그래서 머리(nav)는 두 모드 모두 다크다 */
+:root[data-theme="light"] {
+  --bg:#f6f7f6; --panel:#ffffff; --panel-2:#eef3f1;
+  --ink:#12211f; --muted:#3d534f;
+  /* 다크의 #75898b 를 그대로 쓰면 흰 바탕에서 3.5:1 로 AA 미달 — 흐림의 방향이 반대다 */
+  --faint:#5f7375;
+  --line:#e6eae8; --line-strong:#ccd5d2;
+  /* 흰 바탕 위 민트는 대비 1.7:1 로 글자에 못 쓴다 — 글자용만 진청록으로 내린다 */
+  --accent-deep:#0b6e60; --accent-hover:#23cdb0; --teal-deep:#0b6e60;
+  --green-ink:#15803d; --amber-ink:#b45309; --red-ink:#b91c1c;
+  --shadow-xs:0 1px 2px rgba(18,33,31,.05);
+  --shadow-sm:0 1px 2px rgba(18,33,31,.06);
 }
 * { box-sizing:border-box; margin:0; }
 html { scroll-behavior:smooth; }
@@ -32,7 +55,7 @@ a:hover { text-decoration:underline; text-underline-offset:3px; }
 :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:6px; }
 .wrap { max-width:900px; margin:0 auto; padding:0 24px; }
 .wrap.wide { max-width:1080px; }
-code { font-family:var(--mono); font-size:.9em; background:#eef2f0; padding:1px 5px;
+code { font-family:var(--mono); font-size:.9em; background:var(--panel-2); padding:1px 5px;
        border-radius:4px; word-break:break-all; }
 
 /* ─── 머리 ─── */
@@ -43,8 +66,9 @@ code { font-family:var(--mono); font-size:.9em; background:#eef2f0; padding:1px 
 .brand { display:flex; align-items:center; gap:10px; color:#fff; }
 .brand:hover { text-decoration:none; }
 .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
-               background:linear-gradient(140deg,#0f6f68,#2aa79a); display:flex;
-               align-items:center; justify-content:center; font-weight:800; font-size:13px; }
+               background:linear-gradient(140deg,#0f6f68,#2ee6c3); display:flex;
+               align-items:center; justify-content:center; font-weight:800; font-size:13px;
+               color:#04211b; }
 .brand .nm { font-weight:700; font-size:14px; line-height:1.2; letter-spacing:-.01em; }
 .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
               color:var(--deck-dim); letter-spacing:.1em; text-transform:uppercase; }
@@ -59,9 +83,20 @@ code { font-family:var(--mono); font-size:.9em; background:#eef2f0; padding:1px 
             letter-spacing:.01em; padding:4px 10px; border-radius:5px;
             border:1px solid var(--deck-line); color:var(--deck-ink); white-space:nowrap; }
 .env-pill i { width:5px; height:5px; border-radius:50%; background:#f79009; flex:none; }
-.nav-cta { font-size:12.5px; font-weight:600; color:#fff; background:var(--accent);
+/* 액센트가 민트라 그 위 글자는 흰색이 아니라 어두워야 한다(--accent-ink) */
+.nav-cta { font-size:12.5px; font-weight:600; color:var(--accent-ink); background:var(--accent);
            padding:7px 14px; border-radius:6px; white-space:nowrap; }
-.nav-cta:hover { background:var(--accent-deep); text-decoration:none; }
+.nav-cta:hover { background:var(--accent-hover); text-decoration:none; }
+/* 테마 토글 — nav 는 두 모드 모두 다크라 색도 deck 계열 고정이다.
+   아이콘은 "지금 상태"가 아니라 "누르면 갈 곳"을 보인다: 다크에서는 해(→라이트) */
+.theme-btn { width:30px; height:30px; flex:none; display:flex; align-items:center;
+             justify-content:center; padding:0; border:1px solid var(--deck-line);
+             border-radius:7px; background:transparent; color:var(--deck-ink); cursor:pointer;
+             transition:background .12s, color .12s; }
+.theme-btn:hover { background:rgba(255,255,255,.07); color:#fff; }
+.theme-btn .moon { display:none; }
+:root[data-theme="light"] .theme-btn .sun { display:none; }
+:root[data-theme="light"] .theme-btn .moon { display:block; }
 @media (max-width:900px){ .env-pill { display:none; } .nav-in { gap:12px; } }
 @media (max-width:720px){ .nav-links a { padding:6px 9px; font-size:12.5px; } .brand .sub { display:none; } }
 
@@ -92,16 +127,17 @@ li b, p b { color:var(--ink); font-weight:650; }
 .table-scroll { overflow-x:auto; border:1px solid var(--line); border-radius:8px;
                 background:var(--panel); margin:14px 0; }
 table { border-collapse:collapse; width:100%; font-size:13px; }
-th { background:#f2f6f4; text-align:left; font-weight:600; color:var(--muted);
+th { background:var(--panel-2); text-align:left; font-weight:600; color:var(--muted);
      padding:9px 13px; white-space:nowrap; border-bottom:1px solid var(--line); }
 td { padding:9px 13px; border-bottom:1px solid var(--line); vertical-align:top; color:var(--muted); }
 td b { color:var(--ink); }
 tr:last-child td { border-bottom:0; }
 td.nw { white-space:nowrap; }
 
-/* 코드 블록 */
+/* 코드 블록 — 두 모드 모두 어둡다. 랜딩의 터미널 데모·카탈로그의 호출 예시와 같은 이유로,
+   밝아지면 "실행 화면"으로 안 읽힌다. 그래서 테두리도 본문 토큰이 아니라 흐린 흰선이다 */
 pre { font-family:var(--mono); font-size:12.5px; line-height:1.6; background:#08110f;
-      color:#e4e9f1; border:1px solid #1d2939; border-radius:8px; padding:13px 15px;
+      color:#e4e9f1; border:1px solid rgba(255,255,255,.10); border-radius:8px; padding:13px 15px;
       overflow-x:auto; margin:10px 0; }
 pre code { background:none; padding:0; font-size:inherit; color:inherit; }
 pre .c { color:#7d9c95; }   /* 주석 */
@@ -139,7 +175,7 @@ pre .s { color:#f5c197; }   /* 문자열 */
 .faq summary::before { content:"+"; color:var(--accent); font-weight:700; font-size:15px;
                        line-height:1; flex:none; }
 .faq details[open] summary::before { content:"−"; }
-.faq summary:hover { background:#f2f6f4; }
+.faq summary:hover { background:var(--panel-2); }
 .faq .a { padding:0 17px 15px 41px; font-size:13px; color:var(--muted); }
 .faq .a p:first-child { margin-top:0; }
 

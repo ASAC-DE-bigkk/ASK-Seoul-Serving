@@ -4,102 +4,37 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>출처 · 약관 · 개인정보 — ASK: SEOUL 데이터 플랫폼</title>
+<link rel="stylesheet" href="/site.css">
+<script>
+  /* 테마 확정 — 첫 페인트 전. 아래로 내리면 라이트를 고른 사람에게 다크가 한 번 번쩍인다(FOUC).
+     저장값이 없으면 OS 로 해석하되 저장하지 않는다 — 저장 여부가 "직접 골랐는가"의 유일한
+     기록이고, 그게 뒤에서 OS 변경을 따라갈지 가른다. 배선은 /theme.js 한 벌이 맡는다. */
+  (function () {
+    var t;
+    try { t = localStorage.getItem("theme"); } catch (e) { /* 프라이빗 모드 등 차단 */ }
+    if (t !== "light" && t !== "dark") {
+      t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <style>
-  /* 팔레트·서체는 index.html·catalog.html 과 동일 — 세 페이지가 어긋나면 다른 서비스로 보인다 */
-  :root {
-    --bg:#f6f7f6; --panel:#ffffff; --deck:#0e1a18; --deck-line:#1f302d; --deck-ink:#c2d6d1;
-    --ink:#12211f; --muted:#3d534f; --faint:#75898b; --line:#e6eae8; --line-strong:#ccd5d2;
-    --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
-    --amber-soft:#fffaeb; --amber-ink:#b54708;
-    --mono:ui-monospace,'Cascadia Code',Consolas,'Malgun Gothic',monospace;
-    /* mono 는 라틴 식별자 전용 — 한글이 섞이면 글자 단위로 굴림 계열에 대체돼 뭉개진다 */
-    --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
-           system-ui,-apple-system,'Noto Sans KR',sans-serif;
-  }
-  * { box-sizing:border-box; margin:0; }
-  html { scroll-behavior:smooth; }
-  body { font-family:var(--sans);
-         background:var(--bg); color:var(--ink); font-size:14.5px; line-height:1.7; }
-  a { color:var(--accent-deep); text-decoration:none; }
-  a:hover { text-decoration:underline; text-underline-offset:3px; }
-  code { font-family:var(--mono); font-size:.9em; background:#eef2f0; padding:1px 5px; border-radius:4px; }
-  .wrap { max-width:820px; margin:0 auto; padding:0 24px; }
-
-  /* nav — index.html 과 같은 구조 */
-  .nav { background:var(--deck); border-bottom:1px solid var(--deck-line); position:sticky; top:0; z-index:20; }
-  .nav-in { display:flex; align-items:center; gap:20px; height:56px; }
-  .brand { display:flex; align-items:center; gap:10px; color:#fff; }
-  .brand .logo { width:26px; height:26px; border-radius:6px; background:var(--accent);
-                 display:grid; place-items:center; font-size:11px; font-weight:700; letter-spacing:.02em; }
-  .brand .nm { font-size:14px; font-weight:600; line-height:1.15; }
-  .brand .sub { display:block; font-size:10px; font-weight:500; color:var(--deck-ink); letter-spacing:.04em; }
-  .nav-links { display:flex; gap:2px; margin-left:6px; }
-  .nav-links a { font-size:13px; font-weight:500; color:var(--deck-ink); padding:6px 12px; border-radius:6px; }
-  .nav-links a:hover { background:rgba(255,255,255,.06); color:#fff; text-decoration:none; }
-  .nav .spacer { flex:1; }
-  .env-pill { font-size:11px; color:var(--deck-ink); border:1px solid var(--deck-line);
-              padding:4px 9px; border-radius:99px; }
-  @media (max-width:640px){ .env-pill { display:none; } .nav-in { gap:12px; } }
-
-  header.page { padding:38px 0 22px; border-bottom:1px solid var(--line); background:var(--panel); }
-  header.page h1 { font-size:26px; font-weight:700; letter-spacing:-.01em; }
-  header.page .lede { margin-top:8px; color:var(--muted); font-size:13.5px; }
-
-  .draft { margin:20px 0 0; background:var(--amber-soft); border:1px solid #fde3ae;
+  /* 팔레트·머리·바닥·표·본문은 전부 site.css 다 — 이 페이지에만 있는 두 규칙만 남긴다.
+     예전엔 같은 값 89줄을 여기 복제해 뒀는데, 그래서 팔레트를 바꿀 때 이 페이지만
+     구 테라코타로 남아 있었다(다크 전환 때 실측). 복제가 원인이라 복제를 지운다. */
+  /* 초안 고지 — .note.warn 과 달리 문서 전체에 걸리는 머리말이라 여백 규칙이 다르다 */
+  .draft { margin:20px 0 0; background:var(--amber-soft); border:1px solid var(--amber-line);
            border-radius:8px; padding:12px 14px; font-size:12.5px; color:var(--amber-ink); }
-
-  nav.toc { display:flex; flex-wrap:wrap; gap:6px; margin:22px 0 0; }
-  nav.toc a { font-size:12.5px; padding:5px 11px; border:1px solid var(--line-strong);
-              border-radius:99px; background:var(--panel); color:var(--muted); }
-  nav.toc a:hover { border-color:var(--accent-line); color:var(--accent-deep); text-decoration:none; }
-
-  main { padding:8px 0 60px; }
-  section { margin-top:38px; scroll-margin-top:72px; }
-  section > h2 { font-size:18px; font-weight:700; padding-bottom:9px; border-bottom:1px solid var(--line); }
-  section > h2 .en { font-size:11px; font-weight:500; color:var(--faint); margin-left:8px;
-                     letter-spacing:.04em; text-transform:uppercase; }
-  h3 { font-size:14px; font-weight:650; margin:22px 0 6px; }
-  p { margin:9px 0; color:var(--muted); }
-  p.lead { color:var(--ink); }
-  ul { margin:9px 0; padding-left:19px; color:var(--muted); }
-  li { margin:4px 0; }
-  li b, p b { color:var(--ink); font-weight:650; }
-
-  .table-scroll { overflow-x:auto; border:1px solid var(--line); border-radius:8px;
-                  background:var(--panel); margin:14px 0; }
-  table { border-collapse:collapse; width:100%; font-size:12.5px; }
-  th { background:#f2f6f4; text-align:left; font-weight:600; color:var(--muted);
-       padding:9px 13px; white-space:nowrap; border-bottom:1px solid var(--line); }
-  td { padding:9px 13px; border-bottom:1px solid var(--line); vertical-align:top; color:var(--muted); }
-  tr:last-child td { border-bottom:0; }
   td.dom { color:var(--ink); font-weight:600; white-space:nowrap; }
-
-  .note { background:var(--accent-soft); border:1px solid var(--accent-line); border-radius:8px;
-          padding:12px 14px; margin:14px 0; font-size:12.5px; color:var(--accent-deep); }
-  .updated { margin-top:44px; padding-top:16px; border-top:1px solid var(--line);
-             font-size:12px; color:var(--faint); }
-  footer { margin-top:0; border-top:1px solid var(--line); background:var(--panel); }
-  /* 바닥 — site.css·index.html 과 같은 구조·같은 값 */
-  .foot-in { display:grid; grid-template-columns:1.6fr 1fr 1fr 1fr; gap:24px;
-             max-width:1080px; margin:0 auto; padding:30px 24px 22px; }
-  @media (max-width:760px){ .foot-in { grid-template-columns:1fr 1fr; gap:20px; } }
-  .fcol { display:flex; flex-direction:column; gap:5px; font-size:12.5px; }
-  .fcol b { font-size:12.5px; font-weight:700; color:var(--ink); margin-bottom:2px; }
-  .fcol span { color:var(--faint); }
-  .fcol a { color:var(--muted); }
-  .fcol a:hover { color:var(--accent-deep); }
-  .foot-btm { display:flex; flex-wrap:wrap; gap:8px 18px; max-width:1080px; margin:0 auto;
-              padding:14px 24px 22px; border-top:1px solid var(--line);
-              font-size:12px; color:var(--faint); }
-  .foot-btm .r { margin-left:auto; }
-  @media (max-width:640px){ .foot-btm .r { margin-left:0; } }
 </style>
 </head>
 <body>
 
-<nav class="nav">
-  <div class="wrap nav-in">
+<nav class="nav"><!-- partials/nav.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
+  <div class="nav-in">
     <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="logo" aria-hidden="true">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></a>
+    <!-- 카탈로그 안의 섹션(플레이그라운드·API 키)은 헤더에 걸지 않는다 — 같은 문서로 가는
+         링크가 여럿이 되기 때문. 섹션 이동은 카탈로그 사이드바 몫이고, 여기엔 별도 문서만 건다. -->
     <div class="nav-links">
       <a href="/catalog">카탈로그</a>
       <a href="/docs">API 문서</a>
@@ -107,7 +42,10 @@
       <a href="/status">상태</a>
     </div>
     <span class="spacer"></span>
-    <span class="env-pill">프로토타입</span>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
+      <svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+      <svg class="moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+    </button>
   </div>
 </nav>
 
@@ -116,7 +54,7 @@
     <h1>출처 · 이용약관 · 개인정보</h1>
     <p class="lede">이 서비스가 어떤 데이터를 어디서 가져오는지, 무엇을 보장하지 않는지, 이용자에게서 무엇을 받아 어떻게 다루는지 적어 둡니다.</p>
     <div class="draft">
-      <b>초안입니다.</b> 학습·연구 목적으로 만든 프로토타입 단계의 문서이며, 법률 검토를 거치지 않았습니다.
+      <b>초안입니다.</b> 학습·연구 목적으로 만든 초기 단계의 문서이며, 법률 검토를 거치지 않았습니다.
       지금 이 문서는 <b>운영 사실을 있는 그대로 적어 둔 것</b>이지 법적 약정이 아닙니다.
     </div>
     <nav class="toc">
@@ -163,7 +101,7 @@
     <h2>2. 이용약관 <span class="en">Terms of Use</span></h2>
 
     <h3>서비스의 성격</h3>
-    <p class="lead">이 서비스는 <b>학습 프로젝트의 프로토타입</b>입니다. 가용성 목표(SLA)가 없고, <b>예고 없이 중단·변경·초기화될 수 있습니다.</b> 업무 연속성이 필요한 용도에 의존하지 마세요.</p>
+    <p class="lead">이 서비스는 <b>학습 프로젝트</b>입니다. 가용성 목표(SLA)가 없고, <b>예고 없이 중단·변경·초기화될 수 있습니다.</b> 업무 연속성이 필요한 용도에 의존하지 마세요.</p>
 
     <h3>보증하지 않는 것</h3>
     <p>데이터의 정확성·완전성·적시성을 보증하지 않으며, 제공된 데이터를 근거로 한 판단과 그 결과에 대해 책임지지 않습니다. 특히 <b>안전·의료·법률·재산에 관한 의사결정의 단독 근거로 사용하지 마세요.</b> 위 1절의 '특히 주의할 제품'을 함께 읽어 주시기 바랍니다.</p>
@@ -231,7 +169,7 @@
     <p>삭제 후에도 <b>요청 기록(30일 보존)은 남습니다.</b> 다만 그 기록에는 키 해시만 있고, 삭제로 해시와 이메일의 대응이 사라지므로 <b>더는 특정인과 연결되지 않습니다.</b> 30일이 지나면 자동 삭제됩니다.</p>
 
     <div class="note">
-      <b>알려진 한계 (프로토타입)</b><br>
+      <b>알려진 한계</b><br>
       ① 이메일은 암호화 없이 저장됩니다.
       ② 이메일 소유 확인(인증 메일) 절차가 없어, 타인의 주소로도 발급이 가능합니다.
       ③ 상시 대기하는 지원 인력이 없습니다 — 삭제는 직접 하실 수 있고 <a href="/support">문의 창구</a>도 열려 있지만, 답변 시점을 약속드리지는 못합니다.
@@ -242,7 +180,8 @@
   <p class="updated">최종 갱신 2026-08-03</p>
 </main>
 
-<footer>
+<footer><!-- partials/footer.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
+  <!-- 계약 버전·배치 시각·내부 이슈 번호는 우리 사정이다. 이용자에게 남는 정보만 둔다. -->
   <div class="foot-in">
     <div class="fcol">
       <b>ASK: SEOUL</b>
@@ -269,9 +208,10 @@
   </div>
   <div class="foot-btm">
     <span>© 2026 ASK: SEOUL</span>
-    <span class="r">프로토타입 · 가용성을 보장하지 않습니다</span>
+    <span class="r">가용성을 보장하지 않습니다</span>
   </div>
 </footer>
 
+<script src="/theme.js" defer></script>
 </body>
 </html>

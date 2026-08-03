@@ -6,6 +6,19 @@
 <title>문의하기 — ASK: SEOUL</title>
 <meta name="description" content="ASK: SEOUL 데이터 API 문의 창구 — 자가 해결 경로, 문의 방법, 오류 신고 시 함께 보내주실 정보.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
+<script>
+  /* 테마 확정 — 첫 페인트 전. 아래로 내리면 라이트를 고른 사람에게 다크가 한 번 번쩍인다(FOUC).
+     저장값이 없으면 OS 로 해석하되 저장하지 않는다 — 저장 여부가 "직접 골랐는가"의 유일한
+     기록이고, 그게 뒤에서 OS 변경을 따라갈지 가른다. 배선은 /theme.js 한 벌이 맡는다. */
+  (function () {
+    var t;
+    try { t = localStorage.getItem("theme"); } catch (e) { /* 프라이빗 모드 등 차단 */ }
+    if (t !== "light" && t !== "dark") {
+      t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <link rel="stylesheet" href="/site.css">
 <style>
   .chan { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin:16px 0; }
@@ -29,9 +42,11 @@
 </head>
 <body>
 
-<nav class="nav">
+<nav class="nav"><!-- partials/nav.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
   <div class="nav-in">
     <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="logo" aria-hidden="true">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></a>
+    <!-- 카탈로그 안의 섹션(플레이그라운드·API 키)은 헤더에 걸지 않는다 — 같은 문서로 가는
+         링크가 여럿이 되기 때문. 섹션 이동은 카탈로그 사이드바 몫이고, 여기엔 별도 문서만 건다. -->
     <div class="nav-links">
       <a href="/catalog">카탈로그</a>
       <a href="/docs">API 문서</a>
@@ -39,7 +54,10 @@
       <a href="/status">상태</a>
     </div>
     <span class="spacer"></span>
-    <span class="env-pill"><i aria-hidden="true"></i>프로토타입</span>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
+      <svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+      <svg class="moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+    </button>
   </div>
 </nav>
 
@@ -112,7 +130,7 @@
   <section id="sla">
     <h2>응답에 대해 <span class="en">Response</span></h2>
     <div class="note">
-      <b>정직하게 적어 둡니다.</b> 이 서비스는 학습·연구 목적으로 운영하는 프로토타입이고,
+      <b>정직하게 적어 둡니다.</b> 이 서비스는 학습·연구 목적으로 운영하는 프로젝트이고,
       상시 대기하는 지원 인력이 없습니다. 문의에 언제까지 답하겠다는 약속을 드릴 수 없습니다.
     </div>
     <p>다만 아래는 지키려 합니다.</p>
@@ -128,7 +146,8 @@
   <div class="updated">문의 창구는 서비스 단계가 바뀌면 함께 갱신합니다</div>
 </main>
 
-<footer>
+<footer><!-- partials/footer.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
+  <!-- 계약 버전·배치 시각·내부 이슈 번호는 우리 사정이다. 이용자에게 남는 정보만 둔다. -->
   <div class="foot-in">
     <div class="fcol">
       <b>ASK: SEOUL</b>
@@ -155,9 +174,10 @@
   </div>
   <div class="foot-btm">
     <span>© 2026 ASK: SEOUL</span>
-    <span class="r">프로토타입 · 가용성을 보장하지 않습니다</span>
+    <span class="r">가용성을 보장하지 않습니다</span>
   </div>
 </footer>
 
+<script src="/theme.js" defer></script>
 </body>
 </html>

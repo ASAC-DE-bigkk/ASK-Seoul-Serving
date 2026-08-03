@@ -4,6 +4,8 @@
 전제로 코드를 쓰지 않는다. 구속력 있는 결정은 [docs/decision/](docs/decision/)에 있고,
 콘솔(ops-dashboard)과 공유하는 계약은
 [decision/0001](docs/decision/0001-shared-contracts.md)이 정본이다.
+페이지를 어떻게 합성하는지(=왜 SSG 가 아닌지)는
+[decision/0002](docs/decision/0002-page-composition.md).
 
 ## 1. 이 프로젝트의 실체
 
@@ -28,10 +30,20 @@
 단일 Worker, 파일 셋      — src/index.js(라우터 + /api) · src/v1.js · src/shared.js
                              게이트 순서: 키 검증 → 버스트 → 쿼터 → external 게이트 → 조회
 + Static Assets (public/)   — run_worker_first = ["/api/*", "/v1/*"], 없는 경로는 404 화면
+                              site.css(문서형 공유 뼈대) · theme.js(다크/라이트 토글 배선)
++ partials/                 — nav.html · footer.html. 머리·바닥의 **정본**이다
 + 로컬 D1 (Miniflare)       — wrangler dev --local. 콘솔(../ops-dashboard)이 같은 상태를 읽는다
 + migrations/               — 0001 키·쿼터 · 0002 요청 로그 · 0003 버스트 · 0004 request_id (증분만)
 + fixtures/                 — seed.sql(카탈로그·제품) · handoff_meta_sample.sql(서빙 메타 4종 미러)
 ```
+
+**머리·바닥은 partials/ 가 정본이다.** `public/*.html` 의 `<nav class="nav">`·`<footer>`
+블록은 `npm run sync`(scripts/sync-partials.mjs)가 써 넣는다 — 페이지에서 직접 고치면
+`npm test` 의 `--check` 가 잡는다. 페이지마다 다른 건 셋뿐이고 전부 스크립트의 `PAGES`
+표에 있다(활성 링크 · CTA · 바깥 폭). **정적 사이트 생성기가 아니다**: `public/` 은 여전히
+그대로 서빙되는 정본이고 결과물도 손으로 읽히는 HTML 이다. `src/`→`dist/` 로 바꾸는 것,
+즉 배포 경로에 빌드 단계를 넣는 것은 §6 영역이다.
+카탈로그(`catalog.html`)는 머리가 사이드바라 대상이 아니다.
 
 ## 2. 불변 경계
 
@@ -114,6 +126,8 @@ npm run dev    # :8787 — 콘솔(:8788)과 동시 구동 가능
 - 한도: 429 응답에 `Retry-After` / `X-RateLimit-*` 헤더가 있는지.
 - 관측: 요청 후 `_request_log` 에 행이 실제로 늘었는지 — **조용한 유실 검증, 생략 금지**.
 - 오류 형식: 4xx 본문이 problem+json + `request_id` 인지.
+- 머리·바닥을 건드렸다면 `npm test` — `--check` 가 partial 과 어긋난 페이지를 짚는다
+  (팔레트가 페이지마다 갈려 5페이지가 구 테라코타로 남았던 사고가 복제 때문이었다).
 
 ## 6. 구조 검토가 필요한 변경
 
@@ -125,6 +139,8 @@ npm run dev    # :8787 — 콘솔(:8788)과 동시 구동 가능
 _request_log 컬럼 추가(#9·intent 축) → 새 ALTER 파일 + 시드 체인 + 콘솔 통지, 전부 nullable
 공유 계약(오류·KST·key_hash …) 변경  → decision/0001 개정 + 콘솔 담당 리뷰
 저장소·인프라 추가(DO·Queues·R2 …)  → 도입 신호 확인 후 신규 결정 (ops-dashboard 0008 방식)
+배포 경로에 빌드 단계(SSG·번들러)    → decision/0002 개정 + 멘토 게이트. public/ 이 서빙
+                                      정본인 한 partials 동기화기는 이 선 아래다(0002 D-2)
 발급 rate limit 의 원문 IP           → #9 §7-①·⑥ 결정에 따라 정리 예정 — 그 전까지 확장 금지
 ```
 
