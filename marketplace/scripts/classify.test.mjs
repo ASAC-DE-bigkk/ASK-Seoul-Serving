@@ -1,7 +1,7 @@
 // classifyClient 단독 테스트 (#9 §3) — 실제 UA 문자열 기준. 실행: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyClient } from "../src/index.js";
+import { classifyClient } from "../src/shared.js";
 
 const cases = [
   // AI — crawler (사전 수집)
