@@ -1,6 +1,7 @@
 # 0010 — 행동 로그는 콘솔(소비측)을 먼저 반영한다
 
-- 상태: **채택 — 콘솔 소비측만** (2026-08). 수집 스펙은 ASK-Seoul-Serving#9 에서 검토 중
+- 상태: **채택 — 콘솔 소비측만** (2026-08). 수집 스펙 ①~⑥은 #9 에서 **확정**(2026-08-03),
+  정본 반영(marketplace `migrations/0005`) 대기
 - 관련: [reference/behavior-log-spec-draft.md](../reference/behavior-log-spec-draft.md)(초안),
   [0003](0003-single-shared-local-d1.md)(소유권 경계), [0004](0004-read-open-write-token.md)(읽기 공개)
 
@@ -30,5 +31,8 @@
 
 ## 재검토 조건
 
-#9 확정 시 — 확정 스펙을 결정 문서로 승격(이 문서 개정 또는 0011), 초안 문서의 배너를
-갱신하고, '수집 전' 상태가 실제로 점등되는지 게이트웨이 반영 후 확인한다.
+- ~~#9 확정 시 초안 문서 배너 갱신~~ — 이행됨(2026-08-03, ①~⑥ 확정 반영).
+- marketplace `migrations/0005` 반영 후 — '수집 전' 3카드가 실제로 점등되는지 확인하고,
+  intent 축(`X-ASK-Intent`, #3 편입) 소비 카드(`intent × row_count=0`)를 추가한다.
+- 공통 계약의 정본은 marketplace [decision/0001](../../../marketplace/docs/decision/0001-shared-contracts.md)
+  (C-9: 스키마 정본은 marketplace·콘솔은 추종) — 이 문서와 어긋나면 함께 개정한다.

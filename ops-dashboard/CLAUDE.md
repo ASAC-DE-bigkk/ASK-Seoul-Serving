@@ -118,8 +118,8 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 배포 파이프라인이 없으므로 로컬에서 직접 확인한다.
 
 ```bash
-npm run seed   # _ops_* 리셋 + 합성 시드 → 공유 로컬 D1
-npm run dev    # :8788 — 게이트웨이(:8787)와 동시 구동 가능
+npm run seed   # _ops_* 증분 마이그레이션 + 합성 시드 → 공유 로컬 D1
+npm run dev    # :8788 — 게이트웨이(:8787)와 동시 구동 가능 (인스펙터 9230 고정 — 저쪽 기본 9229 와 안 겹친다)
 ```
 
 - API 는 curl 로: `/api/summary?days=14`, `/api/keys` (GET 무인증 / POST 는 Bearer).

@@ -43,7 +43,7 @@ decision/ 이 정한다.
 | [cloudflare_api_dashboard_role_plan_revised.md](reference/cloudflare_api_dashboard_role_plan_revised.md) | 2인 분업 전제의 초기 계획서 + 과설계 검토(§13~19) — MVP 축소 판단의 원형 |
 | [cloudflare_api_dashboard_role_plan_with_iac.md](reference/cloudflare_api_dashboard_role_plan_with_iac.md) | 위 문서 + IaC 전략(§20~39): Terraform/Wrangler 경계, State, CI/CD |
 | [ops-records-log-patterns.md](reference/ops-records-log-patterns.md) | 운영 기록 로그의 형태 패턴(F/V/D 표)과 인사이트 카탈로그 I-1~I-14 |
-| [behavior-log-spec-draft.md](reference/behavior-log-spec-draft.md) | **초안** — API 행동 로그 공통 스펙 v0 (키·IP·페이지·AI 축), 검토는 #9 |
+| [behavior-log-spec-draft.md](reference/behavior-log-spec-draft.md) | API 행동 로그 공통 스펙 v0 — #9 에서 ①~⑥ 확정(2026-08-03), 정본 반영(marketplace 0005) 대기 |
 
 ## 가이드 — docs/runbook.md
 
@@ -59,6 +59,7 @@ decision/ 이 정한다.
 | ASK-Seoul#78 | 저장소·운영 기록 적용 규약 v1 — 존/경로/확인서/보관/기록 형식/값 집합/조회 DB |
 | ASAC-DAG `common/ops/d1_ops.py` | 조회 DB 테이블 4종(`_ops_run_event` 등) 스키마 정본 |
 | `../marketplace/migrations/` | `_keys`·`_usage`·`_burst`·`_request_log` 스키마 정본 |
+| [`../marketplace/docs/decision/0001`](../../marketplace/docs/decision/0001-shared-contracts.md) | 두 앱 공통 계약 C-1~C-10 (problem+json·KST·key_hash·request_id·값 최소화·증분·정본/추종·유실 검증) — 개정은 상대 앱 담당 리뷰 필수 |
 
 ## 갱신 규칙
 

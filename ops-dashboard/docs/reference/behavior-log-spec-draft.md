@@ -1,10 +1,12 @@
-# API 행동 로그 공통 스펙 — v0 초안
+# API 행동 로그 공통 스펙 — v0
 
-> **문서 성격 — 초안 (구속력 없음).** 검토는 **ASK-Seoul-Serving#9** 에서 진행 중이며,
-> 합의 전까지 게이트웨이는 아무것도 수집하지 않는다. 확정되면 결정 문서로 승격하고
-> 게이트웨이 구현 PR 로 옮긴다. 콘솔의 이용 행동 탭은 이 초안을 소비하도록 선반영되어
-> 있다([../decision/0010](../decision/0010-behavior-log-console-first.md)) — 수집이 시작되면
-> 콘솔 변경 없이 점등된다.
+> **문서 성격 — 확정 결정의 요약 (정본 반영 대기).** 결정 6건(①~⑥)은 **ASK-Seoul-Serving#9**
+> 에서 확정됐다(2026-08-03, 게이트웨이 @yooseongjin527 · 콘솔 @Exisign). **스키마 정본은
+> marketplace 마이그레이션**(공통 계약 C-9)이며, `migrations/0005` 가 반영되기 전까지
+> 게이트웨이는 아무것도 수집하지 않는다. 콘솔의 이용 행동 탭은 이 스펙을 소비하도록
+> 선반영되어 있다([../decision/0010](../decision/0010-behavior-log-console-first.md)) —
+> 수집이 시작되면 콘솔 변경 없이 점등된다. 선작업(분류 함수·발급 IP 해시·유실 검증)은
+> marketplace PR#19.
 
 ## 목적
 
@@ -28,25 +30,31 @@
   저장하지 않는 **파생 지표** — MCP·에이전트 툴은 대개 `python-httpx` 같은 `cli` 얼굴로 오므로,
   판정은 여정(llms.txt/openapi.json → 발급 → 호출 사슬)에서 한다.
 
-## 필드 v0 — `_request_log` 추가 컬럼 (전부 nullable · 추가만 · 기존 불변)
+## 필드 v0 확정 — `_request_log` 추가 컬럼 8종 + intent (전부 nullable · 추가만 · 기존 불변)
 
 | 컬럼 | 값 | 비고 |
 |---|---|---|
 | `ua_class` | 위 6값 | |
 | `agent_name` | 정규화 이름 | AI 아니면 NULL |
 | `agent_mode` | crawler / on_demand | |
-| `agent_verified` | 1/0/NULL | 검증 수단 없으면 NULL |
+| `agent_verified` | 1/0/NULL | ④ 확정: **NULL 로 시작** — 로컬 cf 는 더미라 실측 불가, 공개 배포 시 재결정 |
 | `country` | ISO-3166 alpha-2 | `cf.country` |
-| `asn` | INTEGER | IP 없이도 남용·집중 축 |
-| `ip_hash` | **결정 필요** | 미저장 / 일 회전 솔트 해시 / prefix (#9 ①) |
+| `asn` | INTEGER | IP 없이도 남용·집중 축 — ① 의 갈음 축 |
 | `referer_host` | 호스트만 | 전체 URL 금지 |
-| `page_path` | `route='page'` 행만 | 페이지 관측은 `run_worker_first` 확대 필요 (#9 ②) |
+| `page_path` | `route='page'` 행만 | ② 확정: **핵심 페이지 + 기계 문서만** — `/` · `/docs` · `/legal` · `/llms.txt` · `/openapi.json` · `/column-docs.json` (AI 여정의 출발점 포함) |
+| `intent` | 옵트인 슬러그 | #3 편입: `X-ASK-Intent` 헤더 — 질문 원문이 아니라 의도 코드만 (같은 "축만" 철학) |
 
+- **`ip_hash` 는 미채택** (① 확정: **(A) 미저장** — 빈 컬럼을 만들지 않는다). "asn 으로 못 잡는
+  남용"이 실측되면 일 회전 해시로 승격(증분 규약상 ALTER 한 줄).
 - `route` 값 확장: + `page`
-- 저장 금지 불변: Authorization · 키 원문 · 이메일 · 쿼리 값 · 원문 UA · 전체 Referer URL
-- 보관: 30일 sweep 동일 (샘플링은 #9 ⑤)
+- ③ 확정: AI 분류 목록은 **코드 상수**(marketplace 담당, 갱신 = PR — PR#19 의 `classifyClient`).
+- ⑤ 확정: 보관 30일 유지, 샘플링 보류(페이지 범위 축소로 폭증 위험 낮음).
+- ⑥ 확정: `_issuance_log` 는 **일 회전 솔트 해시 + 24h sweep** (PR#19) — ① 과 합쳐
+  원문 IP 가 어디에도 남지 않는다.
+- 저장 금지 불변: Authorization · 키 원문 · 이메일 · 쿼리 값 · 질문 원문 · 원문 UA · 전체 Referer URL
 
-## 결정 대기 (전문과 논거는 #9)
+## 남은 것
 
-① IP 축 ② 페이지 관측 범위 ③ 분류 목록 관리 주체 ④ verified bot 신호 실측
-⑤ 보관·샘플링 ⑥ `_issuance_log` 원문 IP 정리
+- `migrations/0005` (컬럼 9종 + `logRequest` 배선 — 갈라지면 조용한 유실이라 한 PR 로 묶는다, C-10)
+- `run_worker_first` 에 ② 의 페이지 목록 추가 (같은 PR)
+- 콘솔 후속: `intent × row_count=0`(빈 응답 의도) 카드 — 0005 반영 후
