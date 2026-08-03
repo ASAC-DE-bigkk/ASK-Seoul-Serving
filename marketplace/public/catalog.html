@@ -7,17 +7,19 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
 <style>
   :root {
-    /* 팔레트는 랜딩(index.html)과 같은 단청 계열 — 두 페이지가 어긋나면 다른 서비스로 보인다 */
-    --bg:#f6f7f6; --panel:#ffffff; --sidebar:#0e1a18; --sidebar-hi:#1a2d2a;
-    --sidebar-ink:#c2d6d1; --sidebar-dim:#71908a;
-    /* muted·faint — 1x(표준 해상도) 모니터 실측에서 #48605c/#8fa3a0 가 흐릿하게 읽혀 한 단계 어둡게.
-       색조(청록 기울기)는 유지 — 순회색이 되면 팔레트 의도가 죽는다 */
-    --ink:#12211f; --muted:#3d534f; --faint:#75898b; --line:#e6eae8; --line-strong:#ccd5d2;
-    --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
-    --green-soft:#ecfdf3; --green-ink:#0a6b45;
-    --amber-soft:#fffaeb; --amber-ink:#b54708; --red-soft:#fef3f2; --red-ink:#b42318;
-    --shadow-xs:0 1px 2px rgba(16,24,40,.05);
-    --shadow-sm:0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
+    /* 팔레트는 랜딩(index.html)과 같은 다크 단청 — 두 페이지가 어긋나면 다른 서비스로 보인다.
+       액센트는 민트 하나(테라코타 2색 체제 폐기), hover 는 어두워지지 않고 밝아진다 */
+    --bg:#070c0b; --panel:#0d1413; --panel-2:#111a18;
+    --sidebar:#0a100f; --sidebar-hi:#15201e;
+    --sidebar-ink:#c6d8d2; --sidebar-dim:#647a74;
+    --ink:#e7f2ee; --muted:#9db3ac; --faint:#647a74;
+    --line:rgba(231,242,238,.07); --line-strong:rgba(231,242,238,.14);
+    --accent:#3ce0c4; --accent-deep:#7deed8; --accent-ink:#04211b;
+    --accent-soft:rgba(60,224,196,.09); --accent-line:rgba(60,224,196,.30);
+    --green-soft:rgba(64,222,142,.10); --green-ink:#4ade80;
+    --amber-soft:rgba(251,191,36,.12); --amber-ink:#fbbf24; --red-soft:rgba(248,113,113,.10); --red-ink:#f87171;
+    --shadow-xs:0 0 0 0 transparent;
+    --shadow-sm:0 1px 3px rgba(0,0,0,.3);
     --mono:ui-monospace,'Cascadia Code',Consolas,'Malgun Gothic',monospace;
     /* mono 는 라틴 식별자 전용이다 — Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
        굴림 계열에 대체되고 작은 급수에서 뭉개진다(실측). 한글 라벨은 --sans 로 되돌린다 */
@@ -40,9 +42,9 @@
   .side .brand { display:flex; align-items:center; gap:10px; padding:6px 18px 16px;
                  border-bottom:1px solid rgba(255,255,255,.07); margin-bottom:8px; }
   .side .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
-                       background:linear-gradient(140deg,#0f6f68,#2aa79a);
+                       background:linear-gradient(140deg,#0f6f68,#2ee6c3);
                        display:flex; align-items:center; justify-content:center;
-                       font-weight:800; font-size:13.5px; color:#fff; letter-spacing:-.02em; }
+                       font-weight:800; font-size:13.5px; color:#04211b; letter-spacing:-.02em; }
   .side .brand .nm { font-weight:700; font-size:13.5px; color:#fff; letter-spacing:-.01em; line-height:1.25; }
   .side .brand .sub { display:block; font-weight:500; font-size:11px; color:var(--sidebar-dim);
                       letter-spacing:.02em; }
@@ -56,7 +58,7 @@
                     box-shadow:inset 2px 0 0 var(--accent); }
   .dnav li.soon { cursor:default; color:var(--sidebar-dim); }
   .dnav li.soon:hover { background:none; color:var(--sidebar-dim); }
-  .dnav .dot { width:6px; height:6px; border-radius:50%; background:#2aa79a; flex:none; }
+  .dnav .dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none; }
   .dnav li.soon .dot { background:#294a45; }
   .dnav .cnt { margin-left:auto; font-size:11px; font-variant-numeric:tabular-nums;
                background:rgba(255,255,255,.08); border-radius:4px; padding:1px 6px; color:var(--sidebar-ink); }
@@ -125,7 +127,7 @@
   button { font:inherit; font-size:13.5px; font-weight:600; border:0; border-radius:6px; padding:7px 14px;
            cursor:pointer; transition:background .12s, border-color .12s; }
   button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-  .btn-p { background:var(--accent); color:#fff; box-shadow:var(--shadow-xs); }
+  .btn-p { background:var(--accent); color:var(--accent-ink); box-shadow:var(--shadow-xs); }
   .btn-p:hover { background:var(--accent-deep); }
   .btn-g { background:var(--panel); color:var(--muted); border:1px solid var(--line-strong);
            box-shadow:var(--shadow-xs); }
@@ -160,10 +162,10 @@
            margin-bottom:30px; box-shadow:var(--shadow-xs); }
   .phead, .prow { display:grid; grid-template-columns:minmax(200px,1.2fr) minmax(260px,2.4fr) 110px 90px;
                   gap:14px; align-items:center; padding:10px 18px; }
-  .phead { background:#f2f6f4; border-bottom:1px solid var(--line); font-size:11px; font-weight:600;
+  .phead { background:var(--panel-2); border-bottom:1px solid var(--line); font-size:11px; font-weight:600;
            letter-spacing:.06em; color:var(--muted); }
   .prow { border-bottom:1px solid var(--line); cursor:pointer; transition:background .1s; }
-  .prow:hover { background:#f2f6f4; }
+  .prow:hover { background:var(--panel-2); }
   .prow:last-child, .pdetail:last-child { border-bottom:0; }
   .prow .t { font-weight:600; font-size:13.5px; }
   .prow .t small { display:block; font-family:var(--mono); font-size:11px; font-weight:400;
@@ -182,7 +184,7 @@
   .usage-item .uq { font-weight:600; font-size:13px; }
   .usage-item .umeta { font-size:11.5px; color:var(--muted); margin-top:2px; }
   .usage-item .uins { font-size:12px; color:var(--muted); margin-top:6px; }
-  .usage-item pre { font-family:var(--mono); font-size:11.5px; line-height:1.55; background:#f2f6f4;
+  .usage-item pre { font-family:var(--mono); font-size:11.5px; line-height:1.55; background:var(--panel-2);
                     border:1px solid var(--line); border-radius:4px; padding:8px 10px; margin:8px 0 0;
                     overflow-x:auto; white-space:pre; }
   .uchip { font-family:var(--sans); font-size:11.5px; padding:1px 6px; border-radius:3px;
@@ -196,7 +198,7 @@
                    border:1px solid var(--line-strong); border-radius:6px; background:var(--panel);
                    color:var(--muted); font-variant-numeric:tabular-nums; }
   .lpager button:hover:not([disabled]):not(.on) { border-color:var(--accent-line); color:var(--accent-deep); }
-  .lpager button.on { background:var(--accent); border-color:var(--accent); color:#fff; cursor:default; }
+  .lpager button.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); cursor:default; }
   .lpager button[disabled] { opacity:.4; cursor:default; }
   .lpager .gap { color:var(--faint); padding:0 3px; font-size:13px; }
   .lpager .info { font-size:12px; color:var(--faint); font-variant-numeric:tabular-nums; }
@@ -206,7 +208,7 @@
   .badge.dim { background:var(--panel); color:var(--muted); border:1px solid var(--line-strong);
                font-family:inherit; }
   .prow .act { text-align:right; }
-  .pdetail { display:none; padding:16px 18px 20px; background:#f2f6f4; border-bottom:1px solid var(--line); }
+  .pdetail { display:none; padding:16px 18px 20px; background:var(--bg); border-bottom:1px solid var(--line); }
   .pdetail.open { display:block; }
   /* 스키마 표 — 컬럼명 · 타입 · 설명. 설명이 붙으면서 2열 격자로는 줄바꿈이 많아져 한 줄 = 한 컬럼 */
   .pdetail .cols { margin:10px 0 14px; border-top:1px solid var(--line); }
@@ -227,10 +229,10 @@
     .pdetail .col-item { grid-template-columns:1fr auto; }
     .pdetail .col-item .ds { grid-column:1/-1; }
   }
-  .endpoint { font-family:var(--mono); font-size:12.5px; background:#08110f; color:#e4e9f1;
+  .endpoint { font-family:var(--mono); font-size:12.5px; background:#050908; color:#e4e9f1;
               border-radius:6px; padding:10px 13px; overflow-x:auto; white-space:pre;
-              border:1px solid #1d2939; }
-  .endpoint .m { color:#32d583; font-weight:700; }
+              border:1px solid var(--line-strong); }
+  .endpoint .m { color:#4ade80; font-weight:700; }
   .pdetail .dhead { font-size:11px; font-weight:600; letter-spacing:.06em; color:var(--muted);
                     margin-bottom:5px; }
 
@@ -255,13 +257,13 @@
                 cursor:pointer; text-decoration:underline; text-underline-offset:3px; box-shadow:none; }
   .table-scroll { overflow-x:auto; border:1px solid var(--line); border-radius:6px; background:var(--panel); }
   table.data { border-collapse:collapse; width:100%; font-size:12.5px; font-variant-numeric:tabular-nums; }
-  table.data th { background:#f2f6f4; font-family:var(--mono); font-size:10.5px; color:var(--muted);
+  table.data th { background:var(--panel-2); font-family:var(--mono); font-size:10.5px; color:var(--muted);
                   font-weight:600; text-align:left; padding:7px 11px; white-space:nowrap;
                   border-bottom:1px solid var(--line); position:sticky; top:0; }
   table.data td { padding:6px 11px; border-bottom:1px solid var(--line); white-space:nowrap; }
   table.data tr:last-child td { border-bottom:0; }
-  table.data tbody tr:hover td { background:#f2f6f4; }
-  .raw-json { display:none; font-family:var(--mono); font-size:12px; background:#f2f6f4;
+  table.data tbody tr:hover td { background:var(--panel-2); }
+  .raw-json { display:none; font-family:var(--mono); font-size:12px; background:var(--panel-2);
               border:1px solid var(--line); border-radius:6px; padding:11px; overflow:auto; max-height:320px; }
   .empty { color:var(--faint); font-size:13px; padding:26px; text-align:center;
            border:1px dashed var(--line-strong); border-radius:6px; }

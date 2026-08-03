@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ASK: SEOUL — 서울 데이터 API 허브</title>
 <meta name="description" content="서울의 문화·인구·교통·상권·날씨 데이터를 행정동 코드 하나로 조인해 쓰는 API 허브. 커버리지는 도메인마다 다르며 제품마다 명시. 이메일만으로 즉시 키 발급.">
-<meta name="theme-color" content="#08110f">
+<meta name="theme-color" content="#070c0b">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ASK: SEOUL">
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
@@ -14,21 +14,23 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
 <style>
   :root {
-    /* 팔레트 — 단청(丹靑)에서 가져왔다. 청록이 데이터, 주홍이 행동.
-       제네릭 SaaS 블루를 쓰지 않는 이유: 이 제품의 소재가 서울이기 때문이다.
-       중성색도 순회색이 아니라 청록 쪽으로 아주 살짝 기울여 놓았다. */
-    --bg:#f6f7f6; --panel:#ffffff;
-    /* muted·faint — 1x 모니터 실측에서 흐릿하게 읽혀 한 단계 어둡게(catalog.html 과 동일 보정) */
-    --ink:#12211f; --muted:#3d534f; --faint:#75898b; --line:#e6eae8; --line-strong:#ccd5d2;
-    --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
-    --teal:#0f6f68; --teal-deep:#0a534e; --teal-soft:#e9f4f2; --teal-line:#a9d5cf;
-    --green-soft:#ecfdf3; --green-ink:#0a6b45; --red-ink:#b42318; --red-soft:#fef3f2;
-    /* 어두운 표면 — 히어로·데모·CTA 가 공유한다 */
-    --deck:#08110f; --deck-2:#0e1a18; --deck-line:rgba(214,240,235,.10);
-    --deck-ink:#c2d6d1; --deck-dim:#71908a;
-    --shadow-xs:0 1px 2px rgba(16,24,40,.05);
-    --shadow-sm:0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
-    --shadow-md:0 6px 16px rgba(11,18,32,.10);
+    /* 팔레트 — 다크 단청. 바탕은 청록으로 기운 근흑, 액센트는 단청 청록을 밝힌
+       민트 하나뿐이다(테라코타 2색 체제 폐기 — 초점 분산). 제네릭 SaaS 블루·바이올렛을
+       쓰지 않는 이유는 전과 같다: 이 제품의 소재가 서울이기 때문이다. */
+    --bg:#070c0b; --panel:#0d1413; --panel-2:#111a18;
+    --ink:#e7f2ee; --muted:#9db3ac; --faint:#647a74;
+    --line:rgba(231,242,238,.07); --line-strong:rgba(231,242,238,.14);
+    /* 다크 UI 의 hover 는 어두워지는 게 아니라 밝아진다 — accent-deep 이 더 밝은 이유 */
+    --accent:#3ce0c4; --accent-deep:#7deed8; --accent-ink:#04211b;
+    --accent-soft:rgba(60,224,196,.09); --accent-line:rgba(60,224,196,.30);
+    --teal:#3ce0c4; --teal-deep:#7deed8; --teal-soft:rgba(60,224,196,.09); --teal-line:rgba(60,224,196,.30);
+    --green-soft:rgba(64,222,142,.10); --green-ink:#4ade80; --red-ink:#f87171; --red-soft:rgba(248,113,113,.10);
+    /* 어두운 표면 — 히어로·데모·CTA 가 공유한다. 전면 다크라 바탕과 한 몸이다 */
+    --deck:#070c0b; --deck-2:#0d1413; --deck-line:rgba(214,240,235,.10);
+    --deck-ink:#c6d8d2; --deck-dim:#647a74;
+    --shadow-xs:0 0 0 0 transparent;
+    --shadow-sm:0 1px 3px rgba(0,0,0,.3);
+    --shadow-md:0 12px 32px rgba(0,0,0,.45);
     --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono','Malgun Gothic',monospace;
     /* 본문 서체를 변수로 — 한글 라벨이 mono 에서 빠져나올 때 되돌아올 곳이 필요하다 */
     --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
@@ -46,7 +48,7 @@
   a { color:inherit; text-decoration:none; }
   .wrap { max-width:1140px; margin:0 auto; padding:0 24px; }
   :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:6px; }
-  .deck :focus-visible, .nav :focus-visible { outline-color:#5fd6c6; }
+  .deck :focus-visible, .nav :focus-visible { outline-color:var(--accent); }
   /* 데이터를 가리키는 미세 라벨 — 이 페이지의 서체 규칙.
      mono 는 라틴 전용이다: Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
      굴림 계열에 대체되고, 10px 대 + 자간 .12em 이 겹쳐 뭉개진다(실측). 한글이 실리는
@@ -63,9 +65,9 @@
   .nav-in { display:flex; align-items:center; gap:20px; height:56px; }
   .brand { display:flex; align-items:center; gap:10px; }
   .brand .logo { width:30px; height:30px; border-radius:7px;
-                 background:linear-gradient(140deg,#0f6f68,#2aa79a);
+                 background:linear-gradient(140deg,#0f6f68,#2ee6c3);
                  display:flex; align-items:center; justify-content:center;
-                 font-weight:800; font-size:13px; color:#fff; }
+                 font-weight:800; font-size:13px; color:#04211b; }
   .brand .nm { font-weight:700; font-size:14px; color:#fff; letter-spacing:-.01em; line-height:1.2; }
   .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
                 color:var(--deck-dim); letter-spacing:.1em; text-transform:uppercase; }
@@ -79,7 +81,7 @@
               font-weight:600; letter-spacing:.01em; padding:4px 10px; border-radius:5px;
               border:1px solid var(--deck-line); color:var(--deck-ink); white-space:nowrap; }
   .env-pill i { width:5px; height:5px; border-radius:50%; background:#f79009; }
-  .nav-cta { font-size:12.5px; font-weight:600; color:#fff; background:var(--accent);
+  .nav-cta { font-size:12.5px; font-weight:600; color:var(--accent-ink); background:var(--accent);
              padding:7px 14px; border-radius:6px; white-space:nowrap; }
   .nav-cta:hover { background:var(--accent-deep); }
   @media (max-width:900px){ .env-pill { display:none; } .nav-in { gap:12px; } }
@@ -106,7 +108,7 @@
 
   .hero h1 { font-size:clamp(34px, 5.6vw, 62px); font-weight:800; letter-spacing:-.038em;
              line-height:1.06; text-wrap:balance; margin-top:18px; }
-  .hero h1 .n { font-variant-numeric:tabular-nums; color:#5fd6c6; }
+  .hero h1 .n { font-variant-numeric:tabular-nums; color:var(--accent); }
   .hero h1 .l2 { display:block; color:var(--deck-ink); font-weight:400; letter-spacing:-.03em; }
   .hero .sub { font-size:16.5px; color:var(--deck-ink); margin-top:20px; max-width:470px; }
   .hero .sub b { color:#fff; font-weight:600; }
@@ -122,10 +124,10 @@
                        transition:border-color .12s, background .12s, box-shadow .12s; }
   .search-hero input::placeholder { color:var(--deck-dim); }
   .search-hero input:focus { border-color:var(--accent); background:rgba(255,255,255,.08);
-                             box-shadow:0 0 0 3px rgba(184,73,42,.28); }
+                             box-shadow:0 0 0 3px rgba(60,224,196,.22); }
   .search-hero .ico { position:absolute; left:13px; top:50%; transform:translateY(-50%);
                       color:var(--deck-dim); display:flex; }
-  .search-hero button { font:inherit; font-size:13.5px; font-weight:600; color:#fff; background:var(--accent);
+  .search-hero button { font:inherit; font-size:13.5px; font-weight:600; color:var(--accent-ink); background:var(--accent);
                         border:0; border-radius:8px; padding:0 20px; cursor:pointer; }
   .search-hero button:hover { background:var(--accent-deep); }
   .hot { display:flex; gap:6px; flex-wrap:wrap; margin-top:13px; align-items:center; }
@@ -134,7 +136,7 @@
   .hot a:hover { border-color:var(--accent); color:#fff; }
 
   /* ─── 계기 스트립 (통계) — 카드 4장 대신 구획된 한 줄 ─── */
-  .strip { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  .strip { background:var(--panel); border:1px solid var(--line-strong); border-radius:10px;
            box-shadow:var(--shadow-sm); margin-top:-26px; position:relative; z-index:3;
            display:grid; grid-template-columns:repeat(4,1fr); }
   .strip .cell { padding:15px 20px; border-left:1px solid var(--line); }
@@ -184,11 +186,11 @@
              background:var(--line); border:1px solid var(--line); border-radius:10px;
              overflow:hidden; box-shadow:var(--shadow-xs); }
   .dom { padding:13px 16px; background:var(--panel); display:flex; flex-direction:column; gap:3px; }
-  a.dom:hover { background:#f2f6f4; }
+  a.dom:hover { background:var(--panel-2); }
   /* 제품 수는 이름과 같은 줄로 올렸다 — 아래에 두면 공간 단위와 나란히 놓여
      서로 다른 두 값이 한 줄에서 양끝으로 벌어지고, 서체·색까지 갈라져 지저분했다 */
   .dom .t { font-weight:700; font-size:13.5px; display:flex; align-items:baseline; gap:7px; }
-  .dom .t i { width:6px; height:6px; border-radius:50%; background:#2aa79a; flex:none;
+  .dom .t i { width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none;
               align-self:center; }
   .dom .t .c { margin-left:auto; font-size:11.5px; font-weight:600; color:var(--muted);
                font-variant-numeric:tabular-nums; white-space:nowrap; }
@@ -202,9 +204,9 @@
   .dom.soon .u { color:var(--faint); }
 
   /* skeleton · 상태 */
-  .sk { position:relative; overflow:hidden; background:#e9eeec; border-radius:5px; color:transparent; }
+  .sk { position:relative; overflow:hidden; background:#15201e; border-radius:5px; color:transparent; }
   .sk::after { content:""; position:absolute; inset:0; transform:translateX(-100%);
-               background:linear-gradient(90deg, transparent, rgba(255,255,255,.7), transparent);
+               background:linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent);
                animation:shimmer 1.3s infinite; }
   @keyframes shimmer { to { transform:translateX(100%); } }
   .sk-card { height:140px; background:var(--panel); border:1px solid var(--line); border-radius:10px; }
@@ -225,7 +227,7 @@
   .hstep .dd code { font-family:var(--mono); font-size:11px; background:var(--bg);
                     border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
   /* 데모 — 질문에서 응답까지를 3박자로 보여준다. 화면의 명령이 실제로 호출되는 것과 같다 */
-  .demo { background:var(--deck); border:1px solid var(--deck-line); border-radius:10px;
+  .demo { background:var(--panel); border:1px solid var(--line-strong); border-radius:10px;
           overflow:hidden; box-shadow:var(--shadow-md); }
   .demo .bar { display:flex; align-items:center; gap:8px; padding:10px 15px;
                border-bottom:1px solid var(--deck-line); }
@@ -233,13 +235,13 @@
   .demo .qs { margin-left:auto; display:flex; gap:6px; }
   .demo .qs button { width:7px; height:7px; padding:0; border:0; border-radius:50%;
                      background:#294a45; cursor:pointer; transition:background .15s; }
-  .demo .qs button[aria-selected="true"] { background:#5fd6c6; }
+  .demo .qs button[aria-selected="true"] { background:var(--accent); }
   .demo .body { padding:14px 16px 16px; }
   .demo .q { font-size:14px; font-weight:600; color:#fff; line-height:1.45; }
   .demo .cmd { font-family:var(--mono); font-size:12px; line-height:1.6; color:#e4e9f1;
                margin-top:9px; word-break:break-all; min-height:2.2em; }
-  .demo .cmd .g { color:#7fd6a8; font-weight:700; } .demo .cmd .b { color:#5fd6c6; }
-  .demo .caret { display:inline-block; width:7px; height:12px; background:#5fd6c6;
+  .demo .cmd .g { color:#4ade80; font-weight:700; } .demo .cmd .b { color:var(--accent); }
+  .demo .caret { display:inline-block; width:7px; height:12px; background:var(--accent);
                  vertical-align:-1px; animation:blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity:0; } }
   /* 좁은 화면에서 표가 본문을 밀지 않게 — 가로 스크롤은 표 안에서만 */
@@ -255,11 +257,11 @@
   .demo tr.in td { animation:rowin .3s ease both; }
   @keyframes rowin { from { opacity:0; transform:translateY(5px); } }
   .demo .fo { margin-top:11px; font-size:12px; color:var(--deck-dim); line-height:1.5; }
-  .demo .fo b { color:#5fd6c6; font-weight:600; }
+  .demo .fo b { color:var(--accent); font-weight:600; }
   .demo .fo code { font-family:var(--mono); font-size:10.5px; }
 
   /* cta */
-  .cta { margin:56px 0 0; background:var(--deck); border-radius:12px; padding:34px 38px;
+  .cta { margin:56px 0 0; background:var(--panel); border:1px solid var(--line-strong); border-radius:12px; padding:34px 38px;
          display:flex; align-items:center; gap:24px; flex-wrap:wrap; position:relative; overflow:hidden; }
   .cta::before { content:""; position:absolute; inset:0; pointer-events:none;
     background-image:linear-gradient(var(--deck-line) 1px, transparent 1px),
@@ -273,8 +275,8 @@
   .cta .btns { margin-left:auto; display:flex; gap:10px; flex-wrap:wrap; }
   .btn-p, .btn-g { display:inline-flex; align-items:center; font-size:13.5px; font-weight:600;
                    border-radius:8px; padding:10px 18px; }
-  .btn-p { background:var(--accent); color:#fff; } .btn-p:hover { background:var(--accent-deep); }
-  .btn-g { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.25); }
+  .btn-p { background:var(--accent); color:var(--accent-ink); } .btn-p:hover { background:var(--accent-deep); }
+  .btn-g { background:transparent; color:var(--ink); border:1px solid var(--line-strong); }
   .btn-g:hover { border-color:#fff; }
 
   footer { margin-top:54px; border-top:1px solid var(--line); background:var(--panel); }
@@ -617,7 +619,8 @@ function bootField() {
   const cv = $("field");
   const ctx = cv.getContext("2d");
   const CELLS = 426;
-  const TEAL = [95, 214, 198], EMBER = [214, 106, 62];
+  // 스파크도 민트 단일 팔레트 — 밝기 차이(연한 민트)로만 변화를 준다(테라코타 폐기와 동일 결정)
+  const TEAL = [60, 224, 196], EMBER = [125, 238, 216];
   let cols = 0, rows = 0, cw = 0, ch = 0, dpr = 1, sparks = [], raf = 0, t0 = 0;
 
   function layout() {
