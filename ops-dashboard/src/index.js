@@ -2,7 +2,7 @@
 //
 // 한 화면에서 두 가지를 본다:
 //   · 파이프라인 품질 — 수집·변환이 제 몫을 했나 (_ops_slo, gold_*_slo_daily 스냅샷)
-//   · 서빙 품질       — 외부에 잘 나가고 있나 (_gw_request_log, 게이트웨이가 쌓는다)
+//   · 서빙 품질       — 외부에 잘 나가고 있나 (_request_log, 게이트웨이가 쌓는다)
 // 둘 다 같은 D1 을 읽는다. 마켓플레이스와는 **다른 Worker · 다른 호스트**다 — 청중이 다르고,
 // 배포 단위가 갈려야 사고 반경도 갈린다.
 //
@@ -77,26 +77,26 @@ async function summary(env, params, writable = false) {
     "SELECT * FROM _ops_slo WHERE event_date >= date('now', ?) ORDER BY event_date", since);
   if (!domains.ok || !slo.ok) missing.push("pipeline");
 
-  // ── 서빙 (게이트웨이가 쌓는 _gw_request_log)
+  // ── 서빙 (게이트웨이가 쌓는 _request_log)
   const routes = await safeRows(env,
     "SELECT route, COUNT(*) AS calls, SUM(status >= 400) AS errors, ROUND(AVG(ms),1) AS avg_ms " +
-    "FROM _gw_request_log WHERE ts >= datetime('now', ?) GROUP BY route ORDER BY calls DESC", since);
+    "FROM _request_log WHERE ts >= datetime('now', ?) GROUP BY route ORDER BY calls DESC", since);
   if (!routes.ok) missing.push("serving");
   const [daily, products, failures, empty, keys] = await Promise.all([
     safeRows(env, "SELECT substr(ts,1,10) AS day, COUNT(*) AS calls, COUNT(DISTINCT key_hash) AS keys_used " +
-      "FROM _gw_request_log WHERE ts >= datetime('now', ?) GROUP BY day ORDER BY day", since),
+      "FROM _request_log WHERE ts >= datetime('now', ?) GROUP BY day ORDER BY day", since),
     safeRows(env, "SELECT table_name, SUM(route='preview') AS previews, SUM(route='data') AS calls, " +
-      "ROUND(AVG(row_count),1) AS avg_rows FROM _gw_request_log " +
+      "ROUND(AVG(row_count),1) AS avg_rows FROM _request_log " +
       "WHERE table_name IS NOT NULL AND ts >= datetime('now', ?) " +
       "GROUP BY table_name ORDER BY calls DESC, previews DESC LIMIT 12", since),
-    safeRows(env, "SELECT status, route, table_name, COUNT(*) AS hits FROM _gw_request_log " +
+    safeRows(env, "SELECT status, route, table_name, COUNT(*) AS hits FROM _request_log " +
       "WHERE status >= 400 AND ts >= datetime('now', ?) GROUP BY status, route, table_name " +
       "ORDER BY hits DESC LIMIT 10", since),
-    safeRows(env, "SELECT table_name, filters, COUNT(*) AS empty_responses FROM _gw_request_log " +
+    safeRows(env, "SELECT table_name, filters, COUNT(*) AS empty_responses FROM _request_log " +
       "WHERE status = 200 AND row_count = 0 AND ts >= datetime('now', ?) " +
       "GROUP BY table_name, filters ORDER BY empty_responses DESC LIMIT 10", since),
     safeRows(env, "SELECT substr(key_hash,1,8) AS key_id, COUNT(*) AS calls, " +
-      "COUNT(DISTINCT substr(ts,1,10)) AS active_days FROM _gw_request_log " +
+      "COUNT(DISTINCT substr(ts,1,10)) AS active_days FROM _request_log " +
       "WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?) GROUP BY key_hash " +
       "ORDER BY calls DESC LIMIT 10", since),
   ]);
@@ -147,7 +147,7 @@ const SOURCES = [
     used: "파이프라인 현재 상태" },
   { table: "_ops_pipeline_expectation", owner: "파이프라인", need: ["dag_id", "monitored"],
     used: "실행 주기 등록" },
-  { table: "_gw_request_log", owner: "게이트웨이", need: ["ts", "route", "status", "table_name", "key_hash"],
+  { table: "_request_log", owner: "게이트웨이", need: ["ts", "route", "status", "table_name", "key_hash"],
     used: "응답 상태 · API 사용량" },
   { table: "_catalog", owner: "도메인 export", need: ["name", "product_id", "external"],
     used: "API 사용량" },
@@ -363,7 +363,7 @@ async function usage(env, params) {
       "COALESCE(SUM(r.status >= 400), 0) AS errors, " +
       "COALESCE(SUM(r.status = 200 AND r.row_count = 0), 0) AS empty_hits, " +
       "ROUND(AVG(r.ms), 1) AS avg_ms, MAX(r.ts) AS last_call " +
-      "FROM _catalog c LEFT JOIN _gw_request_log r " +
+      "FROM _catalog c LEFT JOIN _request_log r " +
       "  ON r.table_name = c.name AND r.ts >= datetime('now', ?) " +
       "GROUP BY c.name ORDER BY calls DESC, c.name", since),
     // 도메인 비율 — 분모는 '카탈로그에 잡히는 호출'이다. catalog·me 처럼 제품이 없는 라우트는
@@ -372,14 +372,14 @@ async function usage(env, params) {
       "SELECT " + DOMAIN_EXPR + " AS domain, COUNT(DISTINCT c.name) AS api_count, " +
       "COUNT(r.rowid) AS calls, COUNT(DISTINCT r.table_name) AS apis_used, " +
       "COALESCE(SUM(r.status >= 400), 0) AS errors " +
-      "FROM _catalog c LEFT JOIN _gw_request_log r " +
+      "FROM _catalog c LEFT JOIN _request_log r " +
       "  ON r.table_name = c.name AND r.ts >= datetime('now', ?) " +
       "GROUP BY domain ORDER BY calls DESC, domain", since),
-    // 월별 — _gw_request_log 는 30일 보존이라 실제로 잡히는 건 최대 두 달 조각이다.
+    // 월별 — _request_log 는 30일 보존이라 실제로 잡히는 건 최대 두 달 조각이다.
     // 그래도 내보내는 이유는 "지금 보이는 게 전부"라는 사실을 화면이 말해줄 수 있어서다.
     safeRows(env,
       "SELECT substr(r.ts,1,7) AS month, " + DOMAIN_EXPR + " AS domain, COUNT(*) AS calls " +
-      "FROM _gw_request_log r JOIN _catalog c ON c.name = r.table_name " +
+      "FROM _request_log r JOIN _catalog c ON c.name = r.table_name " +
       "WHERE r.ts >= datetime('now', ?) GROUP BY month, domain ORDER BY month, calls DESC", since),
   ]);
 
@@ -414,18 +414,18 @@ async function usageDetail(env, name, params) {
   const [daily, filters, statuses, recent] = await Promise.all([
     safeRows(env, "SELECT substr(ts,1,10) AS day, COUNT(*) AS calls, " +
       "SUM(status >= 400) AS errors, ROUND(AVG(row_count),1) AS avg_rows " +
-      "FROM _gw_request_log WHERE table_name = ? AND ts >= datetime('now', ?) GROUP BY day ORDER BY day",
+      "FROM _request_log WHERE table_name = ? AND ts >= datetime('now', ?) GROUP BY day ORDER BY day",
       name, since),
     // 필터 '축' — 컬럼명 조합이다. 값은 저장하지 않으므로 여기 나올 수 없다.
     safeRows(env, "SELECT COALESCE(filters, '') AS filters, COUNT(*) AS calls, " +
       "ROUND(AVG(row_count),1) AS avg_rows, SUM(status = 200 AND row_count = 0) AS empty_hits " +
-      "FROM _gw_request_log WHERE table_name = ? AND ts >= datetime('now', ?) " +
+      "FROM _request_log WHERE table_name = ? AND ts >= datetime('now', ?) " +
       "GROUP BY filters ORDER BY calls DESC LIMIT 20", name, since),
-    safeRows(env, "SELECT status, route, COUNT(*) AS calls FROM _gw_request_log " +
+    safeRows(env, "SELECT status, route, COUNT(*) AS calls FROM _request_log " +
       "WHERE table_name = ? AND ts >= datetime('now', ?) GROUP BY status, route ORDER BY calls DESC",
       name, since),
     safeRows(env, "SELECT ts, route, status, COALESCE(filters,'') AS filters, row_count, ms, " +
-      "request_id, substr(key_hash,1,8) AS key_id FROM _gw_request_log " +
+      "request_id, substr(key_hash,1,8) AS key_id FROM _request_log " +
       "WHERE table_name = ? AND ts >= datetime('now', ?) ORDER BY ts DESC LIMIT 50", name, since),
   ]);
 
@@ -466,8 +466,8 @@ async function listKeys(env) {
   const res = await safeRows(env,
     "SELECT k.key_hash, k.key_prefix, k.email, k.status, k.daily_quota, k.created_at, " +
     "COALESCE(u.count, 0) AS used_today, " +
-    "(SELECT COUNT(*) FROM _gw_request_log r WHERE r.key_hash = k.key_hash) AS calls_logged, " +
-    "(SELECT MAX(r.ts) FROM _gw_request_log r WHERE r.key_hash = k.key_hash) AS last_call " +
+    "(SELECT COUNT(*) FROM _request_log r WHERE r.key_hash = k.key_hash) AS calls_logged, " +
+    "(SELECT MAX(r.ts) FROM _request_log r WHERE r.key_hash = k.key_hash) AS last_call " +
     "FROM _keys k LEFT JOIN _usage u ON u.key_hash = k.key_hash AND u.day = date('now', '+9 hours') " +
     "ORDER BY k.created_at DESC");
   // email 은 여기서 사라진다 — 응답 객체에 원문이 담기는 경로를 남기지 않는다.

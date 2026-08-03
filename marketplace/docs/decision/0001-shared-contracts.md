@@ -42,12 +42,12 @@
 ### C-5. 요청 추적 = `request_id`
 
 marketplace 는 모든 API 응답에 `x-request-id` 헤더, 오류 본문에 `request_id` 를 싣고
-`_gw_request_log.request_id` 에 기록한다. 콘솔 `/api/trace` 는 이 열쇠 하나로 단건을
+`_request_log.request_id` 에 기록한다. 콘솔 `/api/trace` 는 이 열쇠 하나로 단건을
 특정한다. 헤더 이름·컬럼 이름·`req_` 접두를 바꾸면 추적이 끊긴다.
 
 ### C-6. 값이 아니라 축만 (+ 30일)
 
-`_gw_request_log` 에는 분류·축만 남긴다: 필터는 **컬럼명만**, 식별자는 **key_hash 만**.
+`_request_log` 에는 분류·축만 남긴다: 필터는 **컬럼명만**, 식별자는 **key_hash 만**.
 저장 금지: 키 원문 · 이메일 · 쿼리 값 · 원문 UA · 전체 Referer URL · Authorization.
 보존 30일(sweep). #9 의 신규 축(ua_class 등)과 #3 의 intent 축도 이 원칙 위에서만
 추가된다. 이메일 원문이 나가는 곳은 본인 인증 응답(`/api/me`)뿐 — 운영 화면은 마스킹.
@@ -62,12 +62,12 @@ marketplace 는 모든 API 응답에 `x-request-id` 헤더, 오류 본문에 `re
 
 DROP·이름 변경 금지. 변경은 새 ALTER 파일로만. SQLite 의 ALTER 에는 IF NOT EXISTS 가
 없으므로 재시드가 깨지지 않게 `||` 로 감싼다. **같은 커밋에서 seed 체인에 그 파일을
-추가한다** — 0004 누락으로 로컬 `_gw_request_log` 가 몇 주간 조용히 전량 유실된 실사고의
+추가한다** — 0004 누락으로 로컬 `_request_log` 가 몇 주간 조용히 전량 유실된 실사고의
 재발 방지 조항이다.
 
 ### C-9. 스키마 정본은 marketplace, 콘솔은 추종
 
-`_keys`·`_usage`·`_burst`·`_gw_request_log`·`_catalog` 의 정본은 `marketplace/migrations/`.
+`_keys`·`_usage`·`_burst`·`_request_log`·`_catalog` 의 정본은 `marketplace/migrations/`.
 콘솔은 ALTER 미러를 만들지 않는다(0010 — duplicate column 충돌). 콘솔이 필요로 하는
 컬럼(#9 의 9종 등)은 marketplace 마이그레이션으로만 태어난다.
 

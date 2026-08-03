@@ -287,7 +287,7 @@ const LOG_SWEEP_RATE = 0.02;  // 크론 없이, 로그 100건당 ~2회 낡은 �
 async function logRequest(env, trace) {
   try {
     await env.DB.prepare(
-      "INSERT INTO _gw_request_log (ts, route, table_name, status, key_hash, filters, row_count, ms, request_id) " +
+      "INSERT INTO _request_log (ts, route, table_name, status, key_hash, filters, row_count, ms, request_id) " +
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       new Date().toISOString(), trace.route, trace.table ?? null, trace.status,
@@ -296,7 +296,7 @@ async function logRequest(env, trace) {
     ).run();
     if (Math.random() < LOG_SWEEP_RATE) {
       const cutoff = new Date(Date.now() - LOG_RETENTION_DAYS * 86400000).toISOString();
-      await env.DB.prepare("DELETE FROM _gw_request_log WHERE ts < ?").bind(cutoff).run();
+      await env.DB.prepare("DELETE FROM _request_log WHERE ts < ?").bind(cutoff).run();
       // 익명 IP 버킷은 주소 수만큼 생긴다 — 창이 지난 행은 남겨 둘 이유가 없다
       const stale = new Date(Date.now() - 3600 * 1000).toISOString().slice(0, 16);
       await env.DB.prepare("DELETE FROM _burst WHERE window_start < ?").bind(stale).run();

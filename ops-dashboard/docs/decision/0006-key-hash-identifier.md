@@ -20,7 +20,7 @@
   5-상태 모델(PENDING/ACTIVE/SUSPENDED/REVOKED/EXPIRED)은 채택하지 않았다 —
   발급 즉시 활성이고 만료·승인 대기가 없는 현 게이트웨이에 세 상태는 죽은 코드다.
 - `delete` 는 이용자의 삭제 요청을 운영자가 대신 처리하는 경로다. `_usage`·`_burst`·`_keys`
-  를 함께 지운다. `_gw_request_log` 의 `key_hash` 는 남지만 해시→이메일 대응이 사라져
+  를 함께 지운다. `_request_log` 의 `key_hash` 는 남지만 해시→이메일 대응이 사라져
   사람과 연결되지 않는다(처리방침 그대로).
 
 ## 재검토 조건

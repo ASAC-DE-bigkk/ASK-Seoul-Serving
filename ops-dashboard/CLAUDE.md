@@ -35,9 +35,9 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 | 탭 | 묻는 질문 | 원본 |
 |---|---|---|
 | 데이터 준비 상태 | 수집·변환이 제 몫을 했나 | **조회 DB 4종**(`_ops_run_event` 등, ASAC-DAG 소유) + `_ops_slo`(보조·합성) |
-| 응답 상태 | 외부에 잘 나가고 있나 | `_gw_request_log` (게이트웨이가 쌓는다) |
-| API 사용량 | 무엇이 얼마나 쓰이나 | `_gw_request_log` + `_catalog` |
-| 이용자 키 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_gw_request_log` |
+| 응답 상태 | 외부에 잘 나가고 있나 | `_request_log` (게이트웨이가 쌓는다) |
+| API 사용량 | 무엇이 얼마나 쓰이나 | `_request_log` + `_catalog` |
+| 이용자 키 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_request_log` |
 
 구성은 이것이 전부다:
 
@@ -68,7 +68,7 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 - **팀(원격) D1 에 쓰지 않는다.** 모든 시드·로더는 로컬 상태(`--persist-to`)만 만진다.
   → [0002](docs/decision/0002-local-only-mentor-gate.md)
 - **게이트웨이 소유 테이블의 스키마를 여기서 바꾸지 않는다.** `_keys`·`_usage`·`_burst`·
-  `_gw_request_log` 의 정본은 `../marketplace/migrations/`. 여기서는 읽기와 정해진 키 조치만.
+  `_request_log` 의 정본은 `../marketplace/migrations/`. 여기서는 읽기와 정해진 키 조치만.
   → [0003](docs/decision/0003-single-shared-local-d1.md)
 - **이메일 원문을 API 응답에 싣지 않는다.** 마스킹은 서버에서(`email_masked`).
   화면에서만 가리는 건 마스킹이 아니다. → [0004](docs/decision/0004-read-open-write-token.md)
@@ -104,7 +104,7 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
   내보내지 않는다. 번역은 `public/index.html` 의 `ROUTE_KO`·`STATUS_KO` 한 곳에서 하고,
   `_ops_domain.note` 처럼 **DB 에 저장되는 사람이 읽을 문구**도 같은 기준으로 쓴다
   (그건 화면에서 못 고친다 — 정본이 fixtures·load_slo.py 다).
-- **요청 값·응답 본문을 화면에 끌어오지 않는다.** `_gw_request_log` 는 필터 **컬럼명**만 남긴다
+- **요청 값·응답 본문을 화면에 끌어오지 않는다.** `_request_log` 는 필터 **컬럼명**만 남긴다
   (게이트웨이 수집 원칙). API 사용량 상세는 축·건수·소요시간·request_id 까지이고,
   화면이 "값은 저장하지 않는다"를 직접 밝힌다.
 - 주석은 "왜"를 적는다 — 이 리포의 기존 주석 밀도와 문체를 따른다.
@@ -118,7 +118,7 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 | `_catalog`, 제품 표 `d1_*` | 도메인 export (`meta.serving` 계약) | **읽기 전용** — dbt 산출물 |
 | `_keys` | 게이트웨이 | `status`·`daily_quota` 갱신, 삭제 — 정해진 조치만 |
 | `_usage`, `_burst` | 게이트웨이 | 키 삭제 시 연쇄 삭제만 |
-| `_gw_request_log` | 게이트웨이 | 읽기 전용 |
+| `_request_log` | 게이트웨이 | 읽기 전용 |
 
 **남의 표를 만들거나 지우지 않는다 — 파이프라인·dbt 산출물은 결코 건드리지 않는다.**
 콘솔 `migrations/` 에 위 '읽기 전용' 표 이름이 등장하면 그 자체가 위반이다(생성·삭제·ALTER 전부).
