@@ -5,6 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>데이터 카탈로그 — ASK: SEOUL 데이터 플랫폼</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
+<script>
+  /* 테마 확정 — 첫 페인트 전. 내려가면 라이트 사용자에게 다크가 번쩍인다(FOUC).
+     저장값이 없으면 OS 로 해석하되 저장하지 않는다 — 저장 여부가 "직접 골랐는가"의
+     유일한 기록이고, 그게 뒤에서 OS 변경을 따라갈지 가른다. index.html 과 같은 코드다. */
+  (function () {
+    var t;
+    try { t = localStorage.getItem("theme"); } catch (e) { /* 프라이빗 모드 등 차단 */ }
+    if (t !== "light" && t !== "dark") {
+      t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <style>
   :root {
     /* 팔레트는 랜딩(index.html)과 같은 다크 단청 — 두 페이지가 어긋나면 다른 서비스로 보인다.
@@ -20,11 +33,28 @@
     --amber-soft:rgba(251,191,36,.12); --amber-ink:#fbbf24; --red-soft:rgba(248,113,113,.10); --red-ink:#f87171;
     --shadow-xs:0 0 0 0 transparent;
     --shadow-sm:0 1px 3px rgba(0,0,0,.3);
+    /* hover 를 accent-deep 이 아니라 따로 둔 이유는 index.html 과 같다 — 두 모드에서
+       방향이 반대다(다크는 밝아지고, 라이트는 진해진다) */
+    --accent-hover:#7deed8;
     --mono:ui-monospace,'Cascadia Code',Consolas,'Malgun Gothic',monospace;
     /* mono 는 라틴 식별자 전용이다 — Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
        굴림 계열에 대체되고 작은 급수에서 뭉개진다(실측). 한글 라벨은 --sans 로 되돌린다 */
     --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
            system-ui,-apple-system,'Noto Sans KR',sans-serif;
+  }
+
+  /* ─── 라이트 모드 ── 랜딩(index.html)의 같은 블록과 값이 같아야 한다.
+     --sidebar* 는 덮어쓰지 않는다: 사이드바는 두 모드 모두 어둡다(랜딩의 nav 와 같은 이유). */
+  :root[data-theme="light"] {
+    --bg:#f6f7f6; --panel:#ffffff; --panel-2:#eef3f1;
+    --ink:#12211f; --muted:#3d534f;
+    /* 다크의 #75898b 를 그대로 쓰면 흰 바탕에서 3.5:1 로 AA 미달 — 흐림의 방향이 반대다 */
+    --faint:#5f7375;
+    --line:#e6eae8; --line-strong:#ccd5d2;
+    /* 흰 바탕 위 민트는 대비 1.7:1 로 글자에 못 쓴다 — 글자용만 진청록으로 내린다 */
+    --accent-deep:#0b6e60; --accent-hover:#23cdb0;
+    --green-ink:#15803d; --amber-ink:#b45309; --red-ink:#b91c1c;
+    --shadow-sm:0 1px 2px rgba(18,33,31,.06);
   }
   * { box-sizing:border-box; margin:0; }
   html { scroll-behavior:smooth; }
@@ -95,6 +125,15 @@
              border:1px solid var(--line-strong); color:var(--muted); cursor:pointer; background:var(--panel); }
   .keychip.on { font-family:var(--mono); border-color:var(--accent-line); background:var(--accent-soft);
                 color:var(--accent-deep); font-weight:600; }
+  /* 테마 토글 — topbar 는 본문과 같은 판(--panel)이라 여기는 deck 이 아니라 본문 토큰을 쓴다.
+     아이콘은 "누르면 갈 곳"을 보인다: 다크에서는 해(→라이트). */
+  .theme-btn { width:28px; height:28px; flex:none; display:flex; align-items:center; justify-content:center;
+               padding:0; border:1px solid var(--line-strong); border-radius:6px; background:var(--panel);
+               color:var(--muted); cursor:pointer; }
+  .theme-btn:hover { border-color:var(--accent-line); color:var(--accent-deep); }
+  .theme-btn .moon { display:none; }
+  :root[data-theme="light"] .theme-btn .sun { display:none; }
+  :root[data-theme="light"] .theme-btn .moon { display:block; }
 
   .content { padding:24px 28px 64px; max-width:1160px; }
   .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; }
@@ -128,7 +167,7 @@
            cursor:pointer; transition:background .12s, border-color .12s; }
   button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .btn-p { background:var(--accent); color:var(--accent-ink); box-shadow:var(--shadow-xs); }
-  .btn-p:hover { background:var(--accent-deep); }
+  .btn-p:hover { background:var(--accent-hover); }
   .btn-g { background:var(--panel); color:var(--muted); border:1px solid var(--line-strong);
            box-shadow:var(--shadow-xs); }
   .btn-g:hover { border-color:var(--accent); color:var(--accent-deep); }
@@ -229,9 +268,12 @@
     .pdetail .col-item { grid-template-columns:1fr auto; }
     .pdetail .col-item .ds { grid-column:1/-1; }
   }
+  /* 호출 예시는 두 모드 모두 어둡다 — 랜딩의 터미널 데모와 같은 이유(실행 화면으로 읽혀야 한다).
+     그래서 테두리도 본문 토큰이 아니라 판 위에서 흐린 흰선이다 — --line-strong 을 쓰면
+     라이트에서 어두운 블록을 밝은 테가 두르는 꼴이 된다 */
   .endpoint { font-family:var(--mono); font-size:12.5px; background:#050908; color:#e4e9f1;
               border-radius:6px; padding:10px 13px; overflow-x:auto; white-space:pre;
-              border:1px solid var(--line-strong); }
+              border:1px solid rgba(255,255,255,.10); }
   .endpoint .m { color:#4ade80; font-weight:700; }
   .pdetail .dhead { font-size:11px; font-weight:600; letter-spacing:.06em; color:var(--muted);
                     margin-bottom:5px; }
@@ -301,6 +343,10 @@
       <h1 id="pageTitle">데이터 카탈로그</h1>
       <div class="search"><span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span><input type="search" id="q" placeholder="제품·질문·테이블명 검색"></div>
       <span class="spacer"></span>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
+        <svg class="sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+        <svg class="moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+      </button>
         <span class="keychip" id="keychip" onclick="goHash('#auth')">키 미연결</span>
     </div>
 
@@ -886,6 +932,28 @@ $("pTable").addEventListener("change", onTableChange);
 for (const id of ["pLimit", "pFrom", "pTo"]) $(id).addEventListener("input", resetPaging);
 for (const id of ["pKey", "pLimit", "pFrom", "pTo"]) $(id).addEventListener("input", updatePreview);
 
+/* 테마 토글 배선 — 확정은 <head> 에서 끝났고 여기는 버튼과 OS 추적만 맡는다.
+   랜딩(index.html)의 bootTheme 과 같은 동작이다. */
+function bootTheme() {
+  const root = document.documentElement, btn = $("themeBtn");
+  const label = () => btn.setAttribute("aria-label",
+    root.dataset.theme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환");
+  label();
+  btn.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
+    try { localStorage.setItem("theme", root.dataset.theme); } catch (e) { /* 차단돼도 이번 세션은 바뀐다 */ }
+    label();
+  });
+  /* 저장값이 없을 때 = 아직 고른 적이 없을 때만 OS 를 따라간다 */
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", (e) => {
+    let stored; try { stored = localStorage.getItem("theme"); } catch (err) {}
+    if (stored === "light" || stored === "dark") return;
+    root.dataset.theme = e.matches ? "light" : "dark";
+    label();
+  });
+}
+
+bootTheme();
 boot();
 </script>
 </body>

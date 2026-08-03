@@ -12,6 +12,21 @@
 <meta property="og:description" content="흩어진 서울 데이터를 같은 축 위에. 미리보기는 키 없이 바로.">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
+<script>
+  /* 테마 확정 — 첫 페인트 전에 끝나야 한다. 이 블록이 </body> 쪽으로 내려가면
+     라이트를 고른 사람에게 다크가 한 번 번쩍인 뒤 바뀐다(FOUC).
+     저장값이 없으면 OS 설정으로 해석한다 — 이때는 저장하지 않는다. 저장 여부가
+     "사용자가 직접 골랐는가"의 유일한 기록이고, 그 기록이 있어야 뒤에서 OS 변경을
+     따라갈지 말지 가른다(고른 뒤에는 따라가지 않는다). catalog.html 과 같은 코드다. */
+  (function () {
+    var t;
+    try { t = localStorage.getItem("theme"); } catch (e) { /* 프라이빗 모드 등 차단 */ }
+    if (t !== "light" && t !== "dark") {
+      t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <style>
   :root {
     /* 팔레트 — 다크 단청. 바탕은 청록으로 기운 근흑, 액센트는 단청 청록을 밝힌
@@ -31,10 +46,36 @@
     --shadow-xs:0 0 0 0 transparent;
     --shadow-sm:0 1px 3px rgba(0,0,0,.3);
     --shadow-md:0 12px 32px rgba(0,0,0,.45);
+    /* hover 를 accent-deep 이 아니라 별도 토큰으로 뺀 이유: 두 모드에서 방향이 반대다.
+       다크는 밝아지고(#7deed8), 라이트는 진해진다(#23cdb0). accent-deep 은 "바탕 위에서
+       읽히는 글자색" 쪽이라 라이트에서 훨씬 어두워져야 해서 hover 로 겸할 수 없다. */
+    --accent-hover:#7deed8;
+    --sk:#15201e; --sk-sheen:rgba(255,255,255,.06);
     --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono','Malgun Gothic',monospace;
     /* 본문 서체를 변수로 — 한글 라벨이 mono 에서 빠져나올 때 되돌아올 곳이 필요하다 */
     --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
            system-ui,-apple-system,'Noto Sans KR',sans-serif;
+  }
+
+  /* ─── 라이트 모드 ───
+     토큰만 덮어쓴다 — 컴포넌트 규칙은 한 벌이다. 덮어쓰지 않는 --deck* 는 그대로
+     어둡게 남고, 그래서 nav·히어로·데모·CTA 는 두 모드에서 모두 다크다. 의도한 것이다:
+     터미널 데모가 밝아지면 "실행 화면"으로 안 읽히고, 히어로의 격자도 사라진다. */
+  :root[data-theme="light"] {
+    --bg:#f6f7f6; --panel:#ffffff; --panel-2:#eef3f1;
+    --ink:#12211f; --muted:#3d534f;
+    /* faint 는 다크 팔레트의 #75898b 를 그대로 못 가져온다 — 흰 바탕에서 3.5:1 로 AA 미달이다
+       (어두운 바탕에서 흐린 색은 밝고, 밝은 바탕에서는 어두워야 같은 "흐림"이 된다) */
+    --faint:#5f7375;
+    --line:#e6eae8; --line-strong:#ccd5d2;
+    /* 흰 바탕 위 민트(#3ce0c4)는 대비 1.7:1 로 글자로 못 쓴다 — 글자용만 진청록으로 내린다.
+       배경으로 쓰이는 --accent 는 그대로다(그 위 글자는 --accent-ink 로 어둡다). */
+    --accent-deep:#0b6e60; --accent-hover:#23cdb0;
+    --teal-deep:#0b6e60;
+    --green-ink:#15803d; --red-ink:#b91c1c;
+    --sk:#e9eeec; --sk-sheen:rgba(255,255,255,.7);
+    --shadow-sm:0 1px 2px rgba(18,33,31,.06);
+    --shadow-md:0 10px 28px rgba(18,33,31,.10);
   }
   * { box-sizing:border-box; margin:0; }
   html { scroll-behavior:smooth; }
@@ -83,7 +124,16 @@
   .env-pill i { width:5px; height:5px; border-radius:50%; background:#f79009; }
   .nav-cta { font-size:12.5px; font-weight:600; color:var(--accent-ink); background:var(--accent);
              padding:7px 14px; border-radius:6px; white-space:nowrap; }
-  .nav-cta:hover { background:var(--accent-deep); }
+  .nav-cta:hover { background:var(--accent-hover); }
+  /* 테마 토글 — nav 는 두 모드 모두 다크라 버튼 색도 deck 계열 고정이다.
+     아이콘은 "지금 상태"가 아니라 "누르면 갈 곳"을 보여준다: 다크에서는 해(→라이트). */
+  .theme-btn { width:30px; height:30px; flex:none; display:flex; align-items:center; justify-content:center;
+               border:1px solid var(--deck-line); border-radius:7px; background:transparent;
+               color:var(--deck-ink); cursor:pointer; padding:0; transition:background .12s, color .12s; }
+  .theme-btn:hover { background:rgba(255,255,255,.07); color:#fff; }
+  .theme-btn .moon { display:none; }
+  :root[data-theme="light"] .theme-btn .sun { display:none; }
+  :root[data-theme="light"] .theme-btn .moon { display:block; }
   @media (max-width:900px){ .env-pill { display:none; } .nav-in { gap:12px; } }
   @media (max-width:760px){
     .nav-links a { display:none; }
@@ -129,7 +179,7 @@
                       color:var(--deck-dim); display:flex; }
   .search-hero button { font:inherit; font-size:13.5px; font-weight:600; color:var(--accent-ink); background:var(--accent);
                         border:0; border-radius:8px; padding:0 20px; cursor:pointer; }
-  .search-hero button:hover { background:var(--accent-deep); }
+  .search-hero button:hover { background:var(--accent-hover); }
   .hot { display:flex; gap:6px; flex-wrap:wrap; margin-top:13px; align-items:center; }
   .hot a { font-size:12px; font-weight:500; color:var(--deck-ink); padding:3px 10px;
            border:1px solid var(--deck-line); border-radius:999px; }
@@ -204,9 +254,9 @@
   .dom.soon .u { color:var(--faint); }
 
   /* skeleton · 상태 */
-  .sk { position:relative; overflow:hidden; background:#15201e; border-radius:5px; color:transparent; }
+  .sk { position:relative; overflow:hidden; background:var(--sk); border-radius:5px; color:transparent; }
   .sk::after { content:""; position:absolute; inset:0; transform:translateX(-100%);
-               background:linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent);
+               background:linear-gradient(90deg, transparent, var(--sk-sheen), transparent);
                animation:shimmer 1.3s infinite; }
   @keyframes shimmer { to { transform:translateX(100%); } }
   .sk-card { height:140px; background:var(--panel); border:1px solid var(--line); border-radius:10px; }
@@ -227,7 +277,7 @@
   .hstep .dd code { font-family:var(--mono); font-size:11px; background:var(--bg);
                     border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
   /* 데모 — 질문에서 응답까지를 3박자로 보여준다. 화면의 명령이 실제로 호출되는 것과 같다 */
-  .demo { background:var(--panel); border:1px solid var(--line-strong); border-radius:10px;
+  .demo { background:var(--deck-2); border:1px solid var(--deck-line); border-radius:10px;
           overflow:hidden; box-shadow:var(--shadow-md); }
   .demo .bar { display:flex; align-items:center; gap:8px; padding:10px 15px;
                border-bottom:1px solid var(--deck-line); }
@@ -261,7 +311,7 @@
   .demo .fo code { font-family:var(--mono); font-size:10.5px; }
 
   /* cta */
-  .cta { margin:56px 0 0; background:var(--panel); border:1px solid var(--line-strong); border-radius:12px; padding:34px 38px;
+  .cta { margin:56px 0 0; background:var(--deck); border:1px solid var(--deck-line); border-radius:12px; padding:34px 38px;
          display:flex; align-items:center; gap:24px; flex-wrap:wrap; position:relative; overflow:hidden; }
   .cta::before { content:""; position:absolute; inset:0; pointer-events:none;
     background-image:linear-gradient(var(--deck-line) 1px, transparent 1px),
@@ -275,8 +325,9 @@
   .cta .btns { margin-left:auto; display:flex; gap:10px; flex-wrap:wrap; }
   .btn-p, .btn-g { display:inline-flex; align-items:center; font-size:13.5px; font-weight:600;
                    border-radius:8px; padding:10px 18px; }
-  .btn-p { background:var(--accent); color:var(--accent-ink); } .btn-p:hover { background:var(--accent-deep); }
-  .btn-g { background:transparent; color:var(--ink); border:1px solid var(--line-strong); }
+  .btn-p { background:var(--accent); color:var(--accent-ink); } .btn-p:hover { background:var(--accent-hover); }
+  /* CTA 판이 두 모드 모두 다크라 여기 글자는 토큰이 아니라 흰색이 맞다 */
+  .btn-g { background:transparent; color:#fff; border:1px solid var(--deck-line); }
   .btn-g:hover { border-color:#fff; }
 
   footer { margin-top:54px; border-top:1px solid var(--line); background:var(--panel); }
@@ -317,6 +368,10 @@
       <a href="/status">상태</a>
     </div>
     <span class="spacer"></span>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
+      <svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+      <svg class="moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+    </button>
     <a class="nav-cta" href="/catalog#auth">시작하기</a>
   </div>
 </nav>
@@ -773,6 +828,29 @@ async function bootCatalog() {
   }).join("");
 }
 
+/* 테마 토글 배선 — 확정 자체는 <head> 에서 이미 끝났고, 여기는 버튼과 OS 추적만 맡는다.
+   아이콘은 "지금 무엇인가"가 아니라 "누르면 무엇이 되는가"를 보인다(다크 → 해).
+   theme-color 는 바꾸지 않는다 — nav 가 두 모드 모두 다크라 그 위 브라우저 바도 같은 색이 맞다. */
+function bootTheme() {
+  const root = document.documentElement, btn = $("themeBtn");
+  const label = () => btn.setAttribute("aria-label",
+    root.dataset.theme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환");
+  label();
+  btn.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
+    try { localStorage.setItem("theme", root.dataset.theme); } catch (e) { /* 차단돼도 이번 세션은 바뀐다 */ }
+    label();
+  });
+  /* 저장값이 없을 때 = 아직 고른 적이 없을 때만 OS 를 따라간다 */
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", (e) => {
+    let stored; try { stored = localStorage.getItem("theme"); } catch (err) {}
+    if (stored === "light" || stored === "dark") return;
+    root.dataset.theme = e.matches ? "light" : "dark";
+    label();
+  });
+}
+
+bootTheme();
 bootField();
 bootCatalog();
 bootDemo();
