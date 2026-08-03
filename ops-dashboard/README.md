@@ -140,9 +140,24 @@ wrangler 가 토큰을 못 읽는데, 기동 로그에는 `Using secrets defined
 | `sample` | `is_sample=1` 이 섞였다 | 합성 배너 + 실측으로 바꾸는 법 |
 | `live` | 전부 `is_sample=0` | 배너 없음 |
 
-**환경을 바꿔도 이 값은 안 바뀐다.** `_ops_slo` 를 채우는 정규 경로(도메인 DAG 의 export 작업)가
-아직 없어서, 어느 D1 이든 그 테이블에는 **우리가 넣은 것만** 들어 있기 때문이다 — 로컬은
-`npm run seed` 의 합성값, 실측은 `scripts/load_slo.py`. 아래 '왜 SLO 를 복사하나'가 그 사정이다.
+**환경을 바꿔도 이 값은 안 바뀐다.** 어느 D1 이든 `_ops_slo` 에는 **우리가 넣은 것만** 들어 있기
+때문이다. 파이프라인은 이미 실행 기록을 조회 DB 에 싣고 있는데(아래) **콘솔이 아직 그걸 읽지
+않아서**, 로컬에는 `npm run seed` 의 합성값만 남는다.
+
+### 정본 공급자는 Trino 가 아니라 조회 DB 4종이다
+
+팀 규약 **ASK-Seoul#78 D-2** — "기존 `_ops_slo`·`_ops_domain` 은 스키마를 바꾸지 않는다.
+화면이 이미 쓰는 계약이며, **위 4종에서 값을 채운다**"(`_ops_run_event`·`_ops_daily_metric`·
+`_ops_pipeline_state`·`_ops_pipeline_expectation`). 그 적재는 **이미 동작한다** —
+ASAC-DAG#647 병합 후 **#655**(2026-08-03)가 실제 조회 DB 에 표 4종 생성 · 52건 적재를 확인했다.
+
+남은 일은 **콘솔이 4종을 읽는 것**([direction.md 축 1](docs/direction.md)). 그 전에
+**#78 D-6 이 선행**이다 — 콘솔 마이그레이션이 `DROP TABLE IF EXISTS` 로 시작하므로
+([0007](docs/decision/0007-schema-single-file-reset.md)) 팀 DB 에 표를 만들기 전에 증분으로
+바꿔야 한다. 안 바꾸면 첫 스키마 수정이 팀 데이터를 지운다.
+
+**`scripts/load_slo.py`(Trino)는 그때까지의 로컬 폴백**이지 정규 경로가 아니다
+([0005 개정 주석](docs/decision/0005-slo-snapshot-to-d1.md)).
 
 지금 어느 환경의 무슨 DB 를 보고 있는지는 **화면 상단 배지**에 늘 떠 있다
 (`wrangler.toml` 의 `[vars] ENV_LABEL·ENV_D1`, 운영은 붉은색). 숫자만 보고 추측하게 두면

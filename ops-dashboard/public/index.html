@@ -462,14 +462,16 @@ function render(d) {
   const src = d.meta.pipeline_source;
   if (src === "sample")
     b.push("<div class='banner warn' data-pane='pipeline'><b>이 숫자는 실측이 아니라 합성 예시입니다</b> " +
-           "(" + d.meta.pipeline_sample_rows + "일치). 이 표의 원본인 <code>_ops_slo</code> 는 " +
-           "<b>파이프라인이 직접 채우지 않고</b> 요약을 밀어 넣어야 하는데, 그 정규 경로(도메인 DAG 의 " +
-           "export 작업)가 아직 없습니다. 그래서 <code>npm run seed</code> 가 넣은 합성 값이 보입니다.<br>" +
-           "실측으로 바꾸려면 Trino 를 띄운 뒤 <code>python scripts/load_slo.py</code> — 넣는 순간 이 배너는 사라집니다.</div>");
+           "(" + d.meta.pipeline_sample_rows + "일치). 파이프라인은 이미 실행 기록을 운영 DB 에 " +
+           "싣고 있지만(팀 규약 ASK-Seoul#78 · ASAC-DAG#655 적재 확인), <b>이 화면이 아직 그 기록을 " +
+           "읽지 않습니다.</b> 연결 작업이 끝날 때까지 여기에는 <code>npm run seed</code> 가 넣은 " +
+           "합성 값이 보입니다.<br>" +
+           "지금 당장 실측을 보고 싶으면 임시 폴백이 있습니다 — <code>python scripts/load_slo.py</code> " +
+           "(Trino 필요). <b>정식 경로는 아닙니다.</b></div>");
   else if (src === "none")
     b.push("<div class='banner info' data-pane='pipeline'>이 기간에 <b>데이터 준비 기록이 없습니다</b> — " +
-           "<code>_ops_slo</code> 가 비어 있습니다. 로컬이면 <code>npm run seed</code>, " +
-           "실측을 넣으려면 <code>python scripts/load_slo.py</code> 를 실행하세요.</div>");
+           "<code>_ops_slo</code> 가 비어 있습니다. 로컬이면 <code>npm run seed</code> 로 채웁니다. " +
+           "운영 기록을 읽는 연결 작업은 아직 진행 중입니다(팀 규약 ASK-Seoul#78).</div>");
   if (d.meta.missing.includes("serving"))
     b.push("<div class='banner info' data-pane='serving'>요청 기록을 찾지 못했습니다 — API 서버와 같은 데이터를 보도록 " +
            "설정(<code>--persist-to</code>)이 맞는지 확인하세요.</div>");
