@@ -5,34 +5,77 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ASK: SEOUL — 서울 데이터 API 허브</title>
 <meta name="description" content="서울의 문화·인구·교통·상권·날씨 데이터를 행정동 코드 하나로 조인해 쓰는 API 허브. 커버리지는 도메인마다 다르며 제품마다 명시. 이메일만으로 즉시 키 발급.">
-<meta name="theme-color" content="#08110f">
+<meta name="theme-color" content="#070c0b">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ASK: SEOUL">
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
-<meta property="og:description" content="흩어진 서울 데이터를 같은 축 위에. 미리보기는 키 없이 무료.">
+<meta property="og:description" content="흩어진 서울 데이터를 같은 축 위에. 미리보기는 키 없이 바로.">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
+<script>
+  /* 테마 확정 — 첫 페인트 전에 끝나야 한다. 이 블록이 </body> 쪽으로 내려가면
+     라이트를 고른 사람에게 다크가 한 번 번쩍인 뒤 바뀐다(FOUC).
+     저장값이 없으면 OS 설정으로 해석한다 — 이때는 저장하지 않는다. 저장 여부가
+     "사용자가 직접 골랐는가"의 유일한 기록이고, 그 기록이 있어야 뒤에서 OS 변경을
+     따라갈지 말지 가른다(고른 뒤에는 따라가지 않는다). catalog.html 과 같은 코드다. */
+  (function () {
+    var t;
+    try { t = localStorage.getItem("theme"); } catch (e) { /* 프라이빗 모드 등 차단 */ }
+    if (t !== "light" && t !== "dark") {
+      t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <style>
   :root {
-    /* 팔레트 — 단청(丹靑)에서 가져왔다. 청록이 데이터, 주홍이 행동.
-       제네릭 SaaS 블루를 쓰지 않는 이유: 이 제품의 소재가 서울이기 때문이다.
-       중성색도 순회색이 아니라 청록 쪽으로 아주 살짝 기울여 놓았다. */
-    --bg:#f6f7f6; --panel:#ffffff;
-    /* muted·faint — 1x 모니터 실측에서 흐릿하게 읽혀 한 단계 어둡게(catalog.html 과 동일 보정) */
-    --ink:#12211f; --muted:#3d534f; --faint:#75898b; --line:#e6eae8; --line-strong:#ccd5d2;
-    --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
-    --teal:#0f6f68; --teal-deep:#0a534e; --teal-soft:#e9f4f2; --teal-line:#a9d5cf;
-    --green-soft:#ecfdf3; --green-ink:#0a6b45; --red-ink:#b42318; --red-soft:#fef3f2;
-    /* 어두운 표면 — 히어로·데모·CTA 가 공유한다 */
-    --deck:#08110f; --deck-2:#0e1a18; --deck-line:rgba(214,240,235,.10);
-    --deck-ink:#c2d6d1; --deck-dim:#71908a;
-    --shadow-xs:0 1px 2px rgba(16,24,40,.05);
-    --shadow-sm:0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
-    --shadow-md:0 6px 16px rgba(11,18,32,.10);
+    /* 팔레트 — 다크 단청. 바탕은 청록으로 기운 근흑, 액센트는 단청 청록을 밝힌
+       민트 하나뿐이다(테라코타 2색 체제 폐기 — 초점 분산). 제네릭 SaaS 블루·바이올렛을
+       쓰지 않는 이유는 전과 같다: 이 제품의 소재가 서울이기 때문이다. */
+    --bg:#070c0b; --panel:#0d1413; --panel-2:#111a18;
+    --ink:#e7f2ee; --muted:#9db3ac; --faint:#647a74;
+    --line:rgba(231,242,238,.07); --line-strong:rgba(231,242,238,.14);
+    /* 다크 UI 의 hover 는 어두워지는 게 아니라 밝아진다 — accent-deep 이 더 밝은 이유 */
+    --accent:#3ce0c4; --accent-deep:#7deed8; --accent-ink:#04211b;
+    --accent-soft:rgba(60,224,196,.09); --accent-line:rgba(60,224,196,.30);
+    --teal:#3ce0c4; --teal-deep:#7deed8; --teal-soft:rgba(60,224,196,.09); --teal-line:rgba(60,224,196,.30);
+    --green-soft:rgba(64,222,142,.10); --green-ink:#4ade80; --red-ink:#f87171; --red-soft:rgba(248,113,113,.10);
+    /* 어두운 표면 — 히어로·데모·CTA 가 공유한다. 전면 다크라 바탕과 한 몸이다 */
+    --deck:#070c0b; --deck-2:#0d1413; --deck-line:rgba(214,240,235,.10);
+    --deck-ink:#c6d8d2; --deck-dim:#647a74;
+    --shadow-xs:0 0 0 0 transparent;
+    --shadow-sm:0 1px 3px rgba(0,0,0,.3);
+    --shadow-md:0 12px 32px rgba(0,0,0,.45);
+    /* hover 를 accent-deep 이 아니라 별도 토큰으로 뺀 이유: 두 모드에서 방향이 반대다.
+       다크는 밝아지고(#7deed8), 라이트는 진해진다(#23cdb0). accent-deep 은 "바탕 위에서
+       읽히는 글자색" 쪽이라 라이트에서 훨씬 어두워져야 해서 hover 로 겸할 수 없다. */
+    --accent-hover:#7deed8;
+    --sk:#15201e; --sk-sheen:rgba(255,255,255,.06);
     --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono','Malgun Gothic',monospace;
     /* 본문 서체를 변수로 — 한글 라벨이 mono 에서 빠져나올 때 되돌아올 곳이 필요하다 */
     --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
            system-ui,-apple-system,'Noto Sans KR',sans-serif;
+  }
+
+  /* ─── 라이트 모드 ───
+     토큰만 덮어쓴다 — 컴포넌트 규칙은 한 벌이다. 덮어쓰지 않는 --deck* 는 그대로
+     어둡게 남고, 그래서 nav·히어로·데모·CTA 는 두 모드에서 모두 다크다. 의도한 것이다:
+     터미널 데모가 밝아지면 "실행 화면"으로 안 읽히고, 히어로의 격자도 사라진다. */
+  :root[data-theme="light"] {
+    --bg:#f6f7f6; --panel:#ffffff; --panel-2:#eef3f1;
+    --ink:#12211f; --muted:#3d534f;
+    /* faint 는 다크 팔레트의 #75898b 를 그대로 못 가져온다 — 흰 바탕에서 3.5:1 로 AA 미달이다
+       (어두운 바탕에서 흐린 색은 밝고, 밝은 바탕에서는 어두워야 같은 "흐림"이 된다) */
+    --faint:#5f7375;
+    --line:#e6eae8; --line-strong:#ccd5d2;
+    /* 흰 바탕 위 민트(#3ce0c4)는 대비 1.7:1 로 글자로 못 쓴다 — 글자용만 진청록으로 내린다.
+       배경으로 쓰이는 --accent 는 그대로다(그 위 글자는 --accent-ink 로 어둡다). */
+    --accent-deep:#0b6e60; --accent-hover:#23cdb0;
+    --teal-deep:#0b6e60;
+    --green-ink:#15803d; --red-ink:#b91c1c;
+    --sk:#e9eeec; --sk-sheen:rgba(255,255,255,.7);
+    --shadow-sm:0 1px 2px rgba(18,33,31,.06);
+    --shadow-md:0 10px 28px rgba(18,33,31,.10);
   }
   * { box-sizing:border-box; margin:0; }
   html { scroll-behavior:smooth; }
@@ -46,7 +89,7 @@
   a { color:inherit; text-decoration:none; }
   .wrap { max-width:1140px; margin:0 auto; padding:0 24px; }
   :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:6px; }
-  .deck :focus-visible, .nav :focus-visible { outline-color:#5fd6c6; }
+  .deck :focus-visible, .nav :focus-visible { outline-color:var(--accent); }
   /* 데이터를 가리키는 미세 라벨 — 이 페이지의 서체 규칙.
      mono 는 라틴 전용이다: Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
      굴림 계열에 대체되고, 10px 대 + 자간 .12em 이 겹쳐 뭉개진다(실측). 한글이 실리는
@@ -63,9 +106,9 @@
   .nav-in { display:flex; align-items:center; gap:20px; height:56px; }
   .brand { display:flex; align-items:center; gap:10px; }
   .brand .logo { width:30px; height:30px; border-radius:7px;
-                 background:linear-gradient(140deg,#0f6f68,#2aa79a);
+                 background:linear-gradient(140deg,#0f6f68,#2ee6c3);
                  display:flex; align-items:center; justify-content:center;
-                 font-weight:800; font-size:13px; color:#fff; }
+                 font-weight:800; font-size:13px; color:#04211b; }
   .brand .nm { font-weight:700; font-size:14px; color:#fff; letter-spacing:-.01em; line-height:1.2; }
   .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
                 color:var(--deck-dim); letter-spacing:.1em; text-transform:uppercase; }
@@ -79,9 +122,18 @@
               font-weight:600; letter-spacing:.01em; padding:4px 10px; border-radius:5px;
               border:1px solid var(--deck-line); color:var(--deck-ink); white-space:nowrap; }
   .env-pill i { width:5px; height:5px; border-radius:50%; background:#f79009; }
-  .nav-cta { font-size:12.5px; font-weight:600; color:#fff; background:var(--accent);
+  .nav-cta { font-size:12.5px; font-weight:600; color:var(--accent-ink); background:var(--accent);
              padding:7px 14px; border-radius:6px; white-space:nowrap; }
-  .nav-cta:hover { background:var(--accent-deep); }
+  .nav-cta:hover { background:var(--accent-hover); }
+  /* 테마 토글 — nav 는 두 모드 모두 다크라 버튼 색도 deck 계열 고정이다.
+     아이콘은 "지금 상태"가 아니라 "누르면 갈 곳"을 보여준다: 다크에서는 해(→라이트). */
+  .theme-btn { width:30px; height:30px; flex:none; display:flex; align-items:center; justify-content:center;
+               border:1px solid var(--deck-line); border-radius:7px; background:transparent;
+               color:var(--deck-ink); cursor:pointer; padding:0; transition:background .12s, color .12s; }
+  .theme-btn:hover { background:rgba(255,255,255,.07); color:#fff; }
+  .theme-btn .moon { display:none; }
+  :root[data-theme="light"] .theme-btn .sun { display:none; }
+  :root[data-theme="light"] .theme-btn .moon { display:block; }
   @media (max-width:900px){ .env-pill { display:none; } .nav-in { gap:12px; } }
   @media (max-width:760px){
     .nav-links a { display:none; }
@@ -106,7 +158,7 @@
 
   .hero h1 { font-size:clamp(34px, 5.6vw, 62px); font-weight:800; letter-spacing:-.038em;
              line-height:1.06; text-wrap:balance; margin-top:18px; }
-  .hero h1 .n { font-variant-numeric:tabular-nums; color:#5fd6c6; }
+  .hero h1 .n { font-variant-numeric:tabular-nums; color:var(--accent); }
   .hero h1 .l2 { display:block; color:var(--deck-ink); font-weight:400; letter-spacing:-.03em; }
   .hero .sub { font-size:16.5px; color:var(--deck-ink); margin-top:20px; max-width:470px; }
   .hero .sub b { color:#fff; font-weight:600; }
@@ -122,19 +174,19 @@
                        transition:border-color .12s, background .12s, box-shadow .12s; }
   .search-hero input::placeholder { color:var(--deck-dim); }
   .search-hero input:focus { border-color:var(--accent); background:rgba(255,255,255,.08);
-                             box-shadow:0 0 0 3px rgba(184,73,42,.28); }
+                             box-shadow:0 0 0 3px rgba(60,224,196,.22); }
   .search-hero .ico { position:absolute; left:13px; top:50%; transform:translateY(-50%);
                       color:var(--deck-dim); display:flex; }
-  .search-hero button { font:inherit; font-size:13.5px; font-weight:600; color:#fff; background:var(--accent);
+  .search-hero button { font:inherit; font-size:13.5px; font-weight:600; color:var(--accent-ink); background:var(--accent);
                         border:0; border-radius:8px; padding:0 20px; cursor:pointer; }
-  .search-hero button:hover { background:var(--accent-deep); }
+  .search-hero button:hover { background:var(--accent-hover); }
   .hot { display:flex; gap:6px; flex-wrap:wrap; margin-top:13px; align-items:center; }
   .hot a { font-size:12px; font-weight:500; color:var(--deck-ink); padding:3px 10px;
            border:1px solid var(--deck-line); border-radius:999px; }
   .hot a:hover { border-color:var(--accent); color:#fff; }
 
   /* ─── 계기 스트립 (통계) — 카드 4장 대신 구획된 한 줄 ─── */
-  .strip { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  .strip { background:var(--panel); border:1px solid var(--line-strong); border-radius:10px;
            box-shadow:var(--shadow-sm); margin-top:-26px; position:relative; z-index:3;
            display:grid; grid-template-columns:repeat(4,1fr); }
   .strip .cell { padding:15px 20px; border-left:1px solid var(--line); }
@@ -184,11 +236,11 @@
              background:var(--line); border:1px solid var(--line); border-radius:10px;
              overflow:hidden; box-shadow:var(--shadow-xs); }
   .dom { padding:13px 16px; background:var(--panel); display:flex; flex-direction:column; gap:3px; }
-  a.dom:hover { background:#f2f6f4; }
+  a.dom:hover { background:var(--panel-2); }
   /* 제품 수는 이름과 같은 줄로 올렸다 — 아래에 두면 공간 단위와 나란히 놓여
      서로 다른 두 값이 한 줄에서 양끝으로 벌어지고, 서체·색까지 갈라져 지저분했다 */
   .dom .t { font-weight:700; font-size:13.5px; display:flex; align-items:baseline; gap:7px; }
-  .dom .t i { width:6px; height:6px; border-radius:50%; background:#2aa79a; flex:none;
+  .dom .t i { width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none;
               align-self:center; }
   .dom .t .c { margin-left:auto; font-size:11.5px; font-weight:600; color:var(--muted);
                font-variant-numeric:tabular-nums; white-space:nowrap; }
@@ -202,9 +254,9 @@
   .dom.soon .u { color:var(--faint); }
 
   /* skeleton · 상태 */
-  .sk { position:relative; overflow:hidden; background:#e9eeec; border-radius:5px; color:transparent; }
+  .sk { position:relative; overflow:hidden; background:var(--sk); border-radius:5px; color:transparent; }
   .sk::after { content:""; position:absolute; inset:0; transform:translateX(-100%);
-               background:linear-gradient(90deg, transparent, rgba(255,255,255,.7), transparent);
+               background:linear-gradient(90deg, transparent, var(--sk-sheen), transparent);
                animation:shimmer 1.3s infinite; }
   @keyframes shimmer { to { transform:translateX(100%); } }
   .sk-card { height:140px; background:var(--panel); border:1px solid var(--line); border-radius:10px; }
@@ -225,7 +277,7 @@
   .hstep .dd code { font-family:var(--mono); font-size:11px; background:var(--bg);
                     border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
   /* 데모 — 질문에서 응답까지를 3박자로 보여준다. 화면의 명령이 실제로 호출되는 것과 같다 */
-  .demo { background:var(--deck); border:1px solid var(--deck-line); border-radius:10px;
+  .demo { background:var(--deck-2); border:1px solid var(--deck-line); border-radius:10px;
           overflow:hidden; box-shadow:var(--shadow-md); }
   .demo .bar { display:flex; align-items:center; gap:8px; padding:10px 15px;
                border-bottom:1px solid var(--deck-line); }
@@ -233,13 +285,13 @@
   .demo .qs { margin-left:auto; display:flex; gap:6px; }
   .demo .qs button { width:7px; height:7px; padding:0; border:0; border-radius:50%;
                      background:#294a45; cursor:pointer; transition:background .15s; }
-  .demo .qs button[aria-selected="true"] { background:#5fd6c6; }
+  .demo .qs button[aria-selected="true"] { background:var(--accent); }
   .demo .body { padding:14px 16px 16px; }
   .demo .q { font-size:14px; font-weight:600; color:#fff; line-height:1.45; }
   .demo .cmd { font-family:var(--mono); font-size:12px; line-height:1.6; color:#e4e9f1;
                margin-top:9px; word-break:break-all; min-height:2.2em; }
-  .demo .cmd .g { color:#7fd6a8; font-weight:700; } .demo .cmd .b { color:#5fd6c6; }
-  .demo .caret { display:inline-block; width:7px; height:12px; background:#5fd6c6;
+  .demo .cmd .g { color:#4ade80; font-weight:700; } .demo .cmd .b { color:var(--accent); }
+  .demo .caret { display:inline-block; width:7px; height:12px; background:var(--accent);
                  vertical-align:-1px; animation:blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity:0; } }
   /* 좁은 화면에서 표가 본문을 밀지 않게 — 가로 스크롤은 표 안에서만 */
@@ -255,11 +307,11 @@
   .demo tr.in td { animation:rowin .3s ease both; }
   @keyframes rowin { from { opacity:0; transform:translateY(5px); } }
   .demo .fo { margin-top:11px; font-size:12px; color:var(--deck-dim); line-height:1.5; }
-  .demo .fo b { color:#5fd6c6; font-weight:600; }
+  .demo .fo b { color:var(--accent); font-weight:600; }
   .demo .fo code { font-family:var(--mono); font-size:10.5px; }
 
   /* cta */
-  .cta { margin:56px 0 0; background:var(--deck); border-radius:12px; padding:34px 38px;
+  .cta { margin:56px 0 0; background:var(--deck); border:1px solid var(--deck-line); border-radius:12px; padding:34px 38px;
          display:flex; align-items:center; gap:24px; flex-wrap:wrap; position:relative; overflow:hidden; }
   .cta::before { content:""; position:absolute; inset:0; pointer-events:none;
     background-image:linear-gradient(var(--deck-line) 1px, transparent 1px),
@@ -273,8 +325,9 @@
   .cta .btns { margin-left:auto; display:flex; gap:10px; flex-wrap:wrap; }
   .btn-p, .btn-g { display:inline-flex; align-items:center; font-size:13.5px; font-weight:600;
                    border-radius:8px; padding:10px 18px; }
-  .btn-p { background:var(--accent); color:#fff; } .btn-p:hover { background:var(--accent-deep); }
-  .btn-g { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.25); }
+  .btn-p { background:var(--accent); color:var(--accent-ink); } .btn-p:hover { background:var(--accent-hover); }
+  /* CTA 판이 두 모드 모두 다크라 여기 글자는 토큰이 아니라 흰색이 맞다 */
+  .btn-g { background:transparent; color:#fff; border:1px solid var(--deck-line); }
   .btn-g:hover { border-color:#fff; }
 
   footer { margin-top:54px; border-top:1px solid var(--line); background:var(--panel); }
@@ -303,7 +356,7 @@
 </head>
 <body>
 
-<nav class="nav">
+<nav class="nav"><!-- partials/nav.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
   <div class="wrap nav-in">
     <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="logo" aria-hidden="true">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></a>
     <!-- 카탈로그 안의 섹션(플레이그라운드·API 키)은 헤더에 걸지 않는다 — 같은 문서로 가는
@@ -315,10 +368,11 @@
       <a href="/status">상태</a>
     </div>
     <span class="spacer"></span>
-    <!-- 'LOCAL' 은 우리 배포 환경이지 이용자가 알 일이 아니다. 남길 가치가 있는 건
-         "완성된 상용 서비스가 아니다"라는 사실뿐이라 그것만 남긴다. -->
-    <span class="env-pill"><i aria-hidden="true"></i>프로토타입</span>
-    <a class="nav-cta" href="/catalog#auth">무료로 시작</a>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
+      <svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+      <svg class="moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+    </button>
+    <a class="nav-cta" href="/catalog#auth">시작하기</a>
   </div>
 </nav>
 
@@ -359,7 +413,7 @@
          그레인이 다른 제품을 더한 값이라 의미가 없다(제품별 행수는 카드에 유지) -->
     <div class="cell"><div class="lab">Join axis</div><div class="v">행정동<span class="u"> 코드</span></div><div class="k">도메인 공통 조인 키</div></div>
     <div class="cell"><div class="lab">Freshness</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
-    <div class="cell"><div class="lab">Free tier</div><div class="v">1,000<span class="u">회/일</span></div><div class="k">키당 무료 호출</div></div>
+    <div class="cell"><div class="lab">Daily quota</div><div class="v">1,000<span class="u">회/일</span></div><div class="k">키당 하루 호출 한도</div></div>
   </div>
 </div>
 
@@ -416,7 +470,7 @@
   <div class="cta">
     <div>
       <h3>지금 카탈로그에서 직접 확인하세요</h3>
-      <p>모든 제품이 미리보기 무료 — 마음에 들면 그때 키를 받으면 됩니다.</p>
+      <p>모든 제품을 키 없이 미리볼 수 있습니다 — 마음에 들면 그때 키를 받으면 됩니다.</p>
     </div>
     <div class="btns">
       <a class="btn-g" href="/catalog#auth">API 키 발급</a>
@@ -426,7 +480,7 @@
 
 </main>
 
-<footer>
+<footer><!-- partials/footer.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
   <!-- 계약 버전·배치 시각·내부 이슈 번호는 우리 사정이다. 이용자에게 남는 정보만 둔다. -->
   <div class="foot-in">
     <div class="fcol">
@@ -454,7 +508,7 @@
   </div>
   <div class="foot-btm">
     <span>© 2026 ASK: SEOUL</span>
-    <span class="r">프로토타입 · 가용성을 보장하지 않습니다</span>
+    <span class="r">가용성을 보장하지 않습니다</span>
   </div>
 </footer>
 
@@ -620,7 +674,8 @@ function bootField() {
   const cv = $("field");
   const ctx = cv.getContext("2d");
   const CELLS = 426;
-  const TEAL = [95, 214, 198], EMBER = [214, 106, 62];
+  // 스파크도 민트 단일 팔레트 — 밝기 차이(연한 민트)로만 변화를 준다(테라코타 폐기와 동일 결정)
+  const TEAL = [60, 224, 196], EMBER = [125, 238, 216];
   let cols = 0, rows = 0, cw = 0, ch = 0, dpr = 1, sparks = [], raf = 0, t0 = 0;
 
   function layout() {
@@ -769,7 +824,7 @@ async function bootCatalog() {
       "<span class='q'>" + esc(p.product_question || "—") + "</span>" +
       "<span class='meta'><span><b>" + nf.format(p.row_count || 0) + "</b> 행</span>" +
       (d.unit ? "<span>" + esc(d.unit) + "</span>" : "") +
-      "<span class='free'>미리보기 무료</span></span></span></a>";
+      "<span class='free'>미리보기</span></span></span></a>";
   }).join("");
 }
 
@@ -777,5 +832,6 @@ bootField();
 bootCatalog();
 bootDemo();
 </script>
+<script src="/theme.js" defer></script>
 </body>
 </html>

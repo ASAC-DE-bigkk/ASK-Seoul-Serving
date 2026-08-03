@@ -6,9 +6,10 @@
   "scripts": {
     "seed": "wrangler d1 execute ask-seoul-dev-d1 --local --file=scripts/backfill-migrations-ledger.sql && wrangler d1 migrations apply ask-seoul-dev-d1 --local && wrangler d1 execute ask-seoul-dev-d1 --local --file=fixtures/seed.sql && wrangler d1 execute ask-seoul-dev-d1 --local --file=fixtures/handoff_meta_sample.sql",
     "dev": "wrangler dev",
+    "sync": "node scripts/sync-partials.mjs",
     "verify:log": "node scripts/verify-request-log.mjs",
     "smoke": "node scripts/smoke.mjs",
-    "test": "node --test \"scripts/*.test.mjs\"",
+    "test": "node --test \"scripts/*.test.mjs\" && node scripts/sync-partials.mjs --check",
     "usage": "wrangler d1 execute ask-seoul-dev-d1 --local --file=scripts/usage-report.sql"
   },
   "devDependencies": {
