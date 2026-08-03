@@ -411,9 +411,16 @@
          공통인 것은 커버리지가 아니라 **조인 축**(행정동 코드, #48 합의)이라 그것만 적는다.
          도메인별 실측 커버리지는 아래 도메인 격자에서 각각 밝힌다. 총 행수도 쓰지 않는다 —
          그레인이 다른 제품을 더한 값이라 의미가 없다(제품별 행수는 카드에 유지) -->
-    <div class="cell"><div class="lab">Join axis</div><div class="v">행정동<span class="u"> 코드</span></div><div class="k">도메인 공통 조인 키</div></div>
+    <!-- 두 축을 나란히 둔다 — 히어로가 "붙이고 자릅니다"라고 주장하는 그 둘이다.
+         공간축은 이름이 하나라 이름을 적고(행정동 코드), 시간축은 컬럼명이 제품마다 달라
+         (실측 18종) 이름 대신 "몇 종에 걸리는가"를 적는다. 둘의 표시가 다른 건 값의
+         성질이 달라서지 일관성이 없어서가 아니다.
+         여기 있던 Daily quota(1,000회/일)를 시간축으로 갈았다 — 한도는 키를 받은 뒤의
+         이야기고, 처음 온 사람이 재는 건 "무엇으로 자를 수 있나"다. 한도는 /docs 와
+         카탈로그에 그대로 있다. -->
+    <div class="cell"><div class="lab">Join axis</div><div class="v">행정동<span class="u"> 코드</span></div><div class="k">도메인을 붙이는 공통 키</div></div>
+    <div class="cell"><div class="lab">Time axis</div><div class="v sk num" id="statTimed">0종</div><div class="k">기간(from/to)으로 자를 수 있는 제품</div></div>
     <div class="cell"><div class="lab">Freshness</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
-    <div class="cell"><div class="lab">Daily quota</div><div class="v">1,000<span class="u">회/일</span></div><div class="k">키당 하루 호출 한도</div></div>
   </div>
 </div>
 
@@ -776,7 +783,7 @@ async function bootCatalog() {
     if (!res.ok) throw new Error("HTTP " + res.status);
     products = (await res.json()).products || [];
   } catch {
-    setStat("statProducts", "—"); setStat("statFresh", "—");
+    setStat("statProducts", "—"); setStat("statTimed", "—"); setStat("statFresh", "—");
     $("statFreshK").textContent = "마지막 갱신 · 확인 불가";
     failState("domains", "도메인 정보를 불러오지 못했습니다");
     failState("cards", "제품 목록을 불러오지 못했습니다");
@@ -784,6 +791,10 @@ async function bootCatalog() {
   }
 
   setStat("statProducts", products.length + "<span class='u'>종</span>");
+  // 시간축 수는 세어서 넣는다 — 하드코딩하면 제품이 늘 때 조용히 거짓이 된다.
+  // time_axis 가 null 인 제품(명부형)은 기간 필터를 못 걸므로 세지 않는다.
+  const timed = products.filter((p) => p.time_axis).length;
+  setStat("statTimed", timed + "<span class='u'>종</span>");
   const stamps = products.map((p) => p.exported_at).filter(Boolean).sort();
   const newest = stamps[stamps.length - 1];
   setStat("statFresh", (newest && relTime(newest)) || "—");
