@@ -40,7 +40,7 @@
 |---|---|---|
 | `_ops_slo` · `_ops_domain` | **콘솔** (`migrations/0001`) | 스키마·내용 모두 |
 | `_ops_run_event` · `_ops_daily_metric` · `_ops_pipeline_state` · `_ops_pipeline_expectation` | ASAC-DAG (`common/ops/d1_ops.py`) | **읽기 전용** |
-| `_keys` · `_usage` · `_burst` · `_request_log` | 게이트웨이 (`../marketplace/migrations/`) | 읽기 + 정해진 키 조치만([0006](0006-key-hash-identifier.md)) |
+| `_keys` · `_usage` · `_burst` · `_gw_request_log` | 게이트웨이 (`../marketplace/migrations/`) | 읽기 + 정해진 키 조치만([0006](0006-key-hash-identifier.md)) |
 | `_catalog` · 제품 표 (`d1_*`) | 도메인 export (`meta.serving` 계약) | **읽기 전용** |
 
 - 콘솔 `migrations/` 에 **남의 표 이름이 등장하면 그 자체가 위반**이다(생성·삭제·ALTER 전부).

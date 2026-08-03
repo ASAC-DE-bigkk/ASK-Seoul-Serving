@@ -15,42 +15,53 @@
 | 대상 D1 | `wrangler.toml` `[env.production]` | `ask-seoul-prod-d1` — 파이프라인이 게시하는 prod D1(ASAC-DAG#668, 8/3 신설). 기본 환경의 dev D1 은 로컬 전용이다 |
 | Cloudflare 계정 | 팀 계정 로그인 | `npx wrangler whoami` — **publisher 와 같은 계정**이어야 바인딩이 같은 DB 로 풀린다(개인 계정 배포 금지) |
 | 코드 | 머지된 `dev` | 로컬 `npm test` · `npm run verify:log` 통과 |
-| **`_request_log` 이름 충돌** | 아래 검사 | ⚠️ **`STOP` 이면 배포 금지** |
+| **요청 로그 표** | 아래 검사 | ⚠️ **`STOP` 이면 배포 금지** |
 
-### 🔴 `_request_log` 이름 충돌 검사 (배포 전 필수)
+### 요청 로그 표는 `_gw_request_log` 다 — 이름 충돌을 비켜섰다
 
-`migrations/0002_request_log.sql` 은 `CREATE TABLE IF NOT EXISTS` 라 **다른 주체가 같은 이름을
-선점하고 있으면 조용히 넘어간다.** 그 상태로 배포하면 게이트웨이가 없는 컬럼에 INSERT 하다
-실패하는데, `ctx.waitUntil` 안이라 **요청 로그가 전량 버려진다**(#23 에서 겪은 형태).
+같은 D1 에 `_request_log` 라는 이름의 **다른 표**가 있다. **우리가 팀 계정에 배포한 워커 두 개**
+(`ask-seoul-citydata-api`·`ask-seoul-transit-api`)가 `INSERT INTO _request_log (ts, path, query)`
+로 쓴다. 실제 표는 `(ts, path, query, token)` 4컬럼이고 **2026-07-21** 부터 쌓였다 —
+게이트웨이(7/28)보다 먼저다.
+
+**나중에 고른 우리가 비켰다.** 게이트웨이는 `_gw_request_log` 를 쓴다
+(`migrations/0005_rename_request_log.sql`). 옛 표는 **건드리지 않는다** — 그 워커들은 지금도
+배포돼 있고 소스가 레포에 없어서, 지우면 살아 있는 배포본이 깨진다.
 
 ```bash
 # 로컬은 --file 로 되지만, **원격은 --command 를 쓴다** — `--file` 은 원격에서 결과 대신
 # DB 통계를 돌려줘 verdict 가 안 보인다(실측).
 npx wrangler d1 execute <PROD_D1> --remote --env production --command \
 "SELECT CASE
-   WHEN NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_request_log')
-     THEN 'OK: 표가 없다'
-   WHEN (SELECT COUNT(*) FROM pragma_table_info('_request_log')
+   WHEN (SELECT COUNT(*) FROM pragma_table_info('_gw_request_log')
          WHERE name IN ('route','table_name','status','key_hash','filters','row_count','ms')) = 7
-     THEN 'OK: 게이트웨이 스키마'
-   ELSE 'STOP: 다른 스키마가 이름을 선점' END AS verdict,
- (SELECT group_concat(name, ', ') FROM pragma_table_info('_request_log')) AS actual_columns"
+     THEN 'OK'
+   WHEN NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_gw_request_log')
+     THEN 'STOP: _gw_request_log 없음 — 0005 적용 필요'
+   ELSE 'STOP: 스키마 불일치' END AS verdict,
+ CASE
+   WHEN NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_request_log')
+     THEN '없음'
+   WHEN (SELECT COUNT(*) FROM pragma_table_info('_request_log') WHERE name='route')=0
+     THEN '남의 표 — 건드리지 않는다'
+   ELSE '우리 옛 표' END AS legacy"
 ```
 
-실측(2026-08-04) 결과 — **운영에서 `STOP` 이 잡힌다:**
+실측(2026-08-04) 운영 D1 — 마이그레이션 적용 **전** 상태:
 
 ```
-verdict        : STOP: 다른 스키마가 이름을 선점
-actual_columns : ts, path, query, token
+verdict : STOP: _gw_request_log 없음 — 0005 적용 필요
+legacy  : 남의 표 — 건드리지 않는다     ← 워커 것. 그대로 둔다
 ```
 
-**실측(2026-08-04): 운영·개발 D1 에 `(ts, path, query, token)` 4컬럼 표가 이미 있다.**
-389~401행이 7/21 부터 쌓이는 중이고 **만든 주체는 미상**이다 — 파이프라인·dbt·대시보드는
-전수 스캔으로 배제됐다(ASAC-DAG#681). 정본은 게이트웨이이므로 **이름 해소는 이쪽 자율**이다.
-`token` 컬럼에 무엇이 들어가는지 확인 전이라 값은 열지 않았다.
+1번(마이그레이션)을 돌리면 `_gw_request_log` 가 새로 생기고 `verdict` 가 `OK` 가 된다.
+`legacy` 는 계속 '남의 표'로 남아야 정상이다 — 우리가 손대는 대상이 아니다.
 
-지금 그대로 배포하면 요청 로그가 안 쌓인다. 배포 전에 **누가 쓰는지 찾고** → 개명·폐기·공존
-중 하나를 정한 뒤 진행한다.
+> **옛 표(`_request_log`)에 대해 알아 둘 것** — 우리 워커 두 개가 쓰던 접근 로그다.
+> 마지막 쓰기는 2026-08-03 이고 지금은 멈춰 있다. `token` 컬럼은 401건 중 1건만 채워져
+> 있는데 **워커 소스에는 `token` 을 넣는 코드가 없다**(3컬럼만 INSERT) — 표를 처음 만든
+> 더 앞선 세대의 잔재로 보인다. 그 1건의 값은 열지 않았다. 워커 정리(은퇴/재배포)는
+> 이 런북 범위 밖이고, **배포에는 영향이 없다** — 우리는 이름을 비켰다.
 
 **로컬에서 먼저 통과시킨다** — 배포본이 아니라 코드가 맞는지는 여기서 본다.
 
@@ -62,7 +73,7 @@ npm run verify:log  # 요청 로그 유실 검증(C-10)
 
 ## 1. 팀 D1 에 운영 테이블 만들기 (최초 1회)
 
-게이트웨이가 쓰는 `_keys`·`_usage`·`_burst`·`_issuance_log`·`_request_log` 는 지금까지
+게이트웨이가 쓰는 `_keys`·`_usage`·`_burst`·`_issuance_log`·`_gw_request_log` 는 지금까지
 `--local` 로만 적용해서 **prod D1 에는 없다.** 이걸 안 하면 배포해도 키 발급·인증이 전부 죽는다.
 
 > ⚠️ **팀(원격) D1 쓰기다.** 스키마 생성만 하고 기존 표(`_catalog`·제품 테이블)는 건드리지
@@ -85,7 +96,7 @@ npx wrangler d1 execute ask-seoul-prod-d1 --remote \
   --command "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '\_%' ESCAPE '\'"
 ```
 
-`_keys`·`_usage`·`_burst`·`_issuance_log`·`_request_log`·`_catalog` 가 보이면 된다.
+`_keys`·`_usage`·`_burst`·`_issuance_log`·`_gw_request_log`·`_catalog` 가 보이면 된다.
 
 ## 2. 시크릿 넣기 (최초 1회)
 

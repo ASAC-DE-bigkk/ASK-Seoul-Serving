@@ -25,7 +25,7 @@ ops-dashboard/    파이프라인·서빙 품질 대시보드            (청중
 ASAC-DBT (gold)  →  ASAC-DAG 공통 Publisher  →  Cloudflare D1  →  이 레포의 Worker
                      (계약: serving-contract-v1)      _catalog
                                                       _ops_slo
-                                                      _request_log
+                                                      _gw_request_log
 ```
 
 결합은 레포가 아니라 **D1 스키마 계약**에 있다. Worker에는 파일시스템이 없으므로

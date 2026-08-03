@@ -62,7 +62,7 @@ npm run dev
 
 ## 사용 계측 — 무엇이 실제로 쓰이나
 
-`_request_log` 에 API 요청을 한 줄씩 남긴다(`ctx.waitUntil` 로 응답을 붙잡지 않으며,
+`_gw_request_log` 에 API 요청을 한 줄씩 남긴다(`ctx.waitUntil` 로 응답을 붙잡지 않으며,
 로그 쓰기가 실패해도 응답에 영향이 없다). `npm run usage` 로 질문 7개를 한 번에 조회:
 
 | 리포트 | 답하는 질문 |
@@ -78,7 +78,7 @@ npm run dev
 
 서빙 품질을 사람이 보는 화면은 **[ops-dashboard](../ops-dashboard/)** 에 있다 — 마켓플레이스와
 다른 Worker · 다른 호스트다. 청중이 다르고(외부 고객 vs 운영자), 배포 단위가 갈려야 사고
-반경도 갈리기 때문이다. 그쪽 콘솔은 이 게이트웨이의 `_request_log` 와 파이프라인 SLO 를
+반경도 갈리기 때문이다. 그쪽 콘솔은 이 게이트웨이의 `_gw_request_log` 와 파이프라인 SLO 를
 한 화면에서 본다.
 
 여기(`npm run usage`)는 같은 질문을 SQL 로 보는 경로로 남겨 둔다.
@@ -106,7 +106,7 @@ npm run dev
 - 분 단위 **고정 창**이라 창 경계에서 최대 2배까지 통과할 수 있다. 슬라이딩 창은 요청마다
   타임스탬프 로그가 필요해 이 규모엔 과하다 — 가용성 보호가 목적이라 그 오차는 견딘다.
 - 카운터는 [`migrations/0003_burst.sql`](migrations/0003_burst.sql). **버킷당 한 행**이라
-  키는 아무리 오래 써도 행이 안 늘고, 익명 IP 행만 `_request_log` sweep 에 얹어 함께 지운다.
+  키는 아무리 오래 써도 행이 안 늘고, 익명 IP 행만 `_gw_request_log` sweep 에 얹어 함께 지운다.
 
 ## 키 폐기 — 폐기와 삭제는 다르다
 

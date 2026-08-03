@@ -23,7 +23,7 @@ WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_keys')
   AND NOT EXISTS (SELECT 1 FROM d1_migrations WHERE name='0001_keys_usage.sql');
 INSERT INTO d1_migrations(name)
 SELECT '0002_request_log.sql'
-WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_request_log')
+WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_gw_request_log')
   AND NOT EXISTS (SELECT 1 FROM d1_migrations WHERE name='0002_request_log.sql');
 INSERT INTO d1_migrations(name)
 SELECT '0003_burst.sql'
@@ -31,5 +31,5 @@ WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_burst')
   AND NOT EXISTS (SELECT 1 FROM d1_migrations WHERE name='0003_burst.sql');
 INSERT INTO d1_migrations(name)
 SELECT '0004_request_id.sql'
-WHERE EXISTS (SELECT 1 FROM pragma_table_info('_request_log') WHERE name='request_id')
+WHERE EXISTS (SELECT 1 FROM pragma_table_info('_gw_request_log') WHERE name='request_id')
   AND NOT EXISTS (SELECT 1 FROM d1_migrations WHERE name='0004_request_id.sql');
