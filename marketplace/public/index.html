@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ASK: SEOUL — 서울 데이터 API 허브</title>
-<meta name="description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨를 시간과 공간 두 축으로 매일 쌓아 시계열·공간계열 데이터를 제공하는 API 허브. 미리보기는 키 없이, 키 발급은 이메일만. 커버리지는 제품마다 명시합니다.">
+<meta name="description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨를 시간과 공간 두 축으로 매일 쌓아 시계열·공간계열 데이터를 제공하는 API 허브. 미리보기는 키 없이, 키 발급은 이메일만.">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0d1211" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
@@ -144,7 +144,9 @@
   /* ─── hero: 공간축 격자 위 ───
      배경은 426칸 격자다 — 서울의 행정동 수와 같은 칸 수. 이 제품의 차별점이
      "행정동 단위로 자를 수 있다"인데, 그 사실을 문장이 아니라 표면으로 말한다.
-     칸의 밝기는 장식이지 실측이 아니다(그래서 지도라고 부르지 않는다). */
+     칸의 밝기는 장식이지 실측이 아니다(그래서 지도라고 부르지 않는다).
+     각주("격자 한 칸 = 행정동 하나")는 뺐다 — 격자가 아무 주장도 하지 않게 되어
+     오해할 것도 없어졌다. 칸 수를 426 으로 유지하는 건 이제 우리끼리의 규칙이다. */
   .deck { background:var(--bg); color:var(--ink); }
   .hero { position:relative; overflow:hidden; padding:84px 0 92px; }
   #field { position:absolute; inset:0; width:100%; height:100%; pointer-events:none;
@@ -162,10 +164,6 @@
   .hero h1 .l2 { display:block; color:var(--muted); font-weight:400; letter-spacing:-.03em; }
   .hero .sub { font-size:16.5px; color:var(--muted); margin-top:20px; max-width:470px; }
   .hero .sub b { color:var(--ink); font-weight:600; }
-  /* 격자가 무엇인지 밝히는 각주 — 데이터인 척하지 않는다 */
-  .hero .fieldnote { position:absolute; right:0; bottom:-4px; z-index:2; text-align:right;
-                     max-width:200px; line-height:1.5; }
-  @media (max-width:1080px){ .hero .fieldnote { display:none; } }
   .search-hero { margin-top:28px; display:flex; gap:8px; max-width:470px; }
   .search-hero .box { flex:1; position:relative; }
   .search-hero input { width:100%; font:inherit; font-size:14px; padding:12px 14px 12px 40px;
@@ -388,9 +386,13 @@
            guide FAQ "실시간 데이터인가요? 아닙니다 … 발행 시점의 스냅샷입니다. 매일 1회 발행",
            status "실시간이 아닙니다", docs "제품은 매일 통째로 재발행되고".
            실측도 같다 — 62종의 exported_at 이 단일 배치 하나다(2026-08-03).
-           히어로만 "연속"이라고 하면 FAQ 를 여는 순간 배신이 되므로 "매일"로 적는다. -->
-      <p class="sub">시간과 공간 두 축으로 <b>매일</b> 쌓아 <b>시계열·공간계열</b> 데이터를 함께 제공합니다.
-         커버리지는 도메인마다 다르고, 제품마다 적어둡니다.</p>
+           히어로만 "연속"이라고 하면 FAQ 를 여는 순간 배신이 되므로 "매일"로 적는다.
+
+           커버리지 단서("커버리지는 도메인마다 다르고…")는 히어로에서 뺐다 — 첫 화면에서
+           할 말이 아니라는 판단(오너 결정, 2026-08-03). 감춘 건 아니고 자리를 옮긴 것이다:
+           도메인 섹션 힌트 "지역을 나누는 단위는 도메인마다 다릅니다" · 도메인 칸의 unit 과
+           title · 제품 카드의 unit 이 그대로 말한다. 셋 다 폭에 상관없이 보인다. -->
+      <p class="sub">시간과 공간 두 축으로 <b>매일</b> 쌓아 <b>시계열·공간계열</b> 데이터를 함께 제공합니다.</p>
       <form class="search-hero" id="heroSearch">
         <div class="box">
           <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span>
@@ -405,7 +407,6 @@
         <a href="/catalog?q=외식">동네 상권</a>
       </div>
     </div>
-    <p class="lab ko fieldnote">격자 한 칸 = 행정동 하나<br>커버리지는 도메인마다 다름</p>
   </div>
 </header>
 
