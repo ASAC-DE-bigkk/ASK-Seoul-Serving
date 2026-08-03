@@ -9,7 +9,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ASK: SEOUL">
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
-<meta property="og:description" content="흩어진 서울 데이터를 같은 축 위에. 미리보기는 키 없이 무료.">
+<meta property="og:description" content="흩어진 서울 데이터를 같은 축 위에. 미리보기는 키 없이 바로.">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
 <style>
@@ -315,10 +315,7 @@
       <a href="/status">상태</a>
     </div>
     <span class="spacer"></span>
-    <!-- 'LOCAL' 은 우리 배포 환경이지 이용자가 알 일이 아니다. 남길 가치가 있는 건
-         "완성된 상용 서비스가 아니다"라는 사실뿐이라 그것만 남긴다. -->
-    <span class="env-pill"><i aria-hidden="true"></i>프로토타입</span>
-    <a class="nav-cta" href="/catalog#auth">무료로 시작</a>
+    <a class="nav-cta" href="/catalog#auth">시작하기</a>
   </div>
 </nav>
 
@@ -359,7 +356,7 @@
          그레인이 다른 제품을 더한 값이라 의미가 없다(제품별 행수는 카드에 유지) -->
     <div class="cell"><div class="lab">Join axis</div><div class="v">행정동<span class="u"> 코드</span></div><div class="k">도메인 공통 조인 키</div></div>
     <div class="cell"><div class="lab">Freshness</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
-    <div class="cell"><div class="lab">Free tier</div><div class="v">1,000<span class="u">회/일</span></div><div class="k">키당 무료 호출</div></div>
+    <div class="cell"><div class="lab">Daily quota</div><div class="v">1,000<span class="u">회/일</span></div><div class="k">키당 하루 호출 한도</div></div>
   </div>
 </div>
 
@@ -416,7 +413,7 @@
   <div class="cta">
     <div>
       <h3>지금 카탈로그에서 직접 확인하세요</h3>
-      <p>모든 제품이 미리보기 무료 — 마음에 들면 그때 키를 받으면 됩니다.</p>
+      <p>모든 제품을 키 없이 미리볼 수 있습니다 — 마음에 들면 그때 키를 받으면 됩니다.</p>
     </div>
     <div class="btns">
       <a class="btn-g" href="/catalog#auth">API 키 발급</a>
@@ -454,7 +451,7 @@
   </div>
   <div class="foot-btm">
     <span>© 2026 ASK: SEOUL</span>
-    <span class="r">프로토타입 · 가용성을 보장하지 않습니다</span>
+    <span class="r">가용성을 보장하지 않습니다</span>
   </div>
 </footer>
 
@@ -769,7 +766,7 @@ async function bootCatalog() {
       "<span class='q'>" + esc(p.product_question || "—") + "</span>" +
       "<span class='meta'><span><b>" + nf.format(p.row_count || 0) + "</b> 행</span>" +
       (d.unit ? "<span>" + esc(d.unit) + "</span>" : "") +
-      "<span class='free'>미리보기 무료</span></span></span></a>";
+      "<span class='free'>미리보기</span></span></span></a>";
   }).join("");
 }
 

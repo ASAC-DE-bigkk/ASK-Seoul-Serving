@@ -289,7 +289,7 @@
     </ul>
     <!-- 개발자용 페이지라 오류 형식(RFC 7807)은 남긴다 — 그건 붙일 때 실제로 필요한 정보다.
          반면 내부 계약 버전·배치 시각·이슈 번호는 이용자가 알 일이 아니라 뺐다. -->
-    <div class="foot">매일 1회 갱신<br>오류 응답 <code>RFC 7807</code><br>프로토타입 · 가용성 무보장
+    <div class="foot">매일 1회 갱신<br>오류 응답 <code>RFC 7807</code><br>가용성 무보장
       <br><a href="/legal#attribution">데이터 출처</a> · <a href="/legal#terms">이용약관</a> · <a href="/legal#privacy">개인정보</a>
       <br>© 2026 ASK: SEOUL</div>
   </aside>
@@ -299,8 +299,7 @@
       <h1 id="pageTitle">데이터 카탈로그</h1>
       <div class="search"><span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span><input type="search" id="q" placeholder="제품·질문·테이블명 검색"></div>
       <span class="spacer"></span>
-      <span class="env-pill"><i></i>프로토타입</span>
-      <span class="keychip" id="keychip" onclick="goHash('#auth')">키 미연결</span>
+        <span class="keychip" id="keychip" onclick="goHash('#auth')">키 미연결</span>
     </div>
 
     <div class="content">
@@ -417,7 +416,7 @@ let USAGE = {};
 const JOIN_KEY = /^(admin_dong_code|gu_code|stat_region_cd)$/;
 
 // 앵커 이동 — 브라우저의 로드 시점 점프에 맡길 수 없다. 목록·시작하기가 JS 로 렌더되면서
-// 앵커 위쪽 높이가 바뀌기 때문(홈의 '무료로 시작'·하단 버튼이 쓰는 /catalog#auth 진입이 맨 위에 떨어지던 원인).
+// 앵커 위쪽 높이가 바뀌기 때문(홈의 '시작하기'·하단 버튼이 쓰는 /catalog#auth 진입이 맨 위에 떨어지던 원인).
 // 같은 해시를 다시 눌러도 동작하도록 hashchange 가 아니라 직접 스크롤한다.
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 function goHash(hash, behavior) {
@@ -487,7 +486,6 @@ function renderStart() {
     step(2, "데이터 고르기", "답하고 싶은 질문으로 찾아보세요", "#catalog") +
     step(3, "바로 호출하기", "curl 한 줄 · JSON 응답", "#playground");
   $("terms").innerHTML =
-    "<span><b>무료</b></span>" +
     "<span>키당 하루 <b>1,000회</b> · 분당 <b>60회</b></span>" +
     "<span>매일 1회 갱신</span>" +
     "<span>REST · JSON 표준</span>";
