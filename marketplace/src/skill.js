@@ -5,7 +5,7 @@
 // 제품만 노출하고, 출처·권리·품질 증거가 아직 게시되지 않은 동안에는 데이터보다 먼저
 // `product_not_ready`를 반환한다. "모르는 데이터를 성공으로 보인다"보다 실패를 명시하는
 // 편이 등록 심사와 사용자 모두에게 안전하다.
-import { json, problem, safeRows } from "./shared.js";
+import { countUsage, json, problem, quotaHeaders, safeRows } from "./shared.js";
 
 export const SKILL_BUNDLE_ID = "seoul-urban-analytics";
 
@@ -22,6 +22,9 @@ export const SKILL_PRODUCT_IDS = [
 
 const PRODUCT_IDS = new Set(SKILL_PRODUCT_IDS);
 const PRODUCT_ID_RE = /^[a-z0-9_]+$/;
+const SQL_IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 500;
 
 export const isSkillProduct = (productId) => PRODUCT_IDS.has(productId);
 
@@ -33,6 +36,46 @@ function parseJsonArray(raw) {
   } catch {
     return [];
   }
+}
+
+function parseJsonObject(raw) {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+const nonEmpty = (value) => typeof value === "string" && value.trim().length > 0;
+const nonNegativeInteger = (value) => Number.isInteger(value) && value >= 0;
+
+function quoteIdentifier(value) {
+  if (!SQL_IDENTIFIER_RE.test(value)) throw new Error(`unsafe identifier: ${value}`);
+  return `"${value}"`;
+}
+
+function encodeCursor(publicationId, rowid) {
+  return btoa(JSON.stringify({ publication_id: publicationId, rowid }))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function decodeCursor(raw) {
+  try {
+    const parsed = JSON.parse(atob(raw.replace(/-/g, "+").replace(/_/g, "/")));
+    return nonEmpty(parsed.publication_id) && Number.isSafeInteger(parsed.rowid) && parsed.rowid >= 0
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseLimit(raw) {
+  if (raw === null) return DEFAULT_LIMIT;
+  if (!/^[1-9][0-9]*$/.test(raw)) return null;
+  return Math.min(Number(raw), MAX_LIMIT);
 }
 
 async function safeFirst(statement) {
@@ -68,10 +111,10 @@ async function loadSkillProduct(env, productId) {
 
   const catalog = await safeFirst(env.DB.prepare(
     "SELECT name, product_id, external, serving_status, publication_id, freshness, time_axis, " +
-    "columns, description, product_question FROM _catalog WHERE product_id = ?"
+    "columns, description, product_question, row_count FROM _catalog WHERE product_id = ?"
   ).bind(productId));
 
-  const [ext, columns] = catalog
+  const [ext, columns, sources, qualityRow] = catalog
     ? await Promise.all([
         safeFirst(env.DB.prepare(
           "SELECT grain, primary_key, time_axis, publication_id FROM d1_catalog_ext WHERE product_id = ?"
@@ -80,8 +123,18 @@ async function loadSkillProduct(env, productId) {
           "SELECT ordinal, column_name, type, description_ko, publication_id " +
           "FROM d1_catalog_columns WHERE product_id = ? ORDER BY ordinal"
         ).bind(productId)),
+        safeRows(env.DB.prepare(
+          "SELECT source_id, source_url, license, license_url, redistribution, attribution, rights_checked_at, " +
+          "publication_id FROM d1_catalog_sources WHERE product_id = ? ORDER BY source_id"
+        ).bind(productId)),
+        safeFirst(env.DB.prepare(
+          "SELECT source_row_count, d1_row_count, duplicate_primary_key_count, null_primary_key_count, " +
+          "freshness_as_of, freshness_slo_minutes, serving_status, measured_at, coverage_json, " +
+          "projection_schema_version, projection_schema_hash, publication_id " +
+          "FROM d1_product_quality WHERE product_id = ?"
+        ).bind(productId)),
       ])
-    : [null, null];
+    : [null, null, null, null];
 
   const blockers = [];
   if (!catalog) {
@@ -90,15 +143,65 @@ async function loadSkillProduct(env, productId) {
     if (catalog.external !== 1) blockers.push("not_externally_published");
     if (catalog.serving_status !== "published") blockers.push("not_serving_published");
     if (!catalog.publication_id) blockers.push("missing_publication_identity");
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(catalog.name || "")) blockers.push("invalid_table_identity");
     if (!ext) blockers.push("missing_structure_metadata");
     if (!columns || !columns.length) blockers.push("missing_column_metadata");
+    if (ext?.publication_id !== catalog.publication_id) blockers.push("structure_publication_mismatch");
+    if (ext?.time_axis && catalog.time_axis && ext.time_axis !== catalog.time_axis) {
+      blockers.push("time_axis_metadata_mismatch");
+    }
+    if (columns?.some((column) => column.publication_id !== catalog.publication_id)) {
+      blockers.push("column_metadata_publication_mismatch");
+    }
   }
 
-  // 현재 publisher가 제공하는 공개 메타 계약에는 출처 URL·license·rights·attribution 및
-  // 품질 게이트 결과가 없다. 이 서버가 값이나 합격 여부를 추정하면 데이터 신뢰성 증거를
-  // 위조하는 셈이므로, 계약이 공급될 때까지 모든 제품을 명시적으로 준비 불가로 둔다.
-  blockers.push("source_rights_metadata_contract_unavailable");
-  blockers.push("quality_metadata_contract_unavailable");
+  if (sources === null) {
+    blockers.push("source_rights_metadata_contract_unavailable");
+  } else if (!sources.length) {
+    blockers.push("missing_source_rights_evidence");
+  } else {
+    for (const source of sources) {
+      if (source.publication_id !== catalog?.publication_id) blockers.push("source_rights_publication_mismatch");
+      if (!nonEmpty(source.source_id) || !nonEmpty(source.source_url) || !nonEmpty(source.license) ||
+          !nonEmpty(source.license_url) || !nonEmpty(source.attribution) || !nonEmpty(source.rights_checked_at)) {
+        blockers.push("source_rights_evidence_incomplete");
+      }
+      if (source.redistribution !== "allowed_with_attribution") {
+        blockers.push("source_redistribution_not_allowed");
+      }
+    }
+  }
+
+  const coverage = parseJsonObject(qualityRow?.coverage_json);
+  if (!qualityRow) {
+    blockers.push("quality_metadata_contract_unavailable");
+  } else {
+    if (qualityRow.publication_id !== catalog?.publication_id) blockers.push("quality_publication_mismatch");
+    if (qualityRow.serving_status !== "published") blockers.push("quality_status_not_published");
+    if (!nonNegativeInteger(qualityRow.source_row_count) || !nonNegativeInteger(qualityRow.d1_row_count) ||
+        !nonNegativeInteger(qualityRow.duplicate_primary_key_count) || !nonNegativeInteger(qualityRow.null_primary_key_count)) {
+      blockers.push("quality_counts_invalid");
+    }
+    if (qualityRow.d1_row_count !== catalog?.row_count) blockers.push("quality_d1_row_count_mismatch");
+    if (qualityRow.duplicate_primary_key_count !== 0 || qualityRow.null_primary_key_count !== 0) {
+      blockers.push("quality_primary_key_violation");
+    }
+    if (!nonEmpty(qualityRow.freshness_as_of) || !Number.isInteger(qualityRow.freshness_slo_minutes) ||
+        qualityRow.freshness_slo_minutes < 1 || !nonEmpty(qualityRow.measured_at)) {
+      blockers.push("quality_freshness_evidence_incomplete");
+    }
+    if (!nonEmpty(qualityRow.projection_schema_version) || !nonEmpty(qualityRow.projection_schema_hash)) {
+      blockers.push("public_projection_identity_missing");
+    }
+    if (!coverage || coverage.status !== "passed" || !nonEmpty(coverage.field) ||
+        !Number.isInteger(coverage.expected_distinct_count) || !Number.isInteger(coverage.observed_distinct_count) ||
+        typeof coverage.minimum_ratio !== "number" || typeof coverage.ratio !== "number" ||
+        coverage.expected_distinct_count < 1 || coverage.observed_distinct_count < 0 ||
+        !(coverage.minimum_ratio > 0 && coverage.minimum_ratio <= 1) ||
+        coverage.ratio < coverage.minimum_ratio) {
+      blockers.push("quality_coverage_not_passing");
+    }
+  }
 
   const metadataPublicationId = ext?.publication_id ?? null;
   const metaOf = metadataPublicationId && catalog?.publication_id &&
@@ -108,6 +211,7 @@ async function loadSkillProduct(env, productId) {
 
   return {
     product_id: productId,
+    table_name: catalog?.name ?? null,
     publication_id: catalog?.publication_id ?? null,
     freshness: catalog?.freshness ?? null,
     description: catalog?.description ?? null,
@@ -129,6 +233,32 @@ async function loadSkillProduct(env, productId) {
         type: column.type,
         description_ko: column.description_ko,
       })),
+      sources: sources === null ? null : (sources || []).map((source) => ({
+        source_id: source.source_id,
+        source_url: source.source_url,
+        license: source.license,
+        license_url: source.license_url,
+        redistribution: source.redistribution,
+        attribution: source.attribution,
+        rights_checked_at: source.rights_checked_at,
+        publication_id: source.publication_id,
+      })),
+      quality: qualityRow
+        ? {
+            source_row_count: qualityRow.source_row_count,
+            d1_row_count: qualityRow.d1_row_count,
+            duplicate_primary_key_count: qualityRow.duplicate_primary_key_count,
+            null_primary_key_count: qualityRow.null_primary_key_count,
+            freshness_as_of: qualityRow.freshness_as_of,
+            freshness_slo_minutes: qualityRow.freshness_slo_minutes,
+            serving_status: qualityRow.serving_status,
+            measured_at: qualityRow.measured_at,
+            projection_schema_version: qualityRow.projection_schema_version,
+            projection_schema_hash: qualityRow.projection_schema_hash,
+            publication_id: qualityRow.publication_id,
+            coverage,
+          }
+        : null,
     },
   };
 }
@@ -166,10 +296,92 @@ export async function handleSkillData(env, productId, _searchParams, _keyRow, tr
   // 상황에서 호출 한도를 잃게 하면 관측 가능한 운영 상태가 숨겨진다.
   if (!product.registration_ready) return notReady(product);
 
-  // source/rights와 quality 계약이 도입돼 위 게이트가 열릴 때에만, 다음 PR에서
-  // publication_id·schema_version·정규화된 필터·keyset 위치를 묶은 K-Skill 커서를
-  // 구현한다. 그 전에는 행을 하나도 조회하지 않는다.
-  return problem(503, "data serving unavailable",
-    "K-Skill 데이터 조회 계약이 아직 활성화되지 않았다",
-    { code: "data_serving_unavailable", product_id: product.product_id });
+  const publicColumns = product.metadata.columns.map((column) => column.name);
+  const allowedColumns = new Set(publicColumns);
+  if (!SQL_IDENTIFIER_RE.test(product.table_name || "") || !publicColumns.length ||
+      publicColumns.some((column) => !SQL_IDENTIFIER_RE.test(column))) {
+    // registration_ready는 D1 metadata의 publication identity까지 확인했지만, identifier
+    // 형식은 SQL 경계에서 한 번 더 fail-closed 한다. 카탈로그 오염이 쿼리로 번지지 않는다.
+    return problem(503, "data serving unavailable", "안전한 공개 조회 스키마를 확인할 수 없다",
+      { code: "data_serving_contract_invalid", product_id: product.product_id });
+  }
+
+  const limit = parseLimit(_searchParams.get("limit"));
+  if (limit === null) {
+    return problem(400, "invalid limit", `limit 는 1 이상 정수여야 하며 최대 ${MAX_LIMIT}까지다`);
+  }
+
+  const where = [];
+  const binds = [];
+  for (const [key, value] of _searchParams.entries()) {
+    if (["limit", "from", "to", "cursor"].includes(key)) continue;
+    if (!allowedColumns.has(key)) {
+      return problem(400, "unknown filter", `'${key}' 컬럼은 이 제품의 공개 projection에 없다`, {
+        product_id: product.product_id,
+      });
+    }
+    where.push(`${quoteIdentifier(key)} = ?`);
+    binds.push(value);
+    trace.filterCols = (trace.filterCols || []).concat(key);
+  }
+
+  const timeAxis = product.metadata.structure?.time_axis;
+  if (_searchParams.get("from") || _searchParams.get("to")) {
+    if (!timeAxis || !allowedColumns.has(timeAxis)) {
+      return problem(400, "no time axis", "이 제품은 공개 time axis가 없어 from/to를 지원하지 않는다", {
+        product_id: product.product_id,
+      });
+    }
+    if (_searchParams.get("from")) {
+      where.push(`${quoteIdentifier(timeAxis)} >= ?`);
+      binds.push(_searchParams.get("from"));
+    }
+    if (_searchParams.get("to")) {
+      where.push(`${quoteIdentifier(timeAxis)} <= ?`);
+      binds.push(_searchParams.get("to"));
+    }
+  }
+
+  const rawCursor = _searchParams.get("cursor");
+  if (rawCursor) {
+    const cursor = decodeCursor(rawCursor);
+    if (!cursor) return problem(400, "invalid cursor", "이전 응답의 next_cursor 값을 그대로 넣어야 한다");
+    if (cursor.publication_id !== product.publication_id) {
+      return problem(409, "cursor expired", "제품이 재게시됐다 — cursor 없이 첫 페이지부터 다시 조회할 것", {
+        publication_id: product.publication_id,
+      });
+    }
+    where.push("rowid > ?");
+    binds.push(cursor.rowid);
+  }
+
+  const usage = await countUsage(env, _keyRow);
+  if (usage.exceeded) {
+    return problem(429, "daily quota exceeded", `일일 쿼터 ${usage.quota}건 소진 — KST 자정에 리셋`);
+  }
+
+  const selectColumns = publicColumns.map(quoteIdentifier).join(", ");
+  const sql = `SELECT rowid AS "_rid", ${selectColumns} FROM ${quoteIdentifier(product.table_name)}` +
+    (where.length ? ` WHERE ${where.join(" AND ")}` : "") +
+    ` ORDER BY rowid LIMIT ${limit + 1}`;
+  const { results } = await env.DB.prepare(sql).bind(...binds).all();
+  const hasMore = results.length > limit;
+  const page = hasMore ? results.slice(0, limit) : results;
+  const lastRowId = page.length ? page[page.length - 1]._rid : null;
+  const rows = page.map(({ _rid, ...row }) => row);
+
+  trace.rows = rows.length;
+  return json({
+    bundle_id: SKILL_BUNDLE_ID,
+    product_id: product.product_id,
+    table_name: product.table_name,
+    publication_id: product.publication_id,
+    row_count: rows.length,
+    limit,
+    time_axis: timeAxis ?? null,
+    has_more: hasMore,
+    next_cursor: hasMore ? encodeCursor(product.publication_id, lastRowId) : null,
+    usage: { used: usage.used, daily_quota: usage.quota },
+    rows,
+  }, 200, quotaHeaders(usage.used, usage.quota));
 }

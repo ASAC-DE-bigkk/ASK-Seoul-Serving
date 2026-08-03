@@ -4,7 +4,7 @@
     "title": "seoul-urban-analytics K-Skill API",
     "version": "1.0.0-draft",
     "summary": "K-Skill 등록 심사용 서울 도시 분석 데이터 제품 계약",
-    "description": "seoul-urban-analytics K-Skill만을 위한 읽기 전용 API다. 공용 Marketplace /v1 API와 제품 범위·응답 계약은 분리하지만, 같은 API Key·버스트 제한·오류·요청 추적 정책을 사용한다. 출처·이용권리·품질 증거가 Publisher에서 게시되기 전에는 데이터 행을 반환하지 않고 503 product_not_ready로 실패한다."
+    "description": "seoul-urban-analytics K-Skill만을 위한 읽기 전용 API다. 공용 Marketplace /v1 API와 제품 범위·응답 계약은 분리하지만, 같은 API Key·버스트 제한·오류·요청 추적 정책을 사용한다. 데이터는 source/right·quality·구조 메타데이터가 현재 publication_id와 모두 일치하고 품질 게이트를 통과한 제품에만 반환한다."
   },
   "servers": [{ "url": "/", "description": "이 서비스가 서빙 중인 호스트" }],
   "security": [{ "bearerAuth": [] }],
@@ -44,13 +44,22 @@
     "/skill/v1/products/{product_id}/data": {
       "get": {
         "summary": "준비된 제품의 데이터 조회",
-        "description": "현재 출처·이용권리·품질 메타 계약이 미게시 상태이므로 모든 제품은 503 product_not_ready를 반환한다. 이 응답은 빈 데이터 집합이 아니다. 해당 증거 계약과 publication-bound cursor 계약이 준비된 뒤에만 200 데이터 페이지를 활성화한다.",
+        "description": "현재 publication_id에 결속된 출처·이용권리·품질·구조 증거가 모두 통과한 제품만 데이터를 반환한다. 미준비 503은 빈 데이터 집합이 아니다. cursor는 publication_id에 결속되므로 재게시 뒤에는 409로 만료된다.",
         "operationId": "getSeoulUrbanAnalyticsData",
-        "parameters": [{ "$ref": "#/components/parameters/ProductId" }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ProductId" },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/From" },
+          { "$ref": "#/components/parameters/To" },
+          { "$ref": "#/components/parameters/Cursor" }
+        ],
         "responses": {
+          "200": { "description": "공개 projection 행과 다음 페이지 cursor", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DataPage" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/CursorExpired" },
           "429": { "$ref": "#/components/responses/TooManyRequests" },
           "503": { "$ref": "#/components/responses/ProductNotReady" }
         }
@@ -81,6 +90,33 @@
             "transit_parking_full_risk"
           ]
         }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 }
+      },
+      "From": {
+        "name": "from",
+        "in": "query",
+        "required": false,
+        "description": "제품의 공개 time axis 하한. time axis가 없는 제품은 사용할 수 없다.",
+        "schema": { "type": "string" }
+      },
+      "To": {
+        "name": "to",
+        "in": "query",
+        "required": false,
+        "description": "제품의 공개 time axis 상한. time axis가 없는 제품은 사용할 수 없다.",
+        "schema": { "type": "string" }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "description": "직전 응답 next_cursor. 발행본이 달라지면 409로 만료된다.",
+        "schema": { "type": "string" }
       }
     },
     "schemas": {
@@ -117,12 +153,31 @@
                   "publication_id": { "type": ["string", "null"] },
                   "meta_of": { "type": ["string", "null"], "enum": ["previous_publication", null] },
                   "structure": { "type": ["object", "null"] },
-                  "columns": { "type": "array", "items": { "type": "object" } }
+                  "columns": { "type": "array", "items": { "type": "object" } },
+                  "sources": { "type": ["array", "null"], "items": { "type": "object" } },
+                  "quality": { "type": ["object", "null"] }
                 }
               }
             }
           }
         ]
+      },
+      "DataPage": {
+        "type": "object",
+        "required": ["bundle_id", "product_id", "publication_id", "row_count", "limit", "has_more", "next_cursor", "rows"],
+        "properties": {
+          "bundle_id": { "const": "seoul-urban-analytics" },
+          "product_id": { "type": "string" },
+          "table_name": { "type": "string" },
+          "publication_id": { "type": "string" },
+          "row_count": { "type": "integer", "minimum": 0 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+          "time_axis": { "type": ["string", "null"] },
+          "has_more": { "type": "boolean" },
+          "next_cursor": { "type": ["string", "null"] },
+          "usage": { "type": "object" },
+          "rows": { "type": "array", "items": { "type": "object" } }
+        }
       },
       "Problem": {
         "type": "object",
@@ -142,6 +197,8 @@
       "Unauthorized": { "description": "누락되었거나 알 수 없는 API Key", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
       "Forbidden": { "description": "폐기된 API Key", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
       "NotFound": { "description": "번들에 없는 제품", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
+      "InvalidRequest": { "description": "허용되지 않은 filter·limit·cursor", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
+      "CursorExpired": { "description": "cursor가 다른 publication_id를 가리킴", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
       "TooManyRequests": { "description": "공유 버스트 제한 초과", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
       "ProductNotReady": { "description": "필수 신뢰성 증거 또는 데이터 조회 계약이 준비되지 않음", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } }
     }
