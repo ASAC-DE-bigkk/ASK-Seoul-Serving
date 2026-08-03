@@ -4,7 +4,7 @@
   "type": "module",
   "description": "V1 마켓플레이스 프로토타입 — 키 발급 + 쿼터 + 6개 도메인 서빙 API (ASK-Seoul#58, 로컬 전용)",
   "scripts": {
-    "seed": "wrangler d1 execute ask-seoul-dev-d1 --local --file=migrations/0001_keys_usage.sql && wrangler d1 execute ask-seoul-dev-d1 --local --file=migrations/0002_request_log.sql && wrangler d1 execute ask-seoul-dev-d1 --local --file=migrations/0003_burst.sql && wrangler d1 execute ask-seoul-dev-d1 --local --file=fixtures/seed.sql",
+    "seed": "wrangler d1 execute ask-seoul-dev-d1 --local --file=migrations/0001_keys_usage.sql && wrangler d1 execute ask-seoul-dev-d1 --local --file=migrations/0002_request_log.sql && wrangler d1 execute ask-seoul-dev-d1 --local --file=migrations/0003_burst.sql && (wrangler d1 execute ask-seoul-dev-d1 --local --file=migrations/0004_request_id.sql || echo '0004: request_id 컬럼 이미 있음 — 건너뜀 (ALTER 는 IF NOT EXISTS 가 없다)') && (wrangler d1 execute ask-seoul-dev-d1 --local --file=migrations/0005_behavior_log.sql || echo '0005: 행동 축 컬럼 이미 있음 — 건너뜀') && wrangler d1 execute ask-seoul-dev-d1 --local --file=fixtures/seed.sql",
     "dev": "wrangler dev",
     "verify:log": "node scripts/verify-request-log.mjs",
     "test": "node --test \"scripts/*.test.mjs\"",

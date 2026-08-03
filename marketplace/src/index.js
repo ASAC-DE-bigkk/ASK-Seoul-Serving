@@ -411,12 +411,18 @@ const LOG_SWEEP_RATE = 0.02;  // 크론 없이, 로그 100건당 ~2회 낡은 �
 async function logRequest(env, trace) {
   try {
     await env.DB.prepare(
-      "INSERT INTO _request_log (ts, route, table_name, status, key_hash, filters, row_count, ms, request_id) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO _request_log (ts, route, table_name, status, key_hash, filters, row_count, ms, request_id, " +
+      "ua_class, agent_name, agent_mode, agent_verified, country, asn, referer_host, page_path, intent) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       new Date().toISOString(), trace.route, trace.table ?? null, trace.status,
       trace.keyHash ?? null, trace.filterCols ? trace.filterCols.join(",") : null,
-      trace.rows ?? null, trace.ms, trace.requestId ?? null
+      trace.rows ?? null, trace.ms, trace.requestId ?? null,
+      trace.uaClass ?? null, trace.agentName ?? null, trace.agentMode ?? null,
+      null,                       // agent_verified — §7-④ NULL 시작 (검증 수단 확보 전)
+      trace.country ?? null, trace.asn ?? null, trace.refererHost ?? null,
+      null,                       // page_path — §7-② 합의 후 배선 (route='page' 도입과 함께)
+      trace.intent ?? null
     ).run();
     if (Math.random() < LOG_SWEEP_RATE) {
       const cutoff = new Date(Date.now() - LOG_RETENTION_DAYS * 86400000).toISOString();
@@ -498,6 +504,21 @@ export default {
 
     const started = Date.now();
     const trace = { route: null, requestId: newRequestId() };
+
+    // 행동 축(#9) — 원문 UA 는 분류만 하고 버린다. cf 는 로컬(wrangler dev)에선 더미·부재라
+    // NULL = 모른다(F-3)로 남고, 공개 배포 후 저절로 채워진다. intent 는 클라이언트가
+    // 자발적으로 실어 보내는 옵트인 슬러그(#3) — 어휘 모양([a-z0-9-])만 통과시켜
+    // 임의 문자열이 저장되는 것을 막는다(값이 아니라 축만, C-6).
+    const cls = classifyClient(request.headers.get("user-agent"));
+    trace.uaClass = cls.ua_class;
+    trace.agentName = cls.agent_name;
+    trace.agentMode = cls.agent_mode;
+    trace.country = request.cf?.country ?? null;
+    trace.asn = request.cf?.asn ?? null;
+    const referer = request.headers.get("referer");
+    if (referer) { try { trace.refererHost = new URL(referer).host; } catch {} }
+    const intent = (request.headers.get("x-ask-intent") || "").toLowerCase();
+    if (/^[a-z0-9][a-z0-9-]{0,63}$/.test(intent)) trace.intent = intent;
     let res = await route(request, env, url, trace);
 
     // 오류는 본문에도 요청 ID 를 넣는다 — 사람이 복사해 오는 건 헤더가 아니라 JSON 이다
