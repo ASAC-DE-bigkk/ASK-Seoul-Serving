@@ -23,7 +23,7 @@ ops-dashboard 의 문서는 **세 층**이고, 층마다 구속력이 다르다.
 | [0006](decision/0006-key-hash-identifier.md) | 조치 식별자 `key_hash` | prefix 는 충돌한다 — 상태는 active/revoked 두 개 |
 | [0007](decision/0007-schema-single-file-reset.md) | `_ops_*` 단일 파일 리셋 | 잃을 상태가 없는 동안만 — 승격 시 증분 전환 |
 | [0008](decision/0008-deferred-scope.md) | 후속으로 미룬 것 | 안 하기로 한 것의 전체 목록 + 도입 신호 |
-| [0009](decision/0009-per-env-config.md) | 환경별 설정 분리 | `config/local`·`config/prod` — 같은 이름 다른 디렉토리, 루트 설정은 지운다 |
+| [0009](decision/0009-per-env-config.md) | 환경별 설정 | 한 파일 + `[env.production]` — 플래그 없으면 로컬, 실수의 방향이 안전한 쪽 |
 
 ## 방향 — docs/direction.md
 

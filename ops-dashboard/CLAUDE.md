@@ -70,10 +70,10 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
   → [0006](docs/decision/0006-key-hash-identifier.md)
 - **쓰기 경로는 언제나 서버의 `requireWrite`를 거친다.** 화면의 `can_write` 는 버튼 노출용일
   뿐이다 — 보안 판단은 서버가 한다. → [0004](docs/decision/0004-read-open-write-token.md)
-- **비밀값(`OPS_TOKEN` 등)은 `config/local/.dev.vars`.** 커밋·출력 금지. 프로젝트 루트가
-  아니다 — wrangler 는 `-c` 로 준 설정 파일 옆에서 찾는다(루트에 두면 조용히 안 읽힌다).
-- **설정은 환경별로 갈린다** — `config/local/` · `config/prod/`, 같은 파일 이름 다른 디렉토리.
-  루트에 `wrangler.toml` 을 되살리지 않는다. → [../docs/environments.md](../docs/environments.md)
+- **비밀값(`OPS_TOKEN` 등)은 `.dev.vars`.** 커밋·출력 금지.
+- **환경은 `wrangler.toml` 한 파일 안에서 갈린다** — 기본 = 로컬, `[env.production]` = 배포.
+  플래그 없으면 언제나 로컬이다. env 섹션은 상속되지 않으니 assets·`run_worker_first` 는
+  두 곳을 같이 고친다. → [../docs/environments.md](../docs/environments.md) · [0009](docs/decision/0009-per-env-config.md)
 - **샘플 데이터는 `is_sample=1`** 로 박고 화면에 배지를 띄운다. 실측인 척 조용히 섞이는 게
   최악이다. → [0005](docs/decision/0005-slo-snapshot-to-d1.md)
 
