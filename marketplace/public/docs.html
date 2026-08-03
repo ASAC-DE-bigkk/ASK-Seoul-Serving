@@ -35,8 +35,8 @@
   /* 선택된 탭은 아래 pre 와 한 몸이라 두 모드 모두 어둡다 — 값도 pre 와 같이 간다 */
   #t-curl:checked ~ .labels label[for=t-curl],
   #t-py:checked ~ .labels label[for=t-py],
-  #t-js:checked ~ .labels label[for=t-js] { background:#08110f; color:#fff;
-                                            border-color:rgba(255,255,255,.10); }
+  #t-js:checked ~ .labels label[for=t-js] { background:var(--term); color:#fff;
+                                            border-color:var(--term-line); }
   #t-curl:checked ~ #p-curl, #t-py:checked ~ #p-py, #t-js:checked ~ #p-js { display:block; }
   .sidenote { font-size:12.5px; color:var(--faint); margin-top:6px; }
 </style>

@@ -20,22 +20,23 @@
 </script>
 <style>
   :root {
-    /* 팔레트는 랜딩(index.html)과 같은 다크 단청 — 두 페이지가 어긋나면 다른 서비스로 보인다.
-       액센트는 민트 하나(테라코타 2색 체제 폐기), hover 는 어두워지지 않고 밝아진다 */
-    --bg:#070c0b; --panel:#0d1413; --panel-2:#111a18;
-    --sidebar:#0a100f; --sidebar-hi:#15201e;
-    --sidebar-ink:#c6d8d2; --sidebar-dim:#647a74;
-    --ink:#e7f2ee; --muted:#9db3ac; --faint:#647a74;
-    --line:rgba(231,242,238,.07); --line-strong:rgba(231,242,238,.14);
-    --accent:#3ce0c4; --accent-deep:#7deed8; --accent-ink:#04211b;
-    --accent-soft:rgba(60,224,196,.09); --accent-line:rgba(60,224,196,.30);
-    --green-soft:rgba(64,222,142,.10); --green-ink:#4ade80;
-    --amber-soft:rgba(251,191,36,.12); --amber-ink:#fbbf24; --red-soft:rgba(248,113,113,.10); --red-ink:#f87171;
-    --shadow-xs:0 0 0 0 transparent;
-    --shadow-sm:0 1px 3px rgba(0,0,0,.3);
-    /* hover 를 accent-deep 이 아니라 따로 둔 이유는 index.html 과 같다 — 두 모드에서
-       방향이 반대다(다크는 밝아지고, 라이트는 진해진다) */
-    --accent-hover:#7deed8;
+    /* 팔레트는 랜딩(index.html)의 :root 와 같은 값이다 — 어긋나면 다른 서비스로 보인다.
+       라이트 기본이고 액센트는 딥 그린 하나이며 면을 칠하지 않는다(링크·버튼·상태만). */
+    --bg:#f7f8f8; --panel:#ffffff; --panel-2:#f1f3f2;
+    --ink:#0f1b1a; --muted:#55655f; --faint:#64716d;
+    --line:#e5e9e7; --line-strong:#d3dad7;
+    /* 사이드바도 이제 밝은 판이다 — 콘솔이라고 어두울 이유는 없고, 어두운 면이 여럿이면
+       무엇이 강조인지 사라진다. 어두운 건 호출 예시(.endpoint) 하나만 남긴다. */
+    --sidebar:#fbfcfc; --sidebar-hi:#eef2f0;
+    --sidebar-ink:#55655f; --sidebar-dim:#64716d; --sidebar-line:#e5e9e7;
+    --accent:#0b6e60; --accent-hover:#0a5c50; --accent-deep:#0b6e60; --accent-ink:#ffffff;
+    --accent-soft:rgba(11,110,96,.06); --accent-line:rgba(11,110,96,.22);
+    --green-ink:#15803d; --green-soft:rgba(21,128,61,.08);
+    --amber-ink:#b45309; --amber-soft:rgba(180,83,9,.08);
+    --red-ink:#b91c1c; --red-soft:rgba(185,28,28,.07);
+    --term:#0f1b1a; --term-line:rgba(255,255,255,.10);
+    --shadow-xs:none;
+    --shadow-sm:0 1px 2px rgba(15,27,26,.05);
     --mono:ui-monospace,'Cascadia Code',Consolas,'Malgun Gothic',monospace;
     /* mono 는 라틴 식별자 전용이다 — Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
        굴림 계열에 대체되고 작은 급수에서 뭉개진다(실측). 한글 라벨은 --sans 로 되돌린다 */
@@ -43,18 +44,20 @@
            system-ui,-apple-system,'Noto Sans KR',sans-serif;
   }
 
-  /* ─── 라이트 모드 ── 랜딩(index.html)의 같은 블록과 값이 같아야 한다.
-     --sidebar* 는 덮어쓰지 않는다: 사이드바는 두 모드 모두 어둡다(랜딩의 nav 와 같은 이유). */
-  :root[data-theme="light"] {
-    --bg:#f6f7f6; --panel:#ffffff; --panel-2:#eef3f1;
-    --ink:#12211f; --muted:#3d534f;
-    /* 다크의 #75898b 를 그대로 쓰면 흰 바탕에서 3.5:1 로 AA 미달 — 흐림의 방향이 반대다 */
-    --faint:#5f7375;
-    --line:#e6eae8; --line-strong:#ccd5d2;
-    /* 흰 바탕 위 민트는 대비 1.7:1 로 글자에 못 쓴다 — 글자용만 진청록으로 내린다 */
-    --accent-deep:#0b6e60; --accent-hover:#23cdb0;
-    --green-ink:#15803d; --amber-ink:#b45309; --red-ink:#b91c1c;
-    --shadow-sm:0 1px 2px rgba(18,33,31,.06);
+  /* ─── 다크 모드 ── 랜딩(index.html)의 같은 블록과 값이 같아야 한다 */
+  :root[data-theme="dark"] {
+    --bg:#0d1211; --panel:#141a19; --panel-2:#1a2220;
+    --ink:#e9eeec; --muted:#9aa8a4; --faint:#7d8b86;
+    --line:rgba(233,238,236,.08); --line-strong:rgba(233,238,236,.15);
+    --sidebar:#0a0f0e; --sidebar-hi:#1a2220;
+    --sidebar-ink:#9aa8a4; --sidebar-dim:#7d8b86; --sidebar-line:rgba(233,238,236,.08);
+    --accent:#35a892; --accent-hover:#4cc4ac; --accent-deep:#5fceb6; --accent-ink:#04211b;
+    --accent-soft:rgba(53,168,146,.12); --accent-line:rgba(53,168,146,.30);
+    --green-ink:#4ade80; --green-soft:rgba(74,222,128,.10);
+    --amber-ink:#fbbf24; --amber-soft:rgba(251,191,36,.12);
+    --red-ink:#f87171; --red-soft:rgba(248,113,113,.10);
+    --term:#0a100f;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
   }
   * { box-sizing:border-box; margin:0; }
   html { scroll-behavior:smooth; }
@@ -68,14 +71,14 @@
 
   .side { background:var(--sidebar); color:var(--sidebar-ink); padding:16px 0 0; position:sticky; top:0;
           height:100vh; overflow-y:auto; display:flex; flex-direction:column;
-          border-right:1px solid rgba(255,255,255,.06); }
+          border-right:1px solid var(--sidebar-line); }
   .side .brand { display:flex; align-items:center; gap:10px; padding:6px 18px 16px;
-                 border-bottom:1px solid rgba(255,255,255,.07); margin-bottom:8px; }
+                 border-bottom:1px solid var(--sidebar-line); margin-bottom:8px; }
   .side .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
-                       background:linear-gradient(140deg,#0f6f68,#2ee6c3);
+                       background:var(--accent);
                        display:flex; align-items:center; justify-content:center;
                        font-weight:800; font-size:13.5px; color:#04211b; letter-spacing:-.02em; }
-  .side .brand .nm { font-weight:700; font-size:13.5px; color:#fff; letter-spacing:-.01em; line-height:1.25; }
+  .side .brand .nm { font-weight:700; font-size:13.5px; color:var(--ink); letter-spacing:-.01em; line-height:1.25; }
   .side .brand .sub { display:block; font-weight:500; font-size:11px; color:var(--sidebar-dim);
                       letter-spacing:.02em; }
   .side .group { padding:16px 18px 6px; font-size:10.5px; font-weight:700; letter-spacing:.1em;
@@ -83,23 +86,23 @@
   .dnav { list-style:none; padding:0 8px; }
   .dnav li { display:flex; align-items:center; gap:9px; padding:7px 12px; font-size:13.5px; cursor:pointer;
              border-radius:6px; margin-bottom:1px; font-weight:500; color:var(--sidebar-ink); }
-  .dnav li:hover { background:rgba(255,255,255,.05); color:#fff; }
-  .dnav li.active { background:var(--sidebar-hi); color:#fff; font-weight:600;
+  .dnav li:hover { background:var(--sidebar-hi); color:var(--ink); }
+  .dnav li.active { background:var(--sidebar-hi); color:var(--ink); font-weight:600;
                     box-shadow:inset 2px 0 0 var(--accent); }
   .dnav li.soon { cursor:default; color:var(--sidebar-dim); }
   .dnav li.soon:hover { background:none; color:var(--sidebar-dim); }
   .dnav .dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none; }
   .dnav li.soon .dot { background:#294a45; }
   .dnav .cnt { margin-left:auto; font-size:11px; font-variant-numeric:tabular-nums;
-               background:rgba(255,255,255,.08); border-radius:4px; padding:1px 6px; color:var(--sidebar-ink); }
+               background:var(--sidebar-hi); border-radius:4px; padding:1px 6px; color:var(--sidebar-ink); }
   .dnav .soon-tag { margin-left:auto; font-size:9.5px; padding:1px 6px; border-radius:4px;
-                    background:rgba(255,255,255,.06); color:var(--sidebar-dim); letter-spacing:.02em; }
+                    background:var(--sidebar-hi); color:var(--sidebar-dim); letter-spacing:.02em; }
   .side .foot { margin-top:auto; padding:14px 18px 16px; font-size:11px; color:var(--sidebar-dim);
-                line-height:1.9; border-top:1px solid rgba(255,255,255,.07); }
+                line-height:1.9; border-top:1px solid var(--sidebar-line); }
   .side .foot b { color:var(--sidebar-ink); font-weight:600; }
   .side .foot code { font-family:var(--mono); font-size:10.5px; }
   .side .foot a { color:var(--sidebar-ink); text-decoration:none; }
-  .side .foot a:hover { color:#fff; text-decoration:underline; text-underline-offset:2px; }
+  .side .foot a:hover { color:var(--accent-deep); text-decoration:underline; text-underline-offset:2px; }
 
   .main { min-width:0; }
   .topbar { background:var(--panel); border-bottom:1px solid var(--line); padding:0 28px; height:52px;
@@ -131,9 +134,9 @@
                padding:0; border:1px solid var(--line-strong); border-radius:6px; background:var(--panel);
                color:var(--muted); cursor:pointer; }
   .theme-btn:hover { border-color:var(--accent-line); color:var(--accent-deep); }
-  .theme-btn .moon { display:none; }
-  :root[data-theme="light"] .theme-btn .sun { display:none; }
-  :root[data-theme="light"] .theme-btn .moon { display:block; }
+  .theme-btn .sun { display:none; }
+  :root[data-theme="dark"] .theme-btn .sun { display:block; }
+  :root[data-theme="dark"] .theme-btn .moon { display:none; }
 
   .content { padding:24px 28px 64px; max-width:1160px; }
   .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; }
@@ -271,7 +274,7 @@
   /* 호출 예시는 두 모드 모두 어둡다 — 랜딩의 터미널 데모와 같은 이유(실행 화면으로 읽혀야 한다).
      그래서 테두리도 본문 토큰이 아니라 판 위에서 흐린 흰선이다 — --line-strong 을 쓰면
      라이트에서 어두운 블록을 밝은 테가 두르는 꼴이 된다 */
-  .endpoint { font-family:var(--mono); font-size:12.5px; background:#050908; color:#e4e9f1;
+  .endpoint { font-family:var(--mono); font-size:12.5px; background:var(--term); color:#e4e9f1;
               border-radius:6px; padding:10px 13px; overflow-x:auto; white-space:pre;
               border:1px solid rgba(255,255,255,.10); }
   .endpoint .m { color:#4ade80; font-weight:700; }
