@@ -34,7 +34,7 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 
 | 탭 | 묻는 질문 | 원본 |
 |---|---|---|
-| 데이터 준비 상태 | 수집·변환이 제 몫을 했나 | `_ops_slo` (gold_*_slo_daily 스냅샷) |
+| 데이터 준비 상태 | 수집·변환이 제 몫을 했나 | **조회 DB 4종**(`_ops_run_event` 등, ASAC-DAG 소유) + `_ops_slo`(보조·합성) |
 | 응답 상태 | 외부에 잘 나가고 있나 | `_request_log` (게이트웨이가 쌓는다) |
 | API 사용량 | 무엇이 얼마나 쓰이나 | `_request_log` + `_catalog` |
 | 이용자 키 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_request_log` |
@@ -43,11 +43,16 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 
 ```text
 단일 Worker (src/index.js)          — GET /api/summary · /api/pipeline · /api/usage · /api/usage/<api>, GET·POST /api/keys
-+ Static Assets (public/index.html) — 탭 3개짜리 단일 페이지
++ Static Assets (public/index.html) — 탭 4개짜리 단일 페이지
 + 공유 로컬 D1                       — 게이트웨이(../marketplace)와 같은 상태 (--persist-to)
-+ migrations/ + fixtures/           — _ops_slo·_ops_domain 정본과 시드
-+ scripts/load_slo.py               — Trino → D1 임시 로더 (export task 명세를 겸함)
++ 원격 dev D1 (npm run dev:remote)  — 파이프라인 실행 기록 4종은 여기에만 있다
++ migrations/ + fixtures/           — _ops_slo·_ops_domain **만** 만든다(남의 표 금지)
++ scripts/load_slo.py               — Trino 폴백, 정규 경로 아님 (0005 — 축 1 완료 시 폐기)
 ```
+
+**파이프라인 실행 기록(4종)은 로컬 Miniflare 에 없다.** 팀 dev D1 에 있으므로
+`npm run dev:remote`(원격 바인딩)로 띄워야 보인다. `--remote` 는 읽기 전용 모드가 아니라
+그 상태의 키 조치가 팀 DB 에 적용된다 — **보기 위한 모드다**([0002](docs/decision/0002-local-only-mentor-gate.md)).
 
 Queues, R2, Durable Objects, Analytics Engine, Terraform, Cloudflare Access,
 TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호는
