@@ -46,6 +46,7 @@ decision/ 이 정한다.
 
 | 정본 | 내용 |
 |---|---|
+| [`../../docs/setup.md`](../../docs/setup.md) | 로컬 실행 매뉴얼(macOS/Windows) — **게이트웨이 담당자와 공동 관리**. 실행 절차는 두 프로젝트가 하나를 공유한다 |
 | ASK-Seoul#78 | 저장소·운영 기록 적용 규약 v1 — 존/경로/확인서/보관/기록 형식/값 집합/조회 DB |
 | ASAC-DAG `common/ops/d1_ops.py` | 조회 DB 테이블 4종(`_ops_run_event` 등) 스키마 정본 |
 | `../marketplace/migrations/` | `_keys`·`_usage`·`_burst`·`_request_log` 스키마 정본 |

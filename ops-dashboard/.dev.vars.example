@@ -1,0 +1,15 @@
+# ops-dashboard 로컬 시크릿 견본 — 이 파일을 .dev.vars 로 복사해서 값을 채운다.
+# .dev.vars 는 .gitignore 대상이다(커밋 금지).
+
+# 운영자 토큰. 폐기·복구·쿼터 변경·삭제(POST /api/keys)에만 필요하다 —
+# 읽기(파이프라인·서빙 품질·키 목록)는 토큰 없이 열린다. 미설정이면 조치가 503 으로
+# 닫힌다(열리는 게 아니라 닫힌다). 화면 우상단 '잠금 해제'에 이 값을 그대로 넣는다.
+#
+# 값 생성 (macOS·Windows 공통, openssl 불필요):
+#   node -e "console.log(require('crypto').randomBytes(16).toString('hex'))"
+#
+# ⚠️ Windows: 이 파일을 셸로 만들 때 인코딩을 지정하지 않으면 UTF-16LE 로 저장돼
+#    wrangler 가 값을 못 읽는다 — 기동 로그는 정상인데 조치만 503 이 되는 조용한 실패다.
+#    Set-Content -Path .dev.vars -Value "OPS_TOKEN=$tok" -Encoding ascii
+#    (자세히: ../docs/setup.md §3)
+OPS_TOKEN=

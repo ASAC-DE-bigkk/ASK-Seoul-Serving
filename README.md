@@ -42,10 +42,19 @@ dbt manifest·Airflow 메타DB를 직접 읽는 경로는 존재하지 않는다
 ## 로컬에서 띄우기
 
 원격 배포 없이 `wrangler dev`(Miniflare 로컬 sqlite D1)로만 돈다. **팀 D1에 쓰지 않는다.**
+사전 준비(Node 20+)·트러블슈팅·OS별 차이는 **[docs/setup.md](docs/setup.md)** 가 정본이다 —
+두 프로젝트가 같은 D1을 공유하므로 실행 절차도 **API·대시보드 담당자가 함께 관리하는 문서 하나**다.
 
 ```bash
+# macOS / Linux
 cd marketplace   && npm install && npm run seed && npm run dev   # :8787
 cd ops-dashboard && npm install && npm run seed && npm run dev   # :8788
+```
+
+```powershell
+# Windows (PowerShell) — && 는 파서 오류다. 한 줄씩 실행한다.
+cd marketplace   ; npm install ; npm run seed ; npm run dev      # :8787
+cd ops-dashboard ; npm install ; npm run seed ; npm run dev      # :8788
 ```
 
 `ops-dashboard`는 `marketplace`의 로컬 D1 상태를 공유하므로 **marketplace를 먼저 시드**할 것.

@@ -90,9 +90,13 @@
 배포 파이프라인이 없으므로 로컬에서 직접 확인한다.
 
 ```bash
-npm run seed   # migrations + fixtures → 로컬 D1 (Windows 는 npm 셸을 Git Bash 로: npm_config_script_shell)
+npm run seed   # migrations + fixtures → 로컬 D1
 npm run dev    # :8787 — 콘솔(:8788)과 동시 구동 가능
 ```
+
+OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) — 콘솔 담당자와 함께
+관리하는 문서다(같은 로컬 D1을 공유하므로 실행 절차가 하나다). 실행·시드·포트·비밀값 규약을
+바꾸면 같은 커밋에서 그 문서를 고치고 상대 담당자에게 알린다.
 
 - 발급→조회 한 바퀴: `POST /api/keys` → `GET /api/data/<t>` (Bearer) → `GET /api/me` 로 카운트 확인.
 - 무과금 확인: 400(없는 필터)·404(없는 테이블) 뒤 `/api/me` 카운트가 안 늘었는지.
