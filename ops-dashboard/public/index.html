@@ -295,6 +295,14 @@
         </div>
         <div class="bd"><div class="scroll" id="pipeExpect"></div></div>
       </div>
+      <div class="card wide">
+        <div class="hd">
+          <h3>데이터 소스 상태</h3>
+          <p>이 화면이 읽는 표가 실제로 읽히는지 — <b>없는 것</b>과 <b>이름은 같은데 구조가 다른 것</b>은
+             조치가 다릅니다. 어느 화면이 비는지도 함께 봅니다.</p>
+        </div>
+        <div class="bd"><div class="scroll" id="sources"></div></div>
+      </div>
     </div>
 
     <div id="sloSection" hidden>
@@ -516,9 +524,13 @@ function render(d) {
     b.push("<div class='banner info' data-pane='pipeline'>이 기간에 <b>데이터 준비 기록이 없습니다</b> — " +
            "<code>_ops_slo</code> 가 비어 있습니다. 로컬이면 <code>npm run seed</code> 로 채웁니다. " +
            "운영 기록을 읽는 연결 작업은 아직 진행 중입니다(팀 규약 ASK-Seoul#78).</div>");
+  // 원인을 단정하지 않는다 — 실제 원인(없음 / 구조 다름)은 '데이터 소스 상태' 표가 말한다.
+  // 예전에는 여기서 무조건 --persist-to 를 의심하라고 했는데, 원격에 붙었을 때는 틀린
+  // 안내였다(표는 있고 스키마가 달랐다). 화면이 모르는 것을 아는 척하면 안 된다.
   if (d.meta.missing.includes("serving"))
-    b.push("<div class='banner info' data-pane='serving'>요청 기록을 찾지 못했습니다 — API 서버와 같은 데이터를 보도록 " +
-           "설정(<code>--persist-to</code>)이 맞는지 확인하세요.</div>");
+    b.push("<div class='banner warn' data-pane='serving'><b>요청 기록을 읽지 못했습니다.</b> " +
+           "원인은 <b>데이터 준비 상태</b> 탭의 '데이터 소스 상태' 표에서 확인하세요 — " +
+           "표가 없는 것과, 이름은 같은데 구조가 다른 것은 조치가 다릅니다.</div>");
   // _ops_slo 표 자체가 없는 경우(원격 dev D1 등) — 실행 기록이 있으면 화면이 비지 않으므로
   // 조용히 접는다. 실행 기록까지 없을 때만 loadPipeline 쪽이 안내한다.
   if (d.meta.missing.includes("pipeline") && hasSlo)
@@ -729,10 +741,37 @@ function renderPipeline(p) {
         ? "<span class='pill ok'>대상</span>" : "<span class='pill dim'>제외</span>" },
   ], p.expectation, "등록된 실행 주기가 없습니다");
 
+  renderSources(p.sources || []);
+
   // 탭 점: 실패가 있거나 집계가 비었으면 붉게
   const bad = totalNg > 0 || (p.meta.source && p.meta.source.aggregate_missing);
   $("dot-pipeline").className = "dot " + (totalEv ? (bad ? "bad" : "ok") : "");
   return p;
+}
+
+// 표 하나하나의 상태를 지표로 낸다. **읽힘 / 구조 다름 / 없음** 세 갈래로 가르는 게 핵심 —
+// 앞의 둘을 "비어 있음"으로 뭉뚱그리면 운영자가 원인을 못 찾는다(실측에서 실제로 그랬다).
+const SRC_STATE = {
+  ok:       { pill: "ok",   label: "읽힘" },
+  mismatch: { pill: "bad",  label: "구조 다름" },
+  absent:   { pill: "warn", label: "없음" },
+};
+function renderSources(rows) {
+  $("sources").innerHTML = table([
+    { t:"표", get:(r) => esc(r.table), name:true },
+    { t:"만드는 쪽", get:(r) => "<span class='pill dim'>" + esc(r.owner) + "</span>" },
+    { t:"상태", get:(r) => {
+        const s = SRC_STATE[r.state] || SRC_STATE.absent;
+        return "<span class='pill " + s.pill + "'>" + s.label + "</span>"; } },
+    // 무엇이 없는지까지 적는다 — "구조가 다르다"만으로는 고칠 수가 없다
+    { t:"빠진 항목", get:(r) => r.missing_columns && r.missing_columns.length
+        ? "<span class='pill warn'>" + esc(r.missing_columns.join(", ")) + "</span>"
+        : "<span class='zero'>—</span>" },
+    { t:"행수", r:true, get:(r) => r.rows == null
+        ? "<span class='zero'>—</span>" : nf.format(r.rows) },
+    { t:"이 표가 없으면 비는 화면", get:(r) => r.state === "ok"
+        ? "<span class='zero'>—</span>" : esc(r.used) },
+  ], rows, "진단할 표가 없습니다");
 }
 
 // 실행 기록 쪽 배너는 요약(/api/summary)이 아니라 이 응답을 보고 붙인다 — 데이터가 늦게
@@ -960,7 +999,8 @@ async function loadUsage() {
     renderUsage(await res.json());
   } catch {
     $("useKpis").innerHTML = "";
-    $("apiTable").innerHTML = "<div class='empty'>사용량을 불러오지 못했습니다 — 게이트웨이 데이터가 공유되고 있는지 확인하세요</div>";
+    $("apiTable").innerHTML = "<div class='empty'>사용량을 불러오지 못했습니다 — " +
+      "<b>데이터 준비 상태</b> 탭의 '데이터 소스 상태' 표에서 어느 표가 문제인지 확인하세요</div>";
   }
 }
 

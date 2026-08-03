@@ -130,6 +130,59 @@ async function summary(env, params, writable = false) {
   });
 }
 
+// ── 데이터 소스 진단 ──────────────────────────────────────────────────────────────
+// 이 콘솔의 존재 이유 절반은 **관측 공백을 드러내는 것**이다(direction.md). 그런데 지금까지
+// "표를 못 읽었다"는 meta.missing 한 줄로만 나갔고, 화면은 "왜 못 읽었나"를 말하지 못했다.
+// 없는 것(표 자체가 없음)과 다른 것(이름은 같은데 스키마가 다름)은 조치가 완전히 다른데
+// 화면에서는 똑같이 "비어 있음"으로 보였다 — 실측에서 실제로 그 상태였다.
+//
+// 그래서 콘솔이 읽는 표를 하나씩 진단해 **지표로** 내보낸다. 없으면 없다고, 스키마가
+// 어긋나면 어느 컬럼이 없는지까지.
+const SOURCES = [
+  { table: "_ops_run_event", owner: "파이프라인", need: ["observed_date_kst", "domain", "status"],
+    used: "데이터 준비 상태" },
+  { table: "_ops_daily_metric", owner: "파이프라인", need: ["observed_date_kst", "domain", "layer", "event_count"],
+    used: "데이터 준비 상태(집계)" },
+  { table: "_ops_pipeline_state", owner: "파이프라인", need: ["dag_id", "last_status", "observation_state"],
+    used: "파이프라인 현재 상태" },
+  { table: "_ops_pipeline_expectation", owner: "파이프라인", need: ["dag_id", "monitored"],
+    used: "실행 주기 등록" },
+  { table: "_request_log", owner: "게이트웨이", need: ["ts", "route", "status", "table_name", "key_hash"],
+    used: "응답 상태 · API 사용량" },
+  { table: "_catalog", owner: "도메인 export", need: ["name", "product_id", "external"],
+    used: "API 사용량" },
+  { table: "_keys", owner: "게이트웨이", need: ["key_hash", "email", "status", "daily_quota"],
+    used: "이용자 키" },
+  { table: "_ops_slo", owner: "콘솔", need: ["domain", "event_date", "is_sample"],
+    used: "품질 기준(SLO)" },
+  { table: "_ops_domain", owner: "콘솔", need: ["domain", "label", "has_slo"], used: "분야 등록부" },
+];
+
+async function sources(env) {
+  const out = await Promise.all(SOURCES.map(async (s) => {
+    // 표 이름은 상수 목록에서만 오므로 사용자 입력이 SQL 로 가지 않는다.
+    const cols = await safeRows(env, `SELECT name FROM pragma_table_info('${s.table}')`);
+    const have = new Set(cols.rows.map((c) => c.name));
+    const exists = have.size > 0;
+    const missingCols = exists ? s.need.filter((c) => !have.has(c)) : s.need;
+    // 스키마가 어긋나면 COUNT 도 의미가 없지만, "행은 쌓이고 있다"는 사실 자체가 신호다
+    // (이름을 선점한 다른 표가 실제로 운영 중인지 아닌지가 갈린다).
+    const cnt = exists ? await safeRows(env, `SELECT COUNT(*) AS n FROM "${s.table}"`) : null;
+    return {
+      table: s.table, owner: s.owner, used: s.used,
+      exists,
+      // 셋으로 가른다 — 조치가 각각 다르다.
+      //   ok        읽을 수 있다
+      //   mismatch  표는 있는데 필요한 컬럼이 없다 (이름 충돌 / 다른 주인)
+      //   absent    표가 아예 없다 (아직 안 만들었다)
+      state: !exists ? "absent" : (missingCols.length ? "mismatch" : "ok"),
+      missing_columns: missingCols,
+      rows: cnt && cnt.ok && cnt.rows[0] ? cnt.rows[0].n : null,
+    };
+  }));
+  return out;
+}
+
 // ── 파이프라인 실행 기록 (팀 조회 DB 4종) ──────────────────────────────────────────
 // 정본은 ASAC-DAG `common/ops/d1_ops.py` 이고 **콘솔은 읽기 전용 소비자**다
 // (ASK-Seoul#78 §8 · decision/0005·0007). 여기서 만들거나 고치는 표가 아니다.
@@ -145,7 +198,8 @@ async function pipeline(env, params) {
   const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
   const sinceDate = `-${days} days`;
 
-  const [metric, events, state, expectation, layerGap] = await Promise.all([
+  const [src, metric, events, state, expectation, layerGap] = await Promise.all([
+    sources(env),
     // 집계표 — D-7 이 지정한 화면용 표. 자연키(날짜·도메인·단계)로 이미 접혀 있다.
     safeRows(env,
       "SELECT observed_date_kst AS day, domain, layer, event_count, success_count, failed_count, " +
@@ -207,6 +261,8 @@ async function pipeline(env, params) {
       // 모른다 ≠ 0 — 단계를 못 적은 기록이 몇 건인지 그대로 센다
       unknown: { events_total: gap.total ?? null, layer_unknown: gap.layer_unknown ?? null },
     },
+    // 콘솔이 읽는 표 하나하나의 상태 — 관측 공백을 배너 한 줄이 아니라 지표로 낸다
+    sources: src,
     daily_metric: metric.rows,
     run_event_daily: events.rows,
     pipeline_state: state.rows,
