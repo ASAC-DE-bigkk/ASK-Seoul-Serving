@@ -5,7 +5,8 @@
   "scripts": {
     "seed": "wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state --file=scripts/backfill-migrations-ledger.sql && wrangler d1 migrations apply ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state && wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state --file=fixtures/slo_sample.sql",
     "dev": "wrangler dev --persist-to ../marketplace/.wrangler/state",
-    "dev:remote": "wrangler dev --remote"
+    "dev:remote": "wrangler dev --remote",
+    "dev:prod-readonly": "wrangler dev --remote --env production --port 8798"
   },
   "devDependencies": {
     "wrangler": "^4"

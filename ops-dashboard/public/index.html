@@ -229,6 +229,9 @@
     <option value="14" selected>14일</option>
     <option value="30">30일</option>
   </select>
+  <!-- 재적재·정기런을 지켜볼 때 F5 를 반복해서 누르게 되는데, 그러면 "언제 바뀌었나"를
+       놓친다. 켜 두면 30초마다 다시 읽고 마지막 갱신 시각을 옆에 적는다. -->
+  <button id="autoBtn" class="mode" title="30초마다 자동으로 다시 읽습니다">자동 새로고침 꺼짐</button>
   <button id="modeBtn" class="mode">읽기 전용 · 잠금 해제</button>
   <a href="http://localhost:8787/" target="_blank" rel="noopener">마켓플레이스 ↗</a>
 </div>
@@ -485,8 +488,11 @@ function render(d) {
     const tag = $("envTag");
     tag.hidden = false;
     tag.className = "envtag" + (ev.label === "운영" ? " prod" : "");
-    tag.innerHTML = esc(ev.label) + "<small>" + esc(ev.d1) + "</small>";
-    tag.title = "이 화면은 " + ev.label + " 환경의 " + ev.d1 + " 데이터를 읽고 있습니다";
+    // 언제 읽은 값인지를 붙인다 — 자동 새로고침 중이면 "멈춘 화면"과 구분이 되어야 한다
+    const at = new Date(d.generated_at).toLocaleTimeString("ko-KR", { hour12: false });
+    tag.innerHTML = esc(ev.label) + "<small>" + esc(ev.d1) + " · " + esc(at) + "</small>";
+    tag.title = "이 화면은 " + ev.label + " 환경의 " + ev.d1 + " 데이터를 읽고 있습니다\n"
+              + "마지막으로 읽은 시각: " + at;
   }
 
   // ── 배너: 샘플 데이터·누락 섹션을 밝힌다. data-pane 이 붙은 것은 해당 탭에서만 보인다
@@ -1067,12 +1073,15 @@ function syncMode() {
   b.classList.toggle("on", CAN_WRITE);
 }
 
-async function load() {
+// quiet=true 는 자동 새로고침이 부르는 경우다. 한 번 실패했다고 보고 있던 화면을 접으면
+// (재적재 중 일시적 오류에도) 지켜보던 것을 잃는다 — 조용히 넘기고 다음 주기를 기다린다.
+async function load(quiet) {
   let res;
   try {
     res = await fetch("/api/summary?days=" + $("days").value, { headers: authHeaders() });
-  } catch { return fail("서버에 닿지 못했습니다"); }
+  } catch { return quiet ? null : fail("서버에 닿지 못했습니다"); }
   if (!res.ok) {
+    if (quiet) return null;
     const b = await res.json().catch(() => ({}));
     return fail(b.detail || ("불러오지 못했습니다 (HTTP " + res.status + ")"));
   }
@@ -1115,7 +1124,32 @@ $("enter").addEventListener("click", () => {
   load();
 });
 $("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("enter").click(); });
+// ── 자동 새로고침 ──────────────────────────────────────────────────────────────────
+// 재적재가 도는 동안 F5 를 반복해 누르면 "언제 바뀌었나"를 놓친다. 30초는 D1 조회를
+// 과하게 밀지 않으면서 사람이 기다릴 만한 간격이다. 상태는 sessionStorage 에 둬서
+// 새로고침해도 켜진 채로 유지된다(지켜보는 중에 꺼지면 그게 더 헷갈린다).
+const AUTO = "ops_auto_refresh";
+let autoTimer = null;
+function syncAuto() {
+  const on = sessionStorage.getItem(AUTO) === "1";
+  const b = $("autoBtn");
+  b.textContent = on ? "자동 새로고침 켜짐 · 30초" : "자동 새로고침 꺼짐";
+  b.classList.toggle("on", on);
+  clearInterval(autoTimer);
+  // 화면이 안 보이는 동안(다른 탭)에는 굳이 읽지 않는다 — 돌아오면 그때 한 번 읽는다
+  if (on) autoTimer = setInterval(() => { if (!document.hidden) load(true); }, 30000);
+}
+$("autoBtn").addEventListener("click", () => {
+  sessionStorage.setItem(AUTO, sessionStorage.getItem(AUTO) === "1" ? "0" : "1");
+  syncAuto();
+  if (sessionStorage.getItem(AUTO) === "1") load(true);
+});
+addEventListener("visibilitychange", () => {
+  if (!document.hidden && sessionStorage.getItem(AUTO) === "1") load(true);
+});
+
 $("days").addEventListener("change", load);
+syncAuto();
 load();   // 토큰 없이도 뜬다 — 막는 문이 아니라 여는 문이다
 </script>
 </body>

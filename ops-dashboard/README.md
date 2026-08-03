@@ -144,12 +144,19 @@ wrangler 가 토큰을 못 읽는데, 기동 로그에는 `Using secrets defined
 **이 표들은 로컬 Miniflare 에 없다** — 팀 dev D1 에 있다. 그래서 보려면 원격 바인딩으로 띄운다.
 
 ```bash
-cp .env.example .env      # CLOUDFLARE_API_TOKEN (D1:Read 면 충분)
-npm run dev:remote        # wrangler dev --remote
+cp .env.example .env         # CLOUDFLARE_API_TOKEN (D1:Read 면 충분)
+npm run dev:remote           # 개발 D1  → :8788
+npm run dev:prod-readonly    # 운영 D1  → :8798 (포트를 갈라 두 화면을 같이 띄운다)
 ```
 
-⚠️ `--remote` 는 읽기 전용 모드가 아니다 — 그 상태에서 키 차단·삭제를 누르면 팀 dev D1 에
-적용된다([0002](docs/decision/0002-local-only-mentor-gate.md) 불변 경계). **보기 위한 모드다.**
+지금 어느 DB 를 보고 있는지는 **상단 배지**가 늘 말한다 — 운영은 붉은색이고, 옆에 마지막으로
+읽은 시각이 붙는다. 재적재·정기런을 지켜볼 때는 **자동 새로고침**(상단 버튼, 30초)을 켠다.
+켜 두면 화면이 멈춘 건지 값이 안 변한 건지를 시각으로 구분할 수 있다.
+
+⚠️ `--remote` 는 읽기 전용 모드가 아니다 — 그 상태에서 키 차단·삭제를 누르면 그 D1 에
+그대로 적용된다([0002](docs/decision/0002-local-only-mentor-gate.md) 불변 경계).
+**보기 위한 모드다.** 스크립트 이름에 `readonly` 를 붙인 건 그 약속을 상기시키려는 것이지
+도구가 강제하는 게 아니다.
 
 ### 모른다 ≠ 0
 
