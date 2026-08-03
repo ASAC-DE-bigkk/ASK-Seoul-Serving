@@ -109,12 +109,20 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 | 테이블 | 정본 | 이 프로젝트의 권한 |
 |---|---|---|
 | `_ops_slo`, `_ops_domain` | **여기** (`migrations/0001`) | 스키마·내용 모두 |
+| `_ops_run_event`, `_ops_daily_metric`, `_ops_pipeline_state`, `_ops_pipeline_expectation` | ASAC-DAG (`common/ops/d1_ops.py`) | **읽기 전용** — 파이프라인 산출물 |
+| `_catalog`, 제품 표 `d1_*` | 도메인 export (`meta.serving` 계약) | **읽기 전용** — dbt 산출물 |
 | `_keys` | 게이트웨이 | `status`·`daily_quota` 갱신, 삭제 — 정해진 조치만 |
 | `_usage`, `_burst` | 게이트웨이 | 키 삭제 시 연쇄 삭제만 |
 | `_request_log` | 게이트웨이 | 읽기 전용 |
 
-`_ops_*` 스키마 변경은 `migrations/0001` 파일 갱신 — DROP+CREATE 리셋 규약
-([0007](docs/decision/0007-schema-single-file-reset.md)). 팀 D1 승격 시 증분으로 전환한다.
+**남의 표를 만들거나 지우지 않는다 — 파이프라인·dbt 산출물은 결코 건드리지 않는다.**
+콘솔 `migrations/` 에 위 '읽기 전용' 표 이름이 등장하면 그 자체가 위반이다(생성·삭제·ALTER 전부).
+개발용 표본이 필요하면 `migrations/` 가 아니라 `fixtures/` 에 둔다.
+
+`_ops_slo`·`_ops_domain` 스키마 변경은 **새 마이그레이션 파일에 ALTER 추가** — `0001` 은 더
+고치지 않고 **DROP 은 쓰지 않는다**(#78 D-6). 적용은 장부 추적
+(`wrangler d1 migrations apply`, 장부 표는 `d1_migrations_ops_dashboard` — 게이트웨이와 분리).
+→ [0007](docs/decision/0007-schema-single-file-reset.md)
 
 ## 7. 검증
 

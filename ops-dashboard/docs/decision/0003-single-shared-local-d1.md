@@ -21,11 +21,19 @@
 
 ## 경계 (이 결정이 부과하는 규칙)
 
+**같은 D1 을 여럿이 쓴다 = 남의 표가 옆에 있다.** 공유의 대가는 "안 건드리기"다.
+
 - **게이트웨이 소유 테이블(`_keys`·`_usage`·`_burst`·`_request_log`)의 스키마는 여기서
   바꾸지 않는다.** 정본은 `../marketplace/migrations/` 다.
 - 그 테이블에 대한 쓰기는 [0006](0006-key-hash-identifier.md)에 정의된 키 조치뿐이다.
-- 테이블이 아직 없을 수 있다(한쪽만 시드된 상태) — 콘솔은 죽는 대신 그 섹션만 비우고
-  `meta.missing` 으로 알린다(`safeRows`).
+- **파이프라인·dbt 산출물은 읽기 전용이다** — 조회 DB 4종(`_ops_run_event`·
+  `_ops_daily_metric`·`_ops_pipeline_state`·`_ops_pipeline_expectation`, 정본은 ASAC-DAG
+  `common/ops/d1_ops.py`)과 `_catalog`·제품 표(`d1_*`). 콘솔이 만들지도, 지우지도, 고치지도
+  않는다. 전체 소유 표는 [0007](0007-schema-single-file-reset.md)에 있다.
+- **마이그레이션 장부도 소유자별로 가른다** — 콘솔은 `d1_migrations_ops_dashboard`.
+  한 표를 공유하면 파일명이 겹칠 때 한쪽이 조용히 건너뛴다([0007](0007-schema-single-file-reset.md)).
+- 테이블이 아직 없을 수 있다(한쪽만 시드된 상태, 또는 로컬에 4종이 없는 상태) — 콘솔은
+  죽는 대신 그 섹션만 비우고 `meta.missing` 으로 알린다(`safeRows`).
 
 ## 대가
 

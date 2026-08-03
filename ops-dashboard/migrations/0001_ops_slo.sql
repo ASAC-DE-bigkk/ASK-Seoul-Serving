@@ -1,19 +1,19 @@
--- 파이프라인 품질 스냅샷 — gold_*_slo_daily 를 D1 로 밀어 넣는 자리 (ASK-Seoul#58)
+-- 파이프라인 품질 스냅샷 — 콘솔이 **자기 소유로** 만드는 표 두 개 (ASK-Seoul#58)
 --
--- **왜 복사하나**: Trino 는 `http://trino:8080`, Docker 내부 주소라 Cloudflare Worker 가
--- 닿지 못한다. 그래서 운영 콘솔이 파이프라인 품질을 보려면 요약을 밀어 넣는 수밖에 없다.
--- 다행히 SLO 마트는 **날짜 1행**이라 도메인 6개 × 1년 = 2,200행 — 웨어하우스를 옮기는 게
--- 아니라 요약 한 줌을 옮기는 것이다.
+-- ⚠️ **이 파일은 DROP 을 쓰지 않는다** (ASK-Seoul#78 D-6). 예전에는 스키마를 고칠 때마다
+--    DROP+CREATE 로 통째로 다시 만들었다. "로컬 프로토타입이라 잃을 상태가 없다"는 전제였고,
+--    팀 조회 DB 에 붙는 순간 그 전제가 깨진다 — 첫 스키마 수정이 팀 데이터를 지운다.
+--    컬럼이 늘면 **새 마이그레이션 파일(0002…)에 ALTER 를 추가**한다. 이 파일은 안 고친다.
+--    적용 여부는 D1 안의 장부(d1_migrations)가 추적한다 — `wrangler d1 migrations apply`.
 --
--- **is_sample**: 로컬 프로토타입에는 팀 D1 쓰기 권한이 없어 합성 데이터를 시드한다.
--- 화면이 그걸 실측인 척하면 안 되므로 행마다 표시하고, UI 는 '샘플' 배지를 띄운다.
--- 실적재가 붙으면 is_sample=0 이 들어오고 배지는 저절로 사라진다.
-
--- 프로토타입이라 스키마 정본을 이 파일 하나로 유지한다 — 컬럼이 늘 때 ALTER 누적 대신
--- 통째로 다시 만든다. 내용물은 로더(scripts/load_slo.py)나 픽스처가 매번 다시 채우므로
--- 잃을 상태가 없다. 팀 D1 로 승격되면 그때부터 증분 마이그레이션으로 바꾼다.
-DROP TABLE IF EXISTS _ops_slo;
-DROP TABLE IF EXISTS _ops_domain;
+-- ⚠️ **콘솔이 만드는 표는 아래 둘뿐이다.** 파이프라인·dbt 산출물(`_ops_run_event`·
+--    `_ops_daily_metric`·`_ops_pipeline_state`·`_ops_pipeline_expectation`·`_catalog`·
+--    제품 표 `d1_*`)은 **소유자가 따로 있고 콘솔은 읽기만 한다.** 그쪽 표를 만들거나
+--    지우는 문장을 이 디렉토리에 두지 않는다 — 스키마 정본은 ASAC-DAG
+--    `common/ops/d1_ops.py`(4종)와 `../marketplace/migrations/`(게이트웨이 표)다.
+--
+-- **is_sample**: 화면이 합성값을 실측인 척하면 안 되므로 행마다 표시한다. UI 가 그걸 읽어
+-- 배너를 띄운다. 실측이 들어오면 is_sample=0 이라 배너는 저절로 사라진다.
 
 CREATE TABLE IF NOT EXISTS _ops_slo (
   domain               TEXT    NOT NULL,
