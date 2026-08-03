@@ -18,16 +18,19 @@
 | `GET /api/preview/<t>` | 고정 5행 미리보기, 무과금 | 무인증 + IP 버스트 |
 | `GET /api/data/<t>` | 필터·기간·키셋 커서 조회 | Bearer + 버스트 + 일일 쿼터 |
 | `GET /api/me` | 내 사용량 (이메일 원문은 여기만 — 본인 응답) | Bearer |
+| `GET /v1/products/<id>` | 제품 번들 — 구조·컬럼 설명·질의 예시 (ASAC-DAG#642) | Bearer |
+| `GET /v1/glossary` | 용어 사전 (`?vocabulary_id=`) | Bearer |
 | 정적 | `/docs` `/legal` `/llms.txt` `/openapi.json` `/column-docs.json` | Assets 서빙 |
 
 구성은 이것이 전부다:
 
 ```text
-단일 Worker (src/index.js)   — 위 라우트 전부. 게이트 순서: 키 검증 → 버스트 → 쿼터 → external 게이트 → 조회
-+ Static Assets (public/)    — run_worker_first = ["/api/*"], 없는 경로는 404 화면
-+ 로컬 D1 (Miniflare)        — wrangler dev --local. 콘솔(../ops-dashboard)이 같은 상태를 읽는다
-+ migrations/                — 0001 키·쿼터 · 0002 요청 로그 · 0003 버스트 · 0004 request_id (증분만)
-+ fixtures/seed.sql          — 카탈로그·제품 샘플
+단일 Worker, 파일 셋      — src/index.js(라우터 + /api) · src/v1.js · src/shared.js
+                             게이트 순서: 키 검증 → 버스트 → 쿼터 → external 게이트 → 조회
++ Static Assets (public/)   — run_worker_first = ["/api/*", "/v1/*"], 없는 경로는 404 화면
++ 로컬 D1 (Miniflare)       — wrangler dev --local. 콘솔(../ops-dashboard)이 같은 상태를 읽는다
++ migrations/               — 0001 키·쿼터 · 0002 요청 로그 · 0003 버스트 · 0004 request_id (증분만)
++ fixtures/                 — seed.sql(카탈로그·제품) · handoff_meta_sample.sql(서빙 메타 4종 미러)
 ```
 
 ## 2. 불변 경계
@@ -56,7 +59,13 @@
 
 실체 기준. 새 코드는 이 규약을 따른다.
 
-- **JavaScript 단일 파일** (`src/index.js`). TS·파일 분할은 규모가 요구할 때.
+- **JavaScript, 경로별 파일 분리.** `src/shared.js` 는 경로가 갈려도 한 벌인 공유 층
+  (키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅 · UA 분류)이고, 경로 묶음마다
+  파일 하나다(`src/index.js` = 라우터 + `/api`, `src/v1.js`). 나눈 이유는 규모가 아니라
+  **협업**이다 — `/skill/v1` 담당과 한 파일을 동시에 고치면 충돌이 잦다(ASAC-DAG#642).
+  새 네임스페이스는 `src/<이름>.js` 를 만들고 공유 층을 가져다 쓴다. TS 전환은 아직 아니다.
+- **새 API 네임스페이스는 `wrangler.toml` 의 `run_worker_first` 에 먼저 등록한다.**
+  빠지면 요청이 워커에 닿지도 못하고 정적 404 로 떨어져 "경로가 없는 것처럼" 보인다.
 - **오류는 problem+json** — `problem(status, title, detail, extras, headers)`.
   4xx/5xx 본문에 `request_id` 를 넣고, 모든 응답에 `x-request-id` 헤더를 실는다.
 - **하루 경계는 KST** (`kstDay()`) — 콘솔·파이프라인 시간축과 같은 규약
