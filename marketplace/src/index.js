@@ -87,7 +87,14 @@ async function issueKey(env, request) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return problem(400, "invalid email", "올바른 이메일 형식이 아니다");
 
-  const ip = request.headers.get("cf-connecting-ip") || "local";
+  // 발급 rate limit 의 IP 축은 원문을 저장하지 않는다(#9 §7-①·⑥) — 일 회전 솔트 해시.
+  // 같은 날 안에서만 같은 값이라 시간당 카운트는 성립하고, 날이 바뀌면 대응이 끊겨
+  // 장기 추적 축이 되지 못한다. 자정 경계에서 카운터가 리셋돼 상한 2배까지 통과
+  // 가능하지만 시간당 5회 상한이라 실해가 없다. 컬럼명 ip 는 유지 — 이름 변경은
+  // 증분 규약 위반이고 바뀌는 건 내용물뿐이다. ISSUANCE_SALT(.dev.vars) 미설정
+  // 로컬에선 약한 해시가 되지만 로컬의 IP 는 'local' 고정값이라 애초에 식별력이 없다.
+  const rawIp = request.headers.get("cf-connecting-ip") || "local";
+  const ip = await sha256hex(`${kstDay()}|${env.ISSUANCE_SALT || ""}|${rawIp}`);
   const hourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
   const { results: recent } = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM _issuance_log WHERE ip = ? AND created_at > ?"
@@ -129,7 +136,10 @@ async function issueKey(env, request) {
     );
   }
   statements.push(
-    env.DB.prepare("INSERT INTO _issuance_log (ip, created_at) VALUES (?, ?)").bind(ip, now)
+    env.DB.prepare("INSERT INTO _issuance_log (ip, created_at) VALUES (?, ?)").bind(ip, now),
+    // rate limit 창은 1시간 — 하루 지난 행은 유지할 이유가 없다(24h sweep, #9 §7-⑥)
+    env.DB.prepare("DELETE FROM _issuance_log WHERE created_at < ?")
+      .bind(new Date(Date.now() - 86400000).toISOString())
   );
   await env.DB.batch(statements);
 
