@@ -233,6 +233,45 @@ const PUBLIC = "external = 1";
 // 크로스도메인 분석의 열쇠를 모른 채 추측해야 한다 — 그래서 응답 메타로도 내보낸다.
 const JOIN_AXES = ["admin_dong_code", "gu_code", "stat_region_cd"];
 
+// ── AI 클라이언트 분류 (#9 §3) — 원문 UA 는 저장하지 않고 분류 결과만 남긴다 ─────────
+// 목록은 코드 상수로 관리한다(#9 §7-③ 결정: 갱신 주체 = marketplace 담당, 방식 = PR).
+// 매칭 실패는 unknown — 지어내지 않는다. MCP·에이전트 툴 호출은 python-httpx 같은
+// 평범한 얼굴로 오므로(#9 §3) 수집 시점 분류는 절반이고, 나머지는 여정 분석의 몫이다.
+const AI_AGENT_PATTERNS = [
+  // [패턴, agent_name, agent_mode] — crawler = 사전 수집, on_demand = 사용자 질문 대행.
+  // 한 벤더의 -User 패턴을 크롤러 패턴보다 먼저 둔다(부분 문자열 겹침 대비).
+  [/ChatGPT-User/i, "openai", "on_demand"],
+  [/GPTBot|OAI-SearchBot/i, "openai", "crawler"],
+  [/Claude-User/i, "anthropic", "on_demand"],
+  [/ClaudeBot|Claude-SearchBot/i, "anthropic", "crawler"],
+  [/Perplexity-User/i, "perplexity", "on_demand"],
+  [/PerplexityBot/i, "perplexity", "crawler"],
+  [/Google-Extended|GoogleOther/i, "google", "crawler"],
+  [/Meta-ExternalFetcher/i, "meta", "on_demand"],
+  [/Meta-ExternalAgent/i, "meta", "crawler"],
+  [/CCBot/i, "commoncrawl", "crawler"],
+  [/Bytespider/i, "bytedance", "crawler"],
+  [/Amazonbot/i, "amazon", "crawler"],
+  [/Applebot-Extended/i, "apple", "crawler"],
+];
+const CLI_PATTERN = /curl|wget|python-requests|python-httpx|python-urllib|node-fetch|undici|axios|Go-http-client|okhttp|libwww|java\//i;
+const GENERIC_BOT_PATTERN = /bot|crawler|spider|slurp|scrapy/i;
+
+// UA 문자열 → {ua_class, agent_name, agent_mode}. request 가 아니라 문자열을 받는
+// 순수 함수 — 스키마·D1 없이 단독 테스트가 가능하다(scripts/classify.test.mjs).
+// 판정 순서가 곧 규칙이다: AI 목록 → cli → 일반 bot → browser → unknown.
+// 일반 bot 을 browser 보다 먼저 보는 이유: 크롤러 UA 대부분이 Mozilla/ 를 포함한다.
+export function classifyClient(ua) {
+  if (!ua) return { ua_class: "unknown", agent_name: null, agent_mode: null };
+  for (const [re, name, mode] of AI_AGENT_PATTERNS)
+    if (re.test(ua))
+      return { ua_class: mode === "crawler" ? "ai_crawler" : "ai_agent", agent_name: name, agent_mode: mode };
+  if (CLI_PATTERN.test(ua)) return { ua_class: "cli", agent_name: null, agent_mode: null };
+  if (GENERIC_BOT_PATTERN.test(ua)) return { ua_class: "bot", agent_name: null, agent_mode: null };
+  if (/Mozilla\//.test(ua)) return { ua_class: "browser", agent_name: null, agent_mode: null };
+  return { ua_class: "unknown", agent_name: null, agent_mode: null };
+}
+
 async function handleCatalog(env) {
   const { results } = await env.DB.prepare(
     "SELECT name, product_id, external, description, product_question, time_axis, columns, " +
