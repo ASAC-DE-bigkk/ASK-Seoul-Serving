@@ -932,29 +932,8 @@ $("pTable").addEventListener("change", onTableChange);
 for (const id of ["pLimit", "pFrom", "pTo"]) $(id).addEventListener("input", resetPaging);
 for (const id of ["pKey", "pLimit", "pFrom", "pTo"]) $(id).addEventListener("input", updatePreview);
 
-/* 테마 토글 배선 — 확정은 <head> 에서 끝났고 여기는 버튼과 OS 추적만 맡는다.
-   랜딩(index.html)의 bootTheme 과 같은 동작이다. */
-function bootTheme() {
-  const root = document.documentElement, btn = $("themeBtn");
-  const label = () => btn.setAttribute("aria-label",
-    root.dataset.theme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환");
-  label();
-  btn.addEventListener("click", () => {
-    root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
-    try { localStorage.setItem("theme", root.dataset.theme); } catch (e) { /* 차단돼도 이번 세션은 바뀐다 */ }
-    label();
-  });
-  /* 저장값이 없을 때 = 아직 고른 적이 없을 때만 OS 를 따라간다 */
-  matchMedia("(prefers-color-scheme: light)").addEventListener("change", (e) => {
-    let stored; try { stored = localStorage.getItem("theme"); } catch (err) {}
-    if (stored === "light" || stored === "dark") return;
-    root.dataset.theme = e.matches ? "light" : "dark";
-    label();
-  });
-}
-
-bootTheme();
 boot();
 </script>
+<script src="/theme.js" defer></script>
 </body>
 </html>

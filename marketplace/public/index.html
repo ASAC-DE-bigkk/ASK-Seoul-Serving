@@ -828,32 +828,10 @@ async function bootCatalog() {
   }).join("");
 }
 
-/* 테마 토글 배선 — 확정 자체는 <head> 에서 이미 끝났고, 여기는 버튼과 OS 추적만 맡는다.
-   아이콘은 "지금 무엇인가"가 아니라 "누르면 무엇이 되는가"를 보인다(다크 → 해).
-   theme-color 는 바꾸지 않는다 — nav 가 두 모드 모두 다크라 그 위 브라우저 바도 같은 색이 맞다. */
-function bootTheme() {
-  const root = document.documentElement, btn = $("themeBtn");
-  const label = () => btn.setAttribute("aria-label",
-    root.dataset.theme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환");
-  label();
-  btn.addEventListener("click", () => {
-    root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
-    try { localStorage.setItem("theme", root.dataset.theme); } catch (e) { /* 차단돼도 이번 세션은 바뀐다 */ }
-    label();
-  });
-  /* 저장값이 없을 때 = 아직 고른 적이 없을 때만 OS 를 따라간다 */
-  matchMedia("(prefers-color-scheme: light)").addEventListener("change", (e) => {
-    let stored; try { stored = localStorage.getItem("theme"); } catch (err) {}
-    if (stored === "light" || stored === "dark") return;
-    root.dataset.theme = e.matches ? "light" : "dark";
-    label();
-  });
-}
-
-bootTheme();
 bootField();
 bootCatalog();
 bootDemo();
 </script>
+<script src="/theme.js" defer></script>
 </body>
 </html>

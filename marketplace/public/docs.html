@@ -6,6 +6,19 @@
 <title>API 문서 — ASK: SEOUL</title>
 <meta name="description" content="ASK: SEOUL 데이터 API 레퍼런스 — 엔드포인트, 인증, 필터, 커서 페이지네이션, 오류 코드, 응답 헤더, 코드 예제.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
+<script>
+  /* 테마 확정 — 첫 페인트 전. 아래로 내리면 라이트를 고른 사람에게 다크가 한 번 번쩍인다(FOUC).
+     저장값이 없으면 OS 로 해석하되 저장하지 않는다 — 저장 여부가 "직접 골랐는가"의 유일한
+     기록이고, 그게 뒤에서 OS 변경을 따라갈지 가른다. 배선은 /theme.js 한 벌이 맡는다. */
+  (function () {
+    var t;
+    try { t = localStorage.getItem("theme"); } catch (e) { /* 프라이빗 모드 등 차단 */ }
+    if (t !== "light" && t !== "dark") {
+      t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <link rel="stylesheet" href="/site.css">
 <style>
   /* 언어 탭 — 라디오 + 형제 선택자로 JS 없이 전환한다 */
@@ -13,7 +26,7 @@
   .tabs input { position:absolute; opacity:0; pointer-events:none; }
   .tabs .labels { display:flex; gap:4px; }
   .tabs .labels label { font-size:12.5px; font-weight:600; padding:6px 13px; border-radius:7px 7px 0 0;
-                        border:1px solid var(--line); border-bottom:0; background:#eef2f0;
+                        border:1px solid var(--line); border-bottom:0; background:var(--panel-2);
                         color:var(--muted); cursor:pointer; }
   .tabs .labels label:hover { color:var(--accent-deep); }
   .tabs .pane { display:none; }
@@ -21,7 +34,9 @@
   .tabs input:focus-visible + label { outline:2px solid var(--accent); outline-offset:2px; }
   #t-curl:checked ~ .labels label[for=t-curl],
   #t-py:checked ~ .labels label[for=t-py],
-  #t-js:checked ~ .labels label[for=t-js] { background:#08110f; color:#fff; border-color:#1d2939; }
+  /* 선택된 탭은 아래 pre 와 한 몸이라 두 모드 모두 어둡다 — 값도 pre 와 같이 간다 */
+  #t-js:checked ~ .labels label[for=t-js] { background:#08110f; color:#fff;
+                                            border-color:rgba(255,255,255,.10); }
   #t-curl:checked ~ #p-curl, #t-py:checked ~ #p-py, #t-js:checked ~ #p-js { display:block; }
   .sidenote { font-size:12.5px; color:var(--faint); margin-top:6px; }
 </style>
@@ -38,6 +53,10 @@
       <a href="/status">상태</a>
     </div>
     <span class="spacer"></span>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
+      <svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+      <svg class="moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+    </button>
     <a class="nav-cta" href="/catalog#auth">키 발급</a>
   </div>
 </nav>
@@ -439,5 +458,6 @@ GET /api/data/gold_citydata_ppltn_daily?from=2026-08-01&amp;to=2026-08-31
   </div>
 </footer>
 
+<script src="/theme.js" defer></script>
 </body>
 </html>
