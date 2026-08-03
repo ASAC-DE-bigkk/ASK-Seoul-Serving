@@ -1,13 +1,13 @@
 {
  "gold_culture_activity_by_dong": {
-  "activities_count": "그날 그 동에서 열린 전체 문화활동 수 — 아래 유형별 건수의 합",
+  "activities_count": "그날 그 동에서 열린 전체 문화활동 수 — 활동 ID 기준 중복을 제거한 값이며 총계는 언제나 이 열을 쓴다. 유형별 열을 더해 총계를 만들지 말 것(축제는 공연과 같은 KOPIS 공연이고, 무료·교육체험 행사 수는 행사 수의 부분집합)",
   "admin_dong": "행정동 이름(예 명동)",
   "admin_dong_code": "행정동 코드 — 행정안전부 표준 10자리. 다른 행정동 데이터와 붙이는 조인 키",
   "edu_experience_events_count": "그날 그 동의 교육·체험 분류 행사 수",
   "event_date": "활동 일자(KST). 여러 날에 걸친 행사는 날짜마다 한 행으로 펼쳐진다",
   "events_count": "서울시 문화행사 수",
   "exhibitions_count": "SeMA 전시 수",
-  "festivals_count": "서울시 축제 수",
+  "festivals_count": "KOPIS 공연 중 축제로 분류된 수 — 공연 수(performances_count)와 같은 공연을 세므로 합산 시 이중계상된다. 서울시가 여는 축제와는 다른 출처",
   "free_events_count": "그날 그 동의 무료 문화행사 수. 유·무료 표기는 서울시 문화행사 출처에만 있어 그 범위의 건수",
   "gu": "자치구 이름(예 중구)",
   "gu_code": "자치구 코드(구 롤업 키)",
@@ -104,12 +104,12 @@
   "venue_name": "개최 장소 이름"
  },
  "gold_culture_location_daily": {
-  "activities_count": "그날 그 구의 전체 문화활동 수(소스별 count 의 합)",
+  "activities_count": "그날 그 구의 전체 문화활동 수 — 활동 ID 기준 중복을 제거한 값이며 총계는 언제나 이 열을 쓴다. 유형별 열의 합과 다르다(축제가 공연과 같은 KOPIS 공연이라 겹친다)",
   "dong_precise_count": "좌표로 행정동까지 정밀한 활동 수(#111 quality_status='dong_precise')",
   "event_date": "활동 일자(KST) — 행사 기간을 일 단위로 전개한 그레인 축",
   "events_count": "서울시 문화행사 수",
   "exhibitions_count": "SeMA 전시 수",
-  "festivals_count": "서울시 축제 수",
+  "festivals_count": "KOPIS 공연 중 축제로 분류된 수 — 공연 수(performances_count)와 같은 공연을 세므로 합산 시 이중계상된다. 서울시가 여는 축제와는 다른 출처",
   "gu": "자치구 이름",
   "gu_code": "자치구 코드(#48 공간축)",
   "performances_count": "KOPIS 공연 수",
