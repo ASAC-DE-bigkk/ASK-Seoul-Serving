@@ -35,8 +35,38 @@ name = "..."                  # ← 여기부터 기본 환경 = 로컬 개발
 | 대시보드 (`ops-dashboard`) | `http://localhost:8788` | `ops.ask-seoul.kr` (예정 — 아래 ⚠️) |
 | D1 이름 | `ask-seoul-dev-d1` | `ask-seoul-prod-d1` |
 | D1 id | `9db0e851-558e-489f-9e76-f131d25aa267` | `59a8409e-3be6-467b-8214-7938c59c8729` |
-| D1 실제 접속 | 안 한다 — Miniflare 로컬 sqlite | 바인딩으로 붙는다 |
-| 시크릿 | `.dev.vars` (프로젝트 루트 파일) | `wrangler secret put <이름> --env production` |
+| D1 실제 접속 | 기본은 Miniflare 로컬 sqlite · **원격 dev D1 을 읽으려면 `--remote`** | 바인딩으로 붙는다 |
+| Worker 시크릿 | `.dev.vars` (프로젝트 루트) | `wrangler secret put <이름> --env production` |
+| wrangler 자격증명 | `.env` | `.env.production` (`--env-file` 로 지정) |
+
+### 파일 두 개를 헷갈리지 않는다
+
+| 파일 | 누가 읽나 | 무엇 |
+|---|---|---|
+| `.dev.vars` | **Worker 안** | `env.OPS_TOKEN`·`env.ISSUANCE_SALT` — 화면·발급 기능용 |
+| `.env` | **wrangler 자신** | `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID` — 원격 D1·배포용 |
+
+wrangler 는 같은 디렉토리의 `.env` 를 **자동으로 읽는다**(플래그 불필요). 운영 자격증명은
+`.env.production` 에 따로 두고 `--env-file` 로 명시한다 — 플래그를 빠뜨렸을 때 운영에 붙는
+사고를 막는 게 파일을 가르는 이유다. 둘 다 `.gitignore` 대상이고, 값이 빈 `.env.example` 만
+추적한다. 권한은 필요한 만큼만 준다(조회만이면 `D1:Read`).
+
+### 원격 dev D1 을 읽어야 할 때
+
+파이프라인이 싣는 운영 기록(`_ops_run_event` 등 4종)은 **팀 dev D1 에 있고 로컬 Miniflare 에는
+없다.** 그걸 화면으로 보려면 Worker 가 실제 바인딩으로 돌아야 한다.
+
+```bash
+cd ops-dashboard
+cp .env.example .env      # CLOUDFLARE_API_TOKEN 채우기
+npm run dev:remote        # wrangler dev --remote — 실제 dev D1 바인딩
+```
+
+⚠️ **`--remote` 는 읽기만 하는 모드가 아니다.** 화면의 키 차단·삭제가 그대로 팀 dev D1 에
+적용되고, `seed` 를 `--remote` 로 돌리면 `_ops_*` 도 팀 DB 에 쓴다 — 불변 경계
+"팀(원격) D1 에 쓰지 않는다"([decision/0002](../ops-dashboard/docs/decision/0002-local-only-mentor-gate.md))와
+정면으로 부딪힌다. **`npm run dev:remote` 는 보기 위한 것이고, 그 상태에서 조치 버튼을 누르지 않는다.**
+안전장치를 코드로 넣을지는 미정 — 결정되면 여기에 적는다.
 
 **두 D1 은 별개다.** prod D1 은 2026-08-03 신설이고 파이프라인이 62개 제품 게시를 시작했다
 (ASAC-DAG#668). 단 게이트웨이 운영 테이블(`_keys` 등)과 콘솔 `_ops_*` 는 아직 없다 —
