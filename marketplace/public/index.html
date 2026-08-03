@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ASK: SEOUL — 서울 데이터 API 허브</title>
-<meta name="description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨를 행정동 코드로 붙이고 기간으로 자르는 API 허브. 미리보기는 키 없이, 키 발급은 이메일만. 커버리지는 제품마다 명시합니다.">
+<meta name="description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨를 시간과 공간 두 축으로 매일 쌓아 시계열·공간계열 데이터를 제공하는 API 허브. 미리보기는 키 없이, 키 발급은 이메일만. 커버리지는 제품마다 명시합니다.">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0d1211" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ASK: SEOUL">
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
-<meta property="og:description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 행정동 코드로 붙이고 기간으로 자릅니다 — 미리보기는 키 없이 바로.">
+<meta property="og:description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 시간과 공간 두 축으로 매일 쌓아 시계열·공간계열 데이터를 제공합니다.">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
 <script>
@@ -381,9 +381,15 @@
            둘 다 없는 명부형 15. 시간축 컬럼명은 제품마다 달라(18종) 하나로 못 부른다 —
            그래서 컬럼명이 아니라 "기간"이라고 쓴다. 제품별 실제 축은 카드의 배지가 밝힌다. -->
       <h1>흩어진 서울 공공데이터를<span class="l2">같은 두 축 위에</span></h1>
-      <!-- 첫 문장이 두 축을 동사로 말한다(붙이고/자릅니다) — 축 이름을 나열하는 것보다
-           무엇을 할 수 있는지가 먼저 읽힌다. 둘째 문장은 과장하지 않는다는 신호로 남긴다. -->
-      <p class="sub">문화·인구·교통·상권·날씨를 <b>행정동 코드</b>로 붙이고 <b>기간</b>으로 자릅니다.
+      <!-- 축을 동사로 풀어 쓰던 것("행정동 코드로 붙이고 기간으로 자릅니다")을 한 층 올려
+           결과물의 이름으로 요약한다 — 시계열·공간계열. 축 이름과 조작 방법은 카탈로그와
+           문서가 말할 자리이고, 히어로는 무엇을 얻는지만 말하면 된다.
+           ⚠️ "연속 적재"로 쓰지 않았다. 이 사이트가 다른 데서 정면으로 부인한다:
+           guide FAQ "실시간 데이터인가요? 아닙니다 … 발행 시점의 스냅샷입니다. 매일 1회 발행",
+           status "실시간이 아닙니다", docs "제품은 매일 통째로 재발행되고".
+           실측도 같다 — 62종의 exported_at 이 단일 배치 하나다(2026-08-03).
+           히어로만 "연속"이라고 하면 FAQ 를 여는 순간 배신이 되므로 "매일"로 적는다. -->
+      <p class="sub">시간과 공간 두 축으로 <b>매일</b> 쌓아 <b>시계열·공간계열</b> 데이터를 함께 제공합니다.
          커버리지는 도메인마다 다르고, 제품마다 적어둡니다.</p>
       <form class="search-hero" id="heroSearch">
         <div class="box">
