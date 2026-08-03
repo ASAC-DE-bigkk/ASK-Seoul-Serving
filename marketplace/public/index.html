@@ -667,16 +667,25 @@ function bootField() {
   const cv = $("field");
   const ctx = cv.getContext("2d");
   const CELLS = 426;
-  // 격자 잉크는 테마마다 다르다. 라이트 판 위에서 민트(#3ce0c4)는 거의 안 보이고,
-  // 다크 판 위에서 딥 그린은 바탕에 묻힌다 — 방향이 반대라 값을 나눈다.
-  // 두 번째 값(스파크)은 첫 값을 밝힌/진하게 한 같은 색이다(2색 체제가 아니다).
+  // 정지 격자다. 움직이던 것을 세운 이유: 히어로는 헤드라인과 검색창이 주인공인데
+  // 배경이 계속 숨을 쉬면 시선이 갈린다. 칸 수(426=행정동)라는 뜻은 정지 상태에서도
+  // 그대로 전달되므로 애니메이션이 나르던 정보는 없었다 — 장식만 빠진 셈이다.
+  // 프레임 루프와 그 루프를 껐다 켜던 관찰자들이 통째로 사라져 코드도 절반이 됐다.
+  //
+  // 잉크는 테마마다 다르다. 라이트 판에서 민트는 거의 안 보이고 다크 판에서 딥 그린은
+  // 바탕에 묻힌다 — 방향이 반대라 값을 나눈다. 둘째 값은 첫 값을 밝힌/진하게 한
+  // 같은 색이다(2색 체제가 아니다).
   const INK = { light: [[11, 110, 96], [10, 92, 80]], dark: [[53, 168, 146], [95, 206, 182]] };
-  const pal = () => INK[document.documentElement.dataset.theme === "dark" ? "dark" : "light"];
+  const isDark = () => document.documentElement.dataset.theme === "dark";
   // 라이트는 흰 바탕이라 같은 알파로는 격자가 안 보인다 — 바닥과 진폭을 따로 준다
-  const AMP = () => (document.documentElement.dataset.theme === "dark"
-    ? { base: 0.055, wave: 0.085, spark: 0.62 }
-    : { base: 0.045, wave: 0.075, spark: 0.46 });
-  let cols = 0, rows = 0, cw = 0, ch = 0, dpr = 1, sparks = [], raf = 0, t0 = 0;
+  const AMP = () => (isDark() ? { base: 0.055, wave: 0.085, lit: 0.34 }
+                              : { base: 0.045, wave: 0.075, lit: 0.26 });
+  let cols = 0, rows = 0, cw = 0, ch = 0, dpr = 1;
+
+  // 밝은 칸 14개를 한 번만 뽑아 고정한다. 매 페인트마다 새로 뽑으면 창 크기를 바꾸거나
+  // 테마를 토글할 때마다 무늬가 튀어 "정지"로 안 읽힌다.
+  const LIT = new Map();
+  for (let k = 0; k < 14; k++) LIT.set((Math.random() * CELLS) | 0, k % 6 === 0);
 
   function layout() {
     const r = cv.getBoundingClientRect();
@@ -694,60 +703,32 @@ function bootField() {
     return true;
   }
 
-  function paint(now) {
-    const t = (now - t0) / 1000;
+  function paint() {
     const r = cv.getBoundingClientRect();
     ctx.clearRect(0, 0, r.width, r.height);
     const gap = 5, sw = cw - gap, sh = ch - gap, rad = Math.min(2.5, sw / 4);
-    const ink = pal(), amp = AMP();
+    const ink = INK[isDark() ? "dark" : "light"], amp = AMP();
     for (let i = 0; i < CELLS; i++) {
       const c = i % cols, rw = (i / cols) | 0;
-      const x = c * cw, y = rw * ch;
-      const wave = 0.5 + 0.5 * Math.sin(t * 0.55 - (c * 0.19 + rw * 0.31));
+      // 시간 항을 뺀 같은 파형 — 흐르지 않고 대각선 결로 남는다
+      const wave = 0.5 + 0.5 * Math.sin(-(c * 0.19 + rw * 0.31));
       let a = amp.base + wave * amp.wave;
       let col = ink[0];
-      for (const s of sparks) {
-        if (s.i !== i) continue;
-        const k = 1 - (t - s.t) / s.life;
-        if (k > 0) { a = Math.max(a, amp.base * 1.8 + k * amp.spark); col = ink[s.hot ? 1 : 0]; }
-      }
+      if (LIT.has(i)) { a = amp.base * 1.8 + amp.lit; col = ink[LIT.get(i) ? 1 : 0]; }
       ctx.fillStyle = "rgba(" + col[0] + "," + col[1] + "," + col[2] + "," + a.toFixed(3) + ")";
       ctx.beginPath();
-      ctx.roundRect(x, y, sw, sh, rad);
+      ctx.roundRect(c * cw, rw * ch, sw, sh, rad);
       ctx.fill();
     }
-    sparks = sparks.filter((s) => t - s.t < s.life);
-    if (sparks.length < 9 && Math.random() < 0.09) {
-      sparks.push({ i: (Math.random() * CELLS) | 0, t, life: 1.4 + Math.random() * 1.2,
-                    hot: Math.random() < 0.18 });
-    }
-  }
-
-  function loop(now) { paint(now); raf = requestAnimationFrame(loop); }
-  function stop() { if (raf) { cancelAnimationFrame(raf); raf = 0; } }
-  function start() {
-    if (raf || !layout()) return;
-    t0 = performance.now();
-    // 애니메이션을 끈 사용자도 격자에 리듬이 보이게 — 밝은 칸 몇 개를 미리 심어 한 장으로 완성한다
-    if (REDUCED && !sparks.length) {
-      for (let k = 0; k < 14; k++)
-        sparks.push({ i: (Math.random() * CELLS) | 0, t: 0, life: 1e6, hot: k % 6 === 0 });
-    }
-    paint(t0);                 // 첫 프레임은 rAF 를 기다리지 않는다 — 빈 격자가 한 순간도 보이지 않게
-    if (REDUCED) return;       // 정지 화면 한 장만
-    raf = requestAnimationFrame(loop);
   }
 
   // roundRect 가 없는 구형 브라우저 — 격자를 포기하고 조용히 빠진다(배경일 뿐이다)
   if (!ctx || !ctx.roundRect) { cv.style.display = "none"; return; }
-  addEventListener("resize", () => { if (layout()) paint(performance.now()); });
-  document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
-  new IntersectionObserver((es) => (es[0].isIntersecting ? start() : stop()),
-                           { threshold: 0 }).observe(cv);
-  // 테마가 바뀌면 잉크를 다시 골라야 한다. 멈춰 있을 때도 마지막 한 장이 남아 있으므로 직접 그린다
-  new MutationObserver(() => paint(raf ? performance.now() : t0))
-    .observe(document.documentElement, { attributeFilter: ["data-theme"] });
-  start();
+  const draw = () => { if (layout()) paint(); };
+  addEventListener("resize", draw);
+  // 테마가 바뀌면 잉크를 다시 골라야 한다
+  new MutationObserver(draw).observe(document.documentElement, { attributeFilter: ["data-theme"] });
+  draw();
 }
 
 function bootDemo() {
