@@ -51,6 +51,9 @@
        읽히는 글자색" 쪽이라 라이트에서 훨씬 어두워져야 해서 hover 로 겸할 수 없다. */
     --accent-hover:#7deed8;
     --sk:#15201e; --sk-sheen:rgba(255,255,255,.06);
+    /* 적재 장면의 창고 상자 — accent-soft(.09)를 그대로 쓰면 벨트의 solid 상자 옆에서
+       거의 안 보인다. 창고가 이 그림의 결말이라 그 반대가 되어야 한다. */
+    --crate:rgba(60,224,196,.20); --crate-line:rgba(60,224,196,.55);
     --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono','Malgun Gothic',monospace;
     /* 본문 서체를 변수로 — 한글 라벨이 mono 에서 빠져나올 때 되돌아올 곳이 필요하다 */
     --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
@@ -74,6 +77,8 @@
     --teal-deep:#0b6e60;
     --green-ink:#15803d; --red-ink:#b91c1c;
     --sk:#e9eeec; --sk-sheen:rgba(255,255,255,.7);
+    /* 흰 판 위에서는 민트가 옅어 형태가 안 잡힌다 — 글자와 같은 진청록으로 간다 */
+    --crate:rgba(11,110,96,.14); --crate-line:rgba(11,110,96,.45);
     --shadow-sm:0 1px 2px rgba(18,33,31,.06);
     --shadow-md:0 10px 28px rgba(18,33,31,.10);
   }
@@ -209,38 +214,60 @@
   .sec-head .more { margin-left:auto; font-size:13px; font-weight:600; color:var(--accent-deep); }
   .sec-head .more:hover { text-decoration:underline; text-underline-offset:3px; }
 
-  /* ─── 적재 띠 ───
-     "매일 한 번 발행이 돌고 도메인마다 제 몫이 쌓인다"는 리듬만 보인다.
-     세로 두께 = 도메인별 제품 수(실측). 가로는 발행 회차이지 시각 눈금이 아니다.
-     칸 높이를 회차마다 흔들지 않는 이유: 흔들면 값이 있는 그래프로 읽히는데 그런 시계열을
-     우리는 갖고 있지 않다(발행 이력이 아니라 현재 스냅샷만 있다). 변하는 건 밝기뿐이다.
-     행 수를 세로로 쌓지 않는 이유는 위 strip 주석과 같다 — 그레인이 다른 값은 더하지 않는다. */
+  /* ─── 적재 장면 ───
+     원천 6곳 → 컨베이어 → 창고. 세 동작이 한 줄에 놓여 "어디서 와서 어디에 쌓이는가"를
+     문장 없이 보인다. 그림이지 그래프가 아니다 — 상자 하나가 몇 행이라는 뜻이 아니고,
+     그래서 상자 크기·개수에 실측을 싣지 않았다. 실측은 원천 칩의 제품 수와 머리의
+     마지막 발행 시각뿐이다(행 수를 쓰지 않는 이유는 위 strip 주석과 같다).
+     캔버스가 아니라 SVG 인 이유: 색을 CSS 변수로 받아 두 테마를 그냥 따라가고,
+     동작을 통째로 prefers-reduced-motion 뒤에 둘 수 있다. */
   .ingest { background:var(--panel); border:1px solid var(--line); border-radius:10px;
             padding:15px 18px 13px; box-shadow:var(--shadow-xs); }
-  .ingest .top { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:11px; }
+  .ingest .top { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
   .ingest .sum { font-size:13px; font-weight:600; }
   .ingest .now { margin-left:auto; display:inline-flex; align-items:center; gap:7px;
                  font-size:12px; font-weight:600; color:var(--accent-deep); white-space:nowrap; }
-  .ingest .now i { width:6px; height:6px; flex:none; border-radius:50%; background:var(--accent);
-                   animation:beat 2.4s ease-out infinite; }
-  @keyframes beat { 0% { box-shadow:0 0 0 0 var(--accent-line); }
-                    70% { box-shadow:0 0 0 8px transparent; }
-                    100% { box-shadow:0 0 0 0 transparent; } }
-  /* 라벨 열과 캔버스가 같은 높이를 6등분해 나눠 갖는다 — 레인 정렬을 이 한 가지 사실로 맞춘다 */
-  .band { display:grid; grid-template-columns:104px 1fr; gap:12px; height:138px; }
-  .band .lanes { display:grid; grid-template-rows:repeat(6,1fr); }
-  .band .lane { display:flex; align-items:center; gap:6px; min-width:0; }
-  .band .lane .nm { font-size:12px; font-weight:600; white-space:nowrap;
-                    overflow:hidden; text-overflow:ellipsis; }
-  .band .lane.off .nm { color:var(--faint); font-weight:500; }
-  .band .lane .c { margin-left:auto; font-size:11px; color:var(--faint); white-space:nowrap; }
-  .band .cv { position:relative; }
-  .band canvas { position:absolute; inset:0; width:100%; height:100%; }
-  .ingest .fine { margin-top:10px; color:var(--faint); line-height:1.55; }
-  @media (max-width:700px){
-    .band { grid-template-columns:82px 1fr; height:116px; }
-    .band .lane .c { display:none; }
+  .ingest .now i { width:6px; height:6px; flex:none; border-radius:50%; background:var(--accent); }
+  .ingest .fine { margin-top:8px; color:var(--faint); line-height:1.55; }
+  /* 좁아지면 viewBox 가 통째로 줄어드는데, 375px 폭에서 재보니 11px 글자가 3.6px 로 뭉갰다.
+     그래서 아래로 안 줄어들 선(780)을 두고, 모자란 폭은 이 카드 안에서만 가로로 민다 —
+     페이지 본문이 옆으로 밀리면 안 되므로 스크롤은 반드시 이 상자 안에 가둔다. */
+  .scene-wrap { overflow-x:auto; overscroll-behavior-x:contain; }
+  .scene { display:block; width:100%; min-width:780px; height:auto; }
+  .scene .chip { fill:var(--panel-2); stroke:var(--line-strong); }
+  .scene .ico { fill:none; stroke:var(--accent-deep); stroke-width:1.5;
+                stroke-linecap:round; stroke-linejoin:round; }
+  .scene .nm { fill:var(--ink); font-size:11px; font-weight:600; }
+  .scene .cnt { fill:var(--faint); font-size:10px; text-anchor:end;
+                font-variant-numeric:tabular-nums; }
+  .scene .feed { fill:none; stroke:var(--line-strong); stroke-width:1.2; }
+  .scene .belt { fill:var(--panel-2); stroke:var(--line-strong); }
+  /* --accent 가 아니라 --accent-deep 인 이유: --accent(민트)는 두 테마에서 같은 값이라
+     라이트의 흰 벨트 위에서 1.4:1 로 뭉개지고, 진청록인 창고 상자와 재질도 갈린다.
+     --accent-deep 은 테마마다 갈리므로 다크에선 밝은 민트, 라이트에선 진청록이 된다. */
+  .scene .box { fill:var(--accent-deep); }
+  .scene .silo { fill:none; stroke:var(--line-strong); stroke-width:1.4; }
+  /* <use> 안쪽은 CSS 선택자가 못 닿는다 — fill·stroke 는 상속되므로 use 에 걸어 내려보낸다.
+     상자마다 밝기를 달리하지 않는 이유: 더미는 한 칸씩 내려가며 루프하는데, 밝기가 순서를
+     따라가면 한 바퀴 끝에서 무늬가 되감기는 게 보인다. 균일해야 이음매가 없다. */
+  .scene .pile use { fill:var(--crate); stroke:var(--crate-line); stroke-width:1; }
+  .scene .cap { fill:var(--faint); font-size:10px; font-weight:600; letter-spacing:.06em; }
+
+  /* 동작은 전부 이 안에만 둔다 — 애니메이션을 끈 사용자에겐 완성된 한 장이 남는다.
+     상자가 흐르는 거리(48·19)는 상자 간격과 같다. 그래야 루프 이음매가 안 보인다. */
+  @media (prefers-reduced-motion: no-preference) {
+    .scene .flow { animation:beltRun 2.6s linear infinite; }
+    .scene .pile { animation:pileDrop 2.6s linear infinite; }
+    .scene .src { animation:srcBlink 7.8s ease-in-out infinite; }
+    .ingest .now i { animation:beat 2.4s ease-out infinite; }
   }
+  @keyframes beltRun { from { transform:translateX(0); } to { transform:translateX(48px); } }
+  @keyframes pileDrop { from { transform:translateY(0); } to { transform:translateY(19px); } }
+  /* 원천은 차례로 한 번씩 깜빡인다 = 방금 받아왔다. 6곳이 2.6s 씩 돌아가며 7.8s 한 바퀴 */
+  @keyframes srcBlink { 0%,14%,100% { opacity:.5; } 4% { opacity:1; } }
+  @keyframes beat { 0% { box-shadow:0 0 0 0 var(--accent-line); opacity:1; }
+                    70% { box-shadow:0 0 0 8px transparent; opacity:.35; }
+                    100% { box-shadow:0 0 0 0 transparent; opacity:1; } }
 
   /* product cards */
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
@@ -461,14 +488,118 @@
         <span class="sum sk" id="ingestSum">불러오는 중</span>
         <span class="now"><i aria-hidden="true"></i><span id="ingestNow">적재중</span></span>
       </div>
-      <div class="band">
-        <div class="lanes" id="ingestLanes"></div>
-        <div class="cv"><canvas id="stream" aria-hidden="true"></canvas></div>
+      <!-- 좌: 원천 6곳 · 중: 컨베이어 · 우: 창고. 상자 크기·개수에 뜻은 없다(그림이다).
+           숫자가 실린 곳은 원천 칩의 제품 수와 머리의 마지막 발행 시각뿐이다. -->
+      <div class="scene-wrap">
+      <svg class="scene" id="scene" viewBox="0 0 880 200" role="img"
+           aria-label="원천에서 데이터가 모여 적재되는 그림">
+        <defs>
+          <!-- 흐름을 벨트·창고 안으로만 가둔다 -->
+          <clipPath id="clipBelt"><rect x="240" y="88" width="408" height="24" rx="12"/></clipPath>
+          <clipPath id="clipSilo"><rect x="660" y="72" width="216" height="116"/></clipPath>
+          <!-- 창고 아래쪽을 흐리게 — 바닥을 그리면 쌓이는 게 아니라 가라앉는 걸로 읽힌다 -->
+          <linearGradient id="fadeDown" x1="0" y1="72" x2="0" y2="188" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#fff"/><stop offset=".62" stop-color="#fff"/>
+            <stop offset="1" stop-color="#000"/>
+          </linearGradient>
+          <mask id="maskSilo"><rect x="660" y="72" width="216" height="116" fill="url(#fadeDown)"/></mask>
+          <g id="pileRow">
+            <rect x="670" width="35" height="14" rx="3"/>
+            <rect x="710" width="35" height="14" rx="3"/>
+            <rect x="750" width="35" height="14" rx="3"/>
+            <rect x="790" width="35" height="14" rx="3"/>
+            <rect x="830" width="35" height="14" rx="3"/>
+          </g>
+        </defs>
+
+        <text class="cap" x="0" y="9">원천</text>
+        <text class="cap" x="240" y="130">매일 1회 발행</text>
+        <text class="cap" x="664" y="64">적재</text>
+
+        <!-- 원천 6곳 — 이름·제품 수는 DOMAINS 순서 그대로다(JS 가 숫자만 채운다) -->
+        <g class="src" style="animation-delay:0s">
+          <path class="feed" d="M134 26C186 26 186 100 238 100"/>
+          <rect class="chip" x=".5" y="15" width="133" height="22" rx="6"/>
+          <g class="ico" transform="translate(9,19)">
+            <path d="M1 4.5h12v2a1.5 1.5 0 0 0 0 3v2H1v-2a1.5 1.5 0 0 0 0-3z"/><path d="M9 5v6.5"/>
+          </g>
+          <text class="nm" x="30" y="30">문화·행사</text><text class="cnt" x="127" y="30" data-d="culture">·</text>
+        </g>
+        <g class="src" style="animation-delay:1.3s">
+          <path class="feed" d="M134 54C186 54 186 100 238 100"/>
+          <rect class="chip" x=".5" y="43" width="133" height="22" rx="6"/>
+          <g class="ico" transform="translate(9,47)">
+            <circle cx="7" cy="4.4" r="2.2"/><path d="M2.5 12.2a4.5 4.5 0 0 1 9 0"/>
+          </g>
+          <text class="nm" x="30" y="58">인구·도시</text><text class="cnt" x="127" y="58" data-d="citydata">·</text>
+        </g>
+        <g class="src" style="animation-delay:2.6s">
+          <path class="feed" d="M134 82C186 82 186 100 238 100"/>
+          <rect class="chip" x=".5" y="71" width="133" height="22" rx="6"/>
+          <g class="ico" transform="translate(9,75)">
+            <rect x="2.5" y="2.5" width="9" height="7" rx="1.5"/><path d="M2.5 6h9"/>
+            <circle cx="4.6" cy="11.4" r="1.1"/><circle cx="9.4" cy="11.4" r="1.1"/>
+          </g>
+          <text class="nm" x="30" y="86">대중교통</text><text class="cnt" x="127" y="86" data-d="transit">·</text>
+        </g>
+        <g class="src" style="animation-delay:3.9s">
+          <path class="feed" d="M134 110C186 110 186 100 238 100"/>
+          <rect class="chip" x=".5" y="99" width="133" height="22" rx="6"/>
+          <g class="ico" transform="translate(9,103)">
+            <path d="M2 5.5h10l-1-2.6H3z"/><path d="M3 5.5v6.6h8V5.5"/>
+          </g>
+          <text class="nm" x="30" y="114">상권</text><text class="cnt" x="127" y="114" data-d="commerce">·</text>
+        </g>
+        <g class="src" style="animation-delay:5.2s">
+          <path class="feed" d="M134 138C186 138 186 100 238 100"/>
+          <rect class="chip" x=".5" y="127" width="133" height="22" rx="6"/>
+          <g class="ico" transform="translate(9,131)">
+            <path d="M4 10.6h6.2a2.6 2.6 0 0 0 .1-5.2 3.4 3.4 0 0 0-6.5.9A2.2 2.2 0 0 0 4 10.6z"/>
+          </g>
+          <text class="nm" x="30" y="142">날씨</text><text class="cnt" x="127" y="142" data-d="weather">·</text>
+        </g>
+        <g class="src" style="animation-delay:6.5s">
+          <path class="feed" d="M134 166C186 166 186 100 238 100"/>
+          <rect class="chip" x=".5" y="155" width="133" height="22" rx="6"/>
+          <g class="ico" transform="translate(9,159)">
+            <path d="M4.2 12.5 6 2.5M9.8 12.5 8 2.5"/><path d="M7 5v1.6M7 8.4V10"/>
+          </g>
+          <text class="nm" x="30" y="170">도로 소통</text><text class="cnt" x="127" y="170" data-d="traffic">·</text>
+        </g>
+
+        <!-- 컨베이어 — 상자는 48 간격이고 48 만큼 흐른다. 두 값이 같아야 루프 이음매가 안 보인다 -->
+        <rect class="belt" x="238" y="88" width="410" height="24" rx="12"/>
+        <g clip-path="url(#clipBelt)">
+          <g class="flow">
+            <rect class="box" x="190" y="94" width="12" height="12" rx="2.5"/>
+            <rect class="box" x="238" y="94" width="12" height="12" rx="2.5"/>
+            <rect class="box" x="286" y="94" width="12" height="12" rx="2.5"/>
+            <rect class="box" x="334" y="94" width="12" height="12" rx="2.5"/>
+            <rect class="box" x="382" y="94" width="12" height="12" rx="2.5"/>
+            <rect class="box" x="430" y="94" width="12" height="12" rx="2.5"/>
+            <rect class="box" x="478" y="94" width="12" height="12" rx="2.5"/>
+            <rect class="box" x="526" y="94" width="12" height="12" rx="2.5"/>
+            <rect class="box" x="574" y="94" width="12" height="12" rx="2.5"/>
+            <rect class="box" x="622" y="94" width="12" height="12" rx="2.5"/>
+          </g>
+        </g>
+
+        <!-- 창고 — 옆벽만 그리고 바닥은 그리지 않는다. 더미가 화면 아래로 계속 이어지는 그림이다 -->
+        <path class="silo" d="M664 74v112M872 74v112"/>
+        <path class="silo" d="M664 74h14M858 74h14"/>
+        <g clip-path="url(#clipSilo)" mask="url(#maskSilo)">
+          <g class="pile">
+            <use href="#pileRow" y="57"/><use href="#pileRow" y="76"/>
+            <use href="#pileRow" y="95"/><use href="#pileRow" y="114"/>
+            <use href="#pileRow" y="133"/><use href="#pileRow" y="152"/>
+            <use href="#pileRow" y="171"/><use href="#pileRow" y="190"/>
+          </g>
+        </g>
+      </svg>
       </div>
-      <!-- 각주가 길지만 줄이지 않는다 — 이 그림이 무엇이 아닌지를 밝히는 게 그림 자체보다 중요하다.
-           히어로 격자의 fieldnote 와 같은 역할이다. -->
-      <p class="lab ko fine">가로는 발행 회차입니다 — 시각 눈금도, 실측 시계열 그래프도 아닙니다.
-        세로 두께는 도메인별 <b>제품 수</b>(실측)이고, 행 수는 제품마다 그레인이 달라 더하지 않습니다.</p>
+      <p class="lab ko fine">그림입니다 — 상자 하나가 몇 행이라는 뜻은 아닙니다.
+        숫자가 실린 곳은 원천별 <b>제품 수</b>와 위의 마지막 발행 시각뿐이고,
+        행 수는 제품마다 그레인이 달라 더하지 않습니다.</p>
     </div>
   </section>
 
@@ -828,106 +959,28 @@ function failState(id, msg) {
     " — <a href='/catalog'>카탈로그에서 직접 보기</a></div>";
 }
 
-// ── 적재 띠: 발행 리듬을 보이는 배경 애니메이션.
-// 실측인 값은 도메인별 제품 수 하나뿐이고 그것만 세로 두께로 나간다. 회차마다 높이를 흔들면
-// 값이 있는 그래프로 읽히는데 우리에겐 그럴 이력이 없다 — 그래서 변하는 건 밝기뿐이다.
-// bootCatalog 이 받아온 목록을 넘겨받는다(같은 걸 두 번 부르지 않는다).
+// ── 적재 장면: 그림은 CSS 가 알아서 움직인다. 여기서는 실측 숫자만 채운다 —
+// 원천별 제품 수와 마지막 발행 시각. bootCatalog 이 받아온 목록을 넘겨받는다.
 function bootIngest(products, newest) {
-  const cv = $("stream"), ctx = cv && cv.getContext("2d");
-
   const counts = {};
   for (const p of products) counts[domainOf(p)] = (counts[domainOf(p)] || 0) + 1;
-  const lanes = DOMAINS.map((d) => ({ name: d.name, n: counts[d.id] || 0 }))
-                       .sort((a, b) => b.n - a.n);
 
-  $("ingestLanes").innerHTML = lanes.map((l) =>
-    "<div class='lane" + (l.n ? "" : " off") + "'><span class='nm'>" + esc(l.name) + "</span>" +
-    "<span class='c num'>" + (l.n ? l.n + "종" : "준비 중") + "</span></div>").join("");
+  for (const el of document.querySelectorAll("#scene .cnt")) {
+    const n = counts[el.dataset.d] || 0;
+    el.textContent = n ? n + "종" : "준비 중";
+  }
 
-  const live = lanes.filter((l) => l.n).length;
+  const live = DOMAINS.filter((d) => counts[d.id]).length;
   setStat("ingestSum", products.length + "종 · " + live + "개 도메인");
-  // 헤드의 "적재중"은 장식이 아니라 마지막 발행 시각이다 — 파이프라인이 멈추면 여기서 먼저 티가 난다
+  // 머리의 "적재중"은 장식이 아니라 실제 마지막 발행 시각이다 — 파이프라인이 멈추면 여기서 먼저 티가 난다
   if (newest) $("ingestNow").textContent = "적재중 · 마지막 " + (relTime(newest) || "—");
 
-  if (!ctx || !ctx.roundRect) { if (cv) cv.style.display = "none"; return; }
-
-  // 두께: 제품 수에 선형 비례하되 바닥(0.30)을 준다 — 적은 도메인이 실선으로 눌리지 않게.
-  // 처음엔 제곱근으로 눌렀는데 레인 높이가 23px 뿐이라 22종과 17종이 1px 차이로 붙어버렸다(실측).
-  // 바닥이 이미 작은 쪽을 지켜주므로 압축까지 겹칠 이유가 없다.
-  const max = Math.max(1, ...lanes.map((l) => l.n));
-  const weight = lanes.map((l) => (l.n ? 0.30 + 0.70 * (l.n / max) : 0));
-
-  const COLW = 13, SPEED = 11;      // px, px/s — 하루 한 번의 리듬이라 느리게 흐른다
-  let dpr = 1, raf = 0, t0 = 0;
-
-  // 캔버스는 CSS 변수를 못 쓴다. 이 띠는 히어로 격자와 달리 --panel 위에 놓여 라이트에서
-  // 바탕이 흰색이 되므로, 민트를 그대로 쓰면 옅은 칸(알파 .10)이 통째로 사라진다(실측).
-  // 글자에 쓰는 --accent-deep 과 같은 진청록으로 갈아끼고 알파도 조금 올린다.
-  const DARK = [60, 224, 196], LIGHT = [11, 110, 96];
-  const isLight = () => document.documentElement.dataset.theme === "light";
-  const ink = () => (isLight() ? LIGHT : DARK);
-  const base = () => (isLight() ? 0.14 : 0.10);
-  const span = () => (isLight() ? 0.66 : 0.55);
-
-  function layout() {
-    const r = cv.getBoundingClientRect();
-    if (!r.width || !r.height) return false;
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    cv.width = Math.round(r.width * dpr);
-    cv.height = Math.round(r.height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return true;
-  }
-
-  function paint(now) {
-    const t = (now - t0) / 1000;
-    const r = cv.getBoundingClientRect();
-    ctx.clearRect(0, 0, r.width, r.height);
-    const laneH = r.height / lanes.length;
-    const shift = (t * SPEED) % COLW;              // 오른쪽에서 태어나 왼쪽으로 흐른다
-    const cols = Math.ceil(r.width / COLW) + 1;
-    const col = ink(), b = base(), s = span();
-
-    for (let c = 0; c < cols; c++) {
-      const x = r.width - shift - (c + 1) * COLW;
-      if (x + COLW < 0) continue;
-      // 오른쪽 끝일수록 밝다 = 최근 회차. 왼쪽으로 갈수록 잦아들며 화면 밖 이력으로 이어진다
-      const age = 1 - (r.width - x) / r.width;
-      const lit = Math.pow(Math.max(0, age), 1.6);
-      for (let i = 0; i < lanes.length; i++) {
-        const w = weight[i];
-        if (!w) continue;
-        const h = laneH * 0.80 * w;
-        const y = i * laneH + (laneH - h) / 2;
-        ctx.fillStyle = "rgba(" + col[0] + "," + col[1] + "," + col[2] + "," +
-                        (b + lit * s).toFixed(3) + ")";
-        ctx.beginPath();
-        ctx.roundRect(x, y, COLW - 3, h, Math.min(2, (COLW - 3) / 3));
-        ctx.fill();
-      }
-    }
-  }
-
-  function loop(now) { paint(now); raf = requestAnimationFrame(loop); }
-  function stop() { if (raf) { cancelAnimationFrame(raf); raf = 0; } }
-  function start() {
-    if (raf || !layout()) return;
-    t0 = performance.now();
-    paint(t0);                 // 첫 프레임은 rAF 를 기다리지 않는다
-    if (REDUCED) return;       // 흐르지 않는 한 장 — 두께 차이는 그대로 읽힌다
-    raf = requestAnimationFrame(loop);
-  }
-
-  addEventListener("resize", () => { if (layout()) paint(performance.now()); });
-  document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
-  new IntersectionObserver((es) => (es[0].isIntersecting ? start() : stop()),
-                           { threshold: 0 }).observe(cv);
-  // 테마를 바꾸면 색을 다시 골라야 한다. 멈춰 있을 때(화면 밖·reduced-motion)도 마지막 한 장이
-  // 남아 있으므로 여기서 직접 다시 그린다 — 안 그리면 이전 모드 색이 그대로 남는다.
-  new MutationObserver(() => paint(raf ? performance.now() : t0))
-    .observe(document.documentElement, { attributeFilter: ["data-theme"] });
-  start();
+  // 그림에 뜻이 실린 건 이 숫자들뿐이라, 읽어주는 문장도 같은 것만 담는다
+  $("scene").setAttribute("aria-label",
+    "원천에서 데이터가 모여 적재되는 그림. " +
+    DOMAINS.map((d) => d.name + " " + (counts[d.id] || 0) + "종").join(", ") + ".");
 }
+
 
 // ── 카탈로그: 통계 · 제품 카드 · 도메인
 async function bootCatalog() {
@@ -943,10 +996,10 @@ async function bootCatalog() {
     $("statFreshK").textContent = "마지막 갱신 · 확인 불가";
     failState("domains", "도메인 정보를 불러오지 못했습니다");
     failState("cards", "제품 목록을 불러오지 못했습니다");
-    // 적재 띠는 실측 위에서만 그린다 — 숫자를 못 읽었으면 흐르는 그림도 띄우지 않는다
+    // 그림은 그대로 두고 숫자만 물음표로 — 흐르는 장면까지 지우면 실패가 더 크게 보인다
     setStat("ingestSum", "적재 현황을 불러오지 못했습니다");
     $("ingestNow").textContent = "확인 불가";
-    $("stream").style.display = "none";
+    for (const el of document.querySelectorAll("#scene .cnt")) el.textContent = "—";
     return;
   }
 
