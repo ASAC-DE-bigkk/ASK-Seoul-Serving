@@ -87,7 +87,23 @@ async function issueKey(env, request) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return problem(400, "invalid email", "올바른 이메일 형식이 아니다");
 
-  const ip = request.headers.get("cf-connecting-ip") || "local";
+  // 발급 rate limit 의 IP 축은 원문을 저장하지 않는다(#9 §7-①·⑥) — 일 회전 솔트 해시.
+  // 같은 날 안에서만 같은 값이라 시간당 카운트는 성립하고, 날이 바뀌면 대응이 끊겨
+  // 장기 추적 축이 되지 못한다. 자정 경계에서 카운터가 리셋돼 상한 2배까지 통과
+  // 가능하지만 시간당 5회 상한이라 실해가 없다. 컬럼명 ip 는 유지 — 이름 변경은
+  // 증분 규약 위반이고 바뀌는 건 내용물뿐이다.
+  //
+  // 솔트가 없으면 해시가 아니라 인코딩이다 — IPv4 는 43억 조합이라 전수 대입으로 원문이
+  // 복원된다. 그래서 미설정이면 **발급만** 닫는다(조회 경로는 영향 없음). 기본값을 안전한
+  // 쪽에 두는 게 목적이라, 배포 때 시크릿을 잊으면 열린 채 도는 게 아니라 막힌 채 돈다.
+  // 콘솔의 'ops write disabled' 503 과 같은 방식.
+  const salt = String(env.ISSUANCE_SALT || "").trim();
+  if (!salt)
+    return problem(503, "issuance disabled",
+      "ISSUANCE_SALT 미설정 — 발급 기록의 IP 해시에 솔트가 없으면 원문 IP 를 복원할 수 있어 발급을 막는다. " +
+      "로컬은 marketplace/.dev.vars 에, 배포 환경은 `wrangler secret put ISSUANCE_SALT` 로 설정할 것");
+  const rawIp = request.headers.get("cf-connecting-ip") || "local";
+  const ip = await sha256hex(`${kstDay()}|${salt}|${rawIp}`);
   const hourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
   const { results: recent } = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM _issuance_log WHERE ip = ? AND created_at > ?"
@@ -129,7 +145,10 @@ async function issueKey(env, request) {
     );
   }
   statements.push(
-    env.DB.prepare("INSERT INTO _issuance_log (ip, created_at) VALUES (?, ?)").bind(ip, now)
+    env.DB.prepare("INSERT INTO _issuance_log (ip, created_at) VALUES (?, ?)").bind(ip, now),
+    // rate limit 창은 1시간 — 하루 지난 행은 유지할 이유가 없다(24h sweep, #9 §7-⑥)
+    env.DB.prepare("DELETE FROM _issuance_log WHERE created_at < ?")
+      .bind(new Date(Date.now() - 86400000).toISOString())
   );
   await env.DB.batch(statements);
 
@@ -222,6 +241,45 @@ const PUBLIC = "external = 1";
 // UI(catalog.html) 의 JOIN 배지와 같은 목록인데, 화면에만 있으면 API 소비자(특히 AI 에이전트)는
 // 크로스도메인 분석의 열쇠를 모른 채 추측해야 한다 — 그래서 응답 메타로도 내보낸다.
 const JOIN_AXES = ["admin_dong_code", "gu_code", "stat_region_cd"];
+
+// ── AI 클라이언트 분류 (#9 §3) — 원문 UA 는 저장하지 않고 분류 결과만 남긴다 ─────────
+// 목록은 코드 상수로 관리한다(#9 §7-③ 결정: 갱신 주체 = marketplace 담당, 방식 = PR).
+// 매칭 실패는 unknown — 지어내지 않는다. MCP·에이전트 툴 호출은 python-httpx 같은
+// 평범한 얼굴로 오므로(#9 §3) 수집 시점 분류는 절반이고, 나머지는 여정 분석의 몫이다.
+const AI_AGENT_PATTERNS = [
+  // [패턴, agent_name, agent_mode] — crawler = 사전 수집, on_demand = 사용자 질문 대행.
+  // 한 벤더의 -User 패턴을 크롤러 패턴보다 먼저 둔다(부분 문자열 겹침 대비).
+  [/ChatGPT-User/i, "openai", "on_demand"],
+  [/GPTBot|OAI-SearchBot/i, "openai", "crawler"],
+  [/Claude-User/i, "anthropic", "on_demand"],
+  [/ClaudeBot|Claude-SearchBot/i, "anthropic", "crawler"],
+  [/Perplexity-User/i, "perplexity", "on_demand"],
+  [/PerplexityBot/i, "perplexity", "crawler"],
+  [/Google-Extended|GoogleOther/i, "google", "crawler"],
+  [/Meta-ExternalFetcher/i, "meta", "on_demand"],
+  [/Meta-ExternalAgent/i, "meta", "crawler"],
+  [/CCBot/i, "commoncrawl", "crawler"],
+  [/Bytespider/i, "bytedance", "crawler"],
+  [/Amazonbot/i, "amazon", "crawler"],
+  [/Applebot-Extended/i, "apple", "crawler"],
+];
+const CLI_PATTERN = /curl|wget|python-requests|python-httpx|python-urllib|node-fetch|undici|axios|Go-http-client|okhttp|libwww|java\//i;
+const GENERIC_BOT_PATTERN = /bot|crawler|spider|slurp|scrapy/i;
+
+// UA 문자열 → {ua_class, agent_name, agent_mode}. request 가 아니라 문자열을 받는
+// 순수 함수 — 스키마·D1 없이 단독 테스트가 가능하다(scripts/classify.test.mjs).
+// 판정 순서가 곧 규칙이다: AI 목록 → cli → 일반 bot → browser → unknown.
+// 일반 bot 을 browser 보다 먼저 보는 이유: 크롤러 UA 대부분이 Mozilla/ 를 포함한다.
+export function classifyClient(ua) {
+  if (!ua) return { ua_class: "unknown", agent_name: null, agent_mode: null };
+  for (const [re, name, mode] of AI_AGENT_PATTERNS)
+    if (re.test(ua))
+      return { ua_class: mode === "crawler" ? "ai_crawler" : "ai_agent", agent_name: name, agent_mode: mode };
+  if (CLI_PATTERN.test(ua)) return { ua_class: "cli", agent_name: null, agent_mode: null };
+  if (GENERIC_BOT_PATTERN.test(ua)) return { ua_class: "bot", agent_name: null, agent_mode: null };
+  if (/Mozilla\//.test(ua)) return { ua_class: "browser", agent_name: null, agent_mode: null };
+  return { ua_class: "unknown", agent_name: null, agent_mode: null };
+}
 
 async function handleCatalog(env) {
   const { results } = await env.DB.prepare(
