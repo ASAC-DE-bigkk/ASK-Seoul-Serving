@@ -4,6 +4,8 @@
 전제로 코드를 쓰지 않는다. 구속력 있는 결정은 [docs/decision/](docs/decision/)에 있고,
 콘솔(ops-dashboard)과 공유하는 계약은
 [decision/0001](docs/decision/0001-shared-contracts.md)이 정본이다.
+페이지를 어떻게 합성하는지(=왜 SSG 가 아닌지)는
+[decision/0002](docs/decision/0002-page-composition.md).
 
 ## 1. 이 프로젝트의 실체
 
@@ -135,6 +137,8 @@ npm run dev    # :8787 — 콘솔(:8788)과 동시 구동 가능
 _request_log 컬럼 추가(#9·intent 축) → 새 ALTER 파일 + 시드 체인 + 콘솔 통지, 전부 nullable
 공유 계약(오류·KST·key_hash …) 변경  → decision/0001 개정 + 콘솔 담당 리뷰
 저장소·인프라 추가(DO·Queues·R2 …)  → 도입 신호 확인 후 신규 결정 (ops-dashboard 0008 방식)
+배포 경로에 빌드 단계(SSG·번들러)    → decision/0002 개정 + 멘토 게이트. public/ 이 서빙
+                                      정본인 한 partials 동기화기는 이 선 아래다(0002 D-2)
 발급 rate limit 의 원문 IP           → #9 §7-①·⑥ 결정에 따라 정리 예정 — 그 전까지 확장 금지
 ```
 
