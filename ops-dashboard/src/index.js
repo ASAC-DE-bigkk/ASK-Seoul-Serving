@@ -194,9 +194,26 @@ async function sources(env) {
 //
 // 🔴 `모른다 ≠ 0` (#78 공통 원칙·F-3): 측정 못 한 값은 NULL 로 두고 0 과 구분해 내보낸다.
 //    0 으로 그리면 관측 공백이 "이상 없음"으로 위장된다.
+// 이 콘솔이 어느 환경을 보는가 → 그 환경 기록만 센다. `_ops_run_event.environment` 에
+// 배포 환경이 실려 오는데(#78 Z-7), 실측에서 **운영 D1 에 dev 기록 17건이 섞여** 있었다
+// (ASAC-DAG#677 곁가지). 섞인 채로 세면 운영 성공률이 개발 실행에 오염된다.
+//
+// 운영 화면(ENV_LABEL='운영')에서는 prod 만, 그 외에는 전부 본다 — 개발 화면에서 운영
+// 기록까지 보이는 건 문제가 아니지만 그 반대는 사고다. 한쪽만 좁히는 이유가 그것이다.
+// 필터를 건 사실과 걸러낸 건수는 응답에 실어 화면이 숨기지 않게 한다.
+function envScope(env) {
+  const isProd = String(env.ENV_LABEL || "") === "운영";
+  return {
+    isProd,
+    // SQL 조각이지만 값이 코드 상수라 주입 경로가 아니다(바인딩을 쓰면 IS NULL 분기가 지저분해진다)
+    where: isProd ? " AND environment = 'prod'" : "",
+  };
+}
+
 async function pipeline(env, params) {
   const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
   const sinceDate = `-${days} days`;
+  const scope = envScope(env);
 
   const [src, metric, events, state, expectation, layerGap] = await Promise.all([
     sources(env),
@@ -204,9 +221,10 @@ async function pipeline(env, params) {
     safeRows(env,
       "SELECT observed_date_kst AS day, domain, layer, event_count, success_count, failed_count, " +
       "skipped_count, degraded_count, retried_run_count, empty_run_count, " +
-      "row_count_sum, rows_observed_count, rows_unknown_count, duration_s_sum " +
+      "row_count_sum, rows_observed_count, rows_unknown_count, duration_s_sum, " +
+      "api_call_count_sum, retry_count_sum, failure_count_sum " +
       "FROM _ops_daily_metric WHERE observed_date_kst >= date('now','+9 hours',?) " +
-      "ORDER BY observed_date_kst, domain, layer", sinceDate),
+      "ORDER BY observed_date_kst DESC, domain, layer", sinceDate),
     // 기록 원본 — 집계가 비었을 때 "그래도 기록은 있다"를 보이기 위한 것이지, 콘솔이 집계를
     // 대신 만드는 게 아니다. 파이프라인의 집계 로직을 여기서 재현하면 정본이 둘이 된다.
     safeRows(env,
@@ -217,7 +235,7 @@ async function pipeline(env, params) {
       // layer 가 NULL 인 기록 — #78 이 세라고 한 '단계 미기록 건수'. 0 과 구분해야 한다.
       "SUM(layer IS NULL) AS layer_unknown, " +
       "SUM(row_count IS NULL) AS rows_unknown " +
-      "FROM _ops_run_event WHERE observed_date_kst >= date('now','+9 hours',?) " +
+      "FROM _ops_run_event WHERE observed_date_kst >= date('now','+9 hours',?)" + scope.where + " " +
       "GROUP BY observed_date_kst, domain ORDER BY observed_date_kst, domain", sinceDate),
     // DAG 현재 상태 — observation_state 가 C-9 의 complete/partial/unverified.
     // unverified 는 "아직 점검이 안 지난 구간"이지 정상이라는 뜻이 **아니다.**
@@ -230,8 +248,11 @@ async function pipeline(env, params) {
       "SELECT dag_id, domain, trigger_type, expected_interval, upstream, max_delay_minutes, " +
       "schedule_timezone, monitored, owner, owner_confirmed_on FROM _ops_pipeline_expectation " +
       "ORDER BY domain, dag_id"),
+    // 환경 필터를 걸었다는 사실 자체를 숨기지 않는다 — 걸러낸 건수를 같이 센다.
+    // "왜 숫자가 다르지"를 화면이 스스로 답할 수 있어야 한다.
     safeRows(env,
-      "SELECT COUNT(*) AS total, SUM(layer IS NULL) AS layer_unknown " +
+      "SELECT COUNT(*) AS total, SUM(layer IS NULL) AS layer_unknown, " +
+      "SUM(environment IS NOT NULL AND environment <> 'prod') AS non_prod " +
       "FROM _ops_run_event WHERE observed_date_kst >= date('now','+9 hours',?)", sinceDate),
   ]);
 
@@ -244,6 +265,49 @@ async function pipeline(env, params) {
   // 기록은 있는데 집계가 비었나 — 이게 실제로 일어나는 상태라 화면이 구분해서 말해야 한다.
   const hasEvents = events.rows.some((r) => r.events > 0);
   const gap = layerGap.rows[0] || {};
+
+  // ── D-7 3분류 — 성공률만으로는 안 보이는 것을 센다 (#78 §8)
+  //   정기 실행 통과  = 성공했고, 재시도도 빈 실행도 아니다
+  //   수동 복구로 살림 = 재시도 끝에 성공했다 — 성공률 100% 뒤에 숨는 열화다
+  //                     (성공률 100% 인 7일 중 4일이 재발이었던 실사례가 규약에 있다)
+  //   빈 실행         = 성공인데 받은 행이 0 — SLO 가 통과로 계산되는 '초록 위장'
+  // 세 값 다 파이프라인이 집계표에 미리 세어 둔 것을 읽는다. 여기서 다시 계산하지 않는다.
+  const cls = metric.rows.reduce((a, r) => {
+    a.retried += r.retried_run_count || 0;
+    a.empty += r.empty_run_count || 0;
+    a.success += r.success_count || 0;
+    a.failed += r.failed_count || 0;
+    a.skipped += r.skipped_count || 0;
+    a.degraded += r.degraded_count || 0;
+    a.events += r.event_count || 0;
+    a.rows_observed += r.rows_observed_count || 0;
+    a.rows_unknown += r.rows_unknown_count || 0;
+    // 모른다 ≠ 0 — row_count_sum 은 잰 것만 더한 값이라 NULL 을 0 으로 접지 않는다
+    if (r.row_count_sum != null) a.row_sum += r.row_count_sum;
+    if (r.duration_s_sum != null) a.duration += r.duration_s_sum;
+    if (r.api_call_count_sum != null) a.api_calls += r.api_call_count_sum;
+    return a;
+  }, { retried: 0, empty: 0, success: 0, failed: 0, skipped: 0, degraded: 0, events: 0,
+       rows_observed: 0, rows_unknown: 0, row_sum: 0, duration: 0, api_calls: 0 });
+  // 정기 통과 = 성공에서 재시도로 살린 것을 뺀다. 음수 방지는 집계가 어긋났을 때의 안전장치다.
+  cls.clean = Math.max(0, cls.success - cls.retried);
+
+  // 단계별 집약 — "어디서 막히나"를 보려면 도메인이 아니라 단계로 접어야 한다
+  const byLayer = {};
+  for (const r of metric.rows) {
+    const k = r.layer || "(미기록)";
+    const b = byLayer[k] || (byLayer[k] = { layer: k, events: 0, success: 0, failed: 0,
+                                            retried: 0, empty: 0, duration: 0, domains: new Set() });
+    b.events += r.event_count || 0; b.success += r.success_count || 0;
+    b.failed += r.failed_count || 0; b.retried += r.retried_run_count || 0;
+    b.empty += r.empty_run_count || 0;
+    if (r.duration_s_sum != null) b.duration += r.duration_s_sum;
+    b.domains.add(r.domain);
+  }
+  const layers = Object.values(byLayer)
+    .map((b) => ({ ...b, domains: b.domains.size,
+                   avg_duration_s: b.events ? Math.round(b.duration / b.events * 10) / 10 : null }))
+    .sort((a, b) => b.events - a.events);
 
   return json({
     window_days: days,
@@ -260,7 +324,12 @@ async function pipeline(env, params) {
       },
       // 모른다 ≠ 0 — 단계를 못 적은 기록이 몇 건인지 그대로 센다
       unknown: { events_total: gap.total ?? null, layer_unknown: gap.layer_unknown ?? null },
+      // 환경 필터를 걸었는지, 그래서 몇 건을 뺐는지 — 화면이 숨기지 않는다
+      scope: { env_filtered: scope.isProd, non_prod_rows: gap.non_prod ?? null },
     },
+    // D-7 실행 3분류 + 집계 기반 지표. 파이프라인이 세어 둔 값을 읽을 뿐 다시 계산하지 않는다.
+    classification: cls,
+    by_layer: layers,
     // 콘솔이 읽는 표 하나하나의 상태 — 관측 공백을 배너 한 줄이 아니라 지표로 낸다
     sources: src,
     daily_metric: metric.rows,

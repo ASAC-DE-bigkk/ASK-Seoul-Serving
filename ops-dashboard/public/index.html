@@ -273,6 +273,9 @@
     <section class="pane" id="pane-pipeline" role="tabpanel" aria-labelledby="tab-pipeline" tabindex="0">
     <h2 class="sec">데이터 준비 상태 <span>서울시 원본을 받아 가공하는 작업이 매일 제때 끝났나</span></h2>
     <div class="kpis" id="runKpis"></div>
+    <!-- 성공률만으로는 안 보이는 두 축. 규약이 3분류를 요구하는 이유가 여기 있다 —
+         재시도로 살린 것과 빈 실행은 성공으로 계산돼 성공률 뒤에 숨는다. -->
+    <div class="kpis" id="clsKpis"></div>
     <div class="grid">
       <div class="card wide">
         <div class="hd">
@@ -294,6 +297,13 @@
           <p>얼마나 자주 돌아야 하는지 등록된 값 — 감시 대상이 아닌 것은 회색입니다</p>
         </div>
         <div class="bd"><div class="scroll" id="pipeExpect"></div></div>
+      </div>
+      <div class="card wide">
+        <div class="hd">
+          <h3>단계별 실행</h3>
+          <p>어디서 막히나 — 수집(raw) → 적재(bronze) → 정제(silver) → 집계(gold) → 게시(d1)</p>
+        </div>
+        <div class="bd"><div class="scroll" id="byLayer"></div></div>
       </div>
       <div class="card wide">
         <div class="hd">
@@ -673,6 +683,9 @@ function render(d) {
 // 원칙 하나 — **모른다 ≠ 0**: 못 잰 값은 0 이 아니라 "미확인"으로 그린다. 0 으로 그리면
 // 관측 공백이 "이상 없음"으로 위장된다(#78 F-3).
 const OBS_KO = { complete: "점검 완료", partial: "일부 미확인", unverified: "점검 전" };
+// 파이프라인 단계 이름 — 내부 용어를 그대로 내보내지 않는다. 순서가 곧 흐름이다.
+const LAYER_KO = { raw: "수집(raw)", bronze: "적재(bronze)", silver: "정제(silver)",
+                   gold: "집계(gold)", d1: "게시(d1)", "(미기록)": "단계 미기록" };
 
 function renderPipeline(p) {
   const rows = p.run_event_daily || [];
@@ -741,6 +754,37 @@ function renderPipeline(p) {
         ? "<span class='pill ok'>대상</span>" : "<span class='pill dim'>제외</span>" },
   ], p.expectation, "등록된 실행 주기가 없습니다");
 
+  // ── D-7 3분류. 집계표가 채워졌을 때만 낸다 — 없는 값을 0 으로 그리면 "이상 없음"이 된다.
+  const c = p.classification;
+  const hasAgg = p.meta.source && p.meta.source.daily_metric_rows > 0;
+  $("clsKpis").hidden = !hasAgg;
+  if (hasAgg && c) {
+    kpis("clsKpis", [
+      ["정기 실행 통과", nf.format(c.clean), "한 번에 성공한 실행", ""],
+      // 성공률 100% 뒤에 숨는 열화 — 규약이 이걸 따로 세라고 한 이유다
+      ["다시 돌려 살림", nf.format(c.retried), "재시도 끝에 성공 — 성공률에는 안 보인다",
+       c.retried > 0 ? "bad" : "good"],
+      ["빈 실행", nf.format(c.empty), "성공했지만 받은 데이터가 0건",
+       c.empty > 0 ? "bad" : "good"],
+      ["실행 건수(집계)", nf.format(c.rows_observed) + " / " + nf.format(c.rows_observed + c.rows_unknown),
+       "행수를 실제로 잰 실행 / 전체", c.rows_unknown > 0 ? "bad" : ""],
+    ]);
+  }
+
+  $("byLayer").innerHTML = table([
+    { t:"단계", get:(r) => "<span class='pill dim'>" + esc(LAYER_KO[r.layer] || r.layer) + "</span>" },
+    { t:"분야 수", r:true, get:(r) => num(r.domains) },
+    { t:"실행", r:true, get:(r) => nf.format(r.events) },
+    { t:"성공", r:true, get:(r) => num(r.success) },
+    { t:"실패", r:true, get:(r) => r.failed ? "<span class='pill bad'>" + r.failed + "</span>" : num(0) },
+    { t:"다시 돌려 살림", r:true, get:(r) => r.retried
+        ? "<span class='pill warn'>" + r.retried + "</span>" : num(0) },
+    { t:"빈 실행", r:true, get:(r) => r.empty
+        ? "<span class='pill bad'>" + r.empty + "</span>" : num(0) },
+    { t:"평균 소요", r:true, get:(r) => r.avg_duration_s != null
+        ? nf.format(r.avg_duration_s) + "초" : "<span class='zero'>—</span>" },
+  ], p.by_layer, hasAgg ? "단계별 집계가 없습니다" : "집계표가 비어 있어 단계별로 나눌 수 없습니다");
+
   renderSources(p.sources || []);
 
   // 탭 점: 실패가 있거나 집계가 비었으면 붉게
@@ -785,6 +829,12 @@ function pipelineBanners(p) {
            "(<code>_ops_daily_metric</code>)가 0행입니다. 화면은 기록을 직접 세어 보여주고 " +
            "있지만, 규약상 집계는 파이프라인이 만듭니다(ASK-Seoul#78 D-7) — 집계 단계가 " +
            "도는지 확인이 필요합니다.</div>");
+  // 환경 필터를 걸었으면 그 사실과 건수를 말한다 — 숫자가 왜 다른지를 화면이 답해야 한다.
+  const sc = p.meta.scope || {};
+  if (sc.env_filtered && sc.non_prod_rows)
+    b.push("<div class='banner info' data-pane='pipeline'>이 화면은 <b>운영(prod) 기록만</b> 셉니다 — " +
+           "같은 표에 섞여 있는 <b>" + nf.format(sc.non_prod_rows) + "건의 개발(dev) 기록을 제외</b>했습니다. " +
+           "배포 환경이 한 표에 섞이면 운영 성공률이 개발 실행에 오염됩니다(ASAC-DAG#677).</div>");
   const u = p.meta.unknown || {};
   if (u.layer_unknown)
     b.push("<div class='banner info' data-pane='pipeline'>실행 기록 " + nf.format(u.events_total) +
