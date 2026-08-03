@@ -27,6 +27,7 @@ ops-dashboard 의 문서는 **세 층**이고, 층마다 구속력이 다르다.
 | [0009](decision/0009-ops-records-consumption.md) | 운영 기록 소비 | 조회 DB 4종을 읽기 전용으로 — 실행 기록 탭 (#78 적용 3단계) |
 | [0010](decision/0010-behavior-log-console-first.md) | 행동 로그 콘솔 선반영 | 이용 행동 탭 — 수집 스펙은 #9 검토 중, ALTER 미러 금지 |
 | [0011](decision/0011-per-env-config.md) | 환경별 설정 | 한 파일 + `[env.production]` — 플래그 없으면 로컬, 실수의 방향이 안전한 쪽 |
+| [0012](decision/0012-runs-tab-observation-boundaries.md) | 실행 기록의 관측 경계 | 환경 스코프·신선도·감시 3분류·로그 번들 — **못 거른 범위까지 화면이 밝힌다** |
 
 ## 방향 — docs/direction.md
 

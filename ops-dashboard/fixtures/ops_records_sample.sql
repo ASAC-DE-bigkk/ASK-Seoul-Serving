@@ -10,6 +10,8 @@
 --   재시도로 살림(07-31 raw·bronze) · 최종 실패(07-25 gold) · 빈 실행=초록 위장(08-01 d1)
 --   모른다≠0(silver 의 dbt 검증) · 멈춤(commerce_collect_watchdog) · 기록 없음(weather_traffic_bronze)
 --   관측 공백(commerce·citydata 외 도메인의 매트릭스 빈 칸) · 환경 섞임(smp_e10, dev)
+--   미등록(weather_collect_obs·citydata_collect — 상태는 있는데 기대치 행이 없다)
+--   감시 제외(monitored=0) · 로그 번들 있음/없음(log_bundle_key)
 -- run_event 는 대표 발췌라 집계표와 1:1 이 아니다 — 화면 경로 확인용이다.
 
 DELETE FROM _ops_run_event WHERE event_id LIKE 'smp_%';
@@ -49,7 +51,12 @@ INSERT INTO _ops_pipeline_state
   ('commerce_serving_export',   'commerce', 'smp_e06', 'success', '2026-08-02T21:20:00Z', '2026-08-03', 'triggered__2026-08-02T21:18:00', 12, 'unverified', '2026-08-01', 'sample'),
   ('culture_bronze',            'culture',  NULL,      'success', '2026-08-02T18:30:00Z', '2026-08-03', 'scheduled__2026-08-02T18:00:00',  8, 'unverified', NULL,         'sample'),
   ('citydata_transform_cosmos', 'citydata', NULL,      'success', '2026-08-02T22:40:00Z', '2026-08-03', 'triggered__2026-08-02T22:35:00', 17, 'unverified', NULL,         'sample'),
-  ('transit_collect_daily',     'transit',  NULL,      'success', '2026-08-02T17:00:00Z', '2026-08-03', 'scheduled__2026-08-02T16:00:00', 22, 'complete',   '2026-08-02', 'sample');
+  ('transit_collect_daily',     'transit',  NULL,      'success', '2026-08-02T17:00:00Z', '2026-08-03', 'scheduled__2026-08-02T16:00:00', 22, 'complete',   '2026-08-02', 'sample'),
+  -- **미등록 시연** — 상태는 있는데 기대치(_ops_pipeline_expectation) 행이 없다.
+  -- "감시 제외"가 아니라 "아직 등록 안 됨"이고, 화면은 이 둘을 구분해야 한다(#7 코멘트 5).
+  -- 실측 근거: 기대 주기는 현재 commerce 9건만 등록돼 있고 타 도메인은 등록 요청 중이다.
+  ('weather_collect_obs',       'weather',  NULL,      'success', '2026-08-02T14:20:00Z', '2026-08-03', 'scheduled__2026-08-02T14:00:00', 31, 'unverified', NULL,         'sample'),
+  ('citydata_collect',          'citydata', NULL,      'success', '2026-08-03T01:10:00Z', '2026-08-03', 'scheduled__2026-08-03T01:00:00', 44, 'partial',    NULL,         'sample');
 
 -- ── 날짜×도메인×단계 집계 (D-7 이 읽는 표).
 --    commerce 는 관문 배선이 끝나 단계가 채워지고, citydata 는 raw 만 시작됐다.
@@ -105,3 +112,11 @@ INSERT INTO _ops_run_event
   ('smp_e12', 'ops/v1', 'culture',  NULL,     'airflow_task', 'culture_bronze',            'recover_partition',   'manual__2026-08-02T18:00:00',    1, 1, 'prod', '2026-08-02T18:30:00Z', NULL,                  NULL,                    NULL,   NULL,     '2026-08-03', '2026-08-02', NULL,   NULL, 'unknown',             NULL,     NULL,             NULL, 0, 0, NULL,   NULL,                                  'success', NULL, NULL, NULL, NULL, NULL, 'recovery', 'ops/recovery/culture/load_date=2026-08-02/e12.json', NULL, '2026-08-03T02:10:00Z'),
   ('smp_e13', 'ops/v1', 'commerce', 'gold',   'airflow_task', 'commerce_load_gold',        'build_sales_mart',    'scheduled__2026-08-02T21:00:00', 1, 1, 'prod', '2026-08-02T21:03:00Z', '2026-08-02T20:17:48Z', '2026-08-02T21:03:00Z', 2712.4, '00:45:12', '2026-08-03', '2026-08-03',  25.0,  30414, 'iceberg_added_records', NULL,   NULL,             NULL, 0, 0, 'table', 'commerce.gold_sales_daily',           'success', NULL, NULL, NULL, NULL, NULL, 'runs',   'ops/runs/commerce/observed_date=2026-08-03/smp_e13.json', NULL, '2026-08-03T02:10:00Z'),
   ('smp_e14', 'ops/v1', 'commerce', 'raw',    'airflow_task', 'commerce_recollect_raw',    'recollect_changed',   'scheduled__2026-08-02T09:00:00', 1, 1, 'prod', '2026-08-02T09:02:00Z', '2026-08-02T09:01:40Z', '2026-08-02T09:02:00Z',   20.0, '00:00:20', '2026-08-02', '2026-08-02',  35.0,   NULL, 'not_applicable',     NULL,     NULL,             NULL, 0, 0, NULL,   NULL,                                  'skipped', NULL, NULL, NULL, NULL, NULL, 'runs',   'ops/runs/commerce/observed_date=2026-08-02/smp_e14.json', NULL, '2026-08-02T21:40:00Z');
+
+-- ── 로그 원문 번들 (#7 코멘트 4) — `log_bundle_key` 는 그 run 의 텍스트 로그
+--    tar.gz(R2) 위치다. 번들이 **하루 1회 뒤늦게** 올라오므로 당일 실행은 NULL 이 정상이고,
+--    지난 실행에만 붙는다. 화면이 이 둘을 "대기"와 경로로 구분해 보여주는지 확인하는 표본이다.
+--    (실측 2026-08-04: 운영 D1 15,873건 중 log_bundle_key 가 붙은 건 0건 — ASAC-DAG 확인 요청)
+UPDATE _ops_run_event SET log_bundle_key =
+  'ops/logs/' || domain || '/observed_date=' || observed_date_kst || '/' || dag_id || '.tar.gz'
+WHERE event_id LIKE 'smp_%' AND observed_date_kst <= '2026-08-01';

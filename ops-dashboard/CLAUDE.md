@@ -92,6 +92,9 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
   두 곳을 같이 고친다. → [../docs/environments.md](../docs/environments.md) · [0011](docs/decision/0011-per-env-config.md)
 - **샘플 데이터는 `is_sample=1`** 로 박고 화면에 배지를 띄운다. 실측인 척 조용히 섞이는 게
   최악이다. → [0005](docs/decision/0005-slo-snapshot-to-d1.md)
+- **거른 것은 걸렀다고 말한다.** 환경 스코프·감시 제외·미등록·미측정을 조용히 빼면 화면이
+  거짓말을 한다. 특히 **못 거른 범위**(집계표는 `environment` 컬럼이 없다)를 밝히지 않으면
+  섞인 값을 운영 수치로 읽는다. → [0012](docs/decision/0012-runs-tab-observation-boundaries.md)
 
 ## 5. 코드 규약
 

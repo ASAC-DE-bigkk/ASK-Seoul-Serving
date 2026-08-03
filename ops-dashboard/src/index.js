@@ -85,39 +85,80 @@ async function summary(env, params, writable = false) {
   // ── 실행 기록 (조회 DB 4종 — ASK-Seoul#78 §8, decision/0009. 읽기만 한다)
   // 날짜 축은 observed_date_kst 라 KST 로 자른다(now+9h). 오늘 포함 N일 창.
   const kstSince = `-${days - 1} days`;
+
+  // 🔴 환경 축을 걸러 읽는다(#78 Z-7, #36 지침 ②). 한 조회 DB 에 prod·dev 기록이 함께
+  // 들어가 있어서 — 실측 2026-08-04 운영 D1 에 dev 17행 — 안 거르면 개발 실행이 운영
+  // 지표에 섞인다. 도메인 쪽 판정 결함은 고쳐졌지만 **과거 행은 남는다.**
+  //
+  // 좁히는 건 운영 화면(ENV_SCOPE)뿐이다. 개발 화면에서까지 좁히면 "섞였다"는 사실
+  // 자체가 안 보이게 되는데, 그건 이 콘솔이 드러내야 할 관측이다.
+  // 아래 SQL 은 `?` 바인딩이 아니라 문자열 조각이라, 값은 상수 목록에서만 온다.
+  const scope = String(env.ENV_SCOPE || "").trim();
+  const SCOPES = { prod: "prod", dev: "dev" };
+  const envCol = SCOPES[scope] || null;
+  const evWhere = envCol ? ` AND environment = '${envCol}'` : "";
+
+  // ⚠️ **집계표는 못 거른다** — `_ops_daily_metric` 에 `environment` 컬럼이 자체가 없다
+  // (정본 스키마 실측 2026-08-04: observed_date_kst·domain·layer 가 키). 그래서 KPI 와
+  // 매트릭스는 환경이 섞인 채로 나온다. 여기에 필터를 붙이면 쿼리가 통째로 실패하고
+  // safeRows 가 그걸 삼켜 **실행 기록 탭 전체가 조용히 빈다**(실측에서 실제로 그랬다).
+  // 거를 수 없다는 사실 자체를 meta 로 내보내 화면이 밝히게 한다 — 감추는 게 더 나쁘다.
   const rdaily = await safeRows(env,
-    "SELECT * FROM _ops_daily_metric WHERE observed_date_kst >= date('now','+9 hours', ?) " +
-    "ORDER BY observed_date_kst, domain, layer", kstSince);
-  // 기대치×상태 — 정본은 DAG 선언의 사본(S-1)이고, 수동 전용(monitored=0)은 뺀다(S-4).
-  // LEFT JOIN 이라 "기록 자체가 없는 DAG"도 행으로 남는다 — 그 공백이 곧 관측이다.
+    "SELECT * FROM _ops_daily_metric WHERE observed_date_kst >= date('now','+9 hours', ?)" +
+    " ORDER BY observed_date_kst, domain, layer", kstSince);
+  // 기대치×상태 — 정본은 DAG 선언의 사본(S-1)이다.
+  //
+  // 세 갈래를 **한 표에서 구분해서** 낸다. 예전에는 `WHERE monitored = 1` 로 잘라내서
+  // 나머지 둘이 화면에 아예 없었는데, 그 둘은 뜻이 정반대다(#7 코멘트 · #36 지침 ④):
+  //   watched      기대치 등록 + 감시 대상   — 침묵 한도로 판정한다
+  //   unmonitored  기대치 등록 + monitored=0 — **감시 제외**(수동 전용 DAG). 정상이다
+  //   unregistered 기대치 행 자체가 없음     — **아직 등록 안 됨**. 판정 근거가 없다는 뜻이라
+  //                                            "이상 없음"이 아니라 관측 공백이다
+  // 세 번째는 상태 표에만 있는 DAG 라 방향을 뒤집은 LEFT JOIN 이 하나 더 필요하다.
   const rexp = await safeRows(env,
     "SELECT e.dag_id, e.domain, e.trigger_type, e.expected_interval, e.upstream, " +
-    "e.max_delay_minutes, e.owner, s.last_status, s.last_observed_at, s.observation_state " +
+    "e.max_delay_minutes, e.owner, " +
+    "CASE WHEN e.monitored = 1 THEN 'watched' ELSE 'unmonitored' END AS watch, " +
+    "s.last_status, s.last_observed_at, s.observation_state " +
     "FROM _ops_pipeline_expectation e LEFT JOIN _ops_pipeline_state s ON s.dag_id = e.dag_id " +
-    "WHERE e.monitored = 1 ORDER BY e.domain, e.dag_id");
+    "UNION ALL " +
+    "SELECT s.dag_id, s.domain, NULL, NULL, NULL, NULL, NULL, 'unregistered', " +
+    "s.last_status, s.last_observed_at, s.observation_state " +
+    "FROM _ops_pipeline_state s " +
+    "WHERE NOT EXISTS (SELECT 1 FROM _ops_pipeline_expectation e WHERE e.dag_id = s.dag_id) " +
+    "ORDER BY watch, domain, dag_id");
   if (!rdaily.ok || !rexp.ok) missing.push("runs");
   const [rfail, rempty, renv, rslow, rload, rsmp] = await Promise.all([
     // 실패 목록 — is_final_try 를 그대로 싣는다. 1=최종 실패, 0=재시도 중, NULL=시도 정보 없음
     // (관문 이전 기록). 셋을 뭉개면 "재시도로 살아난 실행"이 실패로 둔갑한다(C-7).
+    // log_bundle_key = 그 run 의 텍스트 로그 tar.gz(R2) 위치. 번들이 하루 1회 뒤늦게
+    // 올라오므로 **당일 실행은 NULL 이 정상**이다(#7 코멘트 4) — 화면이 그걸 밝힌다.
     safeRows(env, "SELECT observed_date_kst, domain, layer, dag_id, task_id, is_final_try, " +
-      "retry_count, error_ref FROM _ops_run_event WHERE status = 'failed' " +
-      "AND observed_date_kst >= date('now','+9 hours', ?) ORDER BY observed_at DESC LIMIT 12", kstSince),
+      "retry_count, error_ref, log_bundle_key FROM _ops_run_event WHERE status = 'failed' " +
+      "AND observed_date_kst >= date('now','+9 hours', ?)" + evWhere +
+      " ORDER BY observed_at DESC LIMIT 12", kstSince),
     // 빈 실행 = 초록 위장의 일반형 — 성공인데 실측 0행. row_count IS NULL(못 잼)과 다르다(F-3).
-    safeRows(env, "SELECT observed_date_kst, domain, layer, dag_id, task_id, rows_source " +
-      "FROM _ops_run_event WHERE status = 'success' AND row_count = 0 " +
-      "AND observed_date_kst >= date('now','+9 hours', ?) ORDER BY observed_at DESC LIMIT 10", kstSince),
-    // 환경 분포 — 조회 DB 에 dev 가 섞이면 운영 지표가 오염된다(Z-7 실해). 화면이 감시한다.
+    safeRows(env, "SELECT observed_date_kst, domain, layer, dag_id, task_id, rows_source, " +
+      "log_bundle_key FROM _ops_run_event WHERE status = 'success' AND row_count = 0 " +
+      "AND observed_date_kst >= date('now','+9 hours', ?)" + evWhere +
+      " ORDER BY observed_at DESC LIMIT 10", kstSince),
+    // 환경 분포 — **여기만 안 거른다.** 거르면 "무엇이 빠졌나"를 보여줄 수가 없다.
     safeRows(env, "SELECT environment, COUNT(*) AS events, COUNT(DISTINCT domain) AS domains, " +
       "MAX(observed_at) AS last_seen FROM _ops_run_event " +
       "WHERE observed_date_kst >= date('now','+9 hours', ?) GROUP BY environment ORDER BY events DESC", kstSince),
     safeRows(env, "SELECT dag_id, task_id, domain, ROUND(schedule_delay_s/60.0,1) AS delay_min, " +
       "ROUND(duration_s/60.0,1) AS dur_min, observed_date_kst FROM _ops_run_event " +
-      "WHERE schedule_delay_s IS NOT NULL AND observed_date_kst >= date('now','+9 hours', ?) " +
-      "ORDER BY schedule_delay_s DESC LIMIT 8", kstSince),
-    // 적재 자체의 신선도 + 단계 미기록(layer NULL — 관문 이전 기록) 건수
+      "WHERE schedule_delay_s IS NOT NULL AND observed_date_kst >= date('now','+9 hours', ?)" + evWhere +
+      " ORDER BY schedule_delay_s DESC LIMIT 8", kstSince),
+    // 적재 자체의 신선도 + 단계 미기록(layer NULL — 관문 이전 기록) 건수.
+    // bundled = 로그 번들이 실제로 붙은 건수 — 0 이면 링크 칸이 왜 비는지 화면이 설명한다.
     safeRows(env, "SELECT COUNT(*) AS total, SUM(layer IS NULL) AS layerless, " +
-      "MAX(ingested_at) AS last_ingest FROM _ops_run_event " +
-      "WHERE observed_date_kst >= date('now','+9 hours', ?)", kstSince),
+      "SUM(log_bundle_key IS NOT NULL) AS bundled, " +
+      "MAX(ingested_at) AS last_ingest, " +
+      // 적재 DAG(common_ops_d1_load)가 3시간 주기라 실시간이 아니다(#7 코멘트 2).
+      // "몇 분 전"까지 화면이 알아야 '조용한 것'과 '적재가 멈춘 것'을 가른다.
+      "CAST((julianday('now') - julianday(MAX(ingested_at))) * 1440 AS INTEGER) AS ingest_age_min " +
+      "FROM _ops_run_event WHERE observed_date_kst >= date('now','+9 hours', ?)" + evWhere, kstSince),
     // 샘플 감지 — 정본 스키마에 is_sample 이 없어 값 규약으로 표시한다(decision/0009)
     safeRows(env, "SELECT (SELECT COUNT(*) FROM _ops_run_event WHERE event_id LIKE 'smp_%') + " +
       "(SELECT COUNT(*) FROM _ops_daily_metric WHERE updated_at = 'sample') AS n"),
@@ -196,6 +237,19 @@ async function summary(env, params, writable = false) {
       pipeline_source: pipelineSource,
       pipeline_sample_rows: sampleRows,
       runs_is_sample: rsmp.ok && (rsmp.rows[0]?.n || 0) > 0,
+      // 실행 기록을 어느 환경 것만 셌나 + 그래서 몇 건이 빠졌나. 걸러 놓고 말을 안 하면
+      // "숫자가 왜 이렇지"가 되고, 그건 필터를 안 건 것만큼 나쁘다(#78 Z-7).
+      runs_env_scope: envCol,
+      runs_env_excluded: envCol
+        ? renv.rows.filter((r) => r.environment !== envCol)
+                   .reduce((n, r) => n + (r.events || 0), 0)
+        : 0,
+      // 어디까지 걸렀나. 기록 단위(_ops_run_event)는 걸렀지만 집계표는 컬럼이 없어 못 걸렀다 —
+      // "다 걸렀다"고 오해하면 KPI 를 운영 수치로 읽게 되므로 범위를 정확히 밝힌다.
+      runs_env_scope_partial: Boolean(envCol),
+      // 적재 주기는 3시간(common_ops_d1_load) — 실시간이 아니다. 화면이 이 값을 알아야
+      // "조용한 파이프라인"과 "적재가 멈춘 것"을 가른다(#7 코멘트 2).
+      runs_ingest_cycle_min: 180,
       // 로그 테이블은 있는데 초안 컬럼만 없다 = 스펙 반영 전 (테이블 자체가 없으면 serving 누락으로 이미 표시)
       usage_spec_pending: routes.ok && !uclients.ok,
     },
