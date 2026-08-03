@@ -1,9 +1,12 @@
 // ops-dashboard — 운영자용 통합 품질 콘솔 (ASK-Seoul#58, 로컬 전용)
 //
-// 한 화면에서 두 가지를 본다:
+// 한 화면에서 네 가지를 본다:
 //   · 파이프라인 품질 — 수집·변환이 제 몫을 했나 (_ops_slo, gold_*_slo_daily 스냅샷)
+//   · 실행 기록       — 무엇이 돌았고 무엇이 조용한가 (_ops_run_event 등 조회 DB 4종,
+//                       ASK-Seoul#78 규약 — 정본 스키마는 ASAC-DAG, 여기는 읽기 전용. decision/0009)
 //   · 서빙 품질       — 외부에 잘 나가고 있나 (_request_log, 게이트웨이가 쌓는다)
-// 둘 다 같은 D1 을 읽는다. 마켓플레이스와는 **다른 Worker · 다른 호스트**다 — 청중이 다르고,
+//   · 키 관리         — 발급된 키의 상태·쿼터
+// 전부 같은 D1 을 읽는다. 마켓플레이스와는 **다른 Worker · 다른 호스트**다 — 청중이 다르고,
 // 배포 단위가 갈려야 사고 반경도 갈린다.
 //
 // 인증: 읽기는 열려 있고 **조치만** 공유 토큰(OPS_TOKEN)으로 잠근다 — canWrite/requireWrite 참고.
@@ -77,6 +80,47 @@ async function summary(env, params, writable = false) {
     "SELECT * FROM _ops_slo WHERE event_date >= date('now', ?) ORDER BY event_date", since);
   if (!domains.ok || !slo.ok) missing.push("pipeline");
 
+  // ── 실행 기록 (조회 DB 4종 — ASK-Seoul#78 §8, decision/0009. 읽기만 한다)
+  // 날짜 축은 observed_date_kst 라 KST 로 자른다(now+9h). 오늘 포함 N일 창.
+  const kstSince = `-${days - 1} days`;
+  const rdaily = await safeRows(env,
+    "SELECT * FROM _ops_daily_metric WHERE observed_date_kst >= date('now','+9 hours', ?) " +
+    "ORDER BY observed_date_kst, domain, layer", kstSince);
+  // 기대치×상태 — 정본은 DAG 선언의 사본(S-1)이고, 수동 전용(monitored=0)은 뺀다(S-4).
+  // LEFT JOIN 이라 "기록 자체가 없는 DAG"도 행으로 남는다 — 그 공백이 곧 관측이다.
+  const rexp = await safeRows(env,
+    "SELECT e.dag_id, e.domain, e.trigger_type, e.expected_interval, e.upstream, " +
+    "e.max_delay_minutes, e.owner, s.last_status, s.last_observed_at, s.observation_state " +
+    "FROM _ops_pipeline_expectation e LEFT JOIN _ops_pipeline_state s ON s.dag_id = e.dag_id " +
+    "WHERE e.monitored = 1 ORDER BY e.domain, e.dag_id");
+  if (!rdaily.ok || !rexp.ok) missing.push("runs");
+  const [rfail, rempty, renv, rslow, rload, rsmp] = await Promise.all([
+    // 실패 목록 — is_final_try 를 그대로 싣는다. 1=최종 실패, 0=재시도 중, NULL=시도 정보 없음
+    // (관문 이전 기록). 셋을 뭉개면 "재시도로 살아난 실행"이 실패로 둔갑한다(C-7).
+    safeRows(env, "SELECT observed_date_kst, domain, layer, dag_id, task_id, is_final_try, " +
+      "retry_count, error_ref FROM _ops_run_event WHERE status = 'failed' " +
+      "AND observed_date_kst >= date('now','+9 hours', ?) ORDER BY observed_at DESC LIMIT 12", kstSince),
+    // 빈 실행 = 초록 위장의 일반형 — 성공인데 실측 0행. row_count IS NULL(못 잼)과 다르다(F-3).
+    safeRows(env, "SELECT observed_date_kst, domain, layer, dag_id, task_id, rows_source " +
+      "FROM _ops_run_event WHERE status = 'success' AND row_count = 0 " +
+      "AND observed_date_kst >= date('now','+9 hours', ?) ORDER BY observed_at DESC LIMIT 10", kstSince),
+    // 환경 분포 — 조회 DB 에 dev 가 섞이면 운영 지표가 오염된다(Z-7 실해). 화면이 감시한다.
+    safeRows(env, "SELECT environment, COUNT(*) AS events, COUNT(DISTINCT domain) AS domains, " +
+      "MAX(observed_at) AS last_seen FROM _ops_run_event " +
+      "WHERE observed_date_kst >= date('now','+9 hours', ?) GROUP BY environment ORDER BY events DESC", kstSince),
+    safeRows(env, "SELECT dag_id, task_id, domain, ROUND(schedule_delay_s/60.0,1) AS delay_min, " +
+      "ROUND(duration_s/60.0,1) AS dur_min, observed_date_kst FROM _ops_run_event " +
+      "WHERE schedule_delay_s IS NOT NULL AND observed_date_kst >= date('now','+9 hours', ?) " +
+      "ORDER BY schedule_delay_s DESC LIMIT 8", kstSince),
+    // 적재 자체의 신선도 + 단계 미기록(layer NULL — 관문 이전 기록) 건수
+    safeRows(env, "SELECT COUNT(*) AS total, SUM(layer IS NULL) AS layerless, " +
+      "MAX(ingested_at) AS last_ingest FROM _ops_run_event " +
+      "WHERE observed_date_kst >= date('now','+9 hours', ?)", kstSince),
+    // 샘플 감지 — 정본 스키마에 is_sample 이 없어 값 규약으로 표시한다(decision/0009)
+    safeRows(env, "SELECT (SELECT COUNT(*) FROM _ops_run_event WHERE event_id LIKE 'smp_%') + " +
+      "(SELECT COUNT(*) FROM _ops_daily_metric WHERE updated_at = 'sample') AS n"),
+  ]);
+
   // ── 서빙 (게이트웨이가 쌓는 _request_log)
   const routes = await safeRows(env,
     "SELECT route, COUNT(*) AS calls, SUM(status >= 400) AS errors, ROUND(AVG(ms),1) AS avg_ms " +
@@ -109,8 +153,12 @@ async function summary(env, params, writable = false) {
       can_write: writable,
       // 샘플이 한 행이라도 섞여 있으면 화면 전체에 배지를 띄운다 — 조용히 섞이는 게 제일 나쁘다
       pipeline_is_sample: slo.rows.some((r) => r.is_sample === 1),
+      runs_is_sample: rsmp.ok && (rsmp.rows[0]?.n || 0) > 0,
     },
     pipeline: { domains: domains.rows, slo: slo.rows },
+    runs: { daily: rdaily.rows, expectations: rexp.rows, failures: rfail.rows,
+            empty_runs: rempty.rows, environments: renv.rows, slowest: rslow.rows,
+            load: rload.rows[0] || null },
     serving: { routes: routes.rows, daily: daily.rows, products: products.rows,
                failures: failures.rows, empty: empty.rows, keys: keys.rows },
   });
