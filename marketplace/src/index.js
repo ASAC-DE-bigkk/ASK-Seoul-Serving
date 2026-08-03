@@ -9,6 +9,7 @@ import {
   authenticate, checkBurst, burstProblem, countUsage, classifyClient,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
+import { SKILL_BUNDLE_ID, handleSkillBundle, handleSkillData, handleSkillProduct } from "./skill.js";
 
 const ISSUE_HOURLY_CAP = 5;
 const DEFAULT_LIMIT = 500;
@@ -345,6 +346,31 @@ async function route(request, env, url, trace) {
     return handleData(env, decodeURIComponent(dataMatch[1]), url.searchParams, keyRow, trace);
   }
 
+  // ── /skill/v1 — seoul-urban-analytics K-Skill 전용 API ──────────────────────
+  // 공용 `/v1/*`와 제품 선택·응답 계약은 분리하지만, 키·버스트·오류·로그 정책은
+  // 공유한다. K-Skill 신규 경로는 전부 Bearer 인증이며 메타 조회는 쿼터를 소모하지 않는다.
+  if (path.startsWith("/skill/v1/")) {
+    const bundlePath = `/skill/v1/bundles/${SKILL_BUNDLE_ID}`;
+    const dataMatch = path.match(/^\/skill\/v1\/products\/([^/]+)\/data$/);
+    const productMatch = path.match(/^\/skill\/v1\/products\/([^/]+)$/);
+    if (path !== bundlePath && !dataMatch && !productMatch)
+      return problem(404, "not found",
+        `GET ${bundlePath} · /skill/v1/products/<product_id> · /skill/v1/products/<product_id>/data`);
+
+    trace.route = path === bundlePath ? "skill_bundle" : dataMatch ? "skill_data" : "skill_product";
+    const { keyRow, error } = await authenticate(env, request);
+    if (error) return error;
+    trace.keyHash = keyRow.key_hash;
+    const burst = await checkBurst(env, "k:" + keyRow.key_hash);
+    if (burst.exceeded) return burstProblem(burst.retryAfter);
+
+    if (path === bundlePath) return handleSkillBundle(env, trace);
+    const productId = decodeURIComponent((dataMatch || productMatch)[1]);
+    return dataMatch
+      ? handleSkillData(env, productId, url.searchParams, keyRow, trace)
+      : handleSkillProduct(env, productId, trace);
+  }
+
   // ── /v1 — 마켓플레이스 공용 API (ASAC-DAG#642) ────────────────────────────────
   // #638 결정대로 **전 경로 인증**이다. `/api/*` 의 무인증 미리보기는 프로토타입의
   // 제품 결정이라 유지하되, 신규 계약에서는 예외를 만들지 않는다.
@@ -370,7 +396,7 @@ async function route(request, env, url, trace) {
 
   return problem(404, "not found",
     "GET /api/catalog · /api/preview/<table> · /api/data/<table> · /api/me, POST·DELETE /api/keys · " +
-    "GET /v1/products/<product_id> · /v1/glossary — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
+    "GET /v1/products/<product_id> · /v1/glossary · /skill/v1/bundles/seoul-urban-analytics — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
 }
 
 // 요청 ID — 문의가 들어왔을 때 그 요청 하나를 로그에서 집어내는 열쇠다.
