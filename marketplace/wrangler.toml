@@ -8,8 +8,11 @@ compatibility_date = "2026-07-01"
 
 [assets]
 directory = "public"
-# API 라우트(/api/*)는 Worker 로, 그 외 정적 파일은 Assets 가 서빙
-run_worker_first = ["/api/*"]
+# API 라우트는 Worker 로, 그 외 정적 파일은 Assets 가 서빙.
+# 새 API 네임스페이스를 만들면 **여기 먼저 등록**해야 한다 — 빠지면 요청이 워커에 닿지도
+# 못하고 정적 404 페이지로 떨어진다(경로가 없는 것처럼 보여 원인 찾기가 오래 걸린다).
+# /skill/v1/* 은 그 담당이 착수할 때 추가한다(ASAC-DAG#642 경로 분리).
+run_worker_first = ["/api/*", "/v1/*"]
 # 없는 경로는 사람용 404 화면으로 — 이 설정이 없으면 정적 자산에 없는 모든 경로가
 # Worker 의 마지막 분기까지 흘러가 application/problem+json 으로 떨어진다.
 # 오타 URL 로 들어온 사람이 JSON 덩어리를 보게 되던 원인이었다(/api/* 는 그대로 JSON 이 맞다).

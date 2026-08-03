@@ -1,61 +1,24 @@
-// marketplace — 키 발급 + 쿼터 + culture 데이터 API (ASK-Seoul#58, 로컬 전용 프로토타입)
-// 게이트 순서: 키 검증 → 쿼터 카운트 → _catalog 게이트 → 조회 (#476 게이트웨이 역할의 실물 검증)
-// 키 원문 무저장 — SHA-256 해시만 (#58 스키마 확정안)
+// marketplace — 라우터 + `/api/*` 프로토타입 (ASK-Seoul#58, 로컬 전용)
+// 게이트 순서: 키 검증 → 버스트 → 쿼터 → _catalog 게이트 → 조회 (#476 게이트웨이 실물 검증)
+//
+// 경로가 셋으로 갈린다(ASAC-DAG#642) — `/api/*`(이 파일, 프로토타입) ·
+// `/v1/*`(src/v1.js, 마켓플레이스 공용) · `/skill/v1/*`(K-Skill 전용, 별도 담당).
+// 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
+import {
+  json, problem, quotaHeaders, sha256hex, kstDay, PUBLIC,
+  authenticate, checkBurst, burstProblem, countUsage, classifyClient,
+} from "./shared.js";
+import { handleProductBundle, handleGlossary } from "./v1.js";
 
 const ISSUE_HOURLY_CAP = 5;
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 5000;
-// 버스트는 쿼터와 층위가 다르다 — 쿼터는 공정성(하루에 얼마나), 버스트는 가용성(지금 얼마나).
-// 인증 요청은 키별로, 익명 미리보기는 IP별로 센다. 큰 제품을 커서로 훑으면
-// (30만 행 / limit 5000 = 61회) 2분에 나눠 받게 되는데, 그 정도가 적정 속도다.
-const BURST_PER_MIN = 60;
-
-const json = (obj, status = 200, headers = {}) =>
-  new Response(JSON.stringify(obj), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "access-control-allow-origin": "*",
-      ...headers,
-    },
-  });
-
-// 남은 한도를 응답 헤더로 알린다 — 본문을 파싱해야만 알 수 있으면 클라이언트는 한도를
-// 못 지킨다(429 를 맞고 나서야 안다). 헤더면 미들웨어·SDK 층에서 자동으로 감속할 수 있다.
-// 이름은 사실상 표준인 X-RateLimit-* 을 따른다. Reset 은 KST 자정의 epoch 초.
-function quotaHeaders(used, quota) {
-  const kstMidnight = new Date(Date.now() + 9 * 3600 * 1000);
-  kstMidnight.setUTCHours(24, 0, 0, 0);
-  return {
-    "x-ratelimit-limit": String(quota),
-    "x-ratelimit-remaining": String(Math.max(0, quota - used)),
-    "x-ratelimit-reset": String(Math.floor((kstMidnight.getTime() - 9 * 3600 * 1000) / 1000)),
-  };
-}
-
-const problem = (status, title, detail, extras = {}, headers = {}) =>
-  new Response(JSON.stringify({ type: "about:blank", title, status, detail, ...extras }), {
-    status,
-    headers: {
-      "content-type": "application/problem+json; charset=utf-8",
-      "access-control-allow-origin": "*",
-      ...headers,
-    },
-  });
-
-const sha256hex = async (text) => {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-};
 
 const newKey = () => {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   return "ask_" + [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 };
-
-// 쿼터의 하루 경계는 KST — 파이프라인 시간축과 동일 규약
-const kstDay = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
 // ── 페이지네이션: offset 이 아니라 rowid 키셋 커서 ──────────────────────────────
 // offset 을 안 쓰는 이유는 성능이 아니라 **정확성**이다. 제품은 매일 스냅샷으로 통째 재적재되고
@@ -87,7 +50,23 @@ async function issueKey(env, request) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return problem(400, "invalid email", "올바른 이메일 형식이 아니다");
 
-  const ip = request.headers.get("cf-connecting-ip") || "local";
+  // 발급 rate limit 의 IP 축은 원문을 저장하지 않는다(#9 §7-①·⑥) — 일 회전 솔트 해시.
+  // 같은 날 안에서만 같은 값이라 시간당 카운트는 성립하고, 날이 바뀌면 대응이 끊겨
+  // 장기 추적 축이 되지 못한다. 자정 경계에서 카운터가 리셋돼 상한 2배까지 통과
+  // 가능하지만 시간당 5회 상한이라 실해가 없다. 컬럼명 ip 는 유지 — 이름 변경은
+  // 증분 규약 위반이고 바뀌는 건 내용물뿐이다.
+  //
+  // 솔트가 없으면 해시가 아니라 인코딩이다 — IPv4 는 43억 조합이라 전수 대입으로 원문이
+  // 복원된다. 그래서 미설정이면 **발급만** 닫는다(조회 경로는 영향 없음). 기본값을 안전한
+  // 쪽에 두는 게 목적이라, 배포 때 시크릿을 잊으면 열린 채 도는 게 아니라 막힌 채 돈다.
+  // 콘솔의 'ops write disabled' 503 과 같은 방식.
+  const salt = String(env.ISSUANCE_SALT || "").trim();
+  if (!salt)
+    return problem(503, "issuance disabled",
+      "ISSUANCE_SALT 미설정 — 발급 기록의 IP 해시에 솔트가 없으면 원문 IP 를 복원할 수 있어 발급을 막는다. " +
+      "로컬은 marketplace/.dev.vars 에, 배포 환경은 `wrangler secret put ISSUANCE_SALT` 로 설정할 것");
+  const rawIp = request.headers.get("cf-connecting-ip") || "local";
+  const ip = await sha256hex(`${kstDay()}|${salt}|${rawIp}`);
   const hourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
   const { results: recent } = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM _issuance_log WHERE ip = ? AND created_at > ?"
@@ -129,27 +108,14 @@ async function issueKey(env, request) {
     );
   }
   statements.push(
-    env.DB.prepare("INSERT INTO _issuance_log (ip, created_at) VALUES (?, ?)").bind(ip, now)
+    env.DB.prepare("INSERT INTO _issuance_log (ip, created_at) VALUES (?, ?)").bind(ip, now),
+    // rate limit 창은 1시간 — 하루 지난 행은 유지할 이유가 없다(24h sweep, #9 §7-⑥)
+    env.DB.prepare("DELETE FROM _issuance_log WHERE created_at < ?")
+      .bind(new Date(Date.now() - 86400000).toISOString())
   );
   await env.DB.batch(statements);
 
   return json({ key, key_prefix: prefix, rotated, note: "이 키는 지금 한 번만 표시된다 — 저장해 둘 것" }, 201);
-}
-
-// allowRevoked: 폐기 경로 전용. 이미 폐기한 키로도 자기 정보를 지울 수 있어야 한다 —
-// 폐기가 삭제 요청의 문을 닫아버리면 "지울 권리"가 폐기 순서에 걸려 사라진다.
-async function authenticate(env, request, { allowRevoked = false } = {}) {
-  const auth = request.headers.get("authorization") || "";
-  const m = auth.match(/^Bearer\s+(ask_[0-9a-f]{32})$/i);
-  if (!m) return { error: problem(401, "missing api key", "Authorization: Bearer ask_… 헤더가 필요하다 — POST /api/keys 로 발급") };
-  const hash = await sha256hex(m[1]);
-  const row = await env.DB.prepare(
-    "SELECT key_hash, key_prefix, email, status, daily_quota FROM _keys WHERE key_hash = ?"
-  ).bind(hash).first();
-  if (!row) return { error: problem(401, "unknown api key", "등록되지 않은 키다") };
-  if (row.status !== "active" && !allowRevoked)
-    return { error: problem(403, "revoked api key", "폐기된 키다") };
-  return { keyRow: row };
 }
 
 // 폐기 — 키를 즉시 무효화한다. purge=true 면 이메일·사용량까지 지운다(처리방침의 삭제 요청
@@ -175,48 +141,6 @@ async function revokeKey(env, keyRow, purge) {
   });
 }
 
-// 분 단위 고정 창 — 슬라이딩 창이면 요청마다 타임스탬프 로그가 필요하고, 그건 이 규모에
-// 과하다. 대신 창 경계에서 최대 2배까지 통과할 수 있다는 걸 알고 쓴다(가용성 보호가 목적이라
-// 그 정도 오차는 견딘다). UPSERT 한 방으로 "창이 같으면 +1, 바뀌었으면 1로 리셋"을 처리한다.
-async function checkBurst(env, bucket) {
-  const now = new Date();
-  const window = now.toISOString().slice(0, 16);          // 'YYYY-MM-DDTHH:MM' (UTC 분)
-  await env.DB.prepare(
-    "INSERT INTO _burst (bucket, window_start, count) VALUES (?, ?, 1) " +
-    "ON CONFLICT(bucket) DO UPDATE SET " +
-    "count = CASE WHEN _burst.window_start = excluded.window_start THEN _burst.count + 1 ELSE 1 END, " +
-    "window_start = excluded.window_start"
-  ).bind(bucket, window).run();
-  const row = await env.DB.prepare("SELECT count FROM _burst WHERE bucket = ?").bind(bucket).first();
-  const used = row ? row.count : 1;
-  return { exceeded: used > BURST_PER_MIN, retryAfter: 60 - now.getUTCSeconds() };
-}
-
-// 초과 시 응답 — Retry-After 를 함께 준다. "언제 다시 오라"를 안 알려주면 클라이언트가
-// 곧바로 재시도해서 상황을 더 나쁘게 만든다.
-const burstProblem = (retryAfter) =>
-  problem(429, "burst rate limited",
-    `분당 ${BURST_PER_MIN}건을 넘었다 — ${retryAfter}초 뒤 다시 시도할 것`,
-    { retry_after: retryAfter }, { "retry-after": String(retryAfter) });
-
-async function countUsage(env, keyRow) {
-  const day = kstDay();
-  await env.DB.prepare(
-    "INSERT INTO _usage (key_hash, day, count) VALUES (?, ?, 1) " +
-    "ON CONFLICT(key_hash, day) DO UPDATE SET count = count + 1"
-  ).bind(keyRow.key_hash, day).run();
-  const row = await env.DB.prepare(
-    "SELECT count FROM _usage WHERE key_hash = ? AND day = ?"
-  ).bind(keyRow.key_hash, day).first();
-  return { used: row.count, quota: keyRow.daily_quota, exceeded: row.count > keyRow.daily_quota };
-}
-
-// 공개 게이트 — `external = 1` 로 **명시 선언된** 제품만 외부에 나간다.
-// `_catalog` 등록과 외부 공개는 다른 결정이다. 등록은 "publisher 가 실었다"는 사실이고,
-// 공개는 도메인 오너가 계약(meta.serving)에 external 을 켰다는 의사표시다. 이 구분이 없으면
-// 어느 도메인이 내부용 마트를 등록하는 순간 그대로 공개된다.
-// NULL(미선언)은 공개하지 않는다 — 옵트인이 안전한 기본값이다.
-const PUBLIC = "external = 1";
 
 // 도메인 간 공통 조인축(#48) — 서로 다른 제품의 같은 컬럼끼리 그대로 조인된다.
 // UI(catalog.html) 의 JOIN 배지와 같은 목록인데, 화면에만 있으면 API 소비자(특히 AI 에이전트)는
@@ -421,8 +345,32 @@ async function route(request, env, url, trace) {
     return handleData(env, decodeURIComponent(dataMatch[1]), url.searchParams, keyRow, trace);
   }
 
+  // ── /v1 — 마켓플레이스 공용 API (ASAC-DAG#642) ────────────────────────────────
+  // #638 결정대로 **전 경로 인증**이다. `/api/*` 의 무인증 미리보기는 프로토타입의
+  // 제품 결정이라 유지하되, 신규 계약에서는 예외를 만들지 않는다.
+  // 메타 조회는 버스트만 적용하고 일일 쿼터를 소모하지 않는다 — 데이터가 아니라 판단
+  // 재료이고, 소비 순서상 데이터 호출 앞에 반드시 오는 단계라 여기서 깎으면 쓸 몫이 준다.
+  if (path.startsWith("/v1/")) {
+    const productMatch = path.match(/^\/v1\/products\/([^/]+)$/);
+    if (!productMatch && path !== "/v1/glossary")
+      return problem(404, "not found",
+        "GET /v1/products/<product_id> · /v1/glossary?vocabulary_id=<id>");
+
+    trace.route = productMatch ? "v1_product" : "v1_glossary";
+    const { keyRow, error } = await authenticate(env, request);
+    if (error) return error;
+    trace.keyHash = keyRow.key_hash;
+    const burst = await checkBurst(env, "k:" + keyRow.key_hash);
+    if (burst.exceeded) return burstProblem(burst.retryAfter);
+
+    return productMatch
+      ? handleProductBundle(env, decodeURIComponent(productMatch[1]), request, trace)
+      : handleGlossary(env, url.searchParams.get("vocabulary_id"), trace);
+  }
+
   return problem(404, "not found",
-    "GET /api/catalog · /api/preview/<table> · /api/data/<table> · /api/me, POST·DELETE /api/keys — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
+    "GET /api/catalog · /api/preview/<table> · /api/data/<table> · /api/me, POST·DELETE /api/keys · " +
+    "GET /v1/products/<product_id> · /v1/glossary — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
 }
 
 // 요청 ID — 문의가 들어왔을 때 그 요청 하나를 로그에서 집어내는 열쇠다.
