@@ -1,0 +1,38 @@
+# 0010 — 행동 로그는 콘솔(소비측)을 먼저 반영한다
+
+- 상태: **채택 — 콘솔 소비측만** (2026-08). 수집 스펙 ①~⑥은 #9 에서 **확정**(2026-08-03),
+  정본 반영(marketplace `migrations/0005`) 대기
+- 관련: [reference/behavior-log-spec-draft.md](../reference/behavior-log-spec-draft.md)(초안),
+  [0003](0003-single-shared-local-d1.md)(소유권 경계), [0004](0004-read-open-write-token.md)(읽기 공개)
+
+## 맥락
+
+행동 로그 공통 스펙(키·IP·페이지·AI 에이전트 축)이 초안 단계다 — 수집을 시작하려면
+게이트웨이(`_request_log` 소유자, API 담당 소관)가 스펙을 확정해야 한다. 그런데 화면이
+없으면 검토가 추상 논쟁이 된다.
+
+## 결정
+
+1. **콘솔은 초안 필드를 소비하는 '이용 행동' 탭을 먼저 만든다.**
+   - 지금 데이터로 답이 되는 것은 **즉시 동작**: 발급→첫 호출 여정(`_keys`×`_request_log`),
+     익명 vs 인증 추이, `request_id` 단건 추적(`GET /api/trace`).
+   - 초안 종속 축(ua_class·agent_name·page_path 등)은 컬럼이 없으면 `safeRows` 로 실패를
+     삼키고 **'수집 전'** 상태로 남는다(`meta.usage_spec_pending`). 게이트웨이가 스펙을
+     반영하는 순간 콘솔 변경 없이 점등된다 — 실행 기록 탭과 같은 승격 패턴.
+2. **게이트웨이 스키마를 만들지도, 로컬에 미러하지도 않는다.** 운영 기록 4종(0009)과 달리
+   여기는 **기존 테이블에의 ALTER** 라 사정이 다르다 — SQLite 의 `ALTER TABLE ADD COLUMN` 에는
+   `IF NOT EXISTS` 가 없어서, 콘솔이 로컬 미러 ALTER 를 두면 나중에 정본
+   (`../marketplace/migrations/`) 마이그레이션이 같은 컬럼을 추가할 때 duplicate column 으로
+   **저쪽 시드가 깨진다.** 0003 경계(게이트웨이 소유 테이블 불가침)가 여기서는 실질 충돌까지
+   막는 규칙이다.
+3. **`GET /api/trace` 는 무인증(읽기 공개)이다.** `request_id` 는 그 응답을 받은 사람만 아는
+   16-hex 난수이고, 응답에는 키 8자 축약·컬럼명 축만 실린다(값·이메일·원문 키 없음) —
+   0004 의 읽기 공개 정책과 정합.
+
+## 재검토 조건
+
+- ~~#9 확정 시 초안 문서 배너 갱신~~ — 이행됨(2026-08-03, ①~⑥ 확정 반영).
+- marketplace `migrations/0005` 반영 후 — '수집 전' 3카드가 실제로 점등되는지 확인하고,
+  intent 축(`X-ASK-Intent`, #3 편입) 소비 카드(`intent × row_count=0`)를 추가한다.
+- 공통 계약의 정본은 marketplace [decision/0001](../../../marketplace/docs/decision/0001-shared-contracts.md)
+  (C-9: 스키마 정본은 marketplace·콘솔은 추종) — 이 문서와 어긋나면 함께 개정한다.

@@ -28,6 +28,9 @@ npm run dev           # http://localhost:8788  (게이트웨이 :8787 과 동시
 - 시드는 몇 번을 다시 돌려도 안전하다 — 마이그레이션은 `CREATE IF NOT EXISTS` 뿐이고
   (DROP 금지, [0007](decision/0007-schema-single-file-reset.md)), 픽스처는 **자기 샘플 범위만**
   지우고 다시 넣는다.
+- **동시 구동 순서**: 게이트웨이를 먼저 띄우고 콘솔을 나중에 띄운다(공유 sqlite 의 WAL
+  복구 잠금 충돌 예방). 인스펙터 포트는 콘솔이 9230 으로 고정돼 있어 게이트웨이의
+  기본값(9229)과 겹치지 않는다.
 
 ## 2. 맞게 떴는지 — API 검증 세트
 
@@ -49,6 +52,14 @@ curl -s "$BASE/api/summary?days=14" | jq '.runs | {failures, empty_runs, environ
 
 # ③ 키 목록 — 이메일이 마스킹돼 나오는지 (email 원문 키가 없어야 정상)
 curl -s "$BASE/api/keys" | jq '.keys[0]'
+
+# ④ 이용 행동 — 여정(즉시)과 스펙 종속 축('수집 전') 구분
+curl -s "$BASE/api/summary?days=14" | jq '{spec_pending: .meta.usage_spec_pending,
+  funnel: .usage.funnel, clients_pending: .usage.clients.pending}'
+
+# ⑤ 요청 추적 — 게이트웨이 응답 헤더 X-Request-Id 값으로 그 요청 한 건을 특정
+RID=$(curl -si http://localhost:8787/api/catalog | tr -d '\r' | awk -F': ' '/^x-request-id/{print $2}')
+curl -s "$BASE/api/trace?request_id=$RID" | jq '{found, rows}'
 ```
 
 **쓰기 문 3종 세트** — 쓰기 경로를 고쳤다면 반드시 셋 다 본다

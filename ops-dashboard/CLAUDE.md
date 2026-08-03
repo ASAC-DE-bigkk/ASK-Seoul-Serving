@@ -30,25 +30,29 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 
 ## 3. 이 프로젝트의 실체
 
-**운영자용 통합 품질 콘솔** (ASK-Seoul#58). 한 화면에서 네 가지를 본다.
+**운영자용 통합 품질 콘솔** (ASK-Seoul#58). 한 화면에서 다섯 가지를 본다.
 
 | 탭 | 묻는 질문 | 원본 |
 |---|---|---|
 | 파이프라인 품질 | 수집·변환이 제 몫을 했나 | `_ops_slo` (gold_*_slo_daily 스냅샷) |
 | 실행 기록 | 무엇이 돌았고, 무엇이 조용한가 | 조회 DB 4종 `_ops_run_event` 외 (ASK-Seoul#78, → [0009](docs/decision/0009-ops-records-consumption.md)) |
 | 서빙 품질 | 외부에 잘 나가고 있나 | `_request_log` (게이트웨이가 쌓는다) |
+| 이용 행동 | 누가·무엇이·어떻게 쓰나 | `_request_log` + `_keys` + 행동 스펙 초안 #9 (→ [0010](docs/decision/0010-behavior-log-console-first.md)) |
 | 키 관리 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_request_log` |
 
 구성은 이것이 전부다:
 
 ```text
-단일 Worker (src/index.js)          — GET /api/summary, GET·POST /api/keys
-+ Static Assets (public/index.html) — 탭 4개짜리 단일 페이지
+단일 Worker (src/index.js)          — GET /api/summary · /api/trace, GET·POST /api/keys
++ Static Assets (public/index.html) — 탭 5개짜리 단일 페이지
 + 공유 로컬 D1                       — 게이트웨이(../marketplace)와 같은 상태 (--persist-to)
 + migrations/                       — 0001 _ops_slo·_ops_domain(정본) · 0002 조회 DB 4종(미러)
 + fixtures/                         — 합성 샘플 시드 (slo_sample · ops_records_sample)
 + scripts/load_slo.py               — Trino → D1 임시 로더 (export task 명세를 겸함)
 ```
+
+이용 행동 탭의 스펙 종속 축(ua_class 등)은 **게이트웨이 반영 전까지 '수집 전'** 이다 —
+`_request_log` 에 ALTER 미러를 만들지 않는다(0010: 정본 마이그레이션과 duplicate column 충돌).
 
 Queues, R2, Durable Objects, Analytics Engine, Terraform, Cloudflare Access,
 TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호는
@@ -114,15 +118,15 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 배포 파이프라인이 없으므로 로컬에서 직접 확인한다.
 
 ```bash
-npm run seed   # _ops_* 리셋 + 합성 시드 → 공유 로컬 D1
-npm run dev    # :8788 — 게이트웨이(:8787)와 동시 구동 가능
+npm run seed   # _ops_* 증분 마이그레이션 + 합성 시드 → 공유 로컬 D1
+npm run dev    # :8788 — 게이트웨이(:8787)와 동시 구동 가능 (인스펙터 9230 고정 — 저쪽 기본 9229 와 안 겹친다)
 ```
 
 - API 는 curl 로: `/api/summary?days=14`, `/api/keys` (GET 무인증 / POST 는 Bearer).
 - 쓰기 경로를 고쳤으면 **토큰 미설정(503)·토큰 없음(401)·잘못된 토큰(401)** 을 다 본다.
 - 게이트웨이 테이블이 없는 상태(마켓플레이스 미시드)에서도 콘솔이 뜨는지 본다
   (`meta.missing` 강등).
-- 화면을 고쳤으면 탭 4개와 배지(샘플·읽기 전용·탭 경고 점) 동작을 본다.
+- 화면을 고쳤으면 탭 5개와 배지(샘플·읽기 전용·수집 전·탭 경고 점) 동작을 본다.
 - 검증 명령 세트와 실행 기록 탭의 시나리오별 확인법은 [docs/runbook.md](docs/runbook.md).
 
 ## 8. 완료 기준
