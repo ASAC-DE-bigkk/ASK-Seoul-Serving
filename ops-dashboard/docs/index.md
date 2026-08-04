@@ -19,9 +19,9 @@ ops-dashboard 의 문서는 **세 층**이고, 층마다 구속력이 다르다.
 | [0002](decision/0002-local-only-mentor-gate.md) | 로컬 전용 | `wrangler deploy` 금지 — 공개 URL 은 멘토 게이트(#476 ①) |
 | [0003](decision/0003-single-shared-local-d1.md) | 게이트웨이 D1 공유 | 원본 하나 — 복제 계층 없음, 부분 강등(`meta.missing`) |
 | [0004](decision/0004-read-open-write-token.md) | 읽기 공개·쓰기 토큰 | 보안 판단은 서버, 이메일은 서버측 마스킹 |
-| [0005](decision/0005-slo-snapshot-to-d1.md) | SLO 스냅샷 복사 | Trino 는 Worker 가 못 닿는다 — `is_sample` 규약 포함 |
+| [0005](decision/0005-slo-snapshot-to-d1.md) | 파이프라인 상태의 정본 | **조회 DB 4종에서 읽는다**(#78 D-2) — Trino 복사는 폐기 예정 폴백 |
 | [0006](decision/0006-key-hash-identifier.md) | 조치 식별자 `key_hash` | prefix 는 충돌한다 — 상태는 active/revoked 두 개 |
-| [0007](decision/0007-schema-single-file-reset.md) | `_ops_*` 단일 파일 리셋 | 잃을 상태가 없는 동안만 — 승격 시 증분 전환 |
+| [0007](decision/0007-schema-single-file-reset.md) | `_ops_*` **증분** 마이그레이션 | DROP 금지(#78 D-6) · 장부 추적 · **남의 표 소유 경계** |
 | [0008](decision/0008-deferred-scope.md) | 후속으로 미룬 것 | 안 하기로 한 것의 전체 목록 + 도입 신호 |
 | [0009](decision/0009-per-env-config.md) | 환경별 설정 | 한 파일 + `[env.production]` — 플래그 없으면 로컬, 실수의 방향이 안전한 쪽 |
 

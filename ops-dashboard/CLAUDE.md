@@ -34,19 +34,25 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 
 | 탭 | 묻는 질문 | 원본 |
 |---|---|---|
-| 파이프라인 품질 | 수집·변환이 제 몫을 했나 | `_ops_slo` (gold_*_slo_daily 스냅샷) |
-| 서빙 품질 | 외부에 잘 나가고 있나 | `_request_log` (게이트웨이가 쌓는다) |
-| 키 관리 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_request_log` |
+| 데이터 준비 상태 | 수집·변환이 제 몫을 했나 | **조회 DB 4종**(`_ops_run_event` 등, ASAC-DAG 소유) + `_ops_slo`(보조·합성) |
+| 응답 상태 | 외부에 잘 나가고 있나 | `_request_log` (게이트웨이가 쌓는다) |
+| API 사용량 | 무엇이 얼마나 쓰이나 | `_request_log` + `_catalog` |
+| 이용자 키 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_request_log` |
 
 구성은 이것이 전부다:
 
 ```text
-단일 Worker (src/index.js)          — GET /api/summary, GET·POST /api/keys
-+ Static Assets (public/index.html) — 탭 3개짜리 단일 페이지
+단일 Worker (src/index.js)          — GET /api/summary · /api/pipeline · /api/usage · /api/usage/<api>, GET·POST /api/keys
++ Static Assets (public/index.html) — 탭 4개짜리 단일 페이지
 + 공유 로컬 D1                       — 게이트웨이(../marketplace)와 같은 상태 (--persist-to)
-+ migrations/ + fixtures/           — _ops_slo·_ops_domain 정본과 시드
-+ scripts/load_slo.py               — Trino → D1 임시 로더 (export task 명세를 겸함)
++ 원격 dev D1 (npm run dev:remote)  — 파이프라인 실행 기록 4종은 여기에만 있다
++ migrations/ + fixtures/           — _ops_slo·_ops_domain **만** 만든다(남의 표 금지)
++ scripts/load_slo.py               — Trino 폴백, 정규 경로 아님 (0005 — 축 1 완료 시 폐기)
 ```
+
+**파이프라인 실행 기록(4종)은 로컬 Miniflare 에 없다.** 팀 dev D1 에 있으므로
+`npm run dev:remote`(원격 바인딩)로 띄워야 보인다. `--remote` 는 읽기 전용 모드가 아니라
+그 상태의 키 조치가 팀 DB 에 적용된다 — **보기 위한 모드다**([0002](docs/decision/0002-local-only-mentor-gate.md)).
 
 Queues, R2, Durable Objects, Analytics Engine, Terraform, Cloudflare Access,
 TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호는
@@ -94,6 +100,13 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 - **응답은 `no-store`**, 페이지는 `noindex`, 토큰은 sessionStorage(URL 에 싣지 않는다).
 - 조회 윈도우는 `days` 파라미터(기본 14, 최대 90). 목록성 쿼리는 LIMIT 을 둔다.
 - 위험 조치(폐기·삭제)는 화면에서 2단 확인. 삭제는 복구 불가를 명시한다.
+- **화면 문구에 내부 용어를 쓰지 않는다.** SLO·route·status·preview·quota 같은 말은 화면에
+  내보내지 않는다. 번역은 `public/index.html` 의 `ROUTE_KO`·`STATUS_KO` 한 곳에서 하고,
+  `_ops_domain.note` 처럼 **DB 에 저장되는 사람이 읽을 문구**도 같은 기준으로 쓴다
+  (그건 화면에서 못 고친다 — 정본이 fixtures·load_slo.py 다).
+- **요청 값·응답 본문을 화면에 끌어오지 않는다.** `_request_log` 는 필터 **컬럼명**만 남긴다
+  (게이트웨이 수집 원칙). API 사용량 상세는 축·건수·소요시간·request_id 까지이고,
+  화면이 "값은 저장하지 않는다"를 직접 밝힌다.
 - 주석은 "왜"를 적는다 — 이 리포의 기존 주석 밀도와 문체를 따른다.
 
 ## 6. 데이터 소유권
@@ -101,12 +114,20 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 | 테이블 | 정본 | 이 프로젝트의 권한 |
 |---|---|---|
 | `_ops_slo`, `_ops_domain` | **여기** (`migrations/0001`) | 스키마·내용 모두 |
+| `_ops_run_event`, `_ops_daily_metric`, `_ops_pipeline_state`, `_ops_pipeline_expectation` | ASAC-DAG (`common/ops/d1_ops.py`) | **읽기 전용** — 파이프라인 산출물 |
+| `_catalog`, 제품 표 `d1_*` | 도메인 export (`meta.serving` 계약) | **읽기 전용** — dbt 산출물 |
 | `_keys` | 게이트웨이 | `status`·`daily_quota` 갱신, 삭제 — 정해진 조치만 |
 | `_usage`, `_burst` | 게이트웨이 | 키 삭제 시 연쇄 삭제만 |
 | `_request_log` | 게이트웨이 | 읽기 전용 |
 
-`_ops_*` 스키마 변경은 `migrations/0001` 파일 갱신 — DROP+CREATE 리셋 규약
-([0007](docs/decision/0007-schema-single-file-reset.md)). 팀 D1 승격 시 증분으로 전환한다.
+**남의 표를 만들거나 지우지 않는다 — 파이프라인·dbt 산출물은 결코 건드리지 않는다.**
+콘솔 `migrations/` 에 위 '읽기 전용' 표 이름이 등장하면 그 자체가 위반이다(생성·삭제·ALTER 전부).
+개발용 표본이 필요하면 `migrations/` 가 아니라 `fixtures/` 에 둔다.
+
+`_ops_slo`·`_ops_domain` 스키마 변경은 **새 마이그레이션 파일에 ALTER 추가** — `0001` 은 더
+고치지 않고 **DROP 은 쓰지 않는다**(#78 D-6). 적용은 장부 추적
+(`wrangler d1 migrations apply`, 장부 표는 `d1_migrations_ops_dashboard` — 게이트웨이와 분리).
+→ [0007](docs/decision/0007-schema-single-file-reset.md)
 
 ## 7. 검증
 

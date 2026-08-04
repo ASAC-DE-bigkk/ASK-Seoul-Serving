@@ -6,11 +6,11 @@ DELETE FROM _ops_slo;
 DELETE FROM _ops_domain;
 
 INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('culture','문화·행사',1,NULL);
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('citydata','인구·도시',0,'SLO 마트 미보유');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('transit','대중교통',0,'SLO 마트 미보유');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('commerce','상권',0,'SLO 마트 미보유');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('weather','날씨',0,'SLO 마트 미보유');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('traffic','교통',0,'SLO 마트 미보유');
+INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('citydata','인구·도시',0,'품질 측정 기준이 아직 없음');
+INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('transit','대중교통',0,'품질 측정 기준이 아직 없음');
+INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('commerce','상권',0,'품질 측정 기준이 아직 없음');
+INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('weather','날씨',0,'품질 측정 기준이 아직 없음');
+INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('traffic','교통',0,'품질 측정 기준이 아직 없음');
 
 INSERT INTO _ops_slo (domain,event_date,scheduled_slo_passed,eod_slo_passed,best_coverage_pct,failed_dataset_count,violation_count,total_rows,ingest_duration_min,transform_runs,transform_all_success,maintenance_ran,green_disguise_runs,is_sample) VALUES ('culture','2026-06-30',0,1,100.0,0,0,1005,0.0,0,0,0,1,0);
 INSERT INTO _ops_slo (domain,event_date,scheduled_slo_passed,eod_slo_passed,best_coverage_pct,failed_dataset_count,violation_count,total_rows,ingest_duration_min,transform_runs,transform_all_success,maintenance_ran,green_disguise_runs,is_sample) VALUES ('culture','2026-07-01',1,1,100.0,0,0,27772,0.0,0,0,0,0,0);
