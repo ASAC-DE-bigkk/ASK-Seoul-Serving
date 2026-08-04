@@ -26,6 +26,23 @@
 // 네 곳에 흩어 둔 것이 원인이었으므로 **여기 한 줄로 모은다.** 새 문이 생기면 여기만 고친다.
 const SERVE = "route IN ('data', 'skill_data')";
 
+// ── 환경 스코프 ───────────────────────────────────────────────────────────────
+//
+// 파이프라인 쪽(`evWhere`)과 **같은 규약**이다. 좁히는 건 운영 화면(`ENV_SCOPE`)뿐이고,
+// 개발 화면은 섞인 것도 그대로 보여준다 — "섞였다"는 사실 자체가 이 콘솔이 드러내야 할
+// 관측이기 때문이다. 값은 상수 목록에서만 오므로 SQL 조각으로 이어 붙여도 안전하다.
+//
+// 서빙 로그에는 이 필터가 **없었다.** 게이트웨이가 미배포라 전 행이 `local` 이어서 표가
+// 안 났을 뿐이고, 배포되는 순간 `local` 과 `prod` 가 한 화면에 합산된다(#64). 파이프라인이
+// 이미 겪은 함정이다(#52 §11 C-4: 운영에 dev 17 · 개발에 prod 63 · ASAC-DAG#654).
+const SCOPES = { prod: "prod", dev: "dev" };
+const envScope = (env) => SCOPES[String(env.ENV_SCOPE || "").trim()] || null;
+
+// 🔴 `env IS NULL` 은 **운영으로 치지 않는다.** 없는 정보를 운영이라고 단정하면 로컬 실행이
+// 운영으로 보인다(ASAC-DAG#692 와 같은 기준). 그래서 `env = 'prod'` 는 NULL 을 자동으로
+// 뺀다 — 빼는 건 맞고, **뺐다는 사실을 화면이 말한다**(decision/0012).
+const gwWhere = (env) => { const c = envScope(env); return c ? ` AND env = '${c}'` : ""; };
+
 // MCP 는 `route='mcp'` 한 값이라 `query_product`(데이터)와 `list_products`(목록)가 갈리지
 // 않는다 — #62 는 상태 기록만 고치고 route 는 그대로 뒀다. 넣으면 부풀고 빼면 모자라므로
 // **빼고, 뺀 건수를 화면이 말한다.** 추측해서 채우는 게 제일 나쁘다(agreement §4 모른다 ≠ 0).
@@ -125,9 +142,7 @@ async function summary(env, params, writable = false) {
   // 좁히는 건 운영 화면(ENV_SCOPE)뿐이다. 개발 화면에서까지 좁히면 "섞였다"는 사실
   // 자체가 안 보이게 되는데, 그건 이 콘솔이 드러내야 할 관측이다.
   // 아래 SQL 은 `?` 바인딩이 아니라 문자열 조각이라, 값은 상수 목록에서만 온다.
-  const scope = String(env.ENV_SCOPE || "").trim();
-  const SCOPES = { prod: "prod", dev: "dev" };
-  const envCol = SCOPES[scope] || null;
+  const envCol = envScope(env);
   // 합성 배제를 환경 필터와 같은 조각에 얹는다 — _ops_run_event 를 읽는 모든 질의가 이걸 쓴다.
   // 한 곳에 두지 않으면 새 질의를 더할 때 빠뜨린다(그게 화면에 합성이 새는 경로다).
   const evWhere = (envCol ? ` AND environment = '${envCol}'` : "") +
@@ -201,31 +216,36 @@ async function summary(env, params, writable = false) {
   ]);
 
   // ── 서빙 (게이트웨이가 쌓는 _gateway_request_log)
+  // 서빙 로그 전 질의가 같은 조각을 쓴다 — 한 곳에 두지 않으면 새 질의에서 빠뜨리고,
+  // 그게 환경이 조용히 섞이는 경로다(파이프라인에서 배운 것).
+  const gwW = gwWhere(env);
   const routes = await safeRows(env,
     "SELECT route, COUNT(*) AS calls, SUM(status >= 400) AS errors, ROUND(AVG(ms),1) AS avg_ms " +
-    "FROM _gateway_request_log WHERE ts >= datetime('now', ?) GROUP BY route ORDER BY calls DESC", since);
+    "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW +
+    " GROUP BY route ORDER BY calls DESC", since);
   if (!routes.ok) missing.push("serving");
   const [daily, products, failures, empty, keys] = await Promise.all([
     safeRows(env, "SELECT substr(ts,1,10) AS day, COUNT(*) AS calls, COUNT(DISTINCT key_hash) AS keys_used " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?) GROUP BY day ORDER BY day", since),
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW +
+      " GROUP BY day ORDER BY day", since),
     // 축은 product_id 가 정본, 표명은 폴백. 화면에는 사람이 아는 이름을 내보내야 하므로
     // 표명도 같이 싣는다 — 없으면 화면이 식별자를 그대로 보여준다.
     safeRows(env, "SELECT " + PRODUCT_KEY + " AS product_key, MAX(table_name) AS table_name, " +
       "MAX(product_id) AS product_id, SUM(route = 'preview') AS previews, " +
       "SUM(" + SERVE + ") AS calls, SUM(" + MCP_ONLY + ") AS mcp_calls, " +
       "ROUND(AVG(row_count),1) AS avg_rows FROM _gateway_request_log " +
-      "WHERE " + PRODUCT_KEY + " IS NOT NULL AND ts >= datetime('now', ?) " +
+      "WHERE " + PRODUCT_KEY + " IS NOT NULL AND ts >= datetime('now', ?)" + gwW + " " +
       "GROUP BY product_key ORDER BY calls DESC, previews DESC LIMIT 12", since),
     safeRows(env, "SELECT status, route, table_name, COUNT(*) AS hits FROM _gateway_request_log " +
-      "WHERE status >= 400 AND ts >= datetime('now', ?) GROUP BY status, route, table_name " +
+      "WHERE status >= 400 AND ts >= datetime('now', ?)" + gwW + " GROUP BY status, route, table_name " +
       "ORDER BY hits DESC LIMIT 10", since),
     safeRows(env, "SELECT " + PRODUCT_KEY + " AS product_key, MAX(table_name) AS table_name, " +
       "filters, COUNT(*) AS empty_responses FROM _gateway_request_log " +
-      "WHERE status = 200 AND row_count = 0 AND ts >= datetime('now', ?) " +
+      "WHERE status = 200 AND row_count = 0 AND ts >= datetime('now', ?)" + gwW + " " +
       "GROUP BY product_key, filters ORDER BY empty_responses DESC LIMIT 10", since),
     safeRows(env, "SELECT substr(key_hash,1,8) AS key_id, COUNT(*) AS calls, " +
       "COUNT(DISTINCT substr(ts,1,10)) AS active_days FROM _gateway_request_log " +
-      "WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?) GROUP BY key_hash " +
+      "WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?)" + gwW + " GROUP BY key_hash " +
       "ORDER BY calls DESC LIMIT 10", since),
   ]);
 
@@ -244,29 +264,30 @@ async function summary(env, params, writable = false) {
   // 초안 컬럼이 아직 없으면 safeRows 가 실패를 삼키고 그 카드는 '수집 전'으로 남는다 —
   // 콘솔은 게이트웨이 스키마를 만들지도 미러하지도 않는다(0010: ALTER 미러는 정본
   // 마이그레이션과 duplicate column 으로 충돌해 저쪽 시드를 깨뜨린다).
-  const [src, pub, funnel, udaily, uclients, uagents, upages, fill] = await Promise.all([
+  const [src, pub, funnel, udaily, uclients, uagents, upages, fill, genv] = await Promise.all([
     sources(env),
     publication(env, days),
     safeRows(env,
       "SELECT COUNT(*) AS issued, SUM(first_call IS NOT NULL) AS activated, " +
       "ROUND(AVG(CASE WHEN first_call IS NOT NULL THEN (julianday(first_call) - julianday(created_at)) * 24 END), 1) AS avg_hours_to_first " +
       "FROM (SELECT k.created_at, (SELECT MIN(r.ts) FROM _gateway_request_log r " +
-      "WHERE r.key_hash = k.key_hash AND r." + SERVE + ") AS first_call FROM _keys k)"),
+      "WHERE r.key_hash = k.key_hash AND r." + SERVE + gwW.replace(" AND env", " AND r.env") +
+      ") AS first_call FROM _keys k)"),
     safeRows(env, "SELECT substr(ts,1,10) AS day, SUM(key_hash IS NOT NULL) AS keyed, " +
-      "SUM(key_hash IS NULL) AS anon FROM _gateway_request_log WHERE ts >= datetime('now', ?) " +
+      "SUM(key_hash IS NULL) AS anon FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW + " " +
       "GROUP BY day ORDER BY day", since),
     safeRows(env, "SELECT ua_class, COUNT(*) AS calls FROM _gateway_request_log " +
-      "WHERE ts >= datetime('now', ?) AND ua_class IS NOT NULL GROUP BY ua_class ORDER BY calls DESC", since),
+      "WHERE ts >= datetime('now', ?)" + gwW + " AND ua_class IS NOT NULL GROUP BY ua_class ORDER BY calls DESC", since),
     safeRows(env, "SELECT agent_name, agent_mode, COUNT(*) AS calls, SUM(" + SERVE + ") AS data_calls, " +
       "COUNT(DISTINCT " + PRODUCT_KEY + ") AS products FROM _gateway_request_log " +
-      "WHERE ts >= datetime('now', ?) AND agent_name IS NOT NULL " +
+      "WHERE ts >= datetime('now', ?)" + gwW + " AND agent_name IS NOT NULL " +
       "GROUP BY agent_name, agent_mode ORDER BY calls DESC LIMIT 10", since),
     // ⚠️ 예전에는 `route = 'page'` 로 걸렀는데 **게이트웨이 라우터에 그런 값이 없다** —
     // 조건이 아니라 오타에 가까웠고, 그래서 이 카드는 구조적으로 영원히 비었다(#63 ④).
     // 지금은 컬럼만 본다. `page_path` 는 `0005` 에 있지만 게이트웨이 `LOG_COLUMNS` 에 아직
     // 없어 채워지지 않는다 — 그 사실은 아래 `fill` 이 실측으로 말한다.
     safeRows(env, "SELECT page_path, COUNT(*) AS hits FROM _gateway_request_log " +
-      "WHERE ts >= datetime('now', ?) AND page_path IS NOT NULL " +
+      "WHERE ts >= datetime('now', ?)" + gwW + " AND page_path IS NOT NULL " +
       "GROUP BY page_path ORDER BY hits DESC LIMIT 12", since),
     // 행동 축이 '아직 안 온 것'인지 '와서 0인 것'인지는 컬럼 존재만으로 못 가른다. 창 안에서
     // 실제로 채워진 행 수를 세어, 화면이 "게이트웨이가 아직 안 싣는다"를 근거 있게 말하게
@@ -275,7 +296,11 @@ async function summary(env, params, writable = false) {
       "SUM(agent_name IS NOT NULL) AS agent_name, SUM(page_path IS NOT NULL) AS page_path, " +
       "SUM(intent IS NOT NULL) AS intent, SUM(product_id IS NOT NULL) AS product_id, " +
       "SUM(" + MCP_ONLY + ") AS mcp_calls " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)", since),
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW, since),
+    // 환경 분포 — **스코프를 걸지 않는다.** 걸면 "무엇을 뺐는지"를 셀 수 없다.
+    // NULL 은 '(미상)' 으로 따로 센다 — 운영으로 채우지 않는다(ASAC-DAG#692).
+    safeRows(env, "SELECT COALESCE(env, '(미상)') AS env, COUNT(*) AS calls " +
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?) GROUP BY env ORDER BY calls DESC", since),
   ]);
   // 행동 축이 **아직 안 오는 것**인지 **와서 0인 것**인지. 컬럼이 있어도 게이트웨이가 안 실으면
   // 질의는 성공하고 0행이 나와, 화면은 "데이터 없음"이라 말한다 — 그건 틀린 말이다.
@@ -315,6 +340,19 @@ async function summary(env, params, writable = false) {
       // **데이터 서빙으로 센 문**과 **못 가른 것**을 화면이 그대로 말할 수 있게 싣는다.
       // MCP 는 `route='mcp'` 한 값이라 데이터 질의와 목록 조회가 갈리지 않는다(#62) —
       // 그래서 아래 집계에서 뺐고, 뺀 건수를 여기 적는다. 침묵하면 "MCP 는 안 쓰인다"로 읽힌다.
+      // ── #64 환경 스코프 ─────────────────────────────────────────────────
+      // 서빙 수치가 **한 환경의 것임을 보장**하고, 무엇을 뺐는지 같이 말한다.
+      // 침묵하면 "숫자가 왜 이렇지"가 되고, 그건 필터를 안 건 것만큼 나쁘다(decision/0012).
+      serving_env_scope: envCol,
+      serving_env_mix: genv.ok ? genv.rows : [],
+      serving_env_excluded: envCol
+        ? genv.rows.filter((r) => r.env !== envCol).reduce((a, r) => a + (r.calls || 0), 0)
+        : 0,
+      // `env IS NULL` 은 운영으로 채우지 않는다 — 없는 정보를 운영이라 단정하면 로컬
+      // 실행이 운영으로 보인다(ASAC-DAG#692). 따로 세어 화면이 그대로 말한다.
+      serving_env_unknown: genv.ok
+        ? (genv.rows.find((r) => r.env === "(미상)")?.calls || 0)
+        : 0,
       serve_routes: ["data", "skill_data"],
       mcp_calls: F ? (F.mcp_calls || 0) : null,
       // 창 안에서 그 축이 한 번이라도 채워졌나 — 카드가 "게이트웨이 미발행"을 말하는 근거다.
@@ -526,6 +564,9 @@ function keyWindow(params) {
 
 async function keys(env, params, writable) {
   const w = keyWindow(params);
+  // 키의 호출 수도 같은 환경만 센다 — 목록은 운영인데 호출 수가 로컬까지 합쳐지면
+  // 두 숫자가 서로를 설명하지 못한다(#64).
+  const gwW = gwWhere(env);
   const filter = KEY_FILTERS.has(params.get("filter")) ? params.get("filter") : "all";
 
   // 발급일이 구간 안인 키를 센다. 사용량·요청 수도 **같은 구간**으로 자른다 —
@@ -542,7 +583,7 @@ async function keys(env, params, writable) {
     "LEFT JOIN (SELECT key_hash, COUNT(*) AS calls, MAX(ts) AS last_call, " +
     "                  MIN(CASE WHEN " + SERVE + " THEN ts END) AS first_data_call " +
     "           FROM _gateway_request_log " +
-    "           WHERE date(ts, '+9 hours') BETWEEN ? AND ? GROUP BY key_hash) r " +
+    "           WHERE date(ts, '+9 hours') BETWEEN ? AND ?" + gwW + " GROUP BY key_hash) r " +
     "       ON r.key_hash = k.key_hash " +
     "WHERE date(k.created_at, '+9 hours') BETWEEN ? AND ? " +
     "ORDER BY k.created_at DESC LIMIT 500",
@@ -652,6 +693,7 @@ const DOMAIN_EXPR = "substr(c.product_id, 1, instr(c.product_id, '_') - 1)";
 async function usage(env, params) {
   const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
   const since = `-${days} days`;
+  const gwW = gwWhere(env);
 
   const [apis, domains, monthly] = await Promise.all([
     safeRows(env,
@@ -664,7 +706,7 @@ async function usage(env, params) {
       "COALESCE(SUM(r.status = 200 AND r.row_count = 0), 0) AS empty_hits, " +
       "ROUND(AVG(r.ms), 1) AS avg_ms, MAX(r.ts) AS last_call " +
       "FROM _catalog c LEFT JOIN _gateway_request_log r " +
-      "  ON " + CATALOG_JOIN + " AND r.ts >= datetime('now', ?) " +
+      "  ON " + CATALOG_JOIN + " AND r.ts >= datetime('now', ?)" + gwW.replace(" AND env", " AND r.env") + " " +
       "GROUP BY c.name ORDER BY calls DESC, c.name", since),
     // 도메인 비율 — 분모는 '카탈로그에 잡히는 호출'이다. catalog·me 처럼 제품이 없는 라우트는
     // 도메인에 귀속되지 않으므로 여기서 빠진다(화면에 그 사실을 적는다).
@@ -673,14 +715,15 @@ async function usage(env, params) {
       "COUNT(r.rowid) AS calls, COUNT(DISTINCT " + PRODUCT_KEY_R + ") AS apis_used, " +
       "COALESCE(SUM(r.status >= 400), 0) AS errors " +
       "FROM _catalog c LEFT JOIN _gateway_request_log r " +
-      "  ON " + CATALOG_JOIN + " AND r.ts >= datetime('now', ?) " +
+      "  ON " + CATALOG_JOIN + " AND r.ts >= datetime('now', ?)" + gwW.replace(" AND env", " AND r.env") + " " +
       "GROUP BY domain ORDER BY calls DESC, domain", since),
     // 월별 — _gateway_request_log 는 30일 보존이라 실제로 잡히는 건 최대 두 달 조각이다.
     // 그래도 내보내는 이유는 "지금 보이는 게 전부"라는 사실을 화면이 말해줄 수 있어서다.
     safeRows(env,
       "SELECT substr(r.ts,1,7) AS month, " + DOMAIN_EXPR + " AS domain, COUNT(*) AS calls " +
       "FROM _gateway_request_log r JOIN _catalog c ON " + CATALOG_JOIN + " " +
-      "WHERE r.ts >= datetime('now', ?) GROUP BY month, domain ORDER BY month, calls DESC", since),
+      "WHERE r.ts >= datetime('now', ?)" + gwW.replace(" AND env", " AND r.env") +
+      " GROUP BY month, domain ORDER BY month, calls DESC", since),
   ]);
 
   return json({
@@ -714,7 +757,8 @@ async function usageDetail(env, name, params) {
   // 목록과 같은 축으로 찾는다. 상세로 들어오는 값은 표명(`_catalog.name`)이지만 로그에는
   // `product_id` 로만 남은 행이 있다(스킬·MCP) — 표명으로만 찾으면 상세에서만 사라져
   // 목록과 숫자가 어긋난다. 카탈로그에서 방금 읽은 `product_id` 를 두 번째 열쇠로 쓴다.
-  const KEY_W = " AND (table_name = ? OR product_id = ?) ";
+  // 상세도 목록과 같은 환경만 본다 — 안 그러면 상세 합이 목록보다 커진다(#64).
+  const KEY_W = gwWhere(env) + " AND (table_name = ? OR product_id = ?) ";
   const K = [name, product.product_id || name];
 
   const [daily, filters, statuses, recent] = await Promise.all([
@@ -840,8 +884,11 @@ export default {
         return problem(400, "invalid request_id",
           "req_ + 16자리 hex — 게이트웨이 응답 헤더 X-Request-Id(오류 본문 request_id) 값");
       const res = await safeRows(env,
+        // 🔴 여기만은 환경으로 거르지 않는다. `request_id` 는 지원 문의의 출발점이라,
+        // 다른 환경 요청이어도 **"그 환경 것이다"라고 답하는 편이 "없다"보다 낫다.**
+        // 대신 어느 환경 요청인지를 같이 실어 보낸다 — 판단은 사람이 한다.
         "SELECT ts, route, table_name, status, substr(key_hash, 1, 8) AS key_id, " +
-        "filters, row_count, ms FROM _gateway_request_log WHERE request_id = ? LIMIT 5", rid);
+        "filters, row_count, ms, env FROM _gateway_request_log WHERE request_id = ? LIMIT 5", rid);
       if (!res.ok) return problem(503, "log unavailable",
         "_gateway_request_log 를 조회할 수 없다 — 게이트웨이 D1 상태 공유와 마이그레이션 0005 적용 여부를 확인할 것");
       return json({ request_id: rid, found: res.rows.length, rows: res.rows });
