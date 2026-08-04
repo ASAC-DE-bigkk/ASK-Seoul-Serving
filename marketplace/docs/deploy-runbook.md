@@ -62,21 +62,34 @@ npm run verify:log  # 요청 로그 유실 검증(C-10)
 
 ## 1. 팀 D1 에 운영 테이블 만들기 (최초 1회)
 
-게이트웨이가 쓰는 `_keys`·`_usage`·`_burst`·`_issuance_log`·`_request_log` 는 지금까지
+게이트웨이가 쓰는 `_keys`·`_usage`·`_burst`·`_issuance_log`·`_gateway_request_log` 는 지금까지
 `--local` 로만 적용해서 **prod D1 에는 없다.** 이걸 안 하면 배포해도 키 발급·인증이 전부 죽는다.
 
 > ⚠️ **팀(원격) D1 쓰기다.** 스키마 생성만 하고 기존 표(`_catalog`·제품 테이블)는 건드리지
 > 않지만, 실행 전에 팀에 알린다. 이 명령은 **직접 실행한다** — 에이전트가 대신 돌리지 않는다.
 
+### 🔴 0단계 — 장부 백필이 **먼저다** (건너뛰면 남의 표가 오염된다)
+
 ```bash
 cd marketplace
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --env production \
+  --file=scripts/backfill-migrations-ledger.sql
+```
+
+**두 D1 모두 `d1_migrations` 장부가 없다**(2026-08-04 실측, 읽기만). 장부가 없으면 apply 는
+`0001` 부터 전부 재실행하고, 그중 `0004` 는 조건을 달 수 없는
+`ALTER TABLE _request_log ADD COLUMN request_id` 다 — 그 이름의 표는 **남의 것**이라
+(transit 워커, agreement §2) **남의 표에 우리 컬럼이 붙는다.** dev D1 에서 이미 일어난 사고이고,
+백필은 이름이 아니라 `route` 컬럼 유무로 우리 표인지를 가려 그 재연을 막는다(PR #50).
+
+### 1단계 — 적용
+
+```bash
 npx wrangler d1 migrations apply ask-seoul-prod-d1 --remote --env production
 ```
 
-파일을 나열하지 않는다 — 적용 여부는 D1 안의 장부(`d1_migrations`)가 추적하고, 안 된
-파일만 실행된다. 그래서 여러 번 돌려도 안전하고("이미 적용된 ALTER 실패는 정상" 같은
-예외 규칙이 필요 없다), **나중에 0005 가 생기면 같은 명령 한 번이 그것만 마저 적용한다.**
-prod D1 은 8/3 신설이라 장부가 처음부터 추적기와 함께 시작한다 — 로컬처럼 백필이 필요 없다.
+파일을 나열하지 않는다 — 적용 여부는 D1 안의 장부가 추적하고, **안 된 파일만** 실행된다.
+그래서 여러 번 돌려도 안전하다("이미 적용된 ALTER 실패는 정상" 같은 예외 규칙이 필요 없다).
 
 확인:
 
@@ -85,7 +98,17 @@ npx wrangler d1 execute ask-seoul-prod-d1 --remote \
   --command "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '\_%' ESCAPE '\'"
 ```
 
-`_keys`·`_usage`·`_burst`·`_issuance_log`·`_request_log`·`_catalog` 가 보이면 된다.
+`_keys`·`_usage`·`_burst`·`_issuance_log`·`_gateway_request_log`·`_catalog` 가 보이면 된다.
+
+그리고 **남의 표를 안 건드렸는지** 같이 본다 — 행 수만 보면 못 잡는다(ALTER 로 컬럼이
+붙는 사고는 행 수가 그대로다):
+
+```bash
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --env production \
+  --file=scripts/check-request-log-schema.sql
+```
+
+기대: `cols` 가 prod 4 · dev 5 그대로.
 
 ## 2. 시크릿 넣기 (최초 1회)
 
