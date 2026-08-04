@@ -33,7 +33,7 @@
         }
       }
     },
-    "/api/preview/{table}": {
+    "/api/preview/{product_id}": {
       "get": {
         "tags": ["catalog"],
         "summary": "샘플 5행 미리보기",
@@ -64,7 +64,7 @@
         }
       }
     },
-    "/api/data/{table}": {
+    "/api/data/{product_id}": {
       "get": {
         "tags": ["data"],
         "summary": "데이터 조회",
@@ -230,10 +230,10 @@
     },
     "parameters": {
       "Table": {
-        "name": "table", "in": "path", "required": true,
-        "description": "제품의 테이블 이름. /api/catalog 응답의 products[].name 값이다.",
+        "name": "product_id", "in": "path", "required": true,
+        "description": "제품 식별자. /api/catalog 응답의 products[].product_id 값이다. 물리 테이블명(products[].name)도 과도기 별칭으로 받는다.",
         "schema": { "type": "string", "pattern": "^[a-z0-9_]+$" },
-        "example": "gold_culture_event_schedule"
+        "example": "culture_event_schedule"
       }
     },
     "headers": {
@@ -312,7 +312,7 @@
     },
     "responses": {
       "BadRequest": {
-        "description": "invalid table · unknown filter · no time axis · invalid cursor · invalid email",
+        "description": "invalid id · unknown filter · no time axis · invalid cursor · invalid email",
         "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
       },
       "Unauthorized": {
@@ -324,7 +324,7 @@
         "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
       },
       "NotFound": {
-        "description": "unknown table — 비공개 제품도 404 로 답한다(403 이면 존재 여부를 알려주는 셈이라서)",
+        "description": "unknown product — 비공개 제품도 404 로 답한다(403 이면 존재 여부를 알려주는 셈이라서)",
         "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
       },
       "Conflict": {

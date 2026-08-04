@@ -604,28 +604,31 @@ function kstStamp(iso) {
 // 도메인마다 하나씩 — 한 도메인만 계속 보여주면 "문화 데이터 사이트"로 읽힌다.
 // 순서는 히어로 문구(문화·인구·교통·상권·날씨)를 따르고 도로 소통을 끝에 붙였다.
 // dom 은 DOMAINS 의 id — 표시명을 여기 복제하지 않는다.
+// pid 는 화면에 뜨는 공개 식별자(decision/0003)이고 table 은 스냅샷 파일의 조회 키다.
+// 스냅샷(demo-samples.json)은 테이블명으로 키잉돼 있고 그건 생성기 사정이라 그대로 둔다 —
+// 사람에게 보이는 곳만 공개 식별자를 쓴다.
 const DEMOS = [
-  { dom: "culture", table: "gold_culture_activity_by_dong",
+  { dom: "culture", pid: "culture_activity_by_dong", table: "gold_culture_activity_by_dong",
     q: "어느 동네에 문화 활동이 몰리나?",
     cols: [["admin_dong", "행정동"], ["event_date", "날짜"], ["activities_count", "활동"], ["free_events_count", "무료"]],
     foot: "<b>admin_dong_code</b>(행안부 10자리)를 그대로 실어 인구·상권·교통 데이터에 바로 조인됩니다." },
-  { dom: "citydata", table: "gold_citydata_ppltn_hourly",
+  { dom: "citydata", pid: "citydata_ppltn_hourly", table: "gold_citydata_ppltn_hourly",
     q: "이 시각 서울 어디가 붐비나?",
     cols: [["area_nm", "장소"], ["time_bucket", "시각"], ["average_population", "평균 인원"], ["peak_congestion_level", "혼잡"]],
     foot: "관측 지점 <b>121곳</b>의 시간 단위 인구. 장소마다 행정동 코드가 붙어 동네 단위로 말아 볼 수 있습니다." },
-  { dom: "transit", table: "gold_transit_dong_now",
+  { dom: "transit", pid: "transit_dong_now", table: "gold_transit_dong_now",
     q: "지금 이 동네 버스는 어떤가?",
     cols: [["admin_dong", "행정동"], ["gu", "자치구"], ["bus_congestion_grade", "버스 혼잡"], ["bus_veh_cnt", "관측 차량"]],
     foot: "버스·지하철·주차를 <b>행정동 한 줄</b>로 합칩니다 — 세 원천을 각각 부를 필요가 없습니다." },
-  { dom: "commerce", table: "d1_dong_category_matrix",
+  { dom: "commerce", pid: "commerce_dong_category_matrix", table: "d1_dong_category_matrix",
     q: "이 동네엔 무슨 업종이 많나?",
     cols: [["admin_dong", "행정동"], ["category_ko", "업종"], ["active_cnt", "영업 중"], ["opened_last_365d", "최근 1년 개업"]],
     foot: "행정동 × 업종 격자라, 위 문화 활동과 <b>같은 키로 붙여</b> '행사 많은 동네의 상권'을 볼 수 있습니다." },
-  { dom: "weather", table: "gold_weather_place_risk_window",
+  { dom: "weather", pid: "weather_place_risk_window", table: "gold_weather_place_risk_window",
     q: "언제 더위·비를 조심해야 하나?",
     cols: [["place_name", "장소"], ["forecast_at", "예보 시각"], ["temp_c", "기온"], ["risk_labels", "주의"]],
     foot: "KMA 예보를 시간 단위로 펼치고 <b>주의 구간에 이름을 붙여</b> 둡니다 — 임계값을 직접 계산하지 않아도 됩니다." },
-  { dom: "traffic", table: "gold_traffic_incident_x_weather_current_hourly",
+  { dom: "traffic", pid: "traffic_incident_x_weather_current_hourly", table: "gold_traffic_incident_x_weather_current_hourly",
     q: "돌발이 난 동네, 그때 날씨는?",
     cols: [["admin_dong", "행정동"], ["hour_at", "시각"], ["incident_count", "돌발"], ["tmp_value_num", "기온"]],
     foot: "도로 돌발과 같은 시각 예보를 <b>미리 붙여 둔</b> 제품 — 두 도메인을 직접 맞출 필요가 없습니다." },
@@ -675,7 +678,7 @@ async function playDemo(i, manual) {
   $("demoFoot").innerHTML = "&nbsp;";
   $("demoStamp").textContent = "";
 
-  const cmd = "curl " + location.origin + "/api/preview/" + d.table;
+  const cmd = "curl " + location.origin + "/api/preview/" + d.pid;
   const paint = (n) => {
     const shown = cmd.slice(0, n);
     $("demoCmd").innerHTML =
