@@ -40,10 +40,10 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 |---|---|---|
 | 데이터 준비 상태 | 수집·변환이 제 몫을 했나 | `_ops_slo` (보조·합성 스냅샷) |
 | 실행 기록 | 무엇이 돌았고, 무엇이 조용한가 | **조회 DB 4종** `_ops_run_event` 외 (ASK-Seoul#78, → [0009](docs/decision/0009-ops-records-consumption.md)) |
-| 응답 상태 | 외부에 잘 나가고 있나 | `_request_log` (게이트웨이가 쌓는다) |
-| 이용 행동 | 누가·무엇이·어떻게 쓰나 | `_request_log` + `_keys` + 행동 스펙 초안 #9 (→ [0010](docs/decision/0010-behavior-log-console-first.md)) |
-| API 사용량 | 무엇이 얼마나 쓰이나 | `_request_log` + `_catalog` |
-| 이용자 키 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_request_log` |
+| 응답 상태 | 외부에 잘 나가고 있나 | `_gateway_request_log` (게이트웨이가 쌓는다) |
+| 이용 행동 | 누가·무엇이·어떻게 쓰나 | `_gateway_request_log` + `_keys` + 행동 스펙 초안 #9 (→ [0010](docs/decision/0010-behavior-log-console-first.md)) |
+| API 사용량 | 무엇이 얼마나 쓰이나 | `_gateway_request_log` + `_catalog` |
+| 이용자 키 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_gateway_request_log` |
 
 탭 이름은 **화면 문구 규약(§5)** 을 따른다 — "파이프라인 품질"·"서빙 품질" 대신
 "데이터 준비 상태"·"응답 상태". 묻는 질문이 겹치는 두 탭을 갈라 둔 이유는
@@ -66,7 +66,7 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 로컬의 `migrations/0002` 미러는 화면을 돌려보기 위한 **빈 껍데기**이지 정본이 아니다.
 
 이용 행동 탭의 스펙 종속 축(ua_class 등)은 **게이트웨이 반영 전까지 '수집 전'** 이다 —
-`_request_log` 에 ALTER 미러를 만들지 않는다(0010: 정본 마이그레이션과 duplicate column 충돌).
+`_gateway_request_log` 에 ALTER 미러를 만들지 않는다(0010: 정본 마이그레이션과 duplicate column 충돌).
 
 Queues, R2, Durable Objects, Analytics Engine, Terraform, Cloudflare Access,
 TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호는
@@ -82,7 +82,7 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 - **팀(원격) D1 에 쓰지 않는다.** 모든 시드·로더는 로컬 상태(`--persist-to`)만 만진다.
   → [0002](docs/decision/0002-local-only-mentor-gate.md)
 - **게이트웨이 소유 테이블의 스키마를 여기서 바꾸지 않는다.** `_keys`·`_usage`·`_burst`·
-  `_request_log` 의 정본은 `../marketplace/migrations/`. 여기서는 읽기와 정해진 키 조치만.
+  `_gateway_request_log` 의 정본은 `../marketplace/migrations/`. 여기서는 읽기와 정해진 키 조치만.
   → [0003](docs/decision/0003-single-shared-local-d1.md)
 - **이메일 원문을 API 응답에 싣지 않는다.** 마스킹은 서버에서(`email_masked`).
   화면에서만 가리는 건 마스킹이 아니다. → [0004](docs/decision/0004-read-open-write-token.md)
@@ -121,7 +121,7 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
   내보내지 않는다. 번역은 `public/index.html` 의 `ROUTE_KO`·`STATUS_KO` 한 곳에서 하고,
   `_ops_domain.note` 처럼 **DB 에 저장되는 사람이 읽을 문구**도 같은 기준으로 쓴다
   (그건 화면에서 못 고친다 — 정본이 `fixtures/` 다).
-- **요청 값·응답 본문을 화면에 끌어오지 않는다.** `_request_log` 는 필터 **컬럼명**만 남긴다
+- **요청 값·응답 본문을 화면에 끌어오지 않는다.** `_gateway_request_log` 는 필터 **컬럼명**만 남긴다
   (게이트웨이 수집 원칙). API 사용량 상세는 축·건수·소요시간·request_id 까지이고,
   화면이 "값은 저장하지 않는다"를 직접 밝힌다.
 - 주석은 "왜"를 적는다 — 이 리포의 기존 주석 밀도와 문체를 따른다.
@@ -135,7 +135,8 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 | `_catalog`, 제품 표 `d1_*` | 도메인 export (`meta.serving` 계약) | **읽기 전용** — dbt 산출물 |
 | `_keys` | 게이트웨이 | `status`·`daily_quota` 갱신, 삭제 — 정해진 조치만 |
 | `_usage`, `_burst` | 게이트웨이 | 키 삭제 시 연쇄 삭제만 |
-| `_request_log` | 게이트웨이 | 읽기 전용 |
+| `_gateway_request_log` | 게이트웨이 | 읽기 전용 |
+| `_request_log` (4컬럼) | **transit 워커** | ❌ 읽지도 쓰지도 않음 — 이름 충돌로 게이트웨이가 비켰다(agreement §2) |
 
 **남의 표를 만들거나 지우지 않는다 — 파이프라인·dbt 산출물은 결코 건드리지 않는다.**
 `migrations/0002` 는 이 규칙의 **유일한 예외**이고, 그래서 조건이 붙는다: `CREATE TABLE IF
