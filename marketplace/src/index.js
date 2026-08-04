@@ -200,7 +200,7 @@ async function handlePreview(env, id, trace = {}) {
     return problem(400, "invalid id", "제품 id 형식이 아니다");
   // 비공개 제품은 404 로 답한다 — 403 이면 "있긴 있다"를 알려주는 셈이다
   const meta = await lookupProduct(env, id, "name, product_id, time_axis");
-  if (!meta) return problem(404, "unknown product", `'${id}' 은 서빙 카탈로그에 없다 — GET /api/catalog 참조`);
+  if (!meta) return problem(404, "unknown product", `'${id}' 은 서빙 카탈로그에 없다 — GET /api/v1/catalog 참조`);
   // 조회는 **카탈로그가 준 물리명**으로만 한다 — 요청 문자열을 식별자로 쓰지 않는다
   const table = meta.name;
   trace.table = table;
@@ -218,7 +218,7 @@ async function handleData(env, id, params, keyRow, trace = {}) {
   if (!/^[a-z0-9_]+$/.test(id))
     return problem(400, "invalid id", "제품 id 형식이 아니다");
   const meta = await lookupProduct(env, id, "*");
-  if (!meta) return problem(404, "unknown product", `'${id}' 은 서빙 카탈로그에 없다 — GET /api/catalog 참조`);
+  if (!meta) return problem(404, "unknown product", `'${id}' 은 서빙 카탈로그에 없다 — GET /api/v1/catalog 참조`);
   // 아래 SQL 에 들어가는 이름은 여기 하나뿐이다 — 요청 문자열이 아니라 카탈로그가 준 값
   const table = meta.name;
   trace.table = table;
@@ -333,21 +333,21 @@ async function logRequest(env, trace) {
 async function route(request, env, url, trace) {
   const path = url.pathname;
 
-  if (path === "/api/keys" && request.method === "POST") {
+  if (path === "/api/v1/keys" && request.method === "POST") {
     trace.route = "keys";
     return issueKey(env, request);
   }
-  if (path === "/api/keys" && request.method === "DELETE") {
+  if (path === "/api/v1/keys" && request.method === "DELETE") {
     trace.route = "revoke";
     const { keyRow, error } = await authenticate(env, request, { allowRevoked: true });
     if (error) return error;
     trace.keyHash = keyRow.key_hash;
     return revokeKey(env, keyRow, url.searchParams.get("purge") === "true");
   }
-  if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/keys)");
-  if (path === "/api/catalog") { trace.route = "catalog"; return handleCatalog(env); }
+  if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/v1/keys)");
+  if (path === "/api/v1/catalog") { trace.route = "catalog"; return handleCatalog(env); }
 
-  const previewMatch = path.match(/^\/api\/preview\/([^/]+)$/);
+  const previewMatch = path.match(/^\/api\/v1\/preview\/([^/]+)$/);
   if (previewMatch) {
     trace.route = "preview";
     // 익명 경로라 셀 식별자가 IP 밖에 없다 — 키 버킷과 같은 상한을 쓴다
@@ -357,8 +357,8 @@ async function route(request, env, url, trace) {
     return handlePreview(env, decodeURIComponent(previewMatch[1]), trace);
   }
 
-  const dataMatch = path.match(/^\/api\/data\/([^/]+)$/);
-  if (dataMatch || path === "/api/me") {
+  const dataMatch = path.match(/^\/api\/v1\/data\/([^/]+)$/);
+  if (dataMatch || path === "/api/v1/me") {
     trace.route = dataMatch ? "data" : "me";
     const { keyRow, error } = await authenticate(env, request);
     if (error) return error;
@@ -366,7 +366,7 @@ async function route(request, env, url, trace) {
     // 버스트는 쿼터보다 **앞**에서 본다 — 400·404 로 끝날 요청도 서버를 미는 건 같다
     const burst = await checkBurst(env, "k:" + keyRow.key_hash);
     if (burst.exceeded) return burstProblem(burst.retryAfter);
-    if (path === "/api/me") return handleMe(env, keyRow);
+    if (path === "/api/v1/me") return handleMe(env, keyRow);
     return handleData(env, decodeURIComponent(dataMatch[1]), url.searchParams, keyRow, trace);
   }
 
@@ -419,7 +419,7 @@ async function route(request, env, url, trace) {
   }
 
   return problem(404, "not found",
-    "GET /api/catalog · /api/preview/<table> · /api/data/<table> · /api/me, POST·DELETE /api/keys · " +
+    "GET /api/v1/catalog · /api/v1/preview/<table> · /api/v1/data/<table> · /api/v1/me, POST·DELETE /api/v1/keys · " +
     "GET /v1/products/<product_id> · /v1/glossary · /skill/v1/bundles/seoul-urban-analytics — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
 }
 

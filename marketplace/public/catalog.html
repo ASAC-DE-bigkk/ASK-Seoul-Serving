@@ -436,7 +436,7 @@
             <button class="btn-p" id="runBtn" style="width:100%">호출</button>
           </div>
           <div>
-            <div class="endpoint" id="reqPreview"><span class="m">GET</span> /api/data/&lt;table&gt;?limit=10</div>
+            <div class="endpoint" id="reqPreview"><span class="m">GET</span> /api/v1/data/&lt;table&gt;?limit=10</div>
             <div class="resp-head">
               <span class="status" id="respStatus"></span>
               <span class="resp-meta" id="respMeta"></span>
@@ -511,7 +511,7 @@ function goHash(hash, behavior) {
 }
 
 async function boot() {
-  const res = await fetch("/api/catalog");
+  const res = await fetch("/api/v1/catalog");
   PRODUCTS = (await res.json()).products || [];
   // 설명·표시명이 없어도 카탈로그는 그대로 뜬다 — 부가 정보라 실패를 삼킨다
   try { COLUMN_DOCS = await (await fetch("/column-docs.json")).json(); } catch { COLUMN_DOCS = {}; }
@@ -630,7 +630,7 @@ function renderList() {
     const usage = USAGE[p.name] || [];
     row.innerHTML =
       // 기술명은 목록에 싣지 않는다(랜딩 카드와 같은 결정) — 상세의 엔드포인트 줄이
-      // /api/data/<기술명> 으로 이미 보여주고, 검색 표면에는 남아 있다.
+      // /api/v1/data/<기술명> 으로 이미 보여주고, 검색 표면에는 남아 있다.
       "<div class='t' title='" + esc(p.name) + "'>" + titleOf(p) + "</div>" +
       // 목록 설명은 쉬운 한 줄 문장(display 사전 desc)을 우선한다 — 계약 description 은
       // 그레인 기호·내부 용어 중심이라 처음 보는 사용자에게 안 읽힌다(멘토 피드백).
@@ -660,7 +660,7 @@ function renderList() {
       // 기본 상세는 엔드포인트·스키마·미리보기 셋으로 시작한다(제품의 실체 먼저).
       (usageHtml ? "<div class='usage-wrap' data-usage>" + usageHtml + "</div>" : "") +
       "<div class='dhead'>엔드포인트</div>" +
-      "<div class='endpoint'><span class='m'>GET</span> /api/data/" + p.name + "?limit=100" +
+      "<div class='endpoint'><span class='m'>GET</span> /api/v1/data/" + p.name + "?limit=100" +
       (p.time_axis ? "&from=2026-07-01&to=2026-07-31" : "") + "</div>" +
       "<div class='dhead' style='margin-top:12px'>스키마 · " + cols.length + "컬럼" + (d.unit ? " · 그레인: " + d.unit : "") +
       " · " + nf.format(p.row_count || 0) + "행 · " + (p.time_axis ? "시간축 " + p.time_axis : "명부형") +
@@ -699,7 +699,7 @@ function renderList() {
       if (wrap.style.display === "block") { wrap.style.display = "none"; btn.textContent = "샘플 5행 미리보기 — 키 없이"; return; }
       btn.disabled = true; btn.textContent = "불러오는 중…";
       try {
-        const res = await fetch("/api/preview/" + btn.dataset.pv);
+        const res = await fetch("/api/v1/preview/" + btn.dataset.pv);
         const b = await res.json();
         const rows = b.rows || [];
         const tcols = rows.length ? Object.keys(rows[0]) : [];
@@ -780,7 +780,7 @@ function buildPath() {
   q.set("limit", $("pLimit").value || "10");
   if (p.time_axis && $("pFrom").value.trim()) q.set("from", $("pFrom").value.trim());
   if (p.time_axis && $("pTo").value.trim()) q.set("to", $("pTo").value.trim());
-  return "/api/data/" + p.name + "?" + q.toString();
+  return "/api/v1/data/" + p.name + "?" + q.toString();
 }
 function updatePreview() {
   const key = $("pKey").value.trim();
@@ -795,7 +795,7 @@ async function refreshQuota() {
   const key = $("pKey").value.trim();
   if (!key) return;
   try {
-    const res = await fetch("/api/me", { headers: { authorization: "Bearer " + key } });
+    const res = await fetch("/api/v1/me", { headers: { authorization: "Bearer " + key } });
     if (!res.ok) return;
     const b = await res.json();
     $("quotaFill").style.width = Math.min(100, (b.used_today / b.daily_quota) * 100) + "%";
@@ -897,7 +897,7 @@ function resetIssueBtn() {
 $("issueBtn").addEventListener("click", async () => {
   $("issueErr").textContent = "";
   const confirmRotate = $("issueBtn").dataset.confirm === "1";
-  const res = await fetch("/api/keys", {
+  const res = await fetch("/api/v1/keys", {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ email: $("email").value, ...(confirmRotate ? { confirm_rotate: true } : {}) }),
   });
@@ -951,7 +951,7 @@ async function callRevoke(purge) {
   const btn = purge ? $("purgeBtn") : $("revokeBtn");
   btn.disabled = true;
   try {
-    const res = await fetch("/api/keys" + (purge ? "?purge=true" : ""),
+    const res = await fetch("/api/v1/keys" + (purge ? "?purge=true" : ""),
       { method: "DELETE", headers: { authorization: "Bearer " + key } });
     const body = await res.json();
     if (!res.ok) { $("revokeNote").className = ""; $("revokeNote").textContent = friendly(res.status, body); return; }

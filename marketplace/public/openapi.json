@@ -18,7 +18,7 @@
   ],
   "security": [{ "bearerAuth": [] }],
   "paths": {
-    "/api/catalog": {
+    "/api/v1/catalog": {
       "get": {
         "tags": ["catalog"],
         "summary": "공개 제품 목록",
@@ -33,7 +33,7 @@
         }
       }
     },
-    "/api/preview/{product_id}": {
+    "/api/v1/preview/{product_id}": {
       "get": {
         "tags": ["catalog"],
         "summary": "샘플 5행 미리보기",
@@ -64,7 +64,7 @@
         }
       }
     },
-    "/api/data/{product_id}": {
+    "/api/v1/data/{product_id}": {
       "get": {
         "tags": ["data"],
         "summary": "데이터 조회",
@@ -113,7 +113,7 @@
         }
       }
     },
-    "/api/me": {
+    "/api/v1/me": {
       "get": {
         "tags": ["keys"],
         "summary": "내 키의 오늘 사용량",
@@ -142,7 +142,7 @@
         }
       }
     },
-    "/api/keys": {
+    "/api/v1/keys": {
       "post": {
         "tags": ["keys"],
         "summary": "API 키 발급",
@@ -231,7 +231,7 @@
     "parameters": {
       "Table": {
         "name": "product_id", "in": "path", "required": true,
-        "description": "제품 식별자. /api/catalog 응답의 products[].product_id 값이다. 물리 테이블명(products[].name)도 과도기 별칭으로 받는다.",
+        "description": "제품 식별자. /api/v1/catalog 응답의 products[].product_id 값이다. 물리 테이블명(products[].name)도 과도기 별칭으로 받는다.",
         "schema": { "type": "string", "pattern": "^[a-z0-9_]+$" },
         "example": "culture_event_schedule"
       }
@@ -259,7 +259,7 @@
       "Product": {
         "type": "object",
         "properties": {
-          "name": { "type": "string", "description": "/api/data 에 넣는 테이블 이름" },
+          "name": { "type": "string", "description": "/api/v1/data 에 넣는 테이블 이름" },
           "product_id": { "type": "string" },
           "external": { "type": "integer", "description": "1 이면 외부 공개" },
           "description": { "type": "string", "description": "그레인과 주의사항이 실린다 — 한계를 아는 데 필요하다" },

@@ -25,7 +25,7 @@ const fail = (msg) => { console.error(`\nFAIL — ${msg}`); process.exit(1); };
 // 0) 서버 확인
 let catalog;
 try {
-  catalog = await (await fetch(`${BASE}/api/catalog`)).json();
+  catalog = await (await fetch(`${BASE}/api/v1/catalog`)).json();
 } catch {
   fail(`게이트웨이(${BASE})에 연결할 수 없다 — npm run dev 로 띄운 뒤 다시 실행할 것`);
 }
@@ -40,9 +40,9 @@ if (!cols.has("request_id"))
 const before = d1("SELECT COUNT(*) AS n FROM _request_log")[0].n;
 const table = catalog.products?.[0]?.name;
 if (!table) fail("카탈로그가 비어 있다 — npm run seed 후 재실행할 것");
-await fetch(`${BASE}/api/catalog`);
-await fetch(`${BASE}/api/preview/${table}`);
-await fetch(`${BASE}/api/data/${table}`);            // 키 없음 → 401, 그래도 기록되어야 한다
+await fetch(`${BASE}/api/v1/catalog`);
+await fetch(`${BASE}/api/v1/preview/${table}`);
+await fetch(`${BASE}/api/v1/data/${table}`);            // 키 없음 → 401, 그래도 기록되어야 한다
 await new Promise((r) => setTimeout(r, 1500));        // waitUntil 비동기 기록 대기
 
 // 3) 판정

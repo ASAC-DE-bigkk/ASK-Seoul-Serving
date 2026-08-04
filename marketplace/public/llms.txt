@@ -32,14 +32,14 @@
 
 ## 시작 순서
 
-1. `GET /api/catalog` — 제품 목록. 인증 불필요. 각 제품의 `product_question`(자연어 질문)으로
+1. `GET /api/v1/catalog` — 제품 목록. 인증 불필요. 각 제품의 `product_question`(자연어 질문)으로
    사용자 질문과 매칭해 제품을 고른다. `description` = 그레인·주의사항, `columns` = 스키마.
-2. `GET /api/preview/<product_id>` — 샘플 5행(최신 구간). 인증·쿼터 없음. 스키마·실값 확인용.
-3. `POST /api/keys` body `{"email": "..."}` — 키 발급(응답에 1회만 표시). 이메일당 1키.
+2. `GET /api/v1/preview/<product_id>` — 샘플 5행(최신 구간). 인증·쿼터 없음. 스키마·실값 확인용.
+3. `POST /api/v1/keys` body `{"email": "..."}` — 키 발급(응답에 1회만 표시). 이메일당 1키.
    이미 있으면 409 가 오고, 기존 키를 만료시키려면 `"confirm_rotate": true` 를 추가한다.
-4. `GET /api/data/<product_id>?...` — 헤더 `Authorization: Bearer ask_…` 로 조회.
+4. `GET /api/v1/data/<product_id>?...` — 헤더 `Authorization: Bearer ask_…` 로 조회.
 
-## /api/data 문법
+## /api/v1/data 문법
 
 - 필터: `<컬럼명>=<값>` (등가만, 복수는 AND). 없는 컬럼명이면 400 + 사용 가능 컬럼 전체 목록.
 - 기간: `from=<값>&to=<값>` — 카탈로그의 `time_axis` 컬럼에 적용(경계 포함).
@@ -69,4 +69,4 @@
 - 컬럼 의미 사전: `GET /column-docs.json` — 테이블명 → {컬럼명: 설명}. 현재 문화·행사 7종 수록.
 - 신선도: 카탈로그 `freshness`(데이터 기준 시점) · `exported_at`(적재 시점). "지금/현재" 질문에
   답할 때는 이 시점을 함께 밝힐 것.
-- 키 폐기: `DELETE /api/keys`(Bearer). `?purge=true` 면 이메일·사용 기록까지 삭제.
+- 키 폐기: `DELETE /api/v1/keys`(Bearer). `?purge=true` 면 이메일·사용 기록까지 삭제.
