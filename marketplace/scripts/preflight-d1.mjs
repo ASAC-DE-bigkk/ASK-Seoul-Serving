@@ -24,7 +24,12 @@
  * | 일치      | 있고 모양이 같다                            | 진행 |
  * | 모양 다름 | 있는데 컬럼이 다르다                        | **중단** |
  * | 남의 표   | 우리 소유가 아니다. 다른 게 정상이다        | 감시만 |
+ * | **오염**  | 남의 표에 **우리 컬럼이 얹혔다**            | **중단** |
  * | 인수됨    | 남의 표가 우리 모양이 됐다 — 이름을 뺏었다  | **중단** |
+ *
+ * '오염'이 없으면 이 검사는 **이미 일어난 사고를 통과시킨다.** `0004` 가 dev 의 남의 표에
+ * 붙인 `request_id` 는 우리 스키마 **전부**가 아니라서 '인수됨'에 안 걸린다. 그래서
+ * 남의 표마다 `baseline`(원래 모양)을 함께 두고 `우리 컬럼 ∩ 실제 − baseline` 을 본다.
  *
  * ## 기대 모양은 어디서 오나 — **마이그레이션 파일 자체**
  *
@@ -38,13 +43,13 @@
  *   npm run preflight -- <DB이름> --env production
  *   npm run preflight -- <DB이름> --env production --json
  *
- * 종료 코드: 0 진행 가능 · 1 **중단**(모양 다름) · 2 검사 자체 실패(권한·네트워크 등)
+ * 종료 코드: 0 진행 가능 · 1 **중단**(모양 다름·오염·인수됨) · 2 검사 자체 실패(권한·네트워크 등)
  *
  * 중단된 뒤에는 **사람이 정한다.** 정하고 나서 진행할 때만 사유를 남겨 통과시킨다:
  *
  *   npm run preflight -- <DB이름> --env production --ack "#52 합의: transit 소유라 그대로 둔다"
  *
- * `--ack` 는 **모양 다름을 없던 일로 만들지 않는다** — 그대로 출력하고, 사유를 함께 찍고,
+ * `--ack` 는 **판정을 없던 일로 만들지 않는다** — 그대로 출력하고, 사유를 함께 찍고,
  * 종료 코드만 0 으로 바꾼다. 기록이 남아야 다음 사람이 "왜 통과시켰나"를 안다.
  */
 import { execFileSync } from "node:child_process";
@@ -62,8 +67,15 @@ const MIGRATIONS = join(HERE, "..", "migrations");
 //
 // 여기 이름을 올린다고 안전해지는 게 아니다. **우리 코드가 그 이름을 안 쓰는 것**이
 // 안전의 근거이고(→ _gateway_request_log 개명), 이 목록은 그 상태를 감시하는 장치다.
+//
+// `baseline` 은 **남의 표의 원래 모양**이다(실측 사본). 이게 있어야 "우리가 얹은 컬럼"을
+// 골라낼 수 있다 — 단순 교집합으로는 못 가린다. `ts` 는 우리 스키마에도 남의 표에도 있어서
+// 교집합만 보면 멀쩡한 prod 도 오염으로 잡힌다. `우리 컬럼 ∩ 실제 − baseline` 이 정확하다.
 const FOREIGN = new Map([
-  ["_request_log", "transit 워커 소유 (#44 §2). 우리는 _gateway_request_log 를 쓴다"],
+  ["_request_log", {
+    why: "transit 워커 소유 (#44 §2). 우리는 _gateway_request_log 를 쓴다",
+    baseline: ["ts", "path", "query", "token"],   // 실측 2026-08-04 prod (읽기만)
+  }],
 ]);
 
 // ── 기대 스키마 = 마이그레이션을 실제로 적용한 결과 ────────────────────────────
@@ -183,18 +195,30 @@ function judge(expected, remote) {
 
   for (const [tbl, want] of expected) {
     const have = remote.get(tbl);
-    const foreignWhy = FOREIGN.get(tbl);
+    const foreign = FOREIGN.get(tbl);
 
-    if (foreignWhy) {
-      // 남의 표 — 모양이 다른 게 정상이다. 우리 모양과 **같아지면** 그게 이상 신호다
-      // (우리가 그 이름을 인수해 버렸다는 뜻).
+    if (foreign) {
+      // 남의 표 — 모양이 다른 게 정상이다. 이상 신호는 둘이다.
+      //   ① 인수됨   : 우리 스키마를 **전부** 갖췄다 = 이름을 통째로 차지했다
+      //   ② 오염     : 우리 컬럼이 **하나라도** 얹혔다 = 우리 마이그레이션이 남의 표를 건드렸다
+      //
+      // ②가 없으면 이 검사는 **이미 일어난 사고를 통과시킨다.** dev 의 `_request_log` 가
+      // 그 상태다 — `0004` 의 조건 없는 ALTER 가 `request_id` 를 붙였는데, 우리 스키마를
+      // 전부 갖춘 건 아니라서 ①에 안 걸린다. 이 스크립트를 만든 이유가 그 사고인데
+      // 그 사고가 난 DB 를 정상으로 판정하던 자리다.
+      const baseline = new Set(foreign.baseline || []);
+      const ours = have ? [...want].filter((c) => have.has(c) && !baseline.has(c)) : [];
       const taken = Boolean(have) && [...want].every((c) => have.has(c));
+      const verdict = !have ? "없음" : taken ? "인수됨" : ours.length ? "오염" : "남의 표";
+      const note =
+        verdict === "인수됨" ? `우리 스키마가 이 이름을 차지했다 — ${foreign.why}` :
+        verdict === "오염" ? `우리 컬럼이 얹혀 있다: ${ours.join(", ")} — 원래 모양은 ` +
+          `${[...baseline].join(", ")} (${foreign.why})` :
+        foreign.why;
       findings.push({
-        table: tbl,
-        verdict: !have ? "없음" : taken ? "인수됨" : "남의 표",
-        blocking: taken,
-        note: taken ? `우리 스키마가 이 이름을 차지했다 — ${foreignWhy}` : foreignWhy,
+        table: tbl, verdict, blocking: taken || verdict === "오염", note,
         expected: [...want], actual: have ? [...have] : null,
+        baseline: [...baseline], contaminated: ours,
       });
       continue;
     }
@@ -227,7 +251,8 @@ function judge(expected, remote) {
 }
 
 // ── 출력 ──────────────────────────────────────────────────────────────────────
-const MARK = { "없음": "· ", "일치": "OK", "일치+": "OK", "모양 다름": "!!", "남의 표": "~ ", "인수됨": "!!" };
+// 판정을 늘리면 여기도 늘린다 — 빠지면 표에 `undefined` 가 찍힌다(실제로 겪었다).
+const MARK = { "없음": "· ", "일치": "OK", "일치+": "OK", "모양 다름": "!!", "남의 표": "~ ", "오염": "!!", "인수됨": "!!" };
 
 function report(findings, { db, env, ack }) {
   const w = Math.max(...findings.map((f) => f.table.length), 12);
@@ -246,24 +271,42 @@ function report(findings, { db, env, ack }) {
     return 0;
   }
 
-  console.log("[중단] 표의 모양이 기대와 다릅니다. 배포를 진행하지 마십시오.\n");
+  // 오염은 "이대로 가면 생길 일"이 아니라 **이미 일어난 일**이라, 안내가 달라야 한다.
+  const contaminated = blocked.filter((f) => f.verdict === "오염");
+  console.log(contaminated.length
+    ? "[중단] 남의 표에 우리 컬럼이 얹혀 있습니다 — **이미 일어난 일**입니다. 배포보다 이것부터 정리합니다.\n"
+    : "[중단] 표의 모양이 기대와 다릅니다. 배포를 진행하지 마십시오.\n");
   for (const f of blocked) {
     console.log(`  [${f.table}] ${f.note}`);
     console.log(`     기대: ${f.expected.join(", ")}`);
     console.log(`     실제: ${f.actual ? f.actual.join(", ") : "(없음)"}\n`);
   }
-  console.log("이대로 apply 하면:");
-  console.log("  · CREATE TABLE IF NOT EXISTS 가 조용히 넘어가고, 게이트웨이 INSERT 가");
-  console.log("    ctx.waitUntil 안에서 실패해 **요청 로그가 전량 버려집니다**.");
-  console.log("  · 조건 없는 ALTER 가 있으면 **남의 표에 컬럼이 얹힙니다** (dev D1 에서 실제로 일어남).\n");
-  console.log("다음에 할 일:");
-  console.log("  1. 위 표가 누구 것인지 확인한다 (ASK-Seoul-Serving#52 §5 소유 경계)");
-  console.log("  2. 이름을 비킬지 / 스키마를 맞출지 **사람이 정한다**");
-  console.log("  3. 정하고 나면 그 결정을 문서(#52)에 적고, 사유를 달아 다시 돌린다:");
-  console.log(`     npm run preflight -- ${db}${env ? ` --env ${env}` : ""} --ack "<결정과 근거>"\n`);
+  if (contaminated.length) {
+    console.log("어떻게 생겼나: 장부(d1_migrations)가 빈 D1 에 apply 를 돌리면 0001 부터 재실행되고,");
+    console.log("  조건을 달 수 없는 0004(ALTER … ADD COLUMN)가 그 이름의 표에 컬럼을 붙입니다.");
+    console.log("  지금은 백필(scripts/backfill-migrations-ledger.sql)이 route 컬럼 유무로 우리 표인지를");
+    console.log("  가려 재발을 막습니다(PR #50) — 남아 있는 컬럼은 그 이전에 붙은 것입니다.\n");
+    console.log("정리 방향: 우리가 만든 컬럼이므로 **소유자(#52 §5)와 합의해 우리가 걷어냅니다.**");
+    console.log("  다만 DROP COLUMN 은 남의 표를 고치는 일이라 쓰는 쪽 합의가 먼저이고, NULL 만 든");
+    console.log("  컬럼이라 **그대로 두는 것도 선택지**입니다. 어느 쪽이든 결정을 #52 에 적고");
+    console.log("  --ack 로 통과시킵니다 — 그래야 다음 사람이 '왜 통과시켰나'를 압니다.\n");
+  }
+  // 아래 안내는 **'모양 다름'용**이다. 오염만 걸린 경우까지 같이 찍으면 "이대로 apply 하면
+  // 남의 표에 컬럼이 얹힙니다"를 이미 얹힌 상태에서 읽게 되고, 위 설명과 앞뒤가 안 맞는다.
+  if (blocked.some((f) => f.verdict !== "오염")) {
+    console.log("이대로 apply 하면:");
+    console.log("  · CREATE TABLE IF NOT EXISTS 가 조용히 넘어가고, 게이트웨이 INSERT 가");
+    console.log("    ctx.waitUntil 안에서 실패해 **요청 로그가 전량 버려집니다**.");
+    console.log("  · 조건 없는 ALTER 가 있으면 **남의 표에 컬럼이 얹힙니다** (dev D1 에서 실제로 일어남).\n");
+    console.log("다음에 할 일:");
+    console.log("  1. 위 표가 누구 것인지 확인한다 (ASK-Seoul-Serving#52 §5 소유 경계)");
+    console.log("  2. 이름을 비킬지 / 스키마를 맞출지 **사람이 정한다**");
+    console.log("  3. 정하고 나면 그 결정을 문서(#52)에 적고, 사유를 달아 다시 돌린다:");
+  }
+  console.log(`정하고 나서 진행할 때: npm run preflight -- ${db}${env ? ` --env ${env}` : ""} --ack "<결정과 근거>"\n`);
 
   if (ack) {
-    console.log("[통과] --ack 로 통과시킵니다 — 위 '모양 다름'은 없던 일이 되지 않습니다.");
+    console.log("[통과] --ack 로 통과시킵니다 — 위 판정은 없던 일이 되지 않습니다.");
     console.log(`       사유: ${ack}\n`);
     return 0;
   }

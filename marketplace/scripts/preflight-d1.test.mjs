@@ -9,6 +9,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { judge, expectedSchema, FOREIGN } from "./preflight-d1.mjs";
 
 let DatabaseSync;
@@ -55,14 +56,34 @@ test("컬럼이 더 있으면 막지 않는다 — 증분 규약이 '추가만'�
   assert.match(find(fs, "_keys").verdict, /일치/);
 });
 
-test("남의 표는 모양이 달라도 통과한다 — 다른 게 정상이고 건드리면 안 된다", () => {
+test("남의 표가 **원래 모양 그대로면** 통과한다 — 다른 게 정상이고 건드리면 안 된다", () => {
   const expected = new Map([["_request_log", cols("ts", "route", "status")]]);
-  for (const [label, remoteCols] of [["prod", FOREIGN_PROD], ["dev", FOREIGN_DEV]]) {
-    const fs = judge(expected, new Map([["_request_log", remoteCols]]));
-    const f = find(fs, "_request_log");
-    assert.equal(f.verdict, "남의 표", label);
-    assert.equal(f.blocking, false, label);
-  }
+  const fs = judge(expected, new Map([["_request_log", FOREIGN_PROD]]));
+  const f = find(fs, "_request_log");
+  assert.equal(f.verdict, "남의 표");
+  assert.equal(f.blocking, false);
+  // `ts` 는 우리 스키마에도 있다 — 단순 교집합으로 판정하면 멀쩡한 prod 가 오염으로 잡힌다.
+  assert.deepEqual(f.contaminated, []);
+});
+
+test("🔴 남의 표에 **우리 컬럼이 하나라도** 얹히면 중단한다 — dev 가 지금 그 상태다", () => {
+  // 이 케이스가 없으면 검사가 **이미 일어난 사고를 통과시킨다.** `0004` 의 조건 없는 ALTER 가
+  // 붙인 `request_id` 는 우리 스키마 전체가 아니라서 '인수됨'에 걸리지 않는다.
+  const expected = new Map([["_request_log", cols("ts", "route", "status", "request_id")]]);
+  const fs = judge(expected, new Map([["_request_log", FOREIGN_DEV]]));
+  const f = find(fs, "_request_log");
+  assert.equal(f.verdict, "오염");
+  assert.equal(f.blocking, true);
+  assert.deepEqual(f.contaminated, ["request_id"]);   // 어느 컬럼인지 사람이 읽을 수 있어야 한다
+  assert.match(f.note, /request_id/);
+});
+
+test("남의 표가 **자기 컬럼을** 늘린 건 막지 않는다 — 그건 그쪽 사정이다", () => {
+  const expected = new Map([["_request_log", cols("ts", "route", "status")]]);
+  const remote = new Map([["_request_log", cols("ts", "path", "query", "token", "their_new_col")]]);
+  const f = find(judge(expected, remote), "_request_log");
+  assert.equal(f.verdict, "남의 표");
+  assert.equal(f.blocking, false);
 });
 
 test("🔴 남의 표가 **우리 모양이 되면** 중단한다 — 그 이름을 인수해 버렸다는 뜻이다", () => {
@@ -73,9 +94,21 @@ test("🔴 남의 표가 **우리 모양이 되면** 중단한다 — 그 이름
   assert.equal(f.blocking, true);
 });
 
-test("남의 표 목록에 사유가 함께 있다 — 이름만 있으면 다음 사람이 왜인지 모른다", () => {
+test("판정마다 표시 기호가 있다 — 빠지면 표에 undefined 가 찍힌다", async () => {
+  // 실제로 겪었다. 판정을 하나 늘리고 MARK 를 안 늘려서 원격 출력에 `undefined 오염` 이 찍혔다.
+  const src = await readFile(new URL("./preflight-d1.mjs", import.meta.url), "utf8");
+  const marks = src.match(/^const MARK = \{[^}]*\}/m)?.[0] ?? "";
+  for (const verdict of ["없음", "일치", "일치+", "모양 다름", "남의 표", "오염", "인수됨"]) {
+    assert.ok(marks.includes(`"${verdict}"`), `MARK 에 '${verdict}' 이 없다`);
+  }
+});
+
+test("남의 표 목록에 사유와 기준 모양이 함께 있다 — 둘 다 없으면 판정이 안 선다", () => {
   assert.ok(FOREIGN.has("_request_log"));
-  assert.match(FOREIGN.get("_request_log"), /transit/);
+  const entry = FOREIGN.get("_request_log");
+  assert.match(entry.why, /transit/);
+  // baseline 이 없으면 "우리가 얹은 컬럼"을 골라낼 수 없다 — 교집합만으로는 `ts` 때문에 못 가린다.
+  assert.ok(Array.isArray(entry.baseline) && entry.baseline.length, "baseline 이 필요하다");
 });
 
 test("기대 스키마는 마이그레이션 파일에서 나온다 — 하드코딩이면 드리프트한다", NEEDS_SQLITE, async () => {
