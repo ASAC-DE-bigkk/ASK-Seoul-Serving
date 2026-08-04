@@ -131,8 +131,8 @@
   <span class="s">"join_axes"</span>: [<span class="s">"admin_dong_code"</span>, <span class="s">"gu_code"</span>, <span class="s">"stat_region_cd"</span>],
   <span class="s">"products"</span>: [
     {
-      <span class="s">"name"</span>: <span class="s">"gold_culture_event_schedule"</span>,   <span class="c">← /api/data 에 넣는 값</span>
-      <span class="s">"product_id"</span>: <span class="s">"culture_event_schedule"</span>,
+      <span class="s">"name"</span>: <span class="s">"gold_culture_event_schedule"</span>,   <span class="c">← 물리 테이블명(과도기 별칭으로도 받는다)</span>
+      <span class="s">"product_id"</span>: <span class="s">"culture_event_schedule"</span>,  <span class="c">← /api/data 에 넣는 값</span>
       <span class="s">"description"</span>: <span class="s">"문화행사 목록 질의 표면(행사 1행) …"</span>,
       <span class="s">"time_axis"</span>: <span class="s">"event_start_date"</span>,          <span class="c">← from/to 가 걸리는 컬럼. null 이면 기간 필터 불가</span>
       <span class="s">"columns"</span>: [{ <span class="s">"name"</span>: <span class="s">"gu_code"</span>, <span class="s">"type"</span>: <span class="s">"TEXT"</span> }],
@@ -390,8 +390,8 @@ console.log(events.length, <span class="s">"행"</span>);</code></pre>
     <p>어떤 제품이 어떤 축을 갖는지는 <code>/api/catalog</code> 응답의 <code>join_keys</code> 로 내려갑니다.
       두 제품 모두에 같은 축이 있으면 조인 가능합니다.</p>
     <pre><code><span class="c"># 행사가 있는 날 그 동네가 평소보다 더 붐볐는지</span>
-GET /api/data/gold_culture_activity_by_dong?from=2026-08-01&amp;to=2026-08-31
-GET /api/data/gold_citydata_ppltn_daily?from=2026-08-01&amp;to=2026-08-31
+GET /api/data/culture_activity_by_dong?from=2026-08-01&amp;to=2026-08-31
+GET /api/data/citydata_ppltn_daily?from=2026-08-01&amp;to=2026-08-31
 <span class="c"># → admin_dong_code + 날짜로 대응</span></code></pre>
   </section>
 

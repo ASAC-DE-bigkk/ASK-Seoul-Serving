@@ -26,6 +26,7 @@ const must = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 // 1) 카탈로그 — 제품이 실제로 보이는가. 로컬 픽스처가 아니라 그 환경 D1 을 읽는지의 첫 증거다
 let firstProduct = null;
+let firstProductId = null;
 await check("catalog 200 + 제품 존재", async () => {
   const r = await fetch(`${BASE}/api/catalog`);
   must(r.ok, `status ${r.status}`);
@@ -33,7 +34,8 @@ await check("catalog 200 + 제품 존재", async () => {
   must(Array.isArray(j.products) && j.products.length > 0, "products 비어 있음");
   must(j.attribution && j.docs, "attribution·docs 링크 누락");
   firstProduct = j.products[0].name;
-  return `${j.products.length}종 · 첫 제품 ${firstProduct}`;
+  firstProductId = j.products[0].product_id;
+  return `${j.products.length}종 · 첫 제품 ${firstProductId} (${firstProduct})`;
 });
 
 // 2) 요청 ID — 지원 문의의 유일한 열쇠(공통 계약 C-5). 없으면 추적이 끊긴다
@@ -52,6 +54,20 @@ await check("preview 200 + 행 반환", async () => {
   const j = await r.json();
   must(j.row_count > 0, `row_count ${j.row_count}`);
   return `${j.row_count}행`;
+});
+
+// 3-b) 공개 식별자 — product_id 가 정본이고 테이블명은 과도기 별칭이다(decision/0003).
+// 둘이 **같은 것을 가리키는지**를 본다. 별칭이 조용히 다른 제품을 주면 그게 최악이다.
+await check("product_id·테이블명이 같은 제품을 준다", async () => {
+  must(firstProductId && firstProduct, "카탈로그 실패로 대상 없음");
+  const [a, b] = await Promise.all([
+    fetch(`${BASE}/api/preview/${encodeURIComponent(firstProductId)}`).then((r) => r.json()),
+    fetch(`${BASE}/api/preview/${encodeURIComponent(firstProduct)}`).then((r) => r.json()),
+  ]);
+  must(a.table === b.table, `해석된 테이블이 다르다: ${a.table} vs ${b.table}`);
+  must(a.product_id === b.product_id, `product_id 가 다르다: ${a.product_id} vs ${b.product_id}`);
+  must(JSON.stringify(a.rows) === JSON.stringify(b.rows), "같은 제품인데 행이 다르다");
+  return `${firstProductId} ≡ ${firstProduct} (${a.row_count}행)`;
 });
 
 // 4) 인증 게이트 — 키 없이 데이터가 나가면 안 된다

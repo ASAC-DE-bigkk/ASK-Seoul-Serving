@@ -593,16 +593,20 @@ function kstStamp(iso) {
 // ── 데모: 질문 → 호출 → 응답 3박자.
 // 화면에 타이핑되는 명령과 실제로 호출하는 주소가 같다(무인증 /api/preview). 응답도 실물이라
 // 픽스처가 비면 그대로 "표시할 행이 없습니다"가 뜬다 — 꾸며낸 행을 넣지 않는다.
+//
+// `pid` 가 화면에 뜨는 공개 식별자(decision/0003)이고 `table` 은 스냅샷 파일의 조회 키다.
+// 스냅샷(demo-samples.json)은 테이블명으로 키잉돼 있고 그건 생성기의 사정이라 그대로 둔다 —
+// 사람에게 보이는 곳만 공개 식별자를 쓴다.
 const DEMOS = [
-  { table: "gold_culture_event_schedule",
+  { pid: "culture_event_schedule", table: "gold_culture_event_schedule",
     q: "이번에 서울에서 무슨 행사가 열리나?",
     cols: [["title", "행사"], ["gu", "자치구"], ["event_start_date", "시작일"]],
     foot: "행사 하나가 한 행. <b>기간 겹침</b> 조회를 지원해 '이번 주말에 열리는 것'을 한 번에 받습니다." },
-  { table: "gold_culture_activity_by_dong",
+  { pid: "culture_activity_by_dong", table: "gold_culture_activity_by_dong",
     q: "어느 동네에 문화 활동이 몰리나?",
     cols: [["admin_dong", "행정동"], ["event_date", "날짜"], ["activities_count", "활동"], ["free_events_count", "무료"]],
     foot: "<b>admin_dong_code</b>(행안부 10자리)를 그대로 실어 인구·상권·교통 데이터에 바로 조인됩니다." },
-  { table: "gold_culture_boxoffice_daily",
+  { pid: "culture_boxoffice_daily", table: "gold_culture_boxoffice_daily",
     q: "지금 잘 팔리는 공연은?",
     cols: [["rank_no", "순위"], ["performance_name", "공연"], ["genre", "장르"]],
     foot: "일자 × 순위 스냅샷이라 <b>순위 변동</b>을 시계열로 추적할 수 있습니다." },
@@ -640,7 +644,7 @@ async function playDemo(i, manual) {
   $("demoOut").innerHTML = "";
   $("demoFoot").innerHTML = "&nbsp;";
 
-  const cmd = "curl " + location.origin + "/api/preview/" + d.table;
+  const cmd = "curl " + location.origin + "/api/preview/" + d.pid;
   const paint = (n) => {
     const shown = cmd.slice(0, n);
     $("demoCmd").innerHTML =

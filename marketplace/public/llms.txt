@@ -34,10 +34,10 @@
 
 1. `GET /api/catalog` — 제품 목록. 인증 불필요. 각 제품의 `product_question`(자연어 질문)으로
    사용자 질문과 매칭해 제품을 고른다. `description` = 그레인·주의사항, `columns` = 스키마.
-2. `GET /api/preview/<name>` — 샘플 5행(최신 구간). 인증·쿼터 없음. 스키마·실값 확인용.
+2. `GET /api/preview/<product_id>` — 샘플 5행(최신 구간). 인증·쿼터 없음. 스키마·실값 확인용.
 3. `POST /api/keys` body `{"email": "..."}` — 키 발급(응답에 1회만 표시). 이메일당 1키.
    이미 있으면 409 가 오고, 기존 키를 만료시키려면 `"confirm_rotate": true` 를 추가한다.
-4. `GET /api/data/<name>?...` — 헤더 `Authorization: Bearer ask_…` 로 조회.
+4. `GET /api/data/<product_id>?...` — 헤더 `Authorization: Bearer ask_…` 로 조회.
 
 ## /api/data 문법
 
