@@ -116,7 +116,7 @@ async function callTool(name, args, ctx) {
     return okJson(body);
   }
   if (name === "check_quota") {
-    // /api/me 는 본인에게 주는 응답이라 이메일을 담지만, MCP 결과는 LLM 컨텍스트·제3자
+    // /api/v1/me 는 본인에게 주는 응답이라 이메일을 담지만, MCP 결과는 LLM 컨텍스트·제3자
     // 클라이언트로 흘러간다 — 이메일 미노출(#26 완료기준). 키는 원래 prefix 만 나간다.
     const res = await deps.handleMe(env, keyRow);
     if (res.status >= 400) return toToolResult(res);
@@ -171,7 +171,7 @@ export async function handleMcp(request, env, trace, deps) {
     if (error)
       return rpcResult(
         id,
-        errText("키가 없거나 유효하지 않습니다 — Authorization: Bearer ask_... 필요(POST /api/keys 발급)."),
+        errText("키가 없거나 유효하지 않습니다 — Authorization: Bearer ask_... 필요(POST /api/v1/keys 발급)."),
       );
     trace.keyHash = keyRow.key_hash;
     const result = await callTool(params && params.name, params && params.arguments, {
