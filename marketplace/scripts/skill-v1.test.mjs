@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import worker from "../src/index.js";
 import {
   SKILL_BUNDLE_ID,
   SKILL_PRODUCT_IDS,
@@ -17,6 +19,9 @@ const EXPECTED_PRODUCTS = [
   "transit_parking_full_risk",
 ];
 
+const OTHER_PUBLIC_PRODUCT = "culture_event_schedule";
+const TEST_API_KEY = `ask_${"0".repeat(32)}`;
+
 function fixtureDb({
   metadataPublicationId = "active-publication",
   sourcePublicationId = "active-publication",
@@ -32,7 +37,7 @@ function fixtureDb({
   },
 } = {}) {
   let usage = 0;
-  const catalog = new Map(EXPECTED_PRODUCTS.map((productId) => [productId, {
+  const catalog = new Map([...EXPECTED_PRODUCTS, OTHER_PUBLIC_PRODUCT].map((productId) => [productId, {
     name: `gold_${productId}`,
     product_id: productId,
     external: 1,
@@ -58,6 +63,16 @@ function fixtureDb({
           return this;
         },
         async first() {
+          if (sql.includes("FROM _keys WHERE key_hash")) {
+            return {
+              key_hash: "test-key-hash",
+              key_prefix: "ask_0000",
+              email: "skill-test@example.test",
+              status: "active",
+              daily_quota: 1000,
+            };
+          }
+          if (sql.includes("SELECT count FROM _burst")) return { count: 1 };
           if (sql.includes("FROM _catalog")) return catalog.get(params[0]) ?? null;
           if (sql.includes("FROM d1_catalog_ext")) {
             return {
@@ -111,7 +126,7 @@ function fixtureDb({
               }],
             };
           }
-          if (sql.includes("SELECT rowid AS \"_rid\"")) {
+          if (sql.includes("SELECT rowid AS \"_rid\"") || sql.includes("SELECT rowid AS _rid")) {
             return {
               results: [
                 { _rid: 7, admin_dong_code: "1111051500", observed_at: "2026-08-03T00:00:00+09:00" },
@@ -130,6 +145,19 @@ function fixtureDb({
   };
 }
 
+async function fetchWorker(path, db) {
+  const pending = [];
+  const response = await worker.fetch(
+    new Request(`https://marketplace.example.test${path}`, {
+      headers: { authorization: `Bearer ${TEST_API_KEY}` },
+    }),
+    { DB: db, ASK_ENV: "dev" },
+    { waitUntil(promise) { pending.push(promise); } },
+  );
+  await Promise.all(pending);
+  return response;
+}
+
 test("skill bundle preserves the exact six-product set and exposes blocked readiness", async () => {
   const response = await handleSkillBundle({ DB: fixtureDb() });
   const body = await response.json();
@@ -143,6 +171,46 @@ test("skill bundle preserves the exact six-product set and exposes blocked readi
   assert.ok(body.products.every((product) => product.registration_ready === false));
   assert.ok(body.products.every((product) =>
     product.blockers.includes("source_rights_metadata_contract_unavailable")));
+});
+
+test("skill OpenAPI product enum stays identical to the server exact-six allowlist", async () => {
+  const openapi = JSON.parse(await readFile(
+    new URL("../public/skill-openapi.json", import.meta.url),
+    "utf8",
+  ));
+
+  assert.deepEqual(openapi.components.parameters.ProductId.schema.enum, SKILL_PRODUCT_IDS);
+});
+
+test("the shared key can read another Marketplace product but skill routes reject it", async () => {
+  const db = fixtureDb({ evidence: true });
+
+  const marketplaceResponse = await fetchWorker(
+    `/api/v1/data/${OTHER_PUBLIC_PRODUCT}?limit=1`,
+    db,
+  );
+  const marketplaceBody = await marketplaceResponse.json();
+  assert.equal(marketplaceResponse.status, 200);
+  assert.equal(marketplaceBody.product_id, OTHER_PUBLIC_PRODUCT);
+  assert.equal(marketplaceBody.row_count, 1);
+
+  for (const suffix of ["", "/data"]) {
+    const skillResponse = await fetchWorker(
+      `/skill/v1/products/${OTHER_PUBLIC_PRODUCT}${suffix}`,
+      db,
+    );
+    const skillBody = await skillResponse.json();
+
+    assert.equal(skillResponse.status, 404);
+    assert.equal(skillBody.code, "unknown_product");
+    assert.equal(skillBody.product_id, OTHER_PUBLIC_PRODUCT);
+    assert.match(skillBody.request_id, /^req_[0-9a-f]{16}$/);
+  }
+
+  const usageResponse = await fetchWorker("/api/v1/me", db);
+  const usageBody = await usageResponse.json();
+  assert.equal(usageResponse.status, 200);
+  assert.equal(usageBody.used_today, 1, "rejected skill requests must not consume daily quota");
 });
 
 test("skill product marks a publisher-classified previous metadata publication without treating it as an error", async () => {
