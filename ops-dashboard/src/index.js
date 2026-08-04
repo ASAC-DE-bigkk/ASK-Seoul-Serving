@@ -1,9 +1,14 @@
 // ops-dashboard — 운영자용 통합 품질 콘솔 (ASK-Seoul#58, 로컬 전용)
 //
-// 한 화면에서 두 가지를 본다:
-//   · 파이프라인 품질 — 수집·변환이 제 몫을 했나 (_ops_slo, gold_*_slo_daily 스냅샷)
-//   · 서빙 품질       — 외부에 잘 나가고 있나 (_request_log, 게이트웨이가 쌓는다)
-// 둘 다 같은 D1 을 읽는다. 마켓플레이스와는 **다른 Worker · 다른 호스트**다 — 청중이 다르고,
+// 한 화면에서 여섯 가지를 본다(탭 이름은 화면 문구 규약 — 내부 용어를 쓰지 않는다):
+//   · 데이터 준비 상태 — 매일 제때 갱신됐나 (_ops_slo, 보조·합성 스냅샷)
+//   · 실행 기록       — 무엇이 돌았고 무엇이 조용한가 (_ops_run_event 등 조회 DB 4종,
+//                       ASK-Seoul#78 규약 — 정본 스키마는 ASAC-DAG, 여기는 읽기 전용. decision/0009)
+//   · 응답 상태       — 외부에 잘 나가고 있나 (_request_log, 게이트웨이가 쌓는다)
+//   · 이용 행동       — **누가** 쓰나: 사람·AI·여정 (decision/0010)
+//   · API 사용량      — **무엇이** 얼마나 쓰이나: API별·분야별 (_request_log + _catalog)
+//   · 이용자 키       — 발급된 키의 상태·쿼터
+// 전부 같은 D1 을 읽는다. 마켓플레이스와는 **다른 Worker · 다른 호스트**다 — 청중이 다르고,
 // 배포 단위가 갈려야 사고 반경도 갈린다.
 //
 // 인증: 읽기는 열려 있고 **조치만** 공유 토큰(OPS_TOKEN)으로 잠근다 — canWrite/requireWrite 참고.
@@ -77,6 +82,88 @@ async function summary(env, params, writable = false) {
     "SELECT * FROM _ops_slo WHERE event_date >= date('now', ?) ORDER BY event_date", since);
   if (!domains.ok || !slo.ok) missing.push("pipeline");
 
+  // ── 실행 기록 (조회 DB 4종 — ASK-Seoul#78 §8, decision/0009. 읽기만 한다)
+  // 날짜 축은 observed_date_kst 라 KST 로 자른다(now+9h). 오늘 포함 N일 창.
+  const kstSince = `-${days - 1} days`;
+
+  // 🔴 환경 축을 걸러 읽는다(#78 Z-7, #36 지침 ②). 한 조회 DB 에 prod·dev 기록이 함께
+  // 들어가 있어서 — 실측 2026-08-04 운영 D1 에 dev 17행 — 안 거르면 개발 실행이 운영
+  // 지표에 섞인다. 도메인 쪽 판정 결함은 고쳐졌지만 **과거 행은 남는다.**
+  //
+  // 좁히는 건 운영 화면(ENV_SCOPE)뿐이다. 개발 화면에서까지 좁히면 "섞였다"는 사실
+  // 자체가 안 보이게 되는데, 그건 이 콘솔이 드러내야 할 관측이다.
+  // 아래 SQL 은 `?` 바인딩이 아니라 문자열 조각이라, 값은 상수 목록에서만 온다.
+  const scope = String(env.ENV_SCOPE || "").trim();
+  const SCOPES = { prod: "prod", dev: "dev" };
+  const envCol = SCOPES[scope] || null;
+  const evWhere = envCol ? ` AND environment = '${envCol}'` : "";
+
+  // ⚠️ **집계표는 못 거른다** — `_ops_daily_metric` 에 `environment` 컬럼이 자체가 없다
+  // (정본 스키마 실측 2026-08-04: observed_date_kst·domain·layer 가 키). 그래서 KPI 와
+  // 매트릭스는 환경이 섞인 채로 나온다. 여기에 필터를 붙이면 쿼리가 통째로 실패하고
+  // safeRows 가 그걸 삼켜 **실행 기록 탭 전체가 조용히 빈다**(실측에서 실제로 그랬다).
+  // 거를 수 없다는 사실 자체를 meta 로 내보내 화면이 밝히게 한다 — 감추는 게 더 나쁘다.
+  const rdaily = await safeRows(env,
+    "SELECT * FROM _ops_daily_metric WHERE observed_date_kst >= date('now','+9 hours', ?)" +
+    " ORDER BY observed_date_kst, domain, layer", kstSince);
+  // 기대치×상태 — 정본은 DAG 선언의 사본(S-1)이다.
+  //
+  // 세 갈래를 **한 표에서 구분해서** 낸다. 예전에는 `WHERE monitored = 1` 로 잘라내서
+  // 나머지 둘이 화면에 아예 없었는데, 그 둘은 뜻이 정반대다(#7 코멘트 · #36 지침 ④):
+  //   watched      기대치 등록 + 감시 대상   — 침묵 한도로 판정한다
+  //   unmonitored  기대치 등록 + monitored=0 — **감시 제외**(수동 전용 DAG). 정상이다
+  //   unregistered 기대치 행 자체가 없음     — **아직 등록 안 됨**. 판정 근거가 없다는 뜻이라
+  //                                            "이상 없음"이 아니라 관측 공백이다
+  // 세 번째는 상태 표에만 있는 DAG 라 방향을 뒤집은 LEFT JOIN 이 하나 더 필요하다.
+  const rexp = await safeRows(env,
+    "SELECT e.dag_id, e.domain, e.trigger_type, e.expected_interval, e.upstream, " +
+    "e.max_delay_minutes, e.owner, " +
+    "CASE WHEN e.monitored = 1 THEN 'watched' ELSE 'unmonitored' END AS watch, " +
+    "s.last_status, s.last_observed_at, s.observation_state " +
+    "FROM _ops_pipeline_expectation e LEFT JOIN _ops_pipeline_state s ON s.dag_id = e.dag_id " +
+    "UNION ALL " +
+    "SELECT s.dag_id, s.domain, NULL, NULL, NULL, NULL, NULL, 'unregistered', " +
+    "s.last_status, s.last_observed_at, s.observation_state " +
+    "FROM _ops_pipeline_state s " +
+    "WHERE NOT EXISTS (SELECT 1 FROM _ops_pipeline_expectation e WHERE e.dag_id = s.dag_id) " +
+    "ORDER BY watch, domain, dag_id");
+  if (!rdaily.ok || !rexp.ok) missing.push("runs");
+  const [rfail, rempty, renv, rslow, rload, rsmp] = await Promise.all([
+    // 실패 목록 — is_final_try 를 그대로 싣는다. 1=최종 실패, 0=재시도 중, NULL=시도 정보 없음
+    // (관문 이전 기록). 셋을 뭉개면 "재시도로 살아난 실행"이 실패로 둔갑한다(C-7).
+    // log_bundle_key = 그 run 의 텍스트 로그 tar.gz(R2) 위치. 번들이 하루 1회 뒤늦게
+    // 올라오므로 **당일 실행은 NULL 이 정상**이다(#7 코멘트 4) — 화면이 그걸 밝힌다.
+    safeRows(env, "SELECT observed_date_kst, domain, layer, dag_id, task_id, is_final_try, " +
+      "retry_count, error_ref, log_bundle_key FROM _ops_run_event WHERE status = 'failed' " +
+      "AND observed_date_kst >= date('now','+9 hours', ?)" + evWhere +
+      " ORDER BY observed_at DESC LIMIT 12", kstSince),
+    // 빈 실행 = 초록 위장의 일반형 — 성공인데 실측 0행. row_count IS NULL(못 잼)과 다르다(F-3).
+    safeRows(env, "SELECT observed_date_kst, domain, layer, dag_id, task_id, rows_source, " +
+      "log_bundle_key FROM _ops_run_event WHERE status = 'success' AND row_count = 0 " +
+      "AND observed_date_kst >= date('now','+9 hours', ?)" + evWhere +
+      " ORDER BY observed_at DESC LIMIT 10", kstSince),
+    // 환경 분포 — **여기만 안 거른다.** 거르면 "무엇이 빠졌나"를 보여줄 수가 없다.
+    safeRows(env, "SELECT environment, COUNT(*) AS events, COUNT(DISTINCT domain) AS domains, " +
+      "MAX(observed_at) AS last_seen FROM _ops_run_event " +
+      "WHERE observed_date_kst >= date('now','+9 hours', ?) GROUP BY environment ORDER BY events DESC", kstSince),
+    safeRows(env, "SELECT dag_id, task_id, domain, ROUND(schedule_delay_s/60.0,1) AS delay_min, " +
+      "ROUND(duration_s/60.0,1) AS dur_min, observed_date_kst FROM _ops_run_event " +
+      "WHERE schedule_delay_s IS NOT NULL AND observed_date_kst >= date('now','+9 hours', ?)" + evWhere +
+      " ORDER BY schedule_delay_s DESC LIMIT 8", kstSince),
+    // 적재 자체의 신선도 + 단계 미기록(layer NULL — 관문 이전 기록) 건수.
+    // bundled = 로그 번들이 실제로 붙은 건수 — 0 이면 링크 칸이 왜 비는지 화면이 설명한다.
+    safeRows(env, "SELECT COUNT(*) AS total, SUM(layer IS NULL) AS layerless, " +
+      "SUM(log_bundle_key IS NOT NULL) AS bundled, " +
+      "MAX(ingested_at) AS last_ingest, " +
+      // 적재 DAG(common_ops_d1_load)가 3시간 주기라 실시간이 아니다(#7 코멘트 2).
+      // "몇 분 전"까지 화면이 알아야 '조용한 것'과 '적재가 멈춘 것'을 가른다.
+      "CAST((julianday('now') - julianday(MAX(ingested_at))) * 1440 AS INTEGER) AS ingest_age_min " +
+      "FROM _ops_run_event WHERE observed_date_kst >= date('now','+9 hours', ?)" + evWhere, kstSince),
+    // 샘플 감지 — 정본 스키마에 is_sample 이 없어 값 규약으로 표시한다(decision/0009)
+    safeRows(env, "SELECT (SELECT COUNT(*) FROM _ops_run_event WHERE event_id LIKE 'smp_%') + " +
+      "(SELECT COUNT(*) FROM _ops_daily_metric WHERE updated_at = 'sample') AS n"),
+  ]);
+
   // ── 서빙 (게이트웨이가 쌓는 _request_log)
   const routes = await safeRows(env,
     "SELECT route, COUNT(*) AS calls, SUM(status >= 400) AS errors, ROUND(AVG(ms),1) AS avg_ms " +
@@ -104,11 +191,37 @@ async function summary(env, params, writable = false) {
   // 데이터 출처를 세 상태로 갈라서 내보낸다. "샘플이냐 아니냐"만 알려주면 화면이
   // "데이터가 없다"와 "합성이 섞였다"를 같은 문구로 말하게 되고, 운영자는 어느 쪽인지
   // 모른 채 원인을 찾게 된다.
-  //   none  — _ops_slo 에 이 기간 행이 아예 없다 (시드 전이거나 실적재가 안 돌았다)
+  //   none  — _ops_slo 에 이 기간 행이 아예 없다 (시드 전이다)
   //   sample— 합성 샘플이 섞여 있다 (is_sample=1)
   //   live  — 전부 실측이다
   const sampleRows = slo.rows.filter((r) => r.is_sample === 1).length;
   const pipelineSource = !slo.rows.length ? "none" : (sampleRows ? "sample" : "live");
+
+  // ── 이용 행동 (행동 로그 스펙 초안 #9 — 콘솔 선반영, decision/0010)
+  // 지금 데이터로 답이 되는 것(여정·익명 비중)과 수집 후 점등되는 것(ua_class 등)을 나눈다.
+  // 초안 컬럼이 아직 없으면 safeRows 가 실패를 삼키고 그 카드는 '수집 전'으로 남는다 —
+  // 콘솔은 게이트웨이 스키마를 만들지도 미러하지도 않는다(0010: ALTER 미러는 정본
+  // 마이그레이션과 duplicate column 으로 충돌해 저쪽 시드를 깨뜨린다).
+  const [src, funnel, udaily, uclients, uagents, upages] = await Promise.all([
+    sources(env),
+    safeRows(env,
+      "SELECT COUNT(*) AS issued, SUM(first_call IS NOT NULL) AS activated, " +
+      "ROUND(AVG(CASE WHEN first_call IS NOT NULL THEN (julianday(first_call) - julianday(created_at)) * 24 END), 1) AS avg_hours_to_first " +
+      "FROM (SELECT k.created_at, (SELECT MIN(r.ts) FROM _request_log r " +
+      "WHERE r.key_hash = k.key_hash AND r.route = 'data') AS first_call FROM _keys k)"),
+    safeRows(env, "SELECT substr(ts,1,10) AS day, SUM(key_hash IS NOT NULL) AS keyed, " +
+      "SUM(key_hash IS NULL) AS anon FROM _request_log WHERE ts >= datetime('now', ?) " +
+      "GROUP BY day ORDER BY day", since),
+    safeRows(env, "SELECT ua_class, COUNT(*) AS calls FROM _request_log " +
+      "WHERE ts >= datetime('now', ?) AND ua_class IS NOT NULL GROUP BY ua_class ORDER BY calls DESC", since),
+    safeRows(env, "SELECT agent_name, agent_mode, COUNT(*) AS calls, SUM(route='data') AS data_calls, " +
+      "COUNT(DISTINCT table_name) AS products FROM _request_log " +
+      "WHERE ts >= datetime('now', ?) AND agent_name IS NOT NULL " +
+      "GROUP BY agent_name, agent_mode ORDER BY calls DESC LIMIT 10", since),
+    safeRows(env, "SELECT page_path, COUNT(*) AS hits FROM _request_log " +
+      "WHERE route = 'page' AND ts >= datetime('now', ?) AND page_path IS NOT NULL " +
+      "GROUP BY page_path ORDER BY hits DESC LIMIT 12", since),
+  ]);
 
   return json({
     window_days: days,
@@ -123,95 +236,90 @@ async function summary(env, params, writable = false) {
       pipeline_is_sample: pipelineSource === "sample",
       pipeline_source: pipelineSource,
       pipeline_sample_rows: sampleRows,
+      runs_is_sample: rsmp.ok && (rsmp.rows[0]?.n || 0) > 0,
+      // 실행 기록을 어느 환경 것만 셌나 + 그래서 몇 건이 빠졌나. 걸러 놓고 말을 안 하면
+      // "숫자가 왜 이렇지"가 되고, 그건 필터를 안 건 것만큼 나쁘다(#78 Z-7).
+      runs_env_scope: envCol,
+      runs_env_excluded: envCol
+        ? renv.rows.filter((r) => r.environment !== envCol)
+                   .reduce((n, r) => n + (r.events || 0), 0)
+        : 0,
+      // 어디까지 걸렀나. 기록 단위(_ops_run_event)는 걸렀지만 집계표는 컬럼이 없어 못 걸렀다 —
+      // "다 걸렀다"고 오해하면 KPI 를 운영 수치로 읽게 되므로 범위를 정확히 밝힌다.
+      runs_env_scope_partial: Boolean(envCol),
+      // 적재 주기는 3시간(common_ops_d1_load) — 실시간이 아니다. 화면이 이 값을 알아야
+      // "조용한 파이프라인"과 "적재가 멈춘 것"을 가른다(#7 코멘트 2).
+      runs_ingest_cycle_min: 180,
+      // 로그 테이블은 있는데 초안 컬럼만 없다 = 스펙 반영 전 (테이블 자체가 없으면 serving 누락으로 이미 표시)
+      usage_spec_pending: routes.ok && !uclients.ok,
     },
     pipeline: { domains: domains.rows, slo: slo.rows },
+    runs: { daily: rdaily.rows, expectations: rexp.rows, failures: rfail.rows,
+            empty_runs: rempty.rows, environments: renv.rows, slowest: rslow.rows,
+            load: rload.rows[0] || null },
     serving: { routes: routes.rows, daily: daily.rows, products: products.rows,
                failures: failures.rows, empty: empty.rows, keys: keys.rows },
+    usage: { funnel: funnel.ok ? funnel.rows[0] : null, daily: udaily.rows,
+             clients: { pending: !uclients.ok, rows: uclients.rows },
+             agents: { pending: !uagents.ok, rows: uagents.rows },
+             pages: { pending: !upages.ok, rows: upages.rows } },
+    // 화면의 숫자가 왜 그 모양인지는 **표를 읽었는지**에서 갈린다. meta.missing 한 줄로는
+    // "없다"와 "이름은 같은데 남의 표다"가 구분되지 않아 진단을 따로 싣는다(아래 sources()).
+    sources: src,
   });
 }
 
-// ── 파이프라인 실행 기록 (팀 조회 DB 4종) ──────────────────────────────────────────
-// 정본은 ASAC-DAG `common/ops/d1_ops.py` 이고 **콘솔은 읽기 전용 소비자**다
-// (ASK-Seoul#78 §8 · decision/0005·0007). 여기서 만들거나 고치는 표가 아니다.
+// ── 데이터 소스 진단 ──────────────────────────────────────────────────────────────
+// 이 콘솔의 존재 이유 절반은 **관측 공백을 드러내는 것**이다(direction.md). 그런데 지금까지
+// "표를 못 읽었다"는 meta.missing 한 줄로만 나갔고, 화면은 "왜 못 읽었나"를 말하지 못했다.
+// 없는 것(표 자체가 없음)과 다른 것(이름은 같은데 스키마가 다름)은 조치가 완전히 다른데
+// 화면에서는 똑같이 "비어 있음"으로 보였다 — 실측에서 실제로 그 상태였다.
 //
-// 화면이 읽어야 할 표는 `_ops_daily_metric`(날짜×도메인×단계 집계)이지만, 그게 비어 있어도
-// `_ops_run_event`(기록 원본)에는 값이 있을 수 있다 — 실측(2026-08-03) 그 상태였다.
-// 그래서 **둘 다 읽고, 어느 쪽이 비었는지를 화면에 그대로 알린다.** 집계가 비었다는 사실
-// 자체가 관측 공백이고, 콘솔의 존재 이유가 그걸 채워서가 아니라 **보여주는** 것이다.
-//
-// 🔴 `모른다 ≠ 0` (#78 공통 원칙·F-3): 측정 못 한 값은 NULL 로 두고 0 과 구분해 내보낸다.
-//    0 으로 그리면 관측 공백이 "이상 없음"으로 위장된다.
-async function pipeline(env, params) {
-  const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
-  const sinceDate = `-${days} days`;
+// 그래서 콘솔이 읽는 표를 하나씩 진단해 **지표로** 내보낸다. 없으면 없다고, 스키마가
+// 어긋나면 어느 컬럼이 없는지까지.
+const SOURCES = [
+  { table: "_ops_run_event", owner: "파이프라인", need: ["observed_date_kst", "domain", "status"],
+    used: "데이터 준비 상태" },
+  { table: "_ops_daily_metric", owner: "파이프라인", need: ["observed_date_kst", "domain", "layer", "event_count"],
+    used: "데이터 준비 상태(집계)" },
+  { table: "_ops_pipeline_state", owner: "파이프라인", need: ["dag_id", "last_status", "observation_state"],
+    used: "파이프라인 현재 상태" },
+  { table: "_ops_pipeline_expectation", owner: "파이프라인", need: ["dag_id", "monitored"],
+    used: "실행 주기 등록" },
+  { table: "_request_log", owner: "게이트웨이", need: ["ts", "route", "status", "table_name", "key_hash"],
+    used: "응답 상태 · API 사용량" },
+  { table: "_catalog", owner: "도메인 export", need: ["name", "product_id", "external"],
+    used: "API 사용량" },
+  { table: "_keys", owner: "게이트웨이", need: ["key_hash", "email", "status", "daily_quota"],
+    used: "이용자 키" },
+  { table: "_ops_slo", owner: "콘솔", need: ["domain", "event_date", "is_sample"],
+    used: "품질 기준(SLO)" },
+  { table: "_ops_domain", owner: "콘솔", need: ["domain", "label", "has_slo"], used: "분야 등록부" },
+];
 
-  const [metric, events, state, expectation, layerGap] = await Promise.all([
-    // 집계표 — D-7 이 지정한 화면용 표. 자연키(날짜·도메인·단계)로 이미 접혀 있다.
-    safeRows(env,
-      "SELECT observed_date_kst AS day, domain, layer, event_count, success_count, failed_count, " +
-      "skipped_count, degraded_count, retried_run_count, empty_run_count, " +
-      "row_count_sum, rows_observed_count, rows_unknown_count, duration_s_sum " +
-      "FROM _ops_daily_metric WHERE observed_date_kst >= date('now','+9 hours',?) " +
-      "ORDER BY observed_date_kst, domain, layer", sinceDate),
-    // 기록 원본 — 집계가 비었을 때 "그래도 기록은 있다"를 보이기 위한 것이지, 콘솔이 집계를
-    // 대신 만드는 게 아니다. 파이프라인의 집계 로직을 여기서 재현하면 정본이 둘이 된다.
-    safeRows(env,
-      "SELECT observed_date_kst AS day, domain, " +
-      "COUNT(*) AS events, " +
-      "SUM(status='success') AS success, SUM(status='failed') AS failed, " +
-      "COUNT(DISTINCT dag_id) AS dags, " +
-      // layer 가 NULL 인 기록 — #78 이 세라고 한 '단계 미기록 건수'. 0 과 구분해야 한다.
-      "SUM(layer IS NULL) AS layer_unknown, " +
-      "SUM(row_count IS NULL) AS rows_unknown " +
-      "FROM _ops_run_event WHERE observed_date_kst >= date('now','+9 hours',?) " +
-      "GROUP BY observed_date_kst, domain ORDER BY observed_date_kst, domain", sinceDate),
-    // DAG 현재 상태 — observation_state 가 C-9 의 complete/partial/unverified.
-    // unverified 는 "아직 점검이 안 지난 구간"이지 정상이라는 뜻이 **아니다.**
-    safeRows(env,
-      "SELECT dag_id, domain, last_status, last_observed_at, last_observed_date_kst, " +
-      "event_count_observed, observation_state, reconciled_through, updated_at " +
-      "FROM _ops_pipeline_state ORDER BY domain, dag_id"),
-    // 기대치 — 정본은 DAG 선언이고 이 표는 사본(S-1). 감시 대상만 비교에 쓴다(S-4).
-    safeRows(env,
-      "SELECT dag_id, domain, trigger_type, expected_interval, upstream, max_delay_minutes, " +
-      "schedule_timezone, monitored, owner, owner_confirmed_on FROM _ops_pipeline_expectation " +
-      "ORDER BY domain, dag_id"),
-    safeRows(env,
-      "SELECT COUNT(*) AS total, SUM(layer IS NULL) AS layer_unknown " +
-      "FROM _ops_run_event WHERE observed_date_kst >= date('now','+9 hours',?)", sinceDate),
-  ]);
-
-  const missing = [];
-  if (!metric.ok) missing.push("daily_metric");
-  if (!events.ok) missing.push("run_event");
-  if (!state.ok) missing.push("pipeline_state");
-  if (!expectation.ok) missing.push("expectation");
-
-  // 기록은 있는데 집계가 비었나 — 이게 실제로 일어나는 상태라 화면이 구분해서 말해야 한다.
-  const hasEvents = events.rows.some((r) => r.events > 0);
-  const gap = layerGap.rows[0] || {};
-
-  return json({
-    window_days: days,
-    generated_at: new Date().toISOString(),
-    meta: {
-      missing,
-      env: { label: env.ENV_LABEL || "알 수 없음", d1: env.ENV_D1 || "알 수 없음" },
-      // 표별 상태를 그대로 내보낸다. 화면이 "왜 비었나"를 말할 수 있어야 한다.
-      source: {
-        daily_metric_rows: metric.rows.length,
-        run_event_days: events.rows.length,
-        // 집계표가 비었는데 원본에는 기록이 있는 상태 — 관측 공백의 한 종류다
-        aggregate_missing: metric.ok && metric.rows.length === 0 && hasEvents,
-      },
-      // 모른다 ≠ 0 — 단계를 못 적은 기록이 몇 건인지 그대로 센다
-      unknown: { events_total: gap.total ?? null, layer_unknown: gap.layer_unknown ?? null },
-    },
-    daily_metric: metric.rows,
-    run_event_daily: events.rows,
-    pipeline_state: state.rows,
-    expectation: expectation.rows,
-  });
+async function sources(env) {
+  const out = await Promise.all(SOURCES.map(async (s) => {
+    // 표 이름은 상수 목록에서만 오므로 사용자 입력이 SQL 로 가지 않는다.
+    const cols = await safeRows(env, `SELECT name FROM pragma_table_info('${s.table}')`);
+    const have = new Set(cols.rows.map((c) => c.name));
+    const exists = have.size > 0;
+    const missingCols = exists ? s.need.filter((c) => !have.has(c)) : s.need;
+    // 스키마가 어긋나면 COUNT 도 의미가 없지만, "행은 쌓이고 있다"는 사실 자체가 신호다
+    // (이름을 선점한 다른 표가 실제로 운영 중인지 아닌지가 갈린다).
+    const cnt = exists ? await safeRows(env, `SELECT COUNT(*) AS n FROM "${s.table}"`) : null;
+    return {
+      table: s.table, owner: s.owner, used: s.used,
+      exists,
+      // 셋으로 가른다 — 조치가 각각 다르다.
+      //   ok        읽을 수 있다
+      //   mismatch  표는 있는데 필요한 컬럼이 없다 (이름 충돌 / 다른 주인)
+      //   absent    표가 아예 없다 (아직 안 만들었다)
+      state: !exists ? "absent" : (missingCols.length ? "mismatch" : "ok"),
+      missing_columns: missingCols,
+      rows: cnt && cnt.ok && cnt.rows[0] ? cnt.rows[0].n : null,
+    };
+  }));
+  return out;
 }
 
 // ── API 사용 현황 ─────────────────────────────────────────────────────────────────
@@ -395,17 +503,13 @@ export default {
       if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
       return summary(env, url.searchParams, canWrite(env, request));
     }
-    if (url.pathname === "/api/pipeline") {
-      if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
-      return pipeline(env, url.searchParams);
-    }
-    if (url.pathname === "/api/usage") {
+    if (url.pathname === "/api/apis") {
       if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
       return usage(env, url.searchParams);
     }
-    if (url.pathname.startsWith("/api/usage/")) {
+    if (url.pathname.startsWith("/api/apis/")) {
       if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
-      const name = decodeURIComponent(url.pathname.slice("/api/usage/".length));
+      const name = decodeURIComponent(url.pathname.slice("/api/apis/".length));
       if (!name) return problem(400, "missing api", "API 이름이 필요하다");
       return usageDetail(env, name, url.searchParams);
     }
@@ -420,9 +524,24 @@ export default {
       if (request.method === "POST") return requireWrite(env, request) || keyAction(env, request);
       return problem(405, "method not allowed", "GET(목록) · POST(조치)");
     }
-    if (url.pathname.startsWith("/api/"))
-      return problem(404, "not found",
-        "GET /api/summary · /api/pipeline · /api/usage · /api/usage/<api> · /api/keys");
+    // 요청 추적 — 지원 문의의 "그 요청" 한 건을 request_id 로 특정한다. 무인증(읽기 공개)인
+    // 근거: request_id 는 그 응답을 받은 사람만 아는 16-hex 난수이고, 응답에는 키 8자
+    // 축약·컬럼명 축만 실린다(decision/0010).
+    if (url.pathname === "/api/trace") {
+      if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
+      const rid = (url.searchParams.get("request_id") || "").trim();
+      if (!/^req_[0-9a-f]{16}$/.test(rid))
+        return problem(400, "invalid request_id",
+          "req_ + 16자리 hex — 게이트웨이 응답 헤더 X-Request-Id(오류 본문 request_id) 값");
+      const res = await safeRows(env,
+        "SELECT ts, route, table_name, status, substr(key_hash, 1, 8) AS key_id, " +
+        "filters, row_count, ms FROM _request_log WHERE request_id = ? LIMIT 5", rid);
+      if (!res.ok) return problem(503, "log unavailable",
+        "_request_log 를 조회할 수 없다 — 게이트웨이 D1 상태 공유와 request_id 컬럼(마이그레이션 0004) 적용 여부를 확인할 것");
+      return json({ request_id: rid, found: res.rows.length, rows: res.rows });
+    }
+    if (url.pathname.startsWith("/api/")) return problem(404, "not found",
+      "GET /api/summary · /api/trace · /api/apis · /api/apis/<이름> · /api/keys");
     return env.ASSETS ? env.ASSETS.fetch(request) : problem(404, "not found", "정적 자산 없음");
   },
 };

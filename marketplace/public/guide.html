@@ -144,7 +144,7 @@
       </div>
     </div>
     <pre><code><span class="k">curl</span> -H <span class="s">"Authorization: Bearer &lt;API_KEY&gt;"</span> \
-  <span class="s">"https://&lt;호스트&gt;/api/data/gold_culture_event_schedule?limit=10"</span></code></pre>
+  <span class="s">"https://&lt;호스트&gt;/api/v1/data/gold_culture_event_schedule?limit=10"</span></code></pre>
     <p>파라미터·오류 코드·페이지네이션을 포함한 전체 규격은 <a href="/docs">API 문서</a>에 있습니다.
       브라우저에서 바로 실행해 보시려면 <a href="/catalog#playground">플레이그라운드</a>를 쓰세요.</p>
   </section>
@@ -251,7 +251,7 @@
         <summary>어떤 제품이 있는지 기계가 읽을 수 있는 형식으로 받고 싶습니다.</summary>
         <div class="a"><p>세 가지 경로가 있습니다.</p>
           <ul>
-            <li><code>GET /api/catalog</code> — 전 제품의 스키마·행 수·발행 시각·조인 축</li>
+            <li><code>GET /api/v1/catalog</code> — 전 제품의 스키마·행 수·발행 시각·조인 축</li>
             <li><a href="/openapi.json">/openapi.json</a> — OpenAPI 3.1 규격. Postman·Swagger 등에 그대로 가져다 쓰실 수 있습니다.</li>
             <li><a href="/llms.txt">/llms.txt</a> — AI 에이전트용 요약. 사람이 읽어도 짧습니다.</li>
           </ul></div>

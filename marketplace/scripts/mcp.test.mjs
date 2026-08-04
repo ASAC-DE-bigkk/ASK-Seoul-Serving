@@ -19,11 +19,10 @@ const mkDeps = (over = {}) => ({
   handleCatalog: async () => jsonRes({ products: [{ product_id: "citydata_ppltn_daily" }] }),
   handleMe: async () => jsonRes({ used: 3, quota: 100, exceeded: false }),
   handleProductBundle: async (_e, pid) => jsonRes({ product_id: pid, columns: [], usage_patterns: [] }),
-  handlePreview: async (_e, table) => jsonRes({ table, preview: true, rows: [{ a: 1 }] }),
-  handleData: async (_e, table) => jsonRes({ table, rows: [] }),
+  handlePreview: async (_e, id) => jsonRes({ id, preview: true, rows: [{ a: 1 }] }),
+  handleData: async (_e, id) => jsonRes({ id, rows: [] }),
   ...over,
 });
-const envStub = { DB: { prepare: () => ({ bind: () => ({ first: async () => ({ name: "gold_citydata_ppltn_daily" }) }) }) } };
 
 test("initialize — 데이터/인증 없이 서버정보", async () => {
   const res = await handleMcp(rpc("initialize"), {}, {}, mkDeps());
@@ -77,13 +76,15 @@ test("check_quota — 이메일 미노출(#26 완료기준), 나머지는 유지
   assert.equal(payload.key_prefix, "ask_0000");
 });
 
-test("tools/call query_product — product_id→table 해석 후 handleData", async () => {
+test("tools/call query_product — product_id 를 shared 해석기에 그대로 전달", async () => {
+  let got = null;
+  const deps = mkDeps({ handleData: async (_e, id, params) => { got = { id, limit: params.get("limit") }; return jsonRes({ id, rows: [] }); } });
   const res = await handleMcp(
     rpc("tools/call", { name: "query_product", arguments: { product_id: "citydata_ppltn_daily", limit: 10 } }),
-    envStub, {}, mkDeps());
+    {}, {}, deps);
   const body = await res.json();
-  const payload = JSON.parse(body.result.content[0].text);
-  assert.equal(payload.table, "gold_citydata_ppltn_daily");
+  assert.equal(body.result.isError, undefined);
+  assert.deepEqual(got, { id: "citydata_ppltn_daily", limit: "10" });
 });
 
 test("tools/call 인증 실패 → 키 안내(isError)", async () => {

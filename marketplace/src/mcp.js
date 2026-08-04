@@ -2,7 +2,7 @@
 //
 // PlayMCP/원격 MCP 표면. **내부 HTTP 재호출 없이** marketplace shared 핸들러(handleCatalog 등)를
 // deps 주입으로 직접 호출해 인증·쿼터·로그 이중집계를 피한다(#26 masondev). 외부 식별자는
-// product_id 로 통일하고 실제 D1 table name(_catalog.name)은 어댑터 안에서만 해석한다.
+// product_id 로 통일하고, 물리 테이블명 해석은 shared 해석기(decision/0003)에 맡긴다.
 // stateless — 세션 상태 없음(과거 SSE 재접속 폭주 위험 회피).
 //
 // P0 툴(5): list_products · describe_product · preview_product · query_product · check_quota.
@@ -100,14 +100,6 @@ async function toToolResult(res) {
   return okJson(body);
 }
 
-// product_id → 실제 D1 table name(_catalog.name). 공개(external=1)만.
-async function resolveTable(env, productId) {
-  const row = await env.DB.prepare("SELECT name FROM _catalog WHERE product_id = ? AND external = 1")
-    .bind(productId)
-    .first();
-  return row ? row.name : null;
-}
-
 async function callTool(name, args, ctx) {
   const { env, request, keyRow, trace, deps } = ctx;
   args = args || {};
@@ -137,16 +129,16 @@ async function callTool(name, args, ctx) {
   }
   if (name === "preview_product" || name === "query_product") {
     if (!args.product_id) return errText("product_id 가 필요합니다.");
-    const table = await resolveTable(env, args.product_id);
-    if (!table) return errText(`없는 제품: ${args.product_id} — list_products 로 확인하세요.`);
-    if (name === "preview_product") return toToolResult(await deps.handlePreview(env, table, trace));
+    // 식별자 해석은 shared 해석기 한 곳에 맡긴다(decision/0003: product_id 정본, 테이블명은
+    // 과도기 별칭). 없는/비공개 제품의 404 는 toToolResult 가 안내 문구로 바꾼다.
+    if (name === "preview_product") return toToolResult(await deps.handlePreview(env, args.product_id, trace));
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(args.filters || {})) params.set(k, String(v));
     if (args.from) params.set("from", String(args.from));
     if (args.to) params.set("to", String(args.to));
     if (args.limit) params.set("limit", String(args.limit));
     if (args.cursor) params.set("cursor", String(args.cursor));
-    return toToolResult(await deps.handleData(env, table, params, keyRow, trace));
+    return toToolResult(await deps.handleData(env, args.product_id, params, keyRow, trace));
   }
   return errText(`알 수 없는 tool: ${name}`);
 }

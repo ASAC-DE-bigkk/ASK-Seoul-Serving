@@ -12,8 +12,7 @@
 
 - 구동은 `wrangler dev` (로컬 Miniflare sqlite D1)뿐. **`wrangler deploy` 금지.**
 - package.json 에 deploy 스크립트를 두지 않는다 — 실수로 누를 버튼 자체를 없앤다.
-- 시드(`npm run seed`)와 폴백 로더(`scripts/load_slo.py` — 정규 경로가 아니다,
-  → [0005](0005-slo-snapshot-to-d1.md))는 **로컬 상태만** 만진다.
+- 시드(`npm run seed`)는 **로컬 상태만** 만진다.
   `wrangler.toml` 기본 환경의 `database_id` 는 로컬 모드에서 사용되지 않는다.
 - **남의 표를 만들거나 지우지 않는다.** 파이프라인·dbt 산출물과 게이트웨이 표는 콘솔이
   읽기만 한다 — 소유 표와 권한은 [0007](0007-schema-single-file-reset.md)이 정본이다.
