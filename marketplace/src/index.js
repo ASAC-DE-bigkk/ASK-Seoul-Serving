@@ -6,7 +6,7 @@
 // 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
 import {
   json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC,
-  authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent,
+  authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent, safeRows,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
 import { SKILL_BUNDLE_ID, handleSkillBundle, handleSkillData, handleSkillProduct } from "./skill.js";
@@ -155,6 +155,23 @@ async function handleCatalog(env) {
     "row_count, freshness, exported_at " +
     `FROM _catalog WHERE ${PUBLIC} ORDER BY name`
   ).all();
+
+  // 컬럼 설명의 정본은 **게시본**이다(`d1_catalog_columns.description_ko`, ASAC-DAG#642 §3).
+  // `_catalog.columns` 는 name·type 만 실어 오므로 여기서 붙인다.
+  //
+  // 예전엔 정적 `column-docs.json` 이 그 자리를 메웠는데, 원천이 dbt yml 이고 생성기를 사람이
+  // 돌리는 구조라 **게시본과 어긋났다** — 실측에서 14종 중 7종이 카탈로그에 없는 표였고,
+  // culture 활동 제품은 `kopis_festivals_count` 라는 지금 없는 컬럼을 설명하고 있었다.
+  // "손으로 쓰는 예제 문서는 만들지 않는다"(#642 §3)가 그래서 있다.
+  //
+  // 표가 없거나 못 읽으면 **설명만 빠지고 카탈로그는 그대로 나간다** — 관측 부재가 서빙을
+  // 막지 않는다. 값이 없는 컬럼은 `description: null` 로 명시한다("모른다"를 빈 문자열로
+  // 꾸미면 화면이 설명이 있는 척한다).
+  const docRows = await safeRows(env.DB.prepare(
+    "SELECT product_id, column_name, description_ko FROM d1_catalog_columns"
+  ));
+  const docs = new Map();
+  for (const r of docRows || []) docs.set(`${r.product_id}|${r.column_name}`, r.description_ko || null);
   // description 을 반드시 실어야 한다 — 제품의 주의사항("기상청 공식 특보가 아님" 등)이
   // 여기에 있고, 화면을 안 거치는 소비자에게는 이 응답이 그걸 전달할 유일한 경로다.
   return json({
@@ -162,10 +179,11 @@ async function handleCatalog(env) {
     attribution: "공공 원천의 2차 가공물 — 출처·이용조건 /legal#attribution",
     docs: "/llms.txt",
     openapi: "/openapi.json",
-    column_docs: "/column-docs.json",
     join_axes: JOIN_AXES,
     products: results.map((r) => {
-      const columns = JSON.parse(r.columns);
+      const columns = JSON.parse(r.columns).map((c) => ({
+        ...c, description: docs.get(`${r.product_id}|${c.name}`) ?? null,
+      }));
       return {
         ...r, columns,
         join_keys: columns.map((c) => c.name).filter((n) => JOIN_AXES.includes(n)),
