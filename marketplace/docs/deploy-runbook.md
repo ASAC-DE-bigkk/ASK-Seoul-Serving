@@ -1,7 +1,7 @@
 # marketplace 배포 런북 (통합 검증용 타겟)
 
-> **이 문서는 승인 후 실행 절차다.** `wrangler deploy` 는 공개 URL 신설이라 멘토 게이트
-> (ASAC-DAG#476 ①)이고, 승인 없이 실행하지 않는다. 결정 상태는 ASK-Seoul-Serving#20.
+> **이 문서는 승인 후 실행 절차다.** `wrangler deploy` 는 공개 URL 신설이라 팀 결정 사항
+> (agreement §8)이고, 승인 없이 실행하지 않는다. 결정 상태는 ASK-Seoul-Serving#20.
 >
 > 대상 범위는 **팀 통합 검증용 비공개 타겟 1개**다 — 외부 공지·문서 링크 없이 올리고,
 > 정식 공개는 별도 판단(#20)이다. 이유는 ASK-Seoul-Serving#4 가 V1 6개 제품 계약 검증에
@@ -11,7 +11,7 @@
 
 | 항목 | 확인 방법 | 기대 |
 |---|---|---|
-| 멘토 승인 | #476 ① 코멘트 | 있음 |
+| **배포 승인** | [`../../docs/agreement.md` §8-3](../../docs/agreement.md#-8-3-원격-d1-에-표를-만드는-것--조율이-필요하다) | ⚠️ **승인 주체 미정** — prod D1 은 파이프라인의 DB 다. #476 ① 은 팀 투표였고 이미 통과했으므로 이 자리의 근거가 아니다 |
 | 대상 D1 | `wrangler.toml` `[env.production]` | `ask-seoul-prod-d1` — 파이프라인이 게시하는 prod D1(ASAC-DAG#668, 8/3 신설). 기본 환경의 dev D1 은 로컬 전용이다 |
 | Cloudflare 계정 | 팀 계정 로그인 | `npx wrangler whoami` — **publisher 와 같은 계정**이어야 바인딩이 같은 DB 로 풀린다(개인 계정 배포 금지) |
 | 코드 | 머지된 `dev` | 로컬 `npm test` · `npm run verify:log` 통과 |

@@ -56,7 +56,7 @@
 어기는 순간 사고가 되는 것들. 완화하려면 결정 문서 개정이 먼저다.
 
 - **`wrangler deploy` 금지.** 로컬 전용(`wrangler dev --local`)이다. 공개 URL 신설은
-  멘토 게이트(#476 ①). package.json 에 deploy 스크립트를 만들지 않는다.
+  배포 결정(agreement §8). package.json 에 deploy 스크립트를 만들지 않는다.
   게이트 통과 후의 배포는 `--env production`(prod D1 `ask-seoul-prod-d1` 바인딩) 만 쓴다
   — 절차는 docs/deploy-runbook.md.
 - **팀(원격) D1 에 쓰지 않는다.** wrangler.toml 의 database_id 는 로컬 모드에서 쓰이지
@@ -140,12 +140,12 @@ npm run dev    # :8787 — 콘솔(:8788)과 동시 구동 가능
 바로 구현하지 않는다. 결정 문서(신규 또는 개정)로 사유·비용·단순 대안·롤백을 먼저 적는다.
 
 ```text
-공개 배포(어떤 형태든)              → 멘토 게이트(#476 ①) — wrangler.toml 주석이 정본
+공개 배포(어떤 형태든)              → 배포 결정(agreement §8) — wrangler.toml 주석이 정본
 키 상태 모델 확장(2값 초과)          → 콘솔 0006 과 공동 개정
 _request_log 컬럼 추가(#9·intent 축) → 새 ALTER 파일 + 시드 체인 + 콘솔 통지, 전부 nullable
 공유 계약(오류·KST·key_hash …) 변경  → decision/0001 개정 + 콘솔 담당 리뷰
 저장소·인프라 추가(DO·Queues·R2 …)  → 도입 신호 확인 후 신규 결정 (ops-dashboard 0008 방식)
-배포 경로에 빌드 단계(SSG·번들러)    → decision/0002 개정 + 멘토 게이트. public/ 이 서빙
+배포 경로에 빌드 단계(SSG·번들러)    → decision/0002 개정 + 배포 결정(agreement §8). public/ 이 서빙
                                       정본인 한 partials 동기화기는 이 선 아래다(0002 D-2)
 발급 rate limit 의 원문 IP           → #9 §7-①·⑥ 결정에 따라 정리 예정 — 그 전까지 확장 금지
 ```

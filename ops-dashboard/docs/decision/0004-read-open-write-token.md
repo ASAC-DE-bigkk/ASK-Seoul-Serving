@@ -34,5 +34,5 @@
 
 ## 재검토 조건
 
-**공개 배포 시 Cloudflare Access / org OAuth 로 교체 필수** — 멘토 게이트([0002](0002-local-only-mentor-gate.md))와
+**공개 배포 시 Cloudflare Access / org OAuth 로 교체 필수** — 배포 결정([0002](0002-local-only-mentor-gate.md) · agreement §8)와
 같이 움직인다. 그때 운영자 감사 로그 결정을 새로 작성한다("누가"가 남는 인증이 생기므로).

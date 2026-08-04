@@ -76,8 +76,8 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 
 어기는 순간 사고가 되는 것들. 완화하려면 해당 결정 문서 개정이 먼저다.
 
-- **`wrangler deploy` 금지.** 로컬 전용(`wrangler dev`)이다. 공개 URL 신설은 멘토 게이트
-  (#476 ①). package.json 에 deploy 스크립트를 만들지 않는다.
+- **`wrangler deploy` 금지.** 로컬 전용(`wrangler dev`)이다. 공개 URL 신설은 팀 결정 사항
+  (agreement §8). package.json 에 deploy 스크립트를 만들지 않는다.
   → [0002](docs/decision/0002-local-only-mentor-gate.md)
 - **팀(원격) D1 에 쓰지 않는다.** 모든 시드·로더는 로컬 상태(`--persist-to`)만 만진다.
   → [0002](docs/decision/0002-local-only-mentor-gate.md)
@@ -181,7 +181,7 @@ OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) �
 바로 구현하지 않는다. decision/ 문서(신규 또는 개정)로 사유·비용·단순 대안·롤백을 먼저 적는다.
 
 ```text
-공개 배포(어떤 형태든)             → 0002 개정 + 멘토 게이트
+공개 배포(어떤 형태든)             → 0002 개정 + 배포 결정(agreement §8)
 인증 방식 변경                     → 0004 개정 (Access/OAuth 승격 포함)
 게이트웨이 테이블 쓰기 확대        → 0003 개정
 저장소·인프라 추가(Queue·R2·DO·AE …) → 0008 의 도입 신호 확인 후 신규 결정

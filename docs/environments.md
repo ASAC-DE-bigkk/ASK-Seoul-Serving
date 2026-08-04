@@ -108,7 +108,7 @@ npm run seed     # 로컬만
 npm run dev      # 로컬만 — 포트는 [dev] port 가 정한다 (--port 불필요)
 ```
 
-배포는 npm script 가 **없다.** 사람이 런북을 보고 직접 친다(멘토 게이트 — 5절).
+배포는 npm script 가 **없다.** 사람이 런북을 보고 직접 친다(배포 결정 — 5절 · agreement §8).
 
 ```bash
 npx wrangler deploy --env production
@@ -164,4 +164,4 @@ D1 안의 장부(`d1_migrations`)에 기록되고 **안 된 파일만 실행**�
   콘솔 쪽은 그 전에 Cloudflare Access 를 `ops.` 호스트로 **한정해서** 거는 게 선행이다
   (#20 결정 B-1 — zone 전체나 `*.ask-seoul.kr` 로 걸면 공개 API 까지 잠긴다).
 - **배포는 아직 허용되지 않았다.** `[env.production]` 이 있다는 것과 배포해도 된다는 것은
-  다르다 — 멘토 게이트(#476 ①). 그래서 **두 `package.json` 다 deploy 스크립트를 두지 않는다.**
+  다르다 — 배포 결정(agreement §8). 그래서 **두 `package.json` 다 deploy 스크립트를 두지 않는다.**

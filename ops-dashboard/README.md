@@ -136,7 +136,7 @@
 
 ## ⚠️ 로컬 전용
 
-`wrangler dev` 로만 구동. **`wrangler deploy` 금지** — 공개 URL 신설은 멘토 게이트(#476 ①).
+`wrangler dev` 로만 구동. **`wrangler deploy` 금지** — 공개 URL 신설은 배포 결정(agreement §8).
 
 ## 실행
 
@@ -254,7 +254,7 @@ Cloudflare Worker 가 애초에 닿지도 못한다([0005](docs/decision/0005-sl
 npm run seed   # fixtures/slo_sample.sql — 모든 행에 is_sample=1, 화면에 경고 배너가 뜬다
 ```
 
-실측을 넣는 정규 경로는 **culture DAG 의 export task**(팀 D1 쓰기 = 멘토 게이트)다.
+실측을 넣는 정규 경로는 **culture DAG 의 export task**(팀 D1 쓰기 = 승인 주체 미정(agreement §8-3))다.
 그전까지 이 탭의 숫자는 합성이고, 화면이 그걸 배너로 직접 밝힌다.
 
 ### 초록 위장을 놓치지 않는다
@@ -273,7 +273,7 @@ npm run seed   # fixtures/slo_sample.sql — 모든 행에 is_sample=1, 화면�
 ## 인증 한계
 
 공유 토큰(`OPS_TOKEN`)이라 **"누가 봤나"가 남지 않는다.** 공개 배포 시 Cloudflare Access 나
-org OAuth 로 **교체 필수**(멘토 게이트). 토큰 미설정이면 503 으로 기능이 꺼진다 —
+org OAuth 로 **교체 필수**(agreement §8-2 B). 토큰 미설정이면 503 으로 기능이 꺼진다 —
 인증 없는 운영 화면이 실수로 열리는 것보다 낫다. 토큰은 sessionStorage 에만 두고
 URL 에 싣지 않으며, 페이지는 `noindex` 다.
 

@@ -77,5 +77,5 @@ cd ops-dashboard ; npm install ; npm run seed ; npm run dev      # :8788
 
 ## 상태
 
-프로토타입이다. 원격 배포·팀 D1 `_keys` 생성·GitHub OAuth 승격은 멘토 게이트로 남아 있다
+프로토타입이다. 원격 배포·팀 D1 `_keys` 생성·GitHub OAuth 승격은 배포 결정(docs/agreement.md §8)으로 남아 있다
 (ASAC-DAG#476).

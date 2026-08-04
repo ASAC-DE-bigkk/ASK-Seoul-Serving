@@ -17,7 +17,7 @@ ops-dashboard 의 문서는 **세 층**이고, 층마다 구속력이 다르다.
 | # | 결정 | 한 줄 |
 |---|---|---|
 | [0001](decision/0001-separate-worker-from-marketplace.md) | 마켓플레이스와 별도 Worker | 청중이 다르고, 배포 단위가 갈려야 사고 반경도 갈린다 |
-| [0002](decision/0002-local-only-mentor-gate.md) | 로컬 전용 | `wrangler deploy` 금지 — 공개 URL 은 멘토 게이트(#476 ①) |
+| [0002](decision/0002-local-only-mentor-gate.md) | 로컬 전용 | `wrangler deploy` 금지 — 공개 URL 은 배포 결정(agreement §8) |
 | [0003](decision/0003-single-shared-local-d1.md) | 게이트웨이 D1 공유 | 원본 하나 — 복제 계층 없음, 부분 강등(`meta.missing`) |
 | [0004](decision/0004-read-open-write-token.md) | 읽기 공개·쓰기 토큰 | 보안 판단은 서버, 이메일은 서버측 마스킹 |
 | [0005](decision/0005-slo-snapshot-to-d1.md) | 파이프라인 상태의 정본 | **조회 DB 4종에서 읽는다**(#78 D-2) — 웨어하우스 직결 복사 경로는 폐기 |
