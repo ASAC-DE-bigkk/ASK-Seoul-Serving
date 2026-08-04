@@ -4,7 +4,7 @@
     "title": "seoul-urban-analytics K-Skill API",
     "version": "1.0.0-draft",
     "summary": "K-Skill 등록 심사용 서울 도시 분석 데이터 제품 계약",
-    "description": "seoul-urban-analytics K-Skill만을 위한 읽기 전용 API다. 공용 Marketplace /v1 API와 제품 범위·응답 계약은 분리하지만, 같은 API Key·버스트 제한·오류·요청 추적 정책을 사용한다. 데이터는 source/right·quality·구조 메타데이터가 현재 publication_id와 모두 일치하고 품질 게이트를 통과한 제품에만 반환한다."
+    "description": "seoul-urban-analytics K-Skill만을 위한 읽기 전용 API다. 공용 Marketplace /v1 API와 제품 범위·응답 계약은 분리하지만, 같은 API Key·버스트 제한·오류·요청 추적 정책을 사용한다. /skill/v1 서버 allowlist는 정확한 6개 제품만 허용하며 Marketplace에 공개된 다른 제품도 404로 거부한다. 데이터는 source/right·quality·구조 메타데이터가 현재 publication_id와 모두 일치하고 품질 게이트를 통과한 제품에만 반환한다."
   },
   "servers": [{ "url": "/", "description": "이 서비스가 서빙 중인 호스트" }],
   "security": [{ "bearerAuth": [] }],
@@ -196,7 +196,7 @@
     "responses": {
       "Unauthorized": { "description": "누락되었거나 알 수 없는 API Key", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
       "Forbidden": { "description": "폐기된 API Key", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
-      "NotFound": { "description": "번들에 없는 제품", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
+      "NotFound": { "description": "exact-six에 포함되지 않은 제품. 공용 Marketplace에 존재해도 이 경로에서는 404다.", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
       "InvalidRequest": { "description": "허용되지 않은 filter·limit·cursor", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
       "CursorExpired": { "description": "cursor가 다른 publication_id를 가리킴", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
       "TooManyRequests": { "description": "공유 버스트 제한 초과", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
