@@ -262,6 +262,25 @@
   .bad-t { color:var(--red-ink); }
   .mono { font-family:var(--mono); font-size:11px; }
 
+  /* 안정성 추이 히트맵 — 하루가 한 칸. 색이 곧 판정이고, 숫자는 그날의 문제 건수다.
+     칸을 누르면 그날 무슨 작업이 문제였는지 아래에 풀린다. */
+  .hm { border-collapse:collapse; }
+  .hm th, .hm td { padding:2px; }
+  .hm .cell { display:block; min-width:26px; height:20px; border-radius:4px; background:var(--bg);
+              border:1px solid var(--line); font-family:var(--mono); font-size:10px;
+              line-height:18px; text-align:center; color:transparent; }
+  .hm .cell.ok   { background:var(--ok-soft); border-color:transparent; }
+  .hm .cell.warn { background:var(--amber-soft); border-color:#fedf89; color:var(--amber-ink); }
+  .hm .cell.bad  { background:var(--red-soft); border-color:#fda29b; color:var(--red-ink); font-weight:700; }
+  .hm .cell.click { cursor:pointer; }
+  .hm .cell.click:hover { box-shadow:0 0 0 2px var(--accent-soft); border-color:var(--accent-line); }
+  .hm .cell.sel { box-shadow:0 0 0 2px var(--accent); }
+  /* 드릴다운 패널 — 튀는 칸 하나를 펼친 것. 자동 새로고침이 히트맵을 다시 그려도 유지된다 */
+  .drill { border:1px solid var(--line-strong); border-radius:8px; background:var(--chip); padding:12px 14px; }
+  .drill-hd { display:flex; align-items:center; gap:8px; }
+  .drill-hd .sub { font-size:11.5px; color:var(--faint); }
+  .drill h4 { font-size:12.5px; font-weight:700; margin:12px 0 4px; }
+
   td.desc { white-space:normal; color:var(--muted); font-size:11.5px; max-width:330px; }
   .zero { color:var(--faint); }
 
@@ -357,38 +376,37 @@
 
     <section class="pane" id="pane-pipeline" role="tabpanel" aria-labelledby="tab-pipeline" tabindex="0">
     <h2 class="sec">데이터 준비 상태 <span>서울시 원본을 받아 가공하는 작업이 매일 제때 끝났나</span></h2>
-    <div class="kpis" id="runKpis"></div>
-    <!-- 성공률만으로는 안 보이는 두 축. 규약이 3분류를 요구하는 이유가 여기 있다 —
-         재시도로 살린 것과 빈 실행은 성공으로 계산돼 성공률 뒤에 숨는다. -->
-    <div class="kpis" id="clsKpis"></div>
+    <!-- 발행 점검 — #78 D-7 이 요구한 지표. 정본은 ASAC-DAG 의 _publication_ledger 이고
+         콘솔은 읽기만 한다. 여기가 비어 있던 동안 화면은 "발행이 다 성공한 것처럼" 보였다. -->
+    <div class="kpis" id="pubKpis"></div>
     <div class="grid">
       <div class="card wide">
         <div class="hd">
-          <h3>날짜별 · 분야별 실행 기록</h3>
-          <p>파이프라인이 실행할 때마다 남긴 기록입니다 — 이 화면의 실측 근거입니다</p>
+          <h3>분야별 발행</h3>
+          <p>제품을 D1 에 올리는 시도의 결과입니다 — 성공만 세면 열화·실패가 안 보입니다</p>
         </div>
-        <div class="bd"><div class="scroll" id="runDaily"></div></div>
+        <div class="bd"><div class="scroll" id="pubDomains"></div></div>
       </div>
       <div class="card">
         <div class="hd">
-          <h3>파이프라인 현재 상태</h3>
-          <p>작업(DAG) 하나가 한 줄 — 마지막 실행이 어땠나</p>
+          <h3>어디서 깨지나</h3>
+          <p>단계별로 나눈 것입니다 — "쓰다 실패"와 "쓰고 나서 확인 실패"는 조치가 다릅니다</p>
         </div>
-        <div class="bd"><div class="scroll" id="pipeState"></div></div>
+        <div class="bd"><div class="scroll" id="pubStages"></div></div>
       </div>
       <div class="card">
         <div class="hd">
-          <h3>실행 주기 등록</h3>
-          <p>얼마나 자주 돌아야 하는지 등록된 값 — 감시 대상이 아닌 것은 회색입니다</p>
+          <h3>문제가 몰린 제품</h3>
+          <p>실패·열화가 잦은 순서입니다 — 사유는 줄에 마우스를 올리면 나옵니다</p>
         </div>
-        <div class="bd"><div class="scroll" id="pipeExpect"></div></div>
+        <div class="bd"><div class="scroll" id="pubWorst"></div></div>
       </div>
       <div class="card wide">
         <div class="hd">
-          <h3>단계별 실행</h3>
-          <p>어디서 막히나 — 수집(raw) → 적재(bronze) → 정제(silver) → 집계(gold) → 게시(d1)</p>
+          <h3>행수가 안 맞는 발행</h3>
+          <p>원본·발행·D1 세 숫자가 다릅니다 — 어느 것이 맞는지는 <b>화면이 정하지 않고 그대로 보여줍니다</b></p>
         </div>
-        <div class="bd"><div class="scroll" id="byLayer"></div></div>
+        <div class="bd"><div class="scroll" id="pubMismatch"></div></div>
       </div>
       <div class="card wide">
         <div class="hd">
@@ -426,6 +444,14 @@
     <div class="kpis" id="runsKpis"></div>
     <div class="grid">
       <div class="card wide">
+        <div class="hd">
+          <h3>분야별 안정성 추이</h3>
+          <p>하루가 한 칸입니다 — <b>붉은 칸(실패)을 누르면</b> 그날 어떤 작업이 문제였는지 아래에 풉니다</p>
+        </div>
+        <div class="bd"><div id="runsTrend"></div></div>
+        <div class="bd" id="runsDrillWrap" hidden><div id="runsDrill"></div></div>
+      </div>
+      <div class="card wide">
         <div class="hd"><h3>도메인 × 단계</h3><p>최근 창의 성공/기록 — 빈 칸(—)은 그 도메인·단계가 아직 기록을 안 남긴다는 <b>관측</b>이다</p></div>
         <div class="bd" id="runsMatrix"></div>
       </div>
@@ -440,6 +466,13 @@
       <div class="card">
         <div class="hd"><h3>빈 실행</h3><p>성공인데 실측 0행 — 초록 위장의 일반형</p></div>
         <div class="bd" id="runsEmpty"></div>
+      </div>
+      <div class="card wide">
+        <div class="hd">
+          <h3>단계별 소요와 적재량</h3>
+          <p>어느 단계가 시간을 먹고 어디서 행이 쌓이나 — 수집(raw) → 적재(bronze) → 정제(silver) → 집계(gold) → 게시(d1)</p>
+        </div>
+        <div class="bd"><div id="runsLayers"></div></div>
       </div>
       <div class="card">
         <div class="hd"><h3>지연 상위</h3><p>예정보다 늦게 시작한 실행</p></div>
@@ -486,7 +519,7 @@
     <!-- 이용 행동 — 행동 로그 스펙 초안(#9)의 소비 화면(decision/0010). 여정·추적은 현행
          데이터로 즉시 동작하고, AI·페이지 축은 게이트웨이 수집 반영 후 자동 점등된다. -->
     <section class="pane" id="pane-usage" role="tabpanel" aria-labelledby="tab-usage" tabindex="0" hidden>
-    <h2 class="sec">이용 행동 <span>누가·무엇이·어떻게 쓰나 · _request_log + 행동 스펙 초안(#9)</span></h2>
+    <h2 class="sec">이용 행동 <span>누가·무엇이·어떻게 쓰나 · _gateway_request_log + 행동 스펙 초안(#9)</span></h2>
     <div class="kpis" id="usageKpis"></div>
     <div class="grid">
       <div class="card wide">
@@ -661,6 +694,23 @@ const bundleNote = (load) => !load || load.bundled ? ""
     "과거분까지 비어 있으면 번들 적재 쪽을 확인해야 한다'>로그 번들 <b>0건</b> / " +
     nf.format(load.total || 0) + "건</p>";
 
+// ── 발행·단계·소요 표기 — 요약(render)과 드릴다운이 같은 번역을 쓴다 ────────────────
+const pubPill = (o) => o === "published" ? "<span class='pill ok'>성공</span>"
+  : o === "degraded" ? "<span class='pill warn'>열화</span>"
+  : o === "failed" ? "<span class='pill bad'>실패</span>"
+  : o === "skipped_retained" ? "<span class='pill dim'>건너뜀(기존 유지)</span>"
+  : "<span class='pill dim'>" + esc(o || "—") + "</span>";
+// 단계는 내부 값이라 사람 말로 옮긴다(화면 문구 규약). 모르는 값은 원문 그대로 둔다 —
+// 지어내는 것보다 낫고, 새 단계가 생기면 여기 추가하라는 신호가 된다.
+const STAGE_KO = { completed: "완료까지", write: "쓰는 중", read_back: "쓰고 확인",
+  source_primary_key: "원본 키 확인", gate: "게시 판정" };
+const stageKo = (x) => STAGE_KO[x] || (x ? esc(x) : "—");
+const LAYERS = [["raw","수집"], ["bronze","정제"], ["silver","변환"], ["gold","집계"], ["d1","서빙"]];
+const layerKo = (k) => { const f = LAYERS.find(([x]) => x === k); return f ? f[1] : (k || "미상"); };
+// 초 단위는 사람이 못 읽는다 — 335시간이 1,206,043초로 나오면 크기 감각이 안 잡힌다
+const hrs = (sec) => sec >= 3600 ? Math.round(sec / 3600).toLocaleString("ko-KR") + "시간"
+  : sec >= 60 ? Math.round(sec / 60) + "분" : Math.round(sec) + "초";
+
 // ── 탭. 상태는 URL 해시에 둔다 — 새로고침·링크 공유에도 보던 자리가 유지된다.
 const PANES = ["pipeline", "runs", "serving", "usage", "apis", "keys"];
 // 해시는 "탭" 또는 "apis/<API 이름>" 이다 — 탭과 같은 이유로 상세도 주소에 싣는다.
@@ -708,6 +758,10 @@ addEventListener("hashchange", () => {
   if (h.pane === "apis" && h.api && h.api !== DETAIL_OPEN) openDetail(h.api, true);
 });
 
+// 안정성 추이에서 펼쳐 둔 칸 — {domain, day}. 자동 새로고침이 히트맵을 다시 그려도
+// 이 값으로 선택 표시를 되살린다. 패널 내용은 다시 긁지 않는다(사용자가 연 시점의 스냅샷).
+let DRILL = null;
+
 function render(d) {
   // ── 지금 보고 있는 데이터의 출처(환경 + D1). wrangler.toml 의 [vars] 에서 온다.
   const ev = (d.meta && d.meta.env) || null;
@@ -735,6 +789,15 @@ function render(d) {
   //   테두리     = **조치가 필요한 것에만.** 정보성은 배경만 — 눈이 조치할 것에 먼저 간다
   //
   // note(kind, label, why) — kind: "info"(배경만) / "warn"(테두리) / "stop"(붉은 테두리)
+  // 발행 점검 합계를 **알림 칩보다 먼저** 낸다 — 칩이 이 값을 쓴다.
+  // 전체 합계는 분야별 행을 화면에서 SUM 한다. 같은 것을 서버에 두 번 묻지 않는다.
+  const P = d.publication || { by_domain: [], by_stage: [], worst: [], row_mismatch: [], recent_published: [] };
+  const pTot = P.by_domain.reduce((a, r) => ({
+    attempts: a.attempts + (r.attempts || 0), published: a.published + (r.published || 0),
+    degraded: a.degraded + (r.degraded || 0), failed: a.failed + (r.failed || 0),
+    skipped: a.skipped + (r.skipped || 0), mismatch: a.mismatch + (r.row_mismatch || 0),
+  }), { attempts: 0, published: 0, degraded: 0, failed: 0, skipped: 0, mismatch: 0 });
+
   const NOTE_IC = { info: "◍", warn: "▲", stop: "■" };
   const note = (kind, label, why) => ({ kind, label, why: why || "" });
 
@@ -750,6 +813,16 @@ function render(d) {
       "실측 파이프라인 상태는 <b>실행 기록</b> 탭에 있습니다."));
   if (d.meta.missing.includes("pipeline") && hasSlo)
     N.pipeline.push(note("info", "데이터 없음", "<code>npm run seed</code> 를 먼저 실행하세요."));
+  if (d.meta.missing.includes("publication"))
+    N.pipeline.push(note("info", "연결되지 않음",
+      "발행 대장(<code>_publication_ledger</code>)을 읽지 못했습니다. 정본은 파이프라인이고 " +
+      "콘솔은 읽기만 합니다 — 로컬에는 이 표가 없을 수 있습니다."));
+  // 발행이 깨지고 있으면 이 탭에서 먼저 보여야 한다 — 성공률만 보면 안 보이는 축이다.
+  if (pTot.failed > 0 || pTot.mismatch > 0)
+    N.pipeline.push(note("warn", "발행 문제 " + nf.format(pTot.failed + pTot.mismatch) + "건",
+      "실패 <b>" + nf.format(pTot.failed) + "</b> · 열화 <b>" + nf.format(pTot.degraded) +
+      "</b> · 행수 안 맞음 <b>" + nf.format(pTot.mismatch) + "</b>. " +
+      "어느 분야에 몰렸는지는 아래 '분야별 발행'에서 봅니다."));
 
   if (d.meta.runs_is_sample)
     N.runs.push(note("warn", "합성 샘플", "팀 조회 DB 적재분이 아닙니다. 이 값으로 운영 판단을 하지 마세요."));
@@ -864,20 +937,91 @@ function render(d) {
     { t:"규칙 위반", r:true, get:(r) => r.violation_count },
   ], badDays, "확인이 필요한 날이 없습니다");
 
+  // ── 발행 점검 (#78 D-7) ────────────────────────────────────────────────────
+  //
+  // 제품을 D1 에 올리는 **시도**의 결과다. 성공만 세면 열화·실패가 안 보이는데,
+  // 실측에서 실패 60건 중 56건이 traffic 한 도메인에 몰려 있었다 — 뭉뚱그리면 사라지는 신호다.
+  //
+  // 전체 합계는 분야별 행을 **화면에서 SUM** 한다. 같은 것을 서버에 두 번 묻지 않는다.
+  kpis("pubKpis", [
+    ["발행 성공", pTot.attempts ? Math.round(pTot.published / pTot.attempts * 100) + "%" : "—",
+     pTot.attempts ? nf.format(pTot.published) + "/" + nf.format(pTot.attempts) + " 시도" : "기록 없음",
+     pTot.attempts && pTot.published / pTot.attempts < 0.95 ? "bad" : "good"],
+    // 열화 = 올라가긴 했는데 온전하지 않다. 실패가 아니라서 성공률에 안 잡힌다.
+    ["열화", nf.format(pTot.degraded), "올라갔지만 온전하지 않음", pTot.degraded > 0 ? "bad" : "good"],
+    ["실패", nf.format(pTot.failed), "올리지 못함", pTot.failed > 0 ? "bad" : "good"],
+    // 세 숫자가 어긋난 건 "성공"으로 기록돼 있어 더 안 보인다.
+    ["행수 안 맞음", nf.format(pTot.mismatch), "원본·발행·D1 이 다름", pTot.mismatch > 0 ? "bad" : "good"],
+  ]);
+
+
+  // 표 진단 — 정의만 있고 호출이 빠져 카드가 비어 있었다(머지 유실). 이 카드가 비면
+  // "왜 화면이 비는가"에 답할 곳이 없어진다 — 그게 이 콘솔의 존재 이유 절반이다.
+  renderSources(d.sources || []);
+
+  $("pubDomains").innerHTML = table([
+    { t:"분야", name:true, get:(r) => esc(domLabel(r.domain)) +
+        " <span class='pill dim'>" + esc(r.domain) + "</span>" },
+    { t:"제품", r:true, get:(r) => r.products },
+    { t:"시도", r:true, get:(r) => nf.format(r.attempts) },
+    { t:"성공", r:true, get:(r) => nf.format(r.published) },
+    { t:"열화", r:true, get:(r) => r.degraded ? "<span class='pill warn'>" + nf.format(r.degraded) + "</span>" : num(0) },
+    { t:"실패", r:true, get:(r) => r.failed ? "<span class='pill bad'>" + nf.format(r.failed) + "</span>" : num(0) },
+    { t:"건너뜀", r:true, get:(r) => num(r.skipped) },
+    { t:"행수 안 맞음", r:true, get:(r) => r.row_mismatch ? "<span class='pill warn'>" + nf.format(r.row_mismatch) + "</span>" : num(0) },
+    { t:"마지막", r:true, get:(r) => esc(fmtTs(r.last_at) || "—") },
+  ], P.by_domain, "데이터 없음");
+
+  $("pubStages").innerHTML = table([
+    { t:"결과", get:(r) => pubPill(r.outcome) },
+    { t:"단계", name:true, get:(r) => stageKo(r.stage) },
+    { t:"건수", r:true, get:(r) => nf.format(r.n) },
+    { t:"마지막", r:true, get:(r) => esc(fmtTs(r.last_at) || "—") },
+  ], P.by_stage, "데이터 없음");
+
+  $("pubWorst").innerHTML = table([
+    // 사유(reason)는 표에 안 싣는다 — 길고, 원문 그대로는 화면 문구 규약에 어긋난다.
+    // 대신 줄 전체의 title 로 달아 필요할 때만 보이게 한다.
+    { t:"제품", name:true, get:(r) => "<span title='" + esc(r.reason || "사유 기록 없음") + "'>" +
+        esc(r.product_id) + "</span>" },
+    { t:"결과", get:(r) => pubPill(r.outcome) },
+    { t:"단계", get:(r) => stageKo(r.stage) },
+    { t:"건수", r:true, get:(r) => nf.format(r.n) },
+  ], P.worst, "데이터 없음");
+
+  $("pubMismatch").innerHTML = table([
+    { t:"제품", name:true, get:(r) => esc(r.product_id) },
+    { t:"원본", r:true, get:(r) => r.source_row_count == null ? "—" : nf.format(r.source_row_count) },
+    { t:"발행", r:true, get:(r) => r.published_row_count == null ? "—" : nf.format(r.published_row_count) },
+    { t:"D1", r:true, get:(r) => r.d1_row_count == null ? "—" : nf.format(r.d1_row_count) },
+    { t:"스모크", get:(r) => esc(r.api_smoke_status || "—") },
+    { t:"되돌림", get:(r) => esc(r.rollback_status || "—") },
+    { t:"시각", r:true, get:(r) => esc(fmtTs(r.attempted_at) || "—") },
+  ], P.row_mismatch, "데이터 없음") +
+  (P.recent_published?.length
+    ? "<p class='hint' style='margin-top:8px'>마지막 성공 발행 " +
+      esc(fmtTs(P.recent_published[0].published_at)) + " · " +
+      esc(P.recent_published[0].product_id) + "</p>"
+    : "");
+
   // ── 실행 기록 — 집계표(_ops_daily_metric)를 창 범위로 접고, 성공률이 가리는 두 축
   // (재시도로 살림·빈 실행)과 "모른다 ≠ 0"(미측정 행수)을 같은 줄에 세운다.
-  const LAYERS = [["raw","수집"], ["bronze","정제"], ["silver","변환"], ["gold","집계"], ["d1","서빙"]];
   const agg = {};
   for (const r of R.daily) {
     const a = agg[r.domain + "|" + r.layer] ||
-      (agg[r.domain + "|" + r.layer] = { ev:0, ok:0, fail:0, empty:0, retried:0, unk:0, obs:0 });
+      (agg[r.domain + "|" + r.layer] = { ev:0, ok:0, fail:0, empty:0, retried:0, unk:0, obs:0,
+                                         deg:0, dur:0, rows:0, api:0 });
     a.ev += r.event_count; a.ok += r.success_count; a.fail += r.failed_count;
     a.empty += r.empty_run_count; a.retried += r.retried_run_count;
     a.unk += r.rows_unknown_count; a.obs += r.rows_observed_count;
+    // #78 D-7 이 요구했는데 화면에 없던 넷 — 값은 이미 SELECT * 로 받고 있었다.
+    a.deg += r.degraded_count || 0; a.dur += r.duration_s_sum || 0;
+    a.rows += r.row_count_sum || 0; a.api += r.api_call_count_sum || 0;
   }
   const rTot = Object.values(agg).reduce((a, x) => ({ ok:a.ok+x.ok, fail:a.fail+x.fail,
-    empty:a.empty+x.empty, retried:a.retried+x.retried, unk:a.unk+x.unk, obs:a.obs+x.obs }),
-    { ok:0, fail:0, empty:0, retried:0, unk:0, obs:0 });
+    empty:a.empty+x.empty, retried:a.retried+x.retried, unk:a.unk+x.unk, obs:a.obs+x.obs,
+    deg:a.deg+x.deg, dur:a.dur+x.dur, rows:a.rows+x.rows, api:a.api+x.api }),
+    { ok:0, fail:0, empty:0, retried:0, unk:0, obs:0, deg:0, dur:0, rows:0, api:0 });
   const judged = rTot.ok + rTot.fail;
   kpis("runsKpis", [
     ["성공", judged ? Math.round(rTot.ok / judged * 100) + "%" : "—",
@@ -886,7 +1030,93 @@ function render(d) {
     ["재시도로 살림", nf.format(rTot.retried), "성공률이 가리는 열화", rTot.retried > 0 ? "bad" : "good"],
     ["빈 실행", nf.format(rTot.empty), "성공인데 실측 0행 — 초록 위장", rTot.empty > 0 ? "bad" : "good"],
     ["행수 미측정", nf.format(rTot.unk), "측정 " + nf.format(rTot.obs) + "건 · 모른다 ≠ 0", ""],
+    // 아래 둘은 #78 D-7 이 요구한 '적재 건수 추이'·'단계별 소요시간'의 합계다.
+    ["적재 행수", nf.format(rTot.rows), "이 기간에 실제로 쌓인 행", ""],
+    ["총 소요", hrs(rTot.dur), rTot.api ? "외부 API 호출 " + nf.format(rTot.api) + "회" : "단계 전체 합", ""],
   ]);
+
+  // ── 분야별 안정성 추이 — 하루가 한 칸, 분야가 한 줄 ─────────────────────────
+  //
+  // 도메인×단계 매트릭스는 창 전체를 접어 "지금 어디가 아픈가"를 보여주지만
+  // **언제부터 아팠는가**는 못 보여준다. 여기는 날짜 축을 살려 추이를 본다.
+  // 실행 집계(_ops_daily_metric)와 발행 대장(_publication_ledger)을 **한 칸에 겹친다** —
+  // 실행은 멀쩡한데 발행만 깨지는 날이 실제로 있다(traffic 실측).
+  const HM = {};
+  for (const r of R.daily) {
+    const c = ((HM[r.domain] ||= {})[r.observed_date_kst] ||=
+      { ev:0, fail:0, deg:0, empty:0, retried:0, pubTry:0, pubFail:0, pubDeg:0, pubMis:0 });
+    c.ev += r.event_count; c.fail += r.failed_count; c.deg += r.degraded_count || 0;
+    c.empty += r.empty_run_count; c.retried += r.retried_run_count;
+  }
+  for (const r of (P.by_day || [])) {
+    const c = ((HM[r.domain] ||= {})[r.day] ||=
+      { ev:0, fail:0, deg:0, empty:0, retried:0, pubTry:0, pubFail:0, pubDeg:0, pubMis:0 });
+    c.pubTry += r.attempts; c.pubFail += r.failed; c.pubDeg += r.degraded; c.pubMis += r.row_mismatch;
+  }
+  // 심각도 — 되돌릴 수 없는 것(실패)이 빨강, 성공으로 위장하는 것(빈·열화·재시도)이 노랑
+  const hmSev = (c) => !c || (c.ev === 0 && c.pubTry === 0) ? "none"
+    : (c.fail > 0 || c.pubFail > 0) ? "bad"
+    : (c.empty > 0 || c.deg > 0 || c.retried > 0 || c.pubDeg > 0 || c.pubMis > 0) ? "warn" : "ok";
+  const hmScore = (c) => !c ? 0
+    : c.fail * 3 + c.pubFail * 3 + c.pubMis * 2 + c.empty + c.deg + c.retried + c.pubDeg;
+  const hmDoms = Object.keys(HM);
+  const hmDays = [];
+  if (hmDoms.length) {
+    // 축은 빈 날도 채운다 — 기록이 없는 날은 "괜찮았던 날"이 아니라 관측 공백이다
+    const seen = hmDoms.flatMap((k) => Object.keys(HM[k])).sort();
+    for (let t = Date.parse(seen[0] + "T00:00:00Z");
+         t <= Date.parse(seen[seen.length - 1] + "T00:00:00Z"); t += 86400000)
+      hmDays.push(new Date(t).toISOString().slice(0, 10));
+  }
+  const hmHalf = Math.floor(hmDays.length / 2);
+  const hmRows = hmDoms.map((dom) => {
+    const tot = { ev:0, fail:0, pubTry:0, pubFail:0, score:0, early:0, late:0 };
+    hmDays.forEach((day, i) => {
+      const c = HM[dom][day]; if (!c) return;
+      tot.ev += c.ev; tot.fail += c.fail; tot.pubTry += c.pubTry; tot.pubFail += c.pubFail;
+      const sc = hmScore(c);
+      tot.score += sc; if (i < hmHalf) tot.early += sc; else tot.late += sc;
+    });
+    return { dom, tot };
+  }).sort((a, b) => b.tot.score - a.tot.score || a.dom.localeCompare(b.dom));
+  $("runsTrend").innerHTML = hmRows.length ? (() => {
+    const head = "<tr><th class='name'>분야</th>" + hmDays.map((k) =>
+      "<th class='r'><small>" + esc(md(k)) + "</small></th>").join("") + "</tr>";
+    const body = hmRows.map(({ dom, tot }) => {
+      const rate = tot.ev ? Math.round((1 - tot.fail / tot.ev) * 100) + "%"
+        : tot.pubTry ? Math.round((1 - tot.pubFail / tot.pubTry) * 100) + "%" : "—";
+      // 추이 — 창의 앞·뒤 절반을 비교한다. 문제 점수가 최근에 몰리면 "나빠짐".
+      const arrow = (tot.early || tot.late)
+        ? (tot.late > tot.early * 1.5 ? " <span class='bad-t'>↗ 나빠짐</span>"
+          : tot.early > tot.late * 1.5 ? " <span style='color:var(--ok)'>↘ 나아짐</span>" : " →")
+        : "";
+      const tds = hmDays.map((day) => {
+        const c = HM[dom][day];
+        const sev = hmSev(c);
+        if (sev === "none")
+          return "<td><span class='cell' title='" + esc(dom) + " " + esc(md(day)) +
+            " — 기록 없음(관측 공백)'></span></td>";
+        const label = sev === "bad" ? (c.fail + c.pubFail)
+          : sev === "warn" ? (c.empty + c.deg + c.retried + c.pubDeg + c.pubMis) : "";
+        const tip = esc(dom) + " " + esc(md(day)) +
+          (c.ev ? "&#10;실행 " + nf.format(c.ev) + " · 실패 " + c.fail + " · 빈 " + c.empty +
+            " · 재시도로 살림 " + c.retried + " · 열화 " + c.deg : "") +
+          (c.pubTry ? "&#10;발행 " + nf.format(c.pubTry) + " · 실패 " + c.pubFail +
+            " · 열화 " + c.pubDeg + " · 행수 불일치 " + c.pubMis : "") +
+          "&#10;누르면 이날 어떤 작업이 문제였는지 폅니다";
+        const sel = DRILL && DRILL.domain === dom && DRILL.day === day ? " sel" : "";
+        return "<td><span class='cell click " + sev + sel + "' data-drill='" +
+          esc(dom) + "|" + esc(day) + "' title='" + tip + "'>" + label + "</span></td>";
+      }).join("");
+      return "<tr><td class='name'>" + esc(domLabel(dom)) +
+        " <small>" + rate + arrow + "</small></td>" + tds + "</tr>";
+    }).join("");
+    return "<table class='hm'><thead>" + head + "</thead><tbody>" + body + "</tbody></table>" +
+      "<div class='cal-legend'><span><span class='pill bad'>빨강</span> 실패 — 숫자는 그날 실패 건수</span>" +
+      "<span><span class='pill warn'>노랑</span> 빈 실행·열화·재시도·행수 불일치</span>" +
+      "<span><span class='pill ok'>초록</span> 문제 없음</span>" +
+      "<span><span class='pill dim'>빈 칸</span> 기록 없음 = 관측 공백</span></div>";
+  })() : emptyBox(["데이터 없음", "실행 집계·발행 대장이 채워지면 나타납니다"]);
 
   // 매트릭스 — 셀이 비어 있으면(—) 그 도메인·단계는 기록을 안 남긴다는 뜻. 공백도 관측이다.
   const rDomains = [...new Set([...R.daily.map((r) => r.domain), ...R.expectations.map((r) => r.domain)])].sort();
@@ -896,12 +1126,16 @@ function render(d) {
       rDomains.map((dom) => "<tr><td class='name'>" + esc(dom) + "</td>" + LAYERS.map(([k]) => {
         const a = agg[dom + "|" + k];
         if (!a) return "<td class='r'><span class='pill dim'>—</span></td>";
-        const cls = a.fail > 0 ? "bad" : a.empty > 0 ? "warn" : "ok";
+        // 열화(degraded)가 색 규칙에 빠져 있었다 — 실패는 아니지만 온전하지도 않은 상태다
+        const cls = a.fail > 0 ? "bad" : (a.empty > 0 || a.deg > 0) ? "warn" : "ok";
+        // 칸을 늘리는 대신 title 로 얹는다. D-7 의 '단계별 소요·적재 건수'를 매트릭스 위에서 읽게 한다.
         return "<td class='r'><span class='pill " + cls + "' title='성공 " + a.ok + " · 실패 " + a.fail +
-          " · 빈 실행 " + a.empty + " · 재시도로 살림 " + a.retried + "'>" + a.ok + "/" + a.ev + "</span></td>";
+          " · 빈 실행 " + a.empty + " · 재시도로 살림 " + a.retried + " · 열화 " + a.deg +
+          "\n소요 " + hrs(a.dur) + " · 적재 " + nf.format(a.rows) + "행" +
+          (a.api ? " · API " + nf.format(a.api) + "회" : "") + "'>" + a.ok + "/" + a.ev + "</span></td>";
       }).join("") + "</tr>").join("") + "</tbody></table>" +
       "<div class='cal-legend'><span><span class='pill ok'>n/m</span> 성공/기록</span>" +
-      "<span><span class='pill warn'>노랑</span> 빈 실행 포함</span>" +
+      "<span><span class='pill warn'>노랑</span> 빈 실행·열화 포함</span>" +
       "<span><span class='pill bad'>빨강</span> 실패 포함</span>" +
       "<span><span class='pill dim'>—</span> 기록 없음 = 관측 공백</span></div>" +
       (R.load ? "<p class='hint' style='margin-top:10px'>기록 " +
@@ -977,6 +1211,32 @@ function render(d) {
     { t:"행수 근거", get:(r) => esc(r.rows_source) },
     { t:"로그", name:true, get:(r) => bundleCell(r.log_bundle_key) },
   ], R.empty_runs, "데이터 없음");
+
+  // 단계 축 합산 — 매트릭스가 도메인×단계라면 여기는 **단계만** 접어 어디가 무거운지 본다.
+  // '지연 상위'는 개별 실행이라 이 분포를 못 보여준다(늦게 시작한 것 ≠ 오래 걸린 것).
+  const byLayer = LAYERS.map(([k, lab]) => {
+    const t = Object.entries(agg).filter(([key]) => key.endsWith("|" + k))
+      .reduce((a, [, x]) => ({ dur:a.dur+x.dur, rows:a.rows+x.rows, api:a.api+x.api,
+        ev:a.ev+x.ev, doms:a.doms+1 }), { dur:0, rows:0, api:0, ev:0, doms:0 });
+    return { key:k, label:lab, ...t };
+  }).filter((x) => x.ev > 0);
+  const maxDur = Math.max(1, ...byLayer.map((x) => x.dur));
+  const maxRow = Math.max(1, ...byLayer.map((x) => x.rows));
+  $("runsLayers").innerHTML = byLayer.length
+    ? "<div class='share'>" + byLayer.map((x) =>
+        "<div class='row'><div class='nm'>" + esc(x.label) +
+          "<small>" + esc(x.key) + " · 분야 " + x.doms + "</small></div>" +
+        "<div class='track' title='소요 " + hrs(x.dur) + "'>" +
+          "<div class='fill' style='width:" + Math.round(x.dur / maxDur * 100) + "%'></div></div>" +
+        "<div class='num'><b>" + hrs(x.dur) + "</b></div></div>" +
+        "<div class='row'><div class='nm'><small>적재 행수</small></div>" +
+        "<div class='track' title='" + nf.format(x.rows) + "행'>" +
+          "<div class='fill dim' style='width:" + Math.round(x.rows / maxRow * 100) + "%'></div></div>" +
+        "<div class='num'><small>" + nf.format(x.rows) + "행</small></div></div>").join("") +
+      "</div>" +
+      "<p class='hint' style='margin-top:10px'>막대는 단계끼리의 상대 크기입니다 · " +
+      "소요는 그 단계 전 분야 실행 시간의 합입니다</p>"
+    : emptyBox(["데이터 없음", "집계표가 채워지면 나타납니다"]);
 
   $("runsSlow").innerHTML = table([
     { t:"dag · task", name:true, get:(r) => esc((r.dag_id || "—") + " · " + (r.task_id || "—")) },
@@ -1131,10 +1391,12 @@ function render(d) {
 
   // ── 탭 라벨의 상태 점 — 탭으로 가린 쪽이 아픈지를 전환 없이 알려준다.
   // 판정 기준은 KPI 의 경고 조건과 같다(정기런 실패·계약 위반 / 에러율 5% 이상·0행 발생).
-  const pipeBad = badDays.length > 0 || viol > 0;
+  // 발행 실패·행수 불일치도 이 탭의 경보다. SLO 는 합성값이라 그것만으로는 점이 안 선다.
+  const pipeBad = badDays.length > 0 || viol > 0 || pTot.failed > 0 || pTot.mismatch > 0;
   const runsBad = stallN > 0 || rTot.fail > 0 || rTot.empty > 0 || envMix;
   const servBad = errPct >= 5 || emptyN > 0;
-  $("dot-pipeline").className = "dot " + (slo.length ? (pipeBad ? "bad" : "ok") : "");
+  $("dot-pipeline").className = "dot " +
+    ((slo.length || P.by_domain.length) ? (pipeBad ? "bad" : "ok") : "");
   $("dot-runs").className = "dot " + ((R.daily.length || R.expectations.length) ? (runsBad ? "bad" : "ok") : "");
   $("dot-serving").className = "dot " + (calls ? (servBad ? "bad" : "ok") : "");
   // 이용 행동은 아직 경고 규칙이 없다(정보 탭) — 데이터 유무만 알린다
@@ -1152,6 +1414,113 @@ const SRC_STATE = {
   mismatch: { pill: "bad",  label: "구조 다름" },
   absent:   { pill: "warn", label: "없음" },
 };
+// ── 안정성 추이 드릴다운 — 튀는 칸 하나를 편다 ────────────────────────────────────
+async function openDrill(domain, day) {
+  DRILL = { domain, day };
+  for (const el of document.querySelectorAll("#runsTrend [data-drill]"))
+    el.classList.toggle("sel", el.dataset.drill === domain + "|" + day);
+  const wrap = $("runsDrillWrap"), el = $("runsDrill");
+  wrap.hidden = false;
+  el.innerHTML = emptyBox("불러오는 중…");
+  try {
+    const res = await fetch("/api/drill?domain=" + encodeURIComponent(domain) +
+      "&day=" + encodeURIComponent(day));
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      throw new Error(b.detail || ("HTTP " + res.status));
+    }
+    renderDrill(await res.json());
+  } catch (e) { el.innerHTML = emptyBox(["읽지 못함", esc(e.message)]); return; }
+  // 사용자가 눌렀을 때만 이 함수가 불린다 — 자동 새로고침 경로가 아니므로 스크롤해도 된다
+  el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function renderDrill(d0) {
+  const el = $("runsDrill");
+  const sec = (title, html) => "<h4>" + title + "</h4>" + html;
+  const tOf = (x) => x ? esc(String(x).slice(11, 16)) : "—";
+  const tries = (r) => r.is_final_try === 1 ? "<span class='pill bad'>최종 실패</span>"
+    : r.is_final_try === 0 ? "<span class='pill warn'>재시도 중</span>"
+    : "<span class='pill dim'>정보 없음</span>";
+  let out = "<div class='drill-hd'><b>" + esc(domLabel(d0.domain)) + " · " + esc(d0.day) +
+    "</b><span class='sub'>이날 이 분야에서 무엇이 문제였나</span>" +
+    "<button class='kbtn' data-drill-close style='margin-left:auto'>닫기</button></div>";
+
+  const has = (a) => a && a.length;
+  if (!has(d0.fails) && !has(d0.publications) && !has(d0.empty_runs) && !has(d0.retried))
+    out += "<div style='margin-top:8px'>" +
+      emptyBox(["데이터 없음", "이날 이 분야에 문제 기록이 없습니다"]) + "</div>";
+
+  if (has(d0.fails)) out += sec("실패한 작업 — 이날을 아프게 한 직접 원인", table([
+    { t:"dag · task", name:true, get:(r) => esc((r.dag_id || "—") + " · " + (r.task_id || "—")) },
+    { t:"단계", get:(r) => r.layer ? esc(layerKo(r.layer)) : "<span class='pill dim'>미상</span>" },
+    { t:"시도", get:tries },
+    { t:"근거", name:true, get:(r) => esc(r.error_ref || "—") },
+    { t:"로그", name:true, get:(r) => bundleCell(r.log_bundle_key) },
+    { t:"시각", r:true, get:(r) => tOf(r.observed_at) },
+  ], d0.fails, ""));
+
+  if (has(d0.publications)) out += sec("발행 문제 — 제품이 D1 에 온전히 오르지 못함", table([
+    { t:"제품", name:true, get:(r) => "<span title='" + esc(r.reason || "사유 기록 없음") + "'>" +
+        esc(r.product_id) + "</span>" },
+    { t:"결과", get:(r) => pubPill(r.outcome) },
+    { t:"단계", get:(r) => stageKo(r.stage) },
+    { t:"원본", r:true, get:(r) => r.source_row_count == null ? "—" : nf.format(r.source_row_count) },
+    { t:"발행", r:true, get:(r) => r.published_row_count == null ? "—" : nf.format(r.published_row_count) },
+    { t:"D1", r:true, get:(r) => r.d1_row_count == null ? "—" : nf.format(r.d1_row_count) },
+    { t:"시각", r:true, get:(r) => tOf(r.attempted_at) },
+  ], d0.publications, ""));
+
+  if (has(d0.empty_runs)) out += sec("빈 실행 — 성공인데 실측 0행 (초록 위장)", table([
+    { t:"dag · task", name:true, get:(r) => esc((r.dag_id || "—") + " · " + (r.task_id || "—")) },
+    { t:"단계", get:(r) => r.layer ? esc(layerKo(r.layer)) : "<span class='pill dim'>미상</span>" },
+    { t:"행수 근거", get:(r) => esc(r.rows_source || "—") },
+    { t:"시각", r:true, get:(r) => tOf(r.observed_at) },
+  ], d0.empty_runs, ""));
+
+  if (has(d0.retried)) out += sec("재시도 끝에 성공 — 성공률이 가리는 열화", table([
+    { t:"dag · task", name:true, get:(r) => esc((r.dag_id || "—") + " · " + (r.task_id || "—")) },
+    { t:"단계", get:(r) => r.layer ? esc(layerKo(r.layer)) : "<span class='pill dim'>미상</span>" },
+    { t:"재시도", r:true, get:(r) => "<span class='pill warn'>" + r.retry_count + "회</span>" },
+    { t:"시각", r:true, get:(r) => tOf(r.observed_at) },
+  ], d0.retried, ""));
+
+  if (has(d0.slow)) out += sec("오래 걸린 작업", table([
+    { t:"dag · task", name:true, get:(r) => esc((r.dag_id || "—") + " · " + (r.task_id || "—")) },
+    { t:"단계", get:(r) => r.layer ? esc(layerKo(r.layer)) : "—" },
+    { t:"소요", r:true, get:(r) => r.dur_min + "분" },
+    { t:"지연", r:true, get:(r) => r.delay_min != null ? r.delay_min + "분" : "—" },
+  ], d0.slow, ""));
+
+  if (has(d0.metric)) out += sec("이날의 단계별 집계", table([
+    { t:"단계", name:true, get:(r) => esc(layerKo(r.layer)) + " <span class='pill dim'>" + esc(r.layer || "—") + "</span>" },
+    { t:"실행", r:true, get:(r) => nf.format(r.event_count) },
+    { t:"성공", r:true, get:(r) => nf.format(r.success_count) },
+    { t:"실패", r:true, get:(r) => r.failed_count ? "<span class='pill bad'>" + r.failed_count + "</span>" : num(0) },
+    { t:"열화", r:true, get:(r) => r.degraded_count ? "<span class='pill warn'>" + r.degraded_count + "</span>" : num(0) },
+    { t:"재시도로 살림", r:true, get:(r) => num(r.retried_run_count) },
+    { t:"빈 실행", r:true, get:(r) => num(r.empty_run_count) },
+    { t:"소요", r:true, get:(r) => hrs(r.duration_s_sum || 0) },
+    { t:"적재", r:true, get:(r) => nf.format(r.row_count_sum || 0) + "행" },
+  ], d0.metric, ""));
+
+  el.innerHTML = "<div class='drill'>" + out + "</div>";
+}
+
+// 히트맵은 매 렌더마다 innerHTML 로 다시 그려진다 — 리스너는 **바깥 컨테이너에 한 번만** 단다.
+$("runsTrend").addEventListener("click", (e) => {
+  const t = e.target.closest("[data-drill]");
+  if (!t) return;
+  const [dom, day] = t.dataset.drill.split("|");
+  openDrill(dom, day);
+});
+$("runsDrill").addEventListener("click", (e) => {
+  if (!e.target.closest("[data-drill-close]")) return;
+  DRILL = null;
+  $("runsDrillWrap").hidden = true;
+  for (const el of document.querySelectorAll("#runsTrend .cell.sel")) el.classList.remove("sel");
+});
+
 function renderSources(rows) {
   $("sources").innerHTML = table([
     { t:"표", get:(r) => esc(r.table), name:true },

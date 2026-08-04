@@ -5,7 +5,7 @@
 // `/v1/*`(src/v1.js, 마켓플레이스 공용) · `/skill/v1/*`(K-Skill 전용, 별도 담당).
 // 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
 import {
-  json, problem, quotaHeaders, sha256hex, kstDay, PUBLIC,
+  json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC,
   authenticate, checkBurst, burstProblem, countUsage, classifyClient,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
@@ -205,6 +205,9 @@ async function handlePreview(env, id, trace = {}) {
   // 조회는 **카탈로그가 준 물리명**으로만 한다 — 요청 문자열을 식별자로 쓰지 않는다
   const table = meta.name;
   trace.table = table;
+  // 공개 식별자도 함께 남긴다 — 요청은 별칭(물리명)으로도 들어오므로, 해석된 뒤의
+  // `product_id` 여야 같은 제품의 호출이 한 축으로 모인다(decision/0003).
+  trace.productId = meta.product_id;
   // 시간축이 있으면 최신 구간을 보여준다 — 미리보기의 존재 이유는 "실물이 쓸만한가"의 판단
   const order = meta.time_axis ? ` ORDER BY "${meta.time_axis}" DESC` : "";
   const { results } = await env.DB.prepare(
@@ -223,6 +226,7 @@ async function handleData(env, id, params, keyRow, trace = {}) {
   // 아래 SQL 에 들어가는 이름은 여기 하나뿐이다 — 요청 문자열이 아니라 카탈로그가 준 값
   const table = meta.name;
   trace.table = table;
+  trace.productId = meta.product_id;   // handlePreview 와 같은 이유
 
   const columns = JSON.parse(meta.columns);
   const colSet = new Set(columns.map((c) => c.name));
@@ -260,8 +264,7 @@ async function handleData(env, id, params, keyRow, trace = {}) {
 
   // 쿼터는 유효한 요청(실제 서빙 직전)만 소모 — 400/404/409 는 무과금
   const usage = await countUsage(env, keyRow);
-  if (usage.exceeded)
-    return problem(429, "daily quota exceeded", `일일 쿼터 ${usage.quota}건 소진 — KST 자정에 리셋`);
+  if (usage.exceeded) return quotaExceededProblem(usage.used, usage.quota);
 
   // limit+1 을 떠서 다음 페이지 유무를 **실측**한다 — 마지막 페이지가 꽉 찼을 때
   // has_more 를 참으로 두면 소비자가 빈 페이지를 한 번 더 받는다.
@@ -309,19 +312,36 @@ async function handleMe(env, keyRow) {
 const LOG_RETENTION_DAYS = 30;
 const LOG_SWEEP_RATE = 0.02;  // 크론 없이, 로그 100건당 ~2회 낡은 행 청소
 
+// 기록하는 컬럼 목록은 여기 한 곳에만 둔다 — INSERT 문과 바인딩 순서가 갈리면
+// 컬럼 개수 불일치로 INSERT 가 통째로 실패하는데, 그 실패는 `catch` 에 먹혀
+// **조용히 전량 유실**된다(0004 미적용으로 실제로 겪었다). scripts/request-log.test.mjs 가
+// 이 목록과 실제 스키마를 대조한다.
+export const LOG_COLUMNS = [
+  "ts", "route", "table_name", "status", "key_hash", "filters", "row_count", "ms",
+  "request_id", "product_id", "env",
+];
+
+export function logValues(trace, env) {
+  return [
+    new Date().toISOString(), trace.route, trace.table ?? null, trace.status,
+    trace.keyHash ?? null, trace.filterCols ? trace.filterCols.join(",") : null,
+    trace.rows ?? null, trace.ms, trace.requestId ?? null,
+    trace.productId ?? null,
+    // 환경은 워커가 자기 설정에서 읽는다 — 값이 환경을 정하지, 키 이름이 정하지 않는다
+    // (ASK-Seoul#78 `Z-7`). 미설정이면 NULL 로 남긴다 — "모른다"를 "local" 로 꾸미지 않는다.
+    env.ASK_ENV ?? null,
+  ];
+}
+
 async function logRequest(env, trace) {
   try {
     await env.DB.prepare(
-      "INSERT INTO _request_log (ts, route, table_name, status, key_hash, filters, row_count, ms, request_id) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(
-      new Date().toISOString(), trace.route, trace.table ?? null, trace.status,
-      trace.keyHash ?? null, trace.filterCols ? trace.filterCols.join(",") : null,
-      trace.rows ?? null, trace.ms, trace.requestId ?? null
-    ).run();
+      `INSERT INTO _gateway_request_log (${LOG_COLUMNS.join(", ")}) ` +
+      `VALUES (${LOG_COLUMNS.map(() => "?").join(", ")})`
+    ).bind(...logValues(trace, env)).run();
     if (Math.random() < LOG_SWEEP_RATE) {
       const cutoff = new Date(Date.now() - LOG_RETENTION_DAYS * 86400000).toISOString();
-      await env.DB.prepare("DELETE FROM _request_log WHERE ts < ?").bind(cutoff).run();
+      await env.DB.prepare("DELETE FROM _gateway_request_log WHERE ts < ?").bind(cutoff).run();
       // 익명 IP 버킷은 주소 수만큼 생긴다 — 창이 지난 행은 남겨 둘 이유가 없다
       const stale = new Date(Date.now() - 3600 * 1000).toISOString().slice(0, 16);
       await env.DB.prepare("DELETE FROM _burst WHERE window_start < ?").bind(stale).run();

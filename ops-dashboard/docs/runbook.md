@@ -9,11 +9,11 @@
 ## 1. 처음 여는 사람 — 구동까지
 
 콘솔은 게이트웨이([../../marketplace/](../../marketplace/))와 **같은 로컬 D1 상태**를 읽는다
-(`--persist-to`). 서빙 품질(`_request_log`)·키(`_keys`)는 저쪽이 만들기 때문에, 게이트웨이도
+(`--persist-to`). 서빙 품질(`_gateway_request_log`)·키(`_keys`)는 저쪽이 만들기 때문에, 게이트웨이도
 한 번은 시드해 두는 게 화면이 온전하다.
 
 ```bash
-# (선택이지만 권장) 게이트웨이 먼저 — _catalog·_keys·_request_log 가 생긴다
+# (선택이지만 권장) 게이트웨이 먼저 — _catalog·_keys·_gateway_request_log 가 생긴다
 cd marketplace && npm install && npm run seed
 
 # 콘솔
@@ -111,7 +111,7 @@ npm run seed   # fixtures/slo_sample.sql — 전 행 is_sample=1
 ```
 
 **이 탭은 아직 합성값만 본다.** 실측을 넣는 정규 경로는 culture DAG 의 export task 이고
-(팀 D1 쓰기 = 멘토 게이트), 그게 붙어 `is_sample=0` 행이 들어오면 '합성 샘플' 배너가
+(팀 D1 쓰기 = 승인 주체 미정(agreement §8-3)), 그게 붙어 `is_sample=0` 행이 들어오면 '합성 샘플' 배너가
 저절로 사라진다. 웨어하우스를 콘솔이 직접 훑던 임시 로더는 폐기했다
 ([0005](decision/0005-slo-snapshot-to-d1.md)) — 실측 파이프라인 상태는 **실행 기록 탭**이
 조회 DB 4종에서 직접 읽는다.

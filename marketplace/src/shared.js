@@ -41,6 +41,19 @@ export function quotaHeaders(used, quota) {
   };
 }
 
+// 쿼터 소진 429 — **헤더를 붙이는 논거가 가장 강한 응답이 여기다.** 위 주석이
+// "429 를 맞고 나서야 안다"를 문제로 들었는데, 정작 그 429 에 기계가 읽을 값이 하나도
+// 없으면 클라이언트는 언제 다시 걸어야 하는지를 한국어 문장에서 읽어내야 한다.
+// `Retry-After` 는 KST 자정까지 남은 초 — `x-ratelimit-reset` 과 같은 순간을 가리킨다.
+export function quotaExceededProblem(used, quota) {
+  const headers = quotaHeaders(used, quota);
+  const retryAfter = Math.max(1, Number(headers["x-ratelimit-reset"]) - Math.floor(Date.now() / 1000));
+  return problem(429, "daily quota exceeded",
+    `일일 쿼터 ${quota}건 소진 — KST 자정에 리셋`,
+    { retry_after: retryAfter },
+    { ...headers, "retry-after": String(retryAfter) });
+}
+
 export const sha256hex = async (text) => {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");

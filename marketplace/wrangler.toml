@@ -1,5 +1,5 @@
 # marketplace — V1 마켓플레이스 프로토타입 (ASK-Seoul#58)
-# ⚠️ 로컬 전용: wrangler dev --local 로만 구동한다. deploy 는 멘토 게이트(#476 ①·ASAC-DAG#521-(B)).
+# ⚠️ 로컬 전용: wrangler dev --local 로만 구동한다. deploy 는 배포 결정(agreement §8).
 # 로컬 모드는 아래 database_id 를 쓰지 않고 Miniflare 로컬 sqlite 를 만든다 —
 # 시드는 `npm run seed` (migrations + fixtures 를 --local 로 적용).
 name = "ask-seoul-gateway"
@@ -23,12 +23,21 @@ binding = "DB"
 database_name = "ask-seoul-dev-d1"
 database_id = "9db0e851-558e-489f-9e76-f131d25aa267"
 
+# 환경을 아는 값은 여기 둔다 — 요청 로그의 `env` 컬럼이 이 값을 그대로 싣는다.
+# 키 이름이 아니라 **값**이 환경을 정한다(ASK-Seoul#78 `Z-7`). 지표가 조용히 섞이는 것을
+# 막는 게 목적이다 — 실측으로 운영 D1 에 `dev` 17건, 개발 D1 에 `prod` 63건이 이미 있다.
+#
+# ⚠️ **base env 는 로컬 전용이다 — 배포하지 않는다.** 여기서 배포하면 dev D1 을 쓰면서
+#    `local` 로 기록돼 값이 실제 배포면을 못 덮는다. 배포는 `--env production` 만 쓴다.
+[vars]
+ASK_ENV = "local"
+
 # ── 배포 전용 환경 (2026-08-03, ASAC-DAG#668) ────────────────────────────────
 # 파이프라인이 prod D1(ask-seoul-prod-d1)을 신설해 62개 제품 게시를 시작했다.
 # 기본(위) 바인딩은 dev D1 을 유지한다 — 로컬 Miniflare 상태가 database_id 로
 # 키잉되어 콘솔(../ops-dashboard)과 같은 로컬 DB 를 공유하기 때문(decision/0003).
 # 여길 바꾸면 로컬 협업 상태가 갈라진다. 배포는 `wrangler deploy --env production`
-# 만 쓴다 — 여전히 멘토 게이트(#476 ①) 이후의 일이다(docs/deploy-runbook.md).
+# 만 쓴다 — 여전히 배포 결정(agreement §8) 이후의 일이다(docs/deploy-runbook.md).
 [env.production]
 name = "ask-seoul-gateway"
 
@@ -41,3 +50,9 @@ not_found_handling = "404-page"
 binding = "DB"
 database_name = "ask-seoul-prod-d1"
 database_id = "59a8409e-3be6-467b-8214-7938c59c8729"
+
+# env 섹션은 **상속되지 않는다** — 위 `[vars]` 가 여기까지 오지 않으므로 다시 쓴다.
+# 빠지면 배포본이 `env` 를 NULL 로 기록하고, 그건 "환경을 모른다"가 되어 §6-2 의
+# 섞임을 걸러낼 수 없다.
+[env.production.vars]
+ASK_ENV = "prod"

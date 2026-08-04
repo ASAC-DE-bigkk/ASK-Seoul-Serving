@@ -36,19 +36,21 @@
 설정 배치, 로컬/운영 도메인·D1 값, env 섹션 비상속 함정. 이 문서는 그 구조 위에서
 **OS별로 어떻게 실행하는가**만 다룬다.
 
-원격 배포는 아직 하지 않는다(`wrangler deploy` 금지 — 멘토 게이트 ASAC-DAG#476 ①).
+원격 배포는 아직 하지 않는다(`wrangler deploy` 금지 — 배포 결정(agreement §8)).
 아래는 전부 `wrangler dev` 로컬 구동이다.
 
 ## 0. 순서가 정해져 있다
 
 ```text
 marketplace 시드  →  ops-dashboard 시드  →  둘 다 dev
-     (_keys · _request_log 생성)   (_ops_slo 생성)
+  (_keys · _gateway_request_log 생성)  (_ops_slo 생성)
 ```
 
 `ops-dashboard`의 `seed`·`dev`는 `--persist-to ../marketplace/.wrangler/state`로 돈다.
 **marketplace를 먼저 시드하지 않으면** 콘솔은 뜨지만 서빙 품질·키 관리 탭이 비고
-`GET /api/summary`의 `meta.missing`에 테이블 이름이 실린다(설계상 강등이지, 고장이 아니다).
+`GET /api/summary`의 `meta.missing`에 비는 **구획** 이름이 실린다(`serving`·`usage` 등 —
+설계상 강등이지, 고장이 아니다). 어느 **표**가 문제인지는 '데이터 준비 상태' 탭의
+'데이터 소스 상태'가 `없음`·`구조 다름`으로 알린다.
 
 이 순서는 **로컬 한정**이다. 콘솔이 기다리는 건 marketplace의 *실행*이 아니라 그쪽이 만든
 *테이블*이라, 배포에서는 마이그레이션이 그 자리를 대신한다(런북 2번). 배포된 게이트웨이가
@@ -249,7 +251,7 @@ curl -s -X POST -H "X-Trino-User: ops" -H "Content-Type: text/plain" \
 | 조치만 `503 ops write disabled` | `.dev.vars`가 UTF-16LE | `-Encoding ascii`로 다시 쓰기 (3절) |
 | 조치만 `503` + 기동 로그에 `Using secrets...` 줄이 **아예 없음** | `.dev.vars`가 프로젝트 루트에 없음 | `wrangler.toml` 옆(루트)으로 옮긴다 (3절) |
 | 조치가 `401` | 토큰 불일치 | 화면 우상단 `잠금 해제`에 `.dev.vars` 값 그대로 입력 |
-| `meta.missing`에 `_keys`·`_request_log` | marketplace 미시드 **또는** 콘솔 `--persist-to` 누락 | marketplace `npm run seed` 먼저 (0절) / [environments.md §4-③](environments.md) |
+| '데이터 소스 상태'에 `_keys`·`_gateway_request_log` 가 `없음` | marketplace 미시드 **또는** 콘솔 `--persist-to` 누락 | marketplace `npm run seed` 먼저 (0절) / [environments.md §4-③](environments.md) |
 | dev 가 `:8789` 등 엉뚱한 포트로 뜸 | 8787/8788 을 이전 프로세스가 쥐고 있음 | 아래 포트 항목 — 포트는 `[dev] port` 로 고정돼 있으나 점유 시 밀린다 |
 | `npm run seed`가 `&&`에서 멈춤 | npm의 script-shell이 PowerShell로 잡힘 | `npm config delete script-shell` |
 | `Address already in use :8787/:8788` | 이전 dev가 살아 있음 | `Get-Process workerd \| Stop-Process -Force` (전부 정리) |

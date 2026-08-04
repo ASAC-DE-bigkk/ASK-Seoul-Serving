@@ -4,9 +4,9 @@
     python fixtures/build_demo_samples.py
 
 **왜 스냅샷인가.** 랜딩 데모가 `/api/v1/preview` 를 실호출하면 방문 1회마다 D1 에
-쓰기가 쌓인다 — `_burst` UPSERT + `_request_log` INSERT 가 호출당 2건이고,
+쓰기가 쌓인다 — `_burst` UPSERT + `_gateway_request_log` INSERT 가 호출당 2건이고,
 도메인 순환이라 방문 1회에 최대 6번이다. 비용보다 문제는 관측 오염이다:
-`_request_log` 는 "무엇이 실제로 쓰이나"를 재는 유일한 근거인데(CLAUDE.md §3),
+`_gateway_request_log` 는 "무엇이 실제로 쓰이나"를 재는 유일한 근거인데(CLAUDE.md §3),
 랜딩 장식 트래픽이 그 표를 채우면 콘솔 사용량 탭이 읽는 값이 흐려진다.
 
 **꾸며낸 행이 아니다.** 여기서 쓰는 행은 전부 실제 `/api/v1/preview` 응답이다.

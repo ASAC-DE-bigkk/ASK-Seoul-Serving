@@ -4,9 +4,9 @@
 //   · 데이터 준비 상태 — 매일 제때 갱신됐나 (_ops_slo, 보조·합성 스냅샷)
 //   · 실행 기록       — 무엇이 돌았고 무엇이 조용한가 (_ops_run_event 등 조회 DB 4종,
 //                       ASK-Seoul#78 규약 — 정본 스키마는 ASAC-DAG, 여기는 읽기 전용. decision/0009)
-//   · 응답 상태       — 외부에 잘 나가고 있나 (_request_log, 게이트웨이가 쌓는다)
+//   · 응답 상태       — 외부에 잘 나가고 있나 (_gateway_request_log, 게이트웨이가 쌓는다)
 //   · 이용 행동       — **누가** 쓰나: 사람·AI·여정 (decision/0010)
-//   · API 사용량      — **무엇이** 얼마나 쓰이나: API별·분야별 (_request_log + _catalog)
+//   · API 사용량      — **무엇이** 얼마나 쓰이나: API별·분야별 (_gateway_request_log + _catalog)
 //   · 이용자 키       — 발급된 키의 상태·쿼터
 // 전부 같은 D1 을 읽는다. 마켓플레이스와는 **다른 Worker · 다른 호스트**다 — 청중이 다르고,
 // 배포 단위가 갈려야 사고 반경도 갈린다.
@@ -164,26 +164,26 @@ async function summary(env, params, writable = false) {
       "(SELECT COUNT(*) FROM _ops_daily_metric WHERE updated_at = 'sample') AS n"),
   ]);
 
-  // ── 서빙 (게이트웨이가 쌓는 _request_log)
+  // ── 서빙 (게이트웨이가 쌓는 _gateway_request_log)
   const routes = await safeRows(env,
     "SELECT route, COUNT(*) AS calls, SUM(status >= 400) AS errors, ROUND(AVG(ms),1) AS avg_ms " +
-    "FROM _request_log WHERE ts >= datetime('now', ?) GROUP BY route ORDER BY calls DESC", since);
+    "FROM _gateway_request_log WHERE ts >= datetime('now', ?) GROUP BY route ORDER BY calls DESC", since);
   if (!routes.ok) missing.push("serving");
   const [daily, products, failures, empty, keys] = await Promise.all([
     safeRows(env, "SELECT substr(ts,1,10) AS day, COUNT(*) AS calls, COUNT(DISTINCT key_hash) AS keys_used " +
-      "FROM _request_log WHERE ts >= datetime('now', ?) GROUP BY day ORDER BY day", since),
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?) GROUP BY day ORDER BY day", since),
     safeRows(env, "SELECT table_name, SUM(route='preview') AS previews, SUM(route='data') AS calls, " +
-      "ROUND(AVG(row_count),1) AS avg_rows FROM _request_log " +
+      "ROUND(AVG(row_count),1) AS avg_rows FROM _gateway_request_log " +
       "WHERE table_name IS NOT NULL AND ts >= datetime('now', ?) " +
       "GROUP BY table_name ORDER BY calls DESC, previews DESC LIMIT 12", since),
-    safeRows(env, "SELECT status, route, table_name, COUNT(*) AS hits FROM _request_log " +
+    safeRows(env, "SELECT status, route, table_name, COUNT(*) AS hits FROM _gateway_request_log " +
       "WHERE status >= 400 AND ts >= datetime('now', ?) GROUP BY status, route, table_name " +
       "ORDER BY hits DESC LIMIT 10", since),
-    safeRows(env, "SELECT table_name, filters, COUNT(*) AS empty_responses FROM _request_log " +
+    safeRows(env, "SELECT table_name, filters, COUNT(*) AS empty_responses FROM _gateway_request_log " +
       "WHERE status = 200 AND row_count = 0 AND ts >= datetime('now', ?) " +
       "GROUP BY table_name, filters ORDER BY empty_responses DESC LIMIT 10", since),
     safeRows(env, "SELECT substr(key_hash,1,8) AS key_id, COUNT(*) AS calls, " +
-      "COUNT(DISTINCT substr(ts,1,10)) AS active_days FROM _request_log " +
+      "COUNT(DISTINCT substr(ts,1,10)) AS active_days FROM _gateway_request_log " +
       "WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?) GROUP BY key_hash " +
       "ORDER BY calls DESC LIMIT 10", since),
   ]);
@@ -202,23 +202,24 @@ async function summary(env, params, writable = false) {
   // 초안 컬럼이 아직 없으면 safeRows 가 실패를 삼키고 그 카드는 '수집 전'으로 남는다 —
   // 콘솔은 게이트웨이 스키마를 만들지도 미러하지도 않는다(0010: ALTER 미러는 정본
   // 마이그레이션과 duplicate column 으로 충돌해 저쪽 시드를 깨뜨린다).
-  const [src, funnel, udaily, uclients, uagents, upages] = await Promise.all([
+  const [src, pub, funnel, udaily, uclients, uagents, upages] = await Promise.all([
     sources(env),
+    publication(env, days),
     safeRows(env,
       "SELECT COUNT(*) AS issued, SUM(first_call IS NOT NULL) AS activated, " +
       "ROUND(AVG(CASE WHEN first_call IS NOT NULL THEN (julianday(first_call) - julianday(created_at)) * 24 END), 1) AS avg_hours_to_first " +
-      "FROM (SELECT k.created_at, (SELECT MIN(r.ts) FROM _request_log r " +
+      "FROM (SELECT k.created_at, (SELECT MIN(r.ts) FROM _gateway_request_log r " +
       "WHERE r.key_hash = k.key_hash AND r.route = 'data') AS first_call FROM _keys k)"),
     safeRows(env, "SELECT substr(ts,1,10) AS day, SUM(key_hash IS NOT NULL) AS keyed, " +
-      "SUM(key_hash IS NULL) AS anon FROM _request_log WHERE ts >= datetime('now', ?) " +
+      "SUM(key_hash IS NULL) AS anon FROM _gateway_request_log WHERE ts >= datetime('now', ?) " +
       "GROUP BY day ORDER BY day", since),
-    safeRows(env, "SELECT ua_class, COUNT(*) AS calls FROM _request_log " +
+    safeRows(env, "SELECT ua_class, COUNT(*) AS calls FROM _gateway_request_log " +
       "WHERE ts >= datetime('now', ?) AND ua_class IS NOT NULL GROUP BY ua_class ORDER BY calls DESC", since),
     safeRows(env, "SELECT agent_name, agent_mode, COUNT(*) AS calls, SUM(route='data') AS data_calls, " +
-      "COUNT(DISTINCT table_name) AS products FROM _request_log " +
+      "COUNT(DISTINCT table_name) AS products FROM _gateway_request_log " +
       "WHERE ts >= datetime('now', ?) AND agent_name IS NOT NULL " +
       "GROUP BY agent_name, agent_mode ORDER BY calls DESC LIMIT 10", since),
-    safeRows(env, "SELECT page_path, COUNT(*) AS hits FROM _request_log " +
+    safeRows(env, "SELECT page_path, COUNT(*) AS hits FROM _gateway_request_log " +
       "WHERE route = 'page' AND ts >= datetime('now', ?) AND page_path IS NOT NULL " +
       "GROUP BY page_path ORDER BY hits DESC LIMIT 12", since),
   ]);
@@ -227,7 +228,9 @@ async function summary(env, params, writable = false) {
     window_days: days,
     generated_at: new Date().toISOString(),
     meta: {
-      missing,
+      // pub.ok 는 위 Promise.all 에서 이미 판정됐다. 표가 없으면 그 섹션만 비우고
+      // 화면이 '연결되지 않음'으로 밝힌다 — 콘솔은 죽지 않는다(safeRows 강등).
+      missing: pub.ok ? missing : [...missing, "publication"],
       can_write: writable,
       // 이 콘솔이 지금 어느 환경의 무슨 DB 를 보고 있나. 숫자만 보고 추측하게 두면
       // 로컬 샘플을 운영 실적으로 오해하는 사고가 난다(wrangler.toml [vars]).
@@ -263,6 +266,8 @@ async function summary(env, params, writable = false) {
              clients: { pending: !uclients.ok, rows: uclients.rows },
              agents: { pending: !uagents.ok, rows: uagents.rows },
              pages: { pending: !upages.ok, rows: upages.rows } },
+    // 발행 점검 — #78 D-7 이 요구한 지표. 여기가 비면 "발행이 다 성공한 것처럼" 보인다.
+    publication: pub,
     // 화면의 숫자가 왜 그 모양인지는 **표를 읽었는지**에서 갈린다. meta.missing 한 줄로는
     // "없다"와 "이름은 같은데 남의 표다"가 구분되지 않아 진단을 따로 싣는다(아래 sources()).
     sources: src,
@@ -286,12 +291,19 @@ const SOURCES = [
     used: "파이프라인 현재 상태" },
   { table: "_ops_pipeline_expectation", owner: "파이프라인", need: ["dag_id", "monitored"],
     used: "실행 주기 등록" },
-  { table: "_request_log", owner: "게이트웨이", need: ["ts", "route", "status", "table_name", "key_hash"],
+  // 옛 이름 `_request_log` 는 transit 워커 소유로 남았다(agreement §2) — 콘솔은 더 읽지 않는다.
+  { table: "_gateway_request_log", owner: "게이트웨이",
+    need: ["ts", "route", "status", "table_name", "key_hash", "product_id", "env"],
     used: "응답 상태 · API 사용량" },
   { table: "_catalog", owner: "도메인 export", need: ["name", "product_id", "external"],
     used: "API 사용량" },
   { table: "_keys", owner: "게이트웨이", need: ["key_hash", "email", "status", "daily_quota"],
     used: "이용자 키" },
+  { table: "_publication_ledger", owner: "파이프라인",
+    need: ["product_id", "outcome", "stage", "published_row_count", "d1_row_count"],
+    used: "발행 점검" },
+  { table: "_publication_log", owner: "파이프라인",
+    need: ["product_id", "published_at", "serving_status"], used: "발행 점검(성공 대장)" },
   { table: "_ops_slo", owner: "콘솔", need: ["domain", "event_date", "is_sample"],
     used: "품질 기준(SLO)" },
   { table: "_ops_domain", owner: "콘솔", need: ["domain", "label", "has_slo"], used: "분야 등록부" },
@@ -322,6 +334,137 @@ async function sources(env) {
   return out;
 }
 
+// ── 발행 점검 ─────────────────────────────────────────────────────────────────────
+//
+// ASK-Seoul#78 `D-7` 이 화면에 요구한 지표 중 **"발행 점검 상태"** 가 이것이다.
+// 정본은 ASAC-DAG 의 `_publication_ledger`(시도 대장)·`_publication_log`(성공 대장)이고
+// 콘솔은 **읽기만** 한다.
+//
+// 왜 필요한가 — 지금까지 이 표를 질의조차 안 해서 **화면은 발행이 다 성공한 것처럼
+// 보였다.** 실측(운영, 2026-08-04): 시도 4,718건 중 **실패 60 · 열화 439 · 행수 불일치 63**.
+// 그리고 실패 60건 중 **56건이 traffic 한 도메인**이다 — 뭉뚱그리면 안 보이는 신호다.
+//
+// 도메인 축은 `product_id` 접두사다(`traffic_flow_…` → traffic). 파이프라인이 그 규칙으로
+// 발행하고 `_catalog` 와 같은 규약이라, 별도 컬럼이나 매핑 표를 두지 않는다(DOMAIN_EXPR 참고).
+const PUB_DOMAIN = "substr(product_id, 1, instr(product_id, '_') - 1)";
+
+async function publication(env, days) {
+  const since = `-${days} days`;
+
+  const [byDomain, byStage, worst, mismatch, recent, byDay] = await Promise.all([
+    // 분야별 rollup. **전체 합계는 화면에서 SUM 한다** — 같은 것을 두 번 묻지 않는다.
+    safeRows(env,
+      "SELECT " + PUB_DOMAIN + " AS domain, COUNT(*) AS attempts, " +
+      "SUM(outcome = 'published') AS published, SUM(outcome = 'degraded') AS degraded, " +
+      "SUM(outcome = 'failed') AS failed, SUM(outcome = 'skipped_retained') AS skipped, " +
+      "SUM(published_row_count <> d1_row_count) AS row_mismatch, " +
+      "COUNT(DISTINCT product_id) AS products, MAX(attempted_at) AS last_at " +
+      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
+      "GROUP BY domain ORDER BY attempts DESC", since),
+    // 어느 **단계**에서 깨지나 — write / read_back / source_primary_key / gate.
+    // 실패를 한 덩어리로 세면 "쓰다 실패"와 "쓰고 나서 확인 실패"가 같아 보인다.
+    safeRows(env,
+      "SELECT outcome, stage, COUNT(*) AS n, MAX(attempted_at) AS last_at " +
+      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
+      "AND outcome <> 'published' GROUP BY outcome, stage ORDER BY n DESC", since),
+    // 어느 **제품**에 몰렸나. reason 은 표에 안 싣고 title 로만 쓴다(화면 문구 규약).
+    safeRows(env,
+      "SELECT product_id, " + PUB_DOMAIN + " AS domain, outcome, stage, COUNT(*) AS n, " +
+      "MAX(attempted_at) AS last_at, MAX(reason) AS reason " +
+      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
+      "AND outcome IN ('failed', 'degraded') " +
+      "GROUP BY product_id, outcome, stage ORDER BY n DESC LIMIT 12", since),
+    // 행수 불일치 — 세 숫자(원본·발행·D1)가 어긋난다. 어느 게 맞는지는 콘솔이 판단하지 않고
+    // **그대로 드러낸다**(F-3: 모르는 것을 지어내지 않는다).
+    safeRows(env,
+      "SELECT product_id, " + PUB_DOMAIN + " AS domain, source_row_count, published_row_count, " +
+      "d1_row_count, api_smoke_status, rollback_status, attempted_at " +
+      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
+      "AND published_row_count <> d1_row_count ORDER BY attempted_at DESC LIMIT 10", since),
+    // 마지막 성공 발행 — 성공 대장은 행이 적어 단독 카드로 두지 않고 각주로 쓴다.
+    safeRows(env,
+      "SELECT product_id, published_at, serving_status, published_row_count, " +
+      "published_bytes, publication_mode FROM _publication_log " +
+      "ORDER BY published_at DESC LIMIT 5"),
+    // 일자×도메인 — 안정성 추이 히트맵의 발행 축. attempted_at 은 UTC 라 **KST 로 접는다**
+    // (+9 hours). 실행 축(observed_date_kst)과 날짜 규약이 다르면 같은 칸에 다른 날이 섞인다.
+    safeRows(env,
+      "SELECT date(attempted_at, '+9 hours') AS day, " + PUB_DOMAIN + " AS domain, " +
+      "COUNT(*) AS attempts, SUM(outcome = 'failed') AS failed, " +
+      "SUM(outcome = 'degraded') AS degraded, " +
+      "SUM(published_row_count <> d1_row_count) AS row_mismatch " +
+      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
+      "GROUP BY day, domain", since),
+  ]);
+
+  return {
+    ok: byDomain.ok,
+    by_domain: byDomain.rows, by_stage: byStage.rows,
+    worst: worst.rows, row_mismatch: mismatch.rows, recent_published: recent.rows,
+    by_day: byDay.rows,
+  };
+}
+
+// ── 하루 드릴다운 — 추이에서 튀는 칸을 눌렀을 때 "무슨 작업이 그랬나" ────────────
+//
+// 화면이 요약(집계표·발행 대장)에서 이상을 보여주면, 원인은 기록 단위(_ops_run_event ·
+// _publication_ledger 의 행)에 있다. 그 연결을 운영자가 SQL 로 하게 두지 않는 것이 이 경로다.
+// 읽기 전용이고, 요약과 **같은 환경 필터**를 쓴다 — 요약에 안 보이던 행이 여기서 튀어나오면
+// 두 화면이 서로를 못 믿게 된다.
+async function domainDay(env, params) {
+  const domain = (params.get("domain") || "").trim();
+  const day = (params.get("day") || "").trim();
+  // 형식 검증 — 어차피 바인딩으로 넘기지만, 어긋난 요청은 일찍 돌려보낸다
+  if (!/^[a-z0-9_]{1,40}$/.test(domain))
+    return problem(400, "invalid domain", "도메인은 소문자·숫자·밑줄 40자 이내");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day))
+    return problem(400, "invalid day", "YYYY-MM-DD 형식으로 보낼 것");
+
+  // summary 와 같은 환경 필터(§6-2) — 값은 상수 목록에서만 온다
+  const envW = ({ prod: " AND environment = 'prod'", dev: " AND environment = 'dev'" })[
+    String(env.ENV_SCOPE || "").trim()] || "";
+
+  const [fails, empties, retried, slow, pubs, metric] = await Promise.all([
+    safeRows(env,
+      "SELECT dag_id, task_id, layer, is_final_try, retry_count, error_ref, log_bundle_key, " +
+      "observed_at FROM _ops_run_event WHERE domain = ? AND observed_date_kst = ? " +
+      "AND status = 'failed'" + envW + " ORDER BY observed_at DESC LIMIT 30", domain, day),
+    safeRows(env,
+      "SELECT dag_id, task_id, layer, rows_source, observed_at FROM _ops_run_event " +
+      "WHERE domain = ? AND observed_date_kst = ? AND status = 'success' AND row_count = 0" +
+      envW + " ORDER BY observed_at DESC LIMIT 20", domain, day),
+    // 재시도 끝에 성공 — 성공률에 안 잡히는 열화. 살아났다는 사실보다 "몇 번 만에"가 신호다.
+    safeRows(env,
+      "SELECT dag_id, task_id, layer, retry_count, observed_at FROM _ops_run_event " +
+      "WHERE domain = ? AND observed_date_kst = ? AND status = 'success' AND retry_count > 0" +
+      envW + " ORDER BY retry_count DESC, observed_at DESC LIMIT 20", domain, day),
+    safeRows(env,
+      "SELECT dag_id, task_id, layer, ROUND(duration_s / 60.0, 1) AS dur_min, " +
+      "ROUND(schedule_delay_s / 60.0, 1) AS delay_min FROM _ops_run_event " +
+      "WHERE domain = ? AND observed_date_kst = ? AND duration_s IS NOT NULL" + envW +
+      " ORDER BY duration_s DESC LIMIT 8", domain, day),
+    // 발행 대장은 UTC 라 KST 로 접는다 — 히트맵 축과 같은 규약이어야 칸과 내용이 맞는다
+    safeRows(env,
+      "SELECT product_id, outcome, stage, reason, attempted_at, source_row_count, " +
+      "published_row_count, d1_row_count FROM _publication_ledger " +
+      "WHERE " + PUB_DOMAIN + " = ? AND date(attempted_at, '+9 hours') = ? " +
+      "AND (outcome IN ('failed', 'degraded') OR published_row_count <> d1_row_count) " +
+      "ORDER BY attempted_at DESC LIMIT 30", domain, day),
+    safeRows(env,
+      "SELECT layer, event_count, success_count, failed_count, degraded_count, " +
+      "retried_run_count, empty_run_count, rows_unknown_count, duration_s_sum, row_count_sum " +
+      "FROM _ops_daily_metric WHERE domain = ? AND observed_date_kst = ? ORDER BY layer",
+      domain, day),
+  ]);
+
+  return json({
+    domain, day,
+    fails: fails.rows, empty_runs: empties.rows, retried: retried.rows, slow: slow.rows,
+    publications: pubs.rows, metric: metric.rows,
+    meta: { runs_ok: fails.ok, pub_ok: pubs.ok },
+  });
+}
+
 // ── API 사용 현황 ─────────────────────────────────────────────────────────────────
 // "어떤 API 가 얼마나 쓰이나"를 API 단위·도메인 단위로 본다. 위의 서빙 품질이 "잘 나가고
 // 있나"(실패·0행)를 본다면 여기는 "무엇이 쓰이나"(수요)를 본다.
@@ -346,7 +489,7 @@ async function usage(env, params) {
       "COALESCE(SUM(r.status >= 400), 0) AS errors, " +
       "COALESCE(SUM(r.status = 200 AND r.row_count = 0), 0) AS empty_hits, " +
       "ROUND(AVG(r.ms), 1) AS avg_ms, MAX(r.ts) AS last_call " +
-      "FROM _catalog c LEFT JOIN _request_log r " +
+      "FROM _catalog c LEFT JOIN _gateway_request_log r " +
       "  ON r.table_name = c.name AND r.ts >= datetime('now', ?) " +
       "GROUP BY c.name ORDER BY calls DESC, c.name", since),
     // 도메인 비율 — 분모는 '카탈로그에 잡히는 호출'이다. catalog·me 처럼 제품이 없는 라우트는
@@ -355,14 +498,14 @@ async function usage(env, params) {
       "SELECT " + DOMAIN_EXPR + " AS domain, COUNT(DISTINCT c.name) AS api_count, " +
       "COUNT(r.rowid) AS calls, COUNT(DISTINCT r.table_name) AS apis_used, " +
       "COALESCE(SUM(r.status >= 400), 0) AS errors " +
-      "FROM _catalog c LEFT JOIN _request_log r " +
+      "FROM _catalog c LEFT JOIN _gateway_request_log r " +
       "  ON r.table_name = c.name AND r.ts >= datetime('now', ?) " +
       "GROUP BY domain ORDER BY calls DESC, domain", since),
-    // 월별 — _request_log 는 30일 보존이라 실제로 잡히는 건 최대 두 달 조각이다.
+    // 월별 — _gateway_request_log 는 30일 보존이라 실제로 잡히는 건 최대 두 달 조각이다.
     // 그래도 내보내는 이유는 "지금 보이는 게 전부"라는 사실을 화면이 말해줄 수 있어서다.
     safeRows(env,
       "SELECT substr(r.ts,1,7) AS month, " + DOMAIN_EXPR + " AS domain, COUNT(*) AS calls " +
-      "FROM _request_log r JOIN _catalog c ON c.name = r.table_name " +
+      "FROM _gateway_request_log r JOIN _catalog c ON c.name = r.table_name " +
       "WHERE r.ts >= datetime('now', ?) GROUP BY month, domain ORDER BY month, calls DESC", since),
   ]);
 
@@ -397,18 +540,18 @@ async function usageDetail(env, name, params) {
   const [daily, filters, statuses, recent] = await Promise.all([
     safeRows(env, "SELECT substr(ts,1,10) AS day, COUNT(*) AS calls, " +
       "SUM(status >= 400) AS errors, ROUND(AVG(row_count),1) AS avg_rows " +
-      "FROM _request_log WHERE table_name = ? AND ts >= datetime('now', ?) GROUP BY day ORDER BY day",
+      "FROM _gateway_request_log WHERE table_name = ? AND ts >= datetime('now', ?) GROUP BY day ORDER BY day",
       name, since),
     // 필터 '축' — 컬럼명 조합이다. 값은 저장하지 않으므로 여기 나올 수 없다.
     safeRows(env, "SELECT COALESCE(filters, '') AS filters, COUNT(*) AS calls, " +
       "ROUND(AVG(row_count),1) AS avg_rows, SUM(status = 200 AND row_count = 0) AS empty_hits " +
-      "FROM _request_log WHERE table_name = ? AND ts >= datetime('now', ?) " +
+      "FROM _gateway_request_log WHERE table_name = ? AND ts >= datetime('now', ?) " +
       "GROUP BY filters ORDER BY calls DESC LIMIT 20", name, since),
-    safeRows(env, "SELECT status, route, COUNT(*) AS calls FROM _request_log " +
+    safeRows(env, "SELECT status, route, COUNT(*) AS calls FROM _gateway_request_log " +
       "WHERE table_name = ? AND ts >= datetime('now', ?) GROUP BY status, route ORDER BY calls DESC",
       name, since),
     safeRows(env, "SELECT ts, route, status, COALESCE(filters,'') AS filters, row_count, ms, " +
-      "request_id, substr(key_hash,1,8) AS key_id FROM _request_log " +
+      "request_id, substr(key_hash,1,8) AS key_id FROM _gateway_request_log " +
       "WHERE table_name = ? AND ts >= datetime('now', ?) ORDER BY ts DESC LIMIT 50", name, since),
   ]);
 
@@ -449,8 +592,8 @@ async function listKeys(env) {
   const res = await safeRows(env,
     "SELECT k.key_hash, k.key_prefix, k.email, k.status, k.daily_quota, k.created_at, " +
     "COALESCE(u.count, 0) AS used_today, " +
-    "(SELECT COUNT(*) FROM _request_log r WHERE r.key_hash = k.key_hash) AS calls_logged, " +
-    "(SELECT MAX(r.ts) FROM _request_log r WHERE r.key_hash = k.key_hash) AS last_call " +
+    "(SELECT COUNT(*) FROM _gateway_request_log r WHERE r.key_hash = k.key_hash) AS calls_logged, " +
+    "(SELECT MAX(r.ts) FROM _gateway_request_log r WHERE r.key_hash = k.key_hash) AS last_call " +
     "FROM _keys k LEFT JOIN _usage u ON u.key_hash = k.key_hash AND u.day = date('now', '+9 hours') " +
     "ORDER BY k.created_at DESC");
   // email 은 여기서 사라진다 — 응답 객체에 원문이 담기는 경로를 남기지 않는다.
@@ -527,6 +670,11 @@ export default {
     // 요청 추적 — 지원 문의의 "그 요청" 한 건을 request_id 로 특정한다. 무인증(읽기 공개)인
     // 근거: request_id 는 그 응답을 받은 사람만 아는 16-hex 난수이고, 응답에는 키 8자
     // 축약·컬럼명 축만 실린다(decision/0010).
+    // 안정성 추이의 드릴다운 — 무인증 조회. 요약과 같은 표를 같은 필터로 읽는다.
+    if (url.pathname === "/api/drill") {
+      if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
+      return domainDay(env, url.searchParams);
+    }
     if (url.pathname === "/api/trace") {
       if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
       const rid = (url.searchParams.get("request_id") || "").trim();
@@ -535,13 +683,13 @@ export default {
           "req_ + 16자리 hex — 게이트웨이 응답 헤더 X-Request-Id(오류 본문 request_id) 값");
       const res = await safeRows(env,
         "SELECT ts, route, table_name, status, substr(key_hash, 1, 8) AS key_id, " +
-        "filters, row_count, ms FROM _request_log WHERE request_id = ? LIMIT 5", rid);
+        "filters, row_count, ms FROM _gateway_request_log WHERE request_id = ? LIMIT 5", rid);
       if (!res.ok) return problem(503, "log unavailable",
-        "_request_log 를 조회할 수 없다 — 게이트웨이 D1 상태 공유와 request_id 컬럼(마이그레이션 0004) 적용 여부를 확인할 것");
+        "_gateway_request_log 를 조회할 수 없다 — 게이트웨이 D1 상태 공유와 마이그레이션 0005 적용 여부를 확인할 것");
       return json({ request_id: rid, found: res.rows.length, rows: res.rows });
     }
     if (url.pathname.startsWith("/api/")) return problem(404, "not found",
-      "GET /api/summary · /api/trace · /api/apis · /api/apis/<이름> · /api/keys");
+      "GET /api/summary · /api/trace · /api/apis · /api/apis/<이름> · /api/drill · /api/keys");
     return env.ASSETS ? env.ASSETS.fetch(request) : problem(404, "not found", "정적 자산 없음");
   },
 };

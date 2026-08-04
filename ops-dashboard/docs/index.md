@@ -17,7 +17,7 @@ ops-dashboard 의 문서는 **세 층**이고, 층마다 구속력이 다르다.
 | # | 결정 | 한 줄 |
 |---|---|---|
 | [0001](decision/0001-separate-worker-from-marketplace.md) | 마켓플레이스와 별도 Worker | 청중이 다르고, 배포 단위가 갈려야 사고 반경도 갈린다 |
-| [0002](decision/0002-local-only-mentor-gate.md) | 로컬 전용 | `wrangler deploy` 금지 — 공개 URL 은 멘토 게이트(#476 ①) |
+| [0002](decision/0002-local-only-mentor-gate.md) | 로컬 전용 | `wrangler deploy` 금지 — 공개 URL 은 배포 결정(agreement §8) |
 | [0003](decision/0003-single-shared-local-d1.md) | 게이트웨이 D1 공유 | 원본 하나 — 복제 계층 없음, 부분 강등(`meta.missing`) |
 | [0004](decision/0004-read-open-write-token.md) | 읽기 공개·쓰기 토큰 | 보안 판단은 서버, 이메일은 서버측 마스킹 |
 | [0005](decision/0005-slo-snapshot-to-d1.md) | 파이프라인 상태의 정본 | **조회 DB 4종에서 읽는다**(#78 D-2) — 웨어하우스 직결 복사 경로는 폐기 |
@@ -58,11 +58,12 @@ decision/ 이 정한다.
 
 | 정본 | 내용 |
 |---|---|
+| [**`../../docs/agreement.md`**](../../docs/agreement.md) | **합의 정본** — 이슈에 흩어져 있던 결정을 하나로. 수집 축·소유 경계·환경·배포·MCP + **폐기된 안** |
 | [`../../docs/setup.md`](../../docs/setup.md) | 로컬 실행 매뉴얼(macOS/Windows) — **게이트웨이 담당자와 공동 관리**. 실행 절차는 두 프로젝트가 하나를 공유한다 |
 | [`../../docs/environments.md`](../../docs/environments.md) | 환경 규약 — 설정 배치·로컬/운영 도메인·D1·`-c` 의 함정 셋. **공동 관리**([0011](decision/0011-per-env-config.md)의 실행 규약) |
 | ASK-Seoul#78 | 저장소·운영 기록 적용 규약 v1 — 존/경로/확인서/보관/기록 형식/값 집합/조회 DB |
 | ASAC-DAG `common/ops/d1_ops.py` | 조회 DB 테이블 4종(`_ops_run_event` 등) 스키마 정본 |
-| `../marketplace/migrations/` | `_keys`·`_usage`·`_burst`·`_request_log` 스키마 정본 |
+| `../marketplace/migrations/` | `_keys`·`_usage`·`_burst`·`_gateway_request_log` 스키마 정본 |
 | [`../marketplace/docs/decision/0001`](../../marketplace/docs/decision/0001-shared-contracts.md) | 두 앱 공통 계약 C-1~C-10 (problem+json·KST·key_hash·request_id·값 최소화·증분·정본/추종·유실 검증) — 개정은 상대 앱 담당 리뷰 필수 |
 
 ## 갱신 규칙
