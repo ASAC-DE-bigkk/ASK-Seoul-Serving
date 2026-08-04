@@ -21,7 +21,7 @@
     },
     {
       "id": "commerce",
-      "question": "지역·업종별 개업·폐업·순증 추이 보여줘",
+      "question": "지역·업종별 월간 개업·폐업·순증 추이 보여줘",
       "expect": { "tool": "query_product", "args": { "product_id": "commerce_flow_monthly" } },
       "acceptable_first_tools": ["list_products", "describe_product", "preview_product"]
     },
