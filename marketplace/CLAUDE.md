@@ -157,9 +157,14 @@ _gateway_request_log 컬럼 추가       → 새 ALTER 파일 + 시드 체인 + 
 발급 rate limit 의 원문 IP           → #9 §7-①·⑥ 결정에 따라 정리 예정 — 그 전까지 확장 금지
 ```
 
-> `#9` 의 intent 축은 **`0005` 에 컬럼이 이미 있다** — 값을 채우는 코드만 없다(`LOG_COLUMNS`).
 > 컬럼을 늘릴 때 **대상은 `_gateway_request_log` 다.** `_request_log` 에 `ALTER` 를 얹으면
 > 남의 표를 건드리게 된다(§4).
+>
+> **`0005` 의 22종 중 셋은 아직 NULL 이고, 그게 맞다**(agreement §4-3 — 모른다 ≠ 0):
+> `agent_verified` 는 검증 수단이 없어 **NULL 로 시작**이 스펙이고(0 은 "검증 실패"로 읽힌다),
+> `page_path` 는 정적 페이지가 `run_worker_first` 밖이라 워커에 닿지 않으며(§3-4 의 6경로를
+> 통과시키는 결정이 먼저), `pattern_id` 는 패턴 실행 API 가 아직 없다.
+> **`LOG_COLUMNS` 에 넣지 않는 방식으로** 비워 둔다 — 넣고 `undefined` 를 실으면 0·'' 로 굳는다.
 
 ## 7. 완료 기준
 

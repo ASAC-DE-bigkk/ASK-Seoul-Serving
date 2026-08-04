@@ -7,7 +7,7 @@
 // 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
 import {
   json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC,
-  authenticate, checkBurst, burstProblem, countUsage, classifyClient,
+  authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent,
 } from "./shared.js";
 import { handleProductBundle } from "./v1.js";
 import { SKILL_BUNDLE_ID, handleSkillBundle, handleSkillData, handleSkillProduct } from "./skill.js";
@@ -209,6 +209,7 @@ async function handlePreview(env, id, trace = {}) {
   // 공개 식별자도 함께 남긴다 — 요청은 별칭(물리명)으로도 들어오므로, 해석된 뒤의
   // `product_id` 여야 같은 제품의 호출이 한 축으로 모인다(decision/0003).
   trace.productId = meta.product_id;
+  trace.publicationId = meta.publication_id ?? null;
   // 시간축이 있으면 최신 구간을 보여준다 — 미리보기의 존재 이유는 "실물이 쓸만한가"의 판단
   const order = meta.time_axis ? ` ORDER BY "${meta.time_axis}" DESC` : "";
   const { results } = await env.DB.prepare(
@@ -228,6 +229,7 @@ async function handleData(env, id, params, keyRow, trace = {}) {
   const table = meta.name;
   trace.table = table;
   trace.productId = meta.product_id;   // handlePreview 와 같은 이유
+  trace.publicationId = meta.publication_id ?? null;
 
   const columns = JSON.parse(meta.columns);
   const colSet = new Set(columns.map((c) => c.name));
@@ -320,6 +322,10 @@ const LOG_SWEEP_RATE = 0.02;  // 크론 없이, 로그 100건당 ~2회 낡은 �
 export const LOG_COLUMNS = [
   "ts", "route", "table_name", "status", "key_hash", "filters", "row_count", "ms",
   "request_id", "product_id", "env", "intent",
+  // 행동 로그 (#9 · agreement §3-1) — 원문은 하나도 없다. UA 는 분류 상수로, Referer 는
+  // 호스트로, IP 는 아예 안 본다(§3-2). 미배선으로 남는 셋은 아래 주석에 이유를 적었다.
+  "ua_class", "agent_name", "agent_mode", "country", "asn", "referer_host",
+  "publication_id",
 ];
 
 export function logValues(trace, env) {
@@ -331,11 +337,24 @@ export function logValues(trace, env) {
     // 환경은 워커가 자기 설정에서 읽는다 — 값이 환경을 정하지, 키 이름이 정하지 않는다
     // (ASK-Seoul#78 `Z-7`). 미설정이면 NULL 로 남긴다 — "모른다"를 "local" 로 꾸미지 않는다.
     env.ASK_ENV ?? null,
-    // 질문 의도 슬러그(agreement §3-6) — 원문이 아니라 축만. MCP 는 인자로(src/mcp.js),
-    // 헤더 제어가 되는 클라이언트는 X-ASK-Intent 로 들어온다(헤더 배선은 별도).
+    // 질문 의도 슬러그(agreement §3-6) — 원문이 아니라 축만. MCP 는 툴 인자로(src/mcp.js),
+    // 헤더 제어가 되는 클라이언트는 `X-ASK-Intent` 로 보낸다. 컬럼과 화면은 하나다.
     trace.intent ?? null,
+    // 요청 축(#9) — `clientAxes` 가 만든 값 그대로. 라우팅과 무관해 모든 표면에 같이 붙는다.
+    trace.uaClass ?? null, trace.agentName ?? null, trace.agentMode ?? null,
+    trace.country ?? null, trace.asn ?? null, trace.refererHost ?? null,
+    // 어느 게시본을 읽었는지 — 제품을 해석한 핸들러만 안다(카탈로그·미리보기·데이터·skill).
+    trace.publicationId ?? null,
   ];
 }
+
+// 아직 채우지 않는 셋 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
+//
+//   agent_verified  검증 수단 자체가 없다. **NULL 로 시작**이 스펙이다(§3-1 · #78 F-3) —
+//                   0 으로 두면 "검증 실패"로 읽힌다.
+//   page_path       정적 페이지·기계 문서는 `run_worker_first` 밖이라 워커에 닿지 않는다.
+//                   관측하려면 §3-4 의 6경로를 워커로 통과시키는 결정이 먼저다(#63 ④).
+//   pattern_id      패턴 실행 API(ASAC-DAG#642 안 C)가 아직 없다. 소비자가 생기면 붙인다.
 
 async function logRequest(env, trace) {
   try {
@@ -472,7 +491,17 @@ export default {
       });
 
     const started = Date.now();
-    const trace = { route: null, requestId: newRequestId() };
+    // 요청 축은 라우팅 **전에** 뽑는다 — 401·404 로 끝난 요청도 "누가 두드렸나"는 남아야
+    // 한다(그게 남용 판정의 재료다). 순수 계산이라 D1 도 안 만진다.
+    const axes = clientAxes(request);
+    const trace = {
+      route: null, requestId: newRequestId(),
+      uaClass: axes.ua_class, agentName: axes.agent_name, agentMode: axes.agent_mode,
+      country: axes.country, asn: axes.asn, refererHost: axes.referer_host,
+      // 헤더로 온 의도. MCP 는 툴 인자로 받아 이 값을 덮어쓴다 — 질의마다 바뀌는 쪽이
+      // 더 정확하기 때문이다(agreement §3-6: 경로는 둘, 컬럼은 하나).
+      intent: normalizeIntent(request.headers.get("x-ask-intent")),
+    };
     let res = await route(request, env, url, trace);
 
     // 오류는 본문에도 요청 ID 를 넣는다 — 사람이 복사해 오는 건 헤더가 아니라 JSON 이다

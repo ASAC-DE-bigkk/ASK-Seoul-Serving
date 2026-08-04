@@ -84,6 +84,52 @@ test("값이 아니라 축만 남는다 — 로그 컬럼에 원문이 들어갈
   assert.deepEqual(found, [], `원문 축이 스키마에 들어왔다: ${found.join(", ")}`);
 });
 
+test("요청 축이 제자리에 들어간다 — 목록과 값 순서가 어긋나면 다른 컬럼에 실린다",
+  NEEDS_SQLITE, () => {
+    const db = migratedDb();
+    const trace = {
+      ...TRACE,
+      uaClass: "ai_agent", agentName: "anthropic", agentMode: "on_demand",
+      country: "KR", asn: "4766", refererHost: "chat.example.com",
+      intent: "dong_activity_rank", publicationId: "pub_2026_08_04",
+    };
+    const sql = `INSERT INTO _gateway_request_log (${LOG_COLUMNS.join(", ")}) ` +
+      `VALUES (${LOG_COLUMNS.map(() => "?").join(", ")})`;
+    db.prepare(sql).run(...logValues(trace, { ASK_ENV: "local" }));
+
+    const row = db.prepare("SELECT * FROM _gateway_request_log").get();
+    assert.equal(row.ua_class, "ai_agent");
+    assert.equal(row.agent_name, "anthropic");
+    assert.equal(row.agent_mode, "on_demand");
+    assert.equal(row.country, "KR");
+    assert.equal(row.asn, "4766");
+    assert.equal(row.referer_host, "chat.example.com");
+    assert.equal(row.intent, "dong_activity_rank");
+    assert.equal(row.publication_id, "pub_2026_08_04");
+  });
+
+test("배선하지 않은 셋은 NULL 로 남는다 — 0 은 '검증 실패'로 읽힌다", NEEDS_SQLITE, () => {
+  // agent_verified 는 스펙상 NULL 로 시작이고(§3-1 · #78 F-3), page_path·pattern_id 는
+  // 값을 만들 곳이 아직 없다. 목록에 넣어 두고 undefined 를 실으면 0/'' 로 굳는다.
+  for (const c of ["agent_verified", "page_path", "pattern_id"])
+    assert.ok(!LOG_COLUMNS.includes(c), `${c} 는 아직 채울 값이 없다 — 목록에 넣지 않는다`);
+
+  const db = migratedDb();
+  const sql = `INSERT INTO _gateway_request_log (${LOG_COLUMNS.join(", ")}) ` +
+    `VALUES (${LOG_COLUMNS.map(() => "?").join(", ")})`;
+  db.prepare(sql).run(...logValues(TRACE, { ASK_ENV: "local" }));
+  const row = db.prepare("SELECT * FROM _gateway_request_log").get();
+  assert.equal(row.agent_verified, null);
+  assert.equal(row.page_path, null);
+  assert.equal(row.pattern_id, null);
+});
+
+test("축을 못 뽑은 요청도 기록된다 — 축이 없다고 행을 버리지 않는다", NEEDS_SQLITE, () => {
+  const values = logValues(TRACE, {});   // uaClass 등 전부 undefined
+  for (const c of ["ua_class", "country", "asn", "referer_host", "publication_id"])
+    assert.equal(values[LOG_COLUMNS.indexOf(c)], null, `${c} 는 undefined 가 아니라 NULL`);
+});
+
 test("응답 상태가 곧 결과인 표면은 HTTP 상태를 그대로 쓴다", () => {
   assert.equal(logStatus({}, { status: 200 }), 200);
   assert.equal(logStatus({}, { status: 429 }), 429);

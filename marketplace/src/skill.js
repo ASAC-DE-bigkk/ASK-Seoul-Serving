@@ -295,6 +295,7 @@ export async function handleSkillProduct(env, productId, trace = {}) {
   trace.productId = productId;
   const product = await loadSkillProduct(env, productId);
   if (!product) return unknownProduct(productId);
+  trace.publicationId = product.publication_id ?? null;
   trace.rows = product.metadata.columns.length;
   return json({ bundle_id: SKILL_BUNDLE_ID, ...product });
 }
@@ -304,6 +305,7 @@ export async function handleSkillData(env, productId, _searchParams, _keyRow, tr
   trace.productId = productId;
   const product = await loadSkillProduct(env, productId);
   if (!product) return unknownProduct(productId);
+  trace.publicationId = product.publication_id ?? null;
 
   // 쿼터는 실제 데이터 제공 뒤에만 소모한다. 준비 전 503을 사용자가 반복 확인하는
   // 상황에서 호출 한도를 잃게 하면 관측 가능한 운영 상태가 숨겨진다.
