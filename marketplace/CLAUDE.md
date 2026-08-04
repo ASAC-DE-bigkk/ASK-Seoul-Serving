@@ -1,7 +1,13 @@
 # CLAUDE.md — marketplace 작업 지침
 
 이 문서는 **현재 코드베이스의 실체**만 적는다. 여기 없는 구조(공개 배포·Queues·DO·TS …)를
-전제로 코드를 쓰지 않는다. 구속력 있는 결정은 [docs/decision/](docs/decision/)에 있고,
+전제로 코드를 쓰지 않는다.
+
+> **두 프로젝트에 걸친 합의는 [../docs/agreement.md](../docs/agreement.md) 가 정본이다** —
+> 수집 축·소유 경계·환경 규약·공개 배포 결정과 **폐기된 안**이 거기 모여 있다. 같은 주제를
+> 두 번 논의하지 않기 위한 문서이므로, 이슈를 다시 뒤지기 전에 먼저 본다.
+
+이 프로젝트에 한정된 구속력 있는 결정은 [docs/decision/](docs/decision/)에 있고,
 콘솔(ops-dashboard)과 공유하는 계약은
 [decision/0001](docs/decision/0001-shared-contracts.md)이 정본이다.
 페이지를 어떻게 합성하는지(=왜 SSG 가 아닌지)는

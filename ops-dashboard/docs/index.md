@@ -58,6 +58,7 @@ decision/ 이 정한다.
 
 | 정본 | 내용 |
 |---|---|
+| [**`../../docs/agreement.md`**](../../docs/agreement.md) | **합의 정본** — 이슈에 흩어져 있던 결정을 하나로. 수집 축·소유 경계·환경·배포·MCP + **폐기된 안** |
 | [`../../docs/setup.md`](../../docs/setup.md) | 로컬 실행 매뉴얼(macOS/Windows) — **게이트웨이 담당자와 공동 관리**. 실행 절차는 두 프로젝트가 하나를 공유한다 |
 | [`../../docs/environments.md`](../../docs/environments.md) | 환경 규약 — 설정 배치·로컬/운영 도메인·D1·`-c` 의 함정 셋. **공동 관리**([0011](decision/0011-per-env-config.md)의 실행 규약) |
 | ASK-Seoul#78 | 저장소·운영 기록 적용 규약 v1 — 존/경로/확인서/보관/기록 형식/값 집합/조회 DB |

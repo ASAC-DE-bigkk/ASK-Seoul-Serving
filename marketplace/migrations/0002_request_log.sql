@@ -6,6 +6,17 @@
 --  2. 식별자는 이미 해시인 것만 — key_hash 만 남기고 이메일·IP 는 넣지 않는다.
 --     익명 미리보기는 key_hash 가 NULL 이라 사람 단위 집계가 불가능한데, 그게 의도다.
 --  3. 무한 증식 금지 — D1 은 DB당 10GB 라 보존 기간을 코드가 강제한다(30일, Worker 가 정리).
+--
+-- ⚠️ **`IF NOT EXISTS` 는 이름 충돌을 숨긴다.** 다른 주체가 같은 이름을 선점하고 있으면
+--    이 문장은 조용히 넘어가고, 게이트웨이가 없는 컬럼에 INSERT 하다 실패하는데 그 INSERT 는
+--    `ctx.waitUntil` 안이라 응답에 영향을 주지 않는다 — **요청 로그가 전량 버려진다**(#23 실사고).
+--
+--    실제로 겪었다: 운영·개발 D1 에 `(ts, path, query, token)` 4컬럼 표가 선점돼 있었고
+--    (2026-07-21~, transit·citydata 쪽 사용분), 이 파일은 그 위를 그냥 지나갔다.
+--    **운영자 협의로 정리에 합의**했고 절차는 ../../docs/agreement.md §2-1 에 있다.
+--
+--    그래서 **적용 전에 반드시 충돌 검사를 돌린다** — `scripts/check-request-log-schema.sql`.
+--    마이그레이션만 믿으면 이 사실이 안 보인다. 배포 런북 0번이 이 검사다.
 
 CREATE TABLE IF NOT EXISTS _request_log (
   ts         TEXT    NOT NULL,  -- ISO8601 UTC

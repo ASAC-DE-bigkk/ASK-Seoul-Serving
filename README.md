@@ -39,6 +39,15 @@ dbt manifest·Airflow 메타DB를 직접 읽는 경로는 존재하지 않는다
 | [ask-seoul](https://github.com/ASAC-DE-bigkk/ask-seoul) | 인프라(Airflow·Trino·R2·docker-compose) |
 | **ask-seoul-serving** | ← 여기. 서빙 계층 |
 
+## 무엇이 정해져 있나
+
+**[docs/agreement.md](docs/agreement.md) 가 정본이다.** 이슈에 흩어져 있던 결정
+(수집 축·소유 경계·환경 규약·공개 배포·MCP)을 하나로 합쳤고, **폐기된 안과 그 이유**까지
+남겨 뒀다. 같은 주제를 두 번 논의하지 않기 위한 문서다 — 여기 적힌 결정을 바꾸려면
+이 문서를 먼저 고친다.
+
+프로젝트별 상세 근거는 각 `docs/decision/` 에 있다.
+
 ## 로컬에서 띄우기
 
 원격 배포 없이 `wrangler dev`(Miniflare 로컬 sqlite D1)로만 돈다. **팀 D1에 쓰지 않는다.**
@@ -47,6 +56,7 @@ dbt manifest·Airflow 메타DB를 직접 읽는 경로는 존재하지 않는다
 
 | 문서 | 무엇 |
 |---|---|
+| [docs/agreement.md](docs/agreement.md) | **합의 정본** — 결정·경계·폐기된 안·남은 과제 |
 | [docs/setup.md](docs/setup.md) | 사전 준비(Node 20+)·OS별 실행 절차·증상별 해결 |
 | [docs/environments.md](docs/environments.md) | 환경 규약 — 설정 배치, local/prod 도메인·D1, 실행 파라미터 배분 |
 
