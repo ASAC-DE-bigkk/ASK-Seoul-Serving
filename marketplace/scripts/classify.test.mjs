@@ -1,7 +1,7 @@
 // classifyClient 단독 테스트 (#9 §3) — 실제 UA 문자열 기준. 실행: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyClient } from "../src/shared.js";
+import { classifyClient, clientAxes, refererHost, normalizeIntent } from "../src/shared.js";
 
 const cases = [
   // AI — crawler (사전 수집)
@@ -53,3 +53,61 @@ for (const [ua, expected] of cases) {
     assert.deepEqual(classifyClient(ua), expected);
   });
 }
+
+// ── 요청 축 (#9 · agreement §3) ───────────────────────────────────────────────
+// 여기서 지키는 건 정확도가 아니라 **원문이 안 남는다**는 것이다. 컬럼이 늘 때 원문 축이
+// 섞여 들어오면 §3 대원칙이 조용히 깨지고, 같은 행의 key_hash 가 이메일과 1:1 이라
+// 그 순간 "이메일에 연결된 이력"이 된다.
+
+// `cf` 는 Cloudflare 런타임이 Request 에 얹는 확장이라 Node 의 Request 로는 못 만든다
+// (init 에 넣어도 무시된다 — 방금 이 테스트가 그걸로 한 번 깨졌다). `clientAxes` 가 쓰는
+// 모양(`.cf` · `.headers.get`)만 갖춘 스텁을 쓴다.
+//
+// 참고: `wrangler dev` 는 로컬에서도 `cf` 를 채운다(실측 `country=KR · asn=4766`). 그래서
+// 아래 "없으면 NULL" 은 로컬 동작이 아니라 **가드 자체**를 고정하는 것이다.
+const req = (headers = {}, cf) => ({ cf, headers: new Headers(headers) });
+
+test("UA 는 분류 상수만 남는다 — 원문이 축에 실리지 않는다", () => {
+  const raw = "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/127.0.0.0 Safari/537.36";
+  const axes = clientAxes(req({ "user-agent": raw }));
+  assert.equal(axes.ua_class, "browser");
+  for (const v of Object.values(axes)) assert.notEqual(v, raw);
+});
+
+test("Referer 는 호스트만 — 경로·쿼리는 남의 검색어가 섞여 온다", () => {
+  assert.equal(refererHost("https://search.example.com/find?q=%EA%B0%9C%EC%9D%B8%EC%A0%95%EB%B3%B4"),
+    "search.example.com");
+  assert.equal(refererHost("https://x.test:8443/a/b"), "x.test:8443");
+});
+
+test("깨진 Referer 는 버린다 — 원문을 대신 남기지 않는다", () => {
+  assert.equal(refererHost("not a url"), null);
+  assert.equal(refererHost(""), null);
+  assert.equal(refererHost(null), null);
+});
+
+test("request.cf 가 없으면 country·asn 은 NULL — 지어내지 않는다", () => {
+  const axes = clientAxes(req({ "user-agent": "curl/8.4.0" }));
+  assert.equal(axes.country, null);
+  assert.equal(axes.asn, null);
+  assert.equal(axes.ua_class, "cli");
+});
+
+test("asn 은 숫자로 오지만 TEXT 컬럼이라 문자열로 맞춘다", () => {
+  const axes = clientAxes(req({}, { country: "KR", asn: 4766 }));
+  assert.equal(axes.country, "KR");
+  assert.equal(axes.asn, "4766");
+});
+
+test("intent — 슬러그는 그대로, 자유 문장은 other, 없으면 NULL", () => {
+  assert.equal(normalizeIntent("dong_activity_rank"), "dong_activity_rank");
+  // 문장을 그대로 실으면 질문 원문이 로그에 남는다(§3-6) — 그래서 뭉갠다.
+  assert.equal(normalizeIntent("강남구 문화행사 뭐 있어?"), "other");
+  assert.equal(normalizeIntent("A".repeat(65)), "other");
+  assert.equal(normalizeIntent("  "), null);
+  assert.equal(normalizeIntent(undefined), null);
+});
+
+test("안 보낸 것과 못 알아본 것은 다르다 — NULL 과 other 를 섞지 않는다", () => {
+  assert.notEqual(normalizeIntent(""), normalizeIntent("!!!"));
+});
