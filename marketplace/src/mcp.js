@@ -9,7 +9,7 @@
 // run_pattern 은 서버 실행계약 확정 후 P1.
 
 import { SKILL_BUNDLE_ID, SKILL_PRODUCT_IDS } from "./skill.js";
-import { burstProblem } from "./shared.js";
+import { burstProblem, normalizeIntent } from "./shared.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "ask-seoul", version: "0.1.0" };
@@ -146,7 +146,9 @@ async function callTool(name, args, ctx) {
     // intent 는 관측 축(agreement §3-6) — MCP 클라이언트는 헤더를 질의마다 못 바꾸므로 인자로
     // 받아 trace 로 옮겨 싣는다(데이터 질의에는 미포함 — 필터로 새면 400 이 난다). 슬러그
     // 모양이 아니면 'other' 로 뭉갠다 — 자유 문장이 오면 원문(PII 위험)을 로그에 남기지 않는다.
-    if (args.intent) trace.intent = /^[a-z0-9_]{1,64}$/.test(args.intent) ? args.intent : "other";
+    // 판정은 헤더 경로와 **같은 함수**를 쓴다(shared) — 두 경로가 한 컬럼에 들어가므로
+    // 규칙이 갈리면 같은 값이 경로에 따라 다르게 기록된다.
+    if (args.intent) trace.intent = normalizeIntent(args.intent) ?? trace.intent ?? null;
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(args.filters || {})) params.set(k, String(v));
     if (args.from) params.set("from", String(args.from));

@@ -187,3 +187,45 @@ export function classifyClient(ua) {
   if (/Mozilla\//.test(ua)) return { ua_class: "browser", agent_name: null, agent_mode: null };
   return { ua_class: "unknown", agent_name: null, agent_mode: null };
 }
+
+// ── 요청 축 (#9 · agreement §3) ───────────────────────────────────────────────
+// 요청 하나에서 뽑는 관측 축을 한 곳에 모은다. **원문은 하나도 남기지 않는다** —
+// UA 는 분류 상수로, Referer 는 호스트로, IP 는 아예 안 본다(§3-2: 컬럼 자체를 안 만든다).
+// 남용 판정은 원문 IP 대신 country·asn 으로 한다.
+//
+// `request.cf` 는 Cloudflare 가 Request 에 얹는 확장이다. `wrangler dev` 는 로컬에서도
+// 채워 준다(실측 2026-08-04: `country=KR · asn=4766`). 다만 **항상 있다고 가정하지 않는다** —
+// Node 의 Request 에는 없고, 그때 NULL 로 남는 게 맞다. "모른다"를 다른 값으로 꾸미면
+// 배포 후 실측과 섞인다(§4-3).
+export function clientAxes(request) {
+  const cf = request.cf || {};
+  const { ua_class, agent_name, agent_mode } = classifyClient(request.headers.get("user-agent"));
+  return {
+    ua_class, agent_name, agent_mode,
+    country: cf.country ?? null,
+    // asn 은 숫자로 온다 — 컬럼이 TEXT 라 문자열로 맞춰 넣는다(집계 축이지 산술 대상이 아니다).
+    asn: cf.asn == null ? null : String(cf.asn),
+    referer_host: refererHost(request.headers.get("referer")),
+  };
+}
+
+// Referer 는 **호스트만** 남긴다 — 전체 URL 에는 경로·쿼리가 붙고, 거기에 남의 사이트의
+// 검색어나 식별자가 섞여 들어온다. 알고 싶은 건 "어디서 왔나"이지 "무엇을 보다 왔나"가 아니다.
+export function refererHost(raw) {
+  if (!raw) return null;
+  try {
+    return new URL(raw).host || null;
+  } catch {
+    return null;   // 깨진 Referer 는 버린다 — 원문을 대신 남기지 않는다
+  }
+}
+
+// 의도 슬러그(§3-6) — 어휘는 `d1_usage_patterns.pattern_id` 재사용. 모양이 아니면 `other` 로
+// 뭉갠다: 자유 문장이 오면 **질문 원문이 로그에 남고**, 같은 행의 key_hash 가 이메일과 1:1 이라
+// "이메일에 연결된 질의 이력"이 된다. 그게 이 축을 슬러그로 못 박은 이유다.
+const INTENT_RE = /^[a-z0-9_]{1,64}$/;
+export function normalizeIntent(raw) {
+  const value = (raw ?? "").trim();
+  if (!value) return null;                       // 안 보낸 것과 못 알아본 것은 다르다
+  return INTENT_RE.test(value) ? value : "other";
+}
