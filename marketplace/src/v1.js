@@ -20,6 +20,7 @@ const etagOf = (publicationId) => (publicationId ? `"${publicationId}"` : null);
 
 export async function handleProductBundle(env, productId, request, trace = {}) {
   trace.table = productId;
+  trace.productId = productId;   // `/v1` 도 경로 인자가 공개 식별자다
   if (!ID_RE.test(productId))
     return problem(400, "invalid product id", "product_id 형식이 아니다");
 
