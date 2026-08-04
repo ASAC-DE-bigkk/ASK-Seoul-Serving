@@ -70,7 +70,8 @@ code { font-family:var(--mono); font-size:.9em; background:var(--panel-2); paddi
 .brand:hover { text-decoration:none; }
 .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
                background:var(--accent); display:flex; align-items:center; justify-content:center;
-               font-weight:700; font-size:12.5px; letter-spacing:.02em; color:#fff; }
+               /* accent 면 위 글자는 --accent-ink — 다크 테마에선 accent 가 밝아져 흰 글자가 안 보인다 */
+               font-weight:700; font-size:12.5px; letter-spacing:.02em; color:var(--accent-ink); }
 .brand .nm { font-weight:700; font-size:14px; line-height:1.2; letter-spacing:-.01em; }
 .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
               color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }

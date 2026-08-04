@@ -74,13 +74,16 @@
           border-right:1px solid var(--sidebar-line); }
   .side .brand { display:flex; align-items:center; gap:10px; padding:6px 18px 16px;
                  border-bottom:1px solid var(--sidebar-line); margin-bottom:8px; }
+  /* 브랜드는 랜딩(index.html .brand)과 동일 규칙 — 로고 글자색은 accent 면 위 전용
+     토큰(--accent-ink)을 쓴다. 하드코딩하면 한쪽 테마에서 대비가 깨진다(라이트에서
+     딥 그린 위 #04211b 이 남아 있던 실사고). */
   .side .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
                        background:var(--accent);
                        display:flex; align-items:center; justify-content:center;
-                       font-weight:800; font-size:13.5px; color:#04211b; letter-spacing:-.02em; }
-  .side .brand .nm { font-weight:700; font-size:13.5px; color:var(--ink); letter-spacing:-.01em; line-height:1.25; }
-  .side .brand .sub { display:block; font-weight:500; font-size:11px; color:var(--sidebar-dim);
-                      letter-spacing:.02em; }
+                       font-weight:700; font-size:12.5px; color:var(--accent-ink); letter-spacing:.02em; }
+  .side .brand .nm { font-weight:700; font-size:14px; color:var(--ink); letter-spacing:-.01em; line-height:1.2; }
+  .side .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
+                      color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
   .side .group { padding:16px 18px 6px; font-size:10.5px; font-weight:700; letter-spacing:.1em;
                  color:var(--sidebar-dim); }
   .dnav { list-style:none; padding:0 8px; }
@@ -336,7 +339,7 @@
 <div class="shell">
 
   <aside class="side">
-    <div class="brand" onclick="location.href='/'" style="cursor:pointer" title="홈으로"><span class="logo">AS</span><span class="nm">ASK SEOUL<span class="sub">Data Platform Console</span></span></div>
+    <div class="brand" onclick="location.href='/'" style="cursor:pointer" title="홈으로"><span class="logo">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></div>
     <div class="group">도메인</div>
     <ul class="dnav" id="dnav"></ul>
     <div class="group">이 페이지 안에서</div>

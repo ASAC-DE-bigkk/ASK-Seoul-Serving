@@ -108,7 +108,8 @@
   .brand { display:flex; align-items:center; gap:10px; }
   .brand .logo { width:30px; height:30px; border-radius:7px;
                  background:var(--accent); display:flex; align-items:center; justify-content:center;
-                 font-weight:700; font-size:12.5px; letter-spacing:.02em; color:#fff; }
+                 /* accent 면 위 글자는 --accent-ink — 다크 테마에선 accent 가 밝아져 흰 글자가 안 보인다 */
+                 font-weight:700; font-size:12.5px; letter-spacing:.02em; color:var(--accent-ink); }
   .brand .nm { font-weight:700; font-size:14px; color:var(--ink); letter-spacing:-.01em; line-height:1.2; }
   .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
                 color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
