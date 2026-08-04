@@ -7,61 +7,172 @@
 <title>품질 콘솔 — ASK: SEOUL 운영</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a534e'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='14' font-weight='700' fill='%23fff' text-anchor='middle'%3EOPS%3C/text%3E%3C/svg%3E">
 <style>
+  /* 팔레트·서체는 **마켓플레이스와 같은 값**이다(`../marketplace/public/site.css`).
+     값이 갈리면 같은 팀 서비스가 둘로 보인다 — 콘솔이라고 다른 색을 쓸 이유가 없다.
+     저쪽 토큰을 고칠 일이 생기면 여기도 같이 고친다.
+
+     액센트는 단청 청록을 낮춘 딥 그린 하나이고 **면을 칠하지 않는다**(링크·버튼·상태만).
+     예전 콘솔은 테라코타(#b8492a)를 썼는데, 그건 마켓플레이스가 팔레트를 통일하기 전의
+     잔재였다. 운영 도구라는 신호는 색이 아니라 **왼쪽 레일과 환경 배지**가 준다. */
   :root {
-    /* 마켓플레이스와 같은 단청 팔레트지만 표면은 더 어둡다 — 운영 도구라는 신호 */
-    --bg:#f4f6f5; --panel:#ffffff;
-    --ink:#12211f; --muted:#48605c; --faint:#8fa3a0; --line:#e6eae8; --line-strong:#ccd5d2;
-    --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
-    --teal:#0f6f68; --teal-deep:#0a534e; --teal-soft:#e9f4f2; --teal-line:#a9d5cf;
-    --ok:#0a6b45; --ok-soft:#e8f6ee;
-    --red-ink:#b42318; --red-soft:#fef3f2; --amber-ink:#b54708; --amber-soft:#fffaeb;
-    --deck:#08110f; --deck-line:rgba(214,240,235,.10); --deck-ink:#c2d6d1; --deck-dim:#71908a;
-    --shadow-xs:0 1px 2px rgba(16,24,40,.05);
-    --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono',monospace;
-    /* 마우스를 올렸을 때 **눈에 보이는** 변화. 예전에는 글자색만 바꿔서 흰 배경 위에서는
-       바뀐 티가 안 났다 — 표를 훑을 때 지금 어느 줄인지 놓친다. 배경으로 바꾼다. */
-    --hover:#eef2f1; --chip:#f1f4f3;
+    --bg:#f7f8f8; --panel:#ffffff; --panel-2:#f1f3f2;
+    --ink:#0f1b1a; --muted:#55655f; --faint:#64716d;
+    --line:#e5e9e7; --line-strong:#d3dad7;
+    --accent:#0b6e60; --accent-hover:#0a5c50; --accent-deep:#0b6e60; --accent-ink:#ffffff;
+    --accent-soft:rgba(11,110,96,.06); --accent-line:rgba(11,110,96,.22);
+    --teal:#0b6e60; --teal-deep:#0b6e60;
+    --teal-soft:rgba(11,110,96,.06); --teal-line:rgba(11,110,96,.22);
+    --ok:#15803d; --ok-soft:rgba(21,128,61,.08); --ok-line:rgba(21,128,61,.25);
+    --amber-ink:#b45309; --amber-soft:rgba(180,83,9,.08); --amber-line:rgba(180,83,9,.25);
+    --red-ink:#b91c1c; --red-soft:rgba(185,28,28,.07); --red-line:rgba(185,28,28,.25);
+    /* 왼쪽 레일 — 마켓플레이스 catalog.html 과 같은 토큰 */
+    --sidebar:#fbfcfc; --sidebar-hi:#eef2f0;
+    --sidebar-ink:#55655f; --sidebar-dim:#64716d; --sidebar-line:#e5e9e7;
+    --shadow-xs:none;
+    --shadow-sm:0 1px 2px rgba(15,27,26,.05);
+    /* mono 는 라틴 식별자 전용 — Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
+       굴림 계열에 대체돼 뭉개진다. 한글 라벨은 --sans 로 되돌린다 */
+    --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono','Malgun Gothic',monospace;
+    --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
+           system-ui,-apple-system,'Noto Sans KR',sans-serif;
+    /* 마우스를 올렸을 때 **눈에 보이는** 변화. 글자색만 바꾸면 흰 배경에서 티가 안 난다. */
+    --hover:#eef2f0; --chip:#f1f3f2;
+  }
+
+  /* 다크 — 어두운 바탕에서는 액센트가 밝아져야 읽힌다(라이트와 방향이 반대다) */
+  :root[data-theme="dark"] {
+    --bg:#0d1211; --panel:#141a19; --panel-2:#1a2220;
+    --ink:#e9eeec; --muted:#9aa8a4; --faint:#7d8b86;
+    --line:rgba(233,238,236,.08); --line-strong:rgba(233,238,236,.15);
+    --accent:#35a892; --accent-hover:#4cc4ac; --accent-deep:#5fceb6; --accent-ink:#04211b;
+    --accent-soft:rgba(53,168,146,.12); --accent-line:rgba(53,168,146,.30);
+    --teal:#35a892; --teal-deep:#5fceb6;
+    --teal-soft:rgba(53,168,146,.12); --teal-line:rgba(53,168,146,.30);
+    --ok:#4ade80; --ok-soft:rgba(74,222,128,.10); --ok-line:rgba(74,222,128,.30);
+    --amber-ink:#fbbf24; --amber-soft:rgba(251,191,36,.12); --amber-line:rgba(251,191,36,.30);
+    --red-ink:#f87171; --red-soft:rgba(248,113,113,.10); --red-line:rgba(248,113,113,.30);
+    --sidebar:#0a0f0e; --sidebar-hi:#1a2220;
+    --sidebar-ink:#9aa8a4; --sidebar-dim:#7d8b86; --sidebar-line:rgba(233,238,236,.08);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --hover:#1a2220; --chip:#1a2220;
   }
   * { box-sizing:border-box; margin:0; }
-  body { font-family:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
-                     system-ui,-apple-system,sans-serif;
+  html { scroll-behavior:smooth; }
+  body { font-family:var(--sans);
          background:var(--bg); color:var(--ink); font-size:14.5px; line-height:1.65; word-break:keep-all;
          -webkit-font-smoothing:antialiased; }
   a { color:inherit; }
   .lab { font-family:var(--mono); font-size:10.5px; font-weight:600; letter-spacing:.12em;
          text-transform:uppercase; color:var(--faint); }
 
-  .top { background:var(--deck); color:#fff; padding:0 26px; height:56px;
-         display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:5; }
-  .top .mark { font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:.1em;
-               background:var(--teal-deep); padding:4px 9px; border-radius:5px; }
-  .top h1 { font-size:15px; font-weight:600; letter-spacing:-.01em; }
-  .top .sp { flex:1; }
-  .top select { font:inherit; font-size:12.5px; background:rgba(255,255,255,.06); color:#fff;
-                border:1px solid var(--deck-line); border-radius:6px; padding:4px 8px; cursor:pointer; }
-  /* 어두운 바 위에서는 글자색 변화가 거의 안 보인다 — 배경을 같이 올려야 눌리는 게 보인다 */
-  .top select:hover { background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.3); }
-  .top select option { background:var(--deck); color:#fff; }
-  .top a { font-size:12.5px; color:var(--deck-ink); text-decoration:none; border-radius:5px;
-           padding:4px 7px; }
-  .top a:hover { color:#fff; background:rgba(255,255,255,.12); }
-  .top select:focus-visible, .top a:focus-visible, .top .mode:focus-visible {
-           outline:2px solid #fff; outline-offset:1px; }
-  /* 읽기 전용 ↔ 운영자 모드 표시 겸 토글 — 지금 무엇을 할 수 있는 상태인지가 상단에 늘 보인다 */
-  .top .mode { font:inherit; font-size:12px; font-weight:600; cursor:pointer;
-               background:rgba(255,255,255,.06); color:var(--deck-ink);
-               border:1px solid rgba(255,255,255,.14); border-radius:6px; padding:5px 11px; }
-  .top .mode:hover { color:#fff; background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.3); }
-  .top .mode.on:hover { background:#d3f0e0; color:var(--ok); }
-  .top .mode.on { background:var(--ok-soft); color:var(--ok); border-color:#b7e4cb; }
-  /* 환경 표시 — 운영은 색으로 즉시 구분된다. 로컬과 운영을 헷갈리는 게 제일 나쁜 사고다 */
-  .top .envtag { font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:5px;
-                 background:rgba(255,255,255,.07); color:var(--deck-ink);
-                 border:1px solid var(--deck-line); white-space:nowrap; }
-  .top .envtag.prod { background:var(--accent); color:#fff; border-color:var(--accent); }
-  .top .envtag small { font-family:var(--mono); font-size:10px; opacity:.75; margin-left:5px; }
+  /* ── 셸 — 마켓플레이스 카탈로그와 같은 구조(좌측 레일 248px + 본문) ──────────
+     예전에는 어두운 상단 바에 탭을 가로로 늘어놨는데, 탭이 여섯이 되면서 라벨이 좁아지고
+     마켓플레이스와 다른 서비스처럼 보였다. 레일로 옮기면 탭마다 **한 줄을 온전히** 쓸 수
+     있어 부제와 상태 점이 같이 들어가고, 저쪽 카탈로그와 눈에 익은 자리가 같아진다. */
+  .shell { display:grid; grid-template-columns:248px 1fr; min-height:100vh; }
+  .side { background:var(--sidebar); color:var(--sidebar-ink); padding:16px 0 0;
+          position:sticky; top:0; height:100vh; overflow-y:auto;
+          display:flex; flex-direction:column; border-right:1px solid var(--sidebar-line); }
+  .side .brand { display:flex; align-items:center; gap:10px; padding:6px 18px 16px;
+                 border-bottom:1px solid var(--sidebar-line); margin-bottom:4px; }
+  .side .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
+                       background:var(--accent); display:flex; align-items:center;
+                       justify-content:center; font-weight:700; font-size:12.5px;
+                       color:var(--accent-ink); letter-spacing:.02em; font-family:var(--mono); }
+  .side .brand .nm { font-weight:700; font-size:14px; color:var(--ink);
+                     letter-spacing:-.01em; line-height:1.2; }
+  .side .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
+                      color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
+  .side .group { padding:14px 18px 6px; font-size:10.5px; font-weight:700; letter-spacing:.1em;
+                 color:var(--sidebar-dim); }
+  .side .foot { margin-top:auto; padding:14px 18px 16px; font-size:11px;
+                color:var(--sidebar-dim); line-height:1.9;
+                border-top:1px solid var(--sidebar-line); }
+  .side .foot b { color:var(--sidebar-ink); font-weight:600; }
+  .side .foot a { color:var(--sidebar-ink); }
+  .side .foot a:hover { color:var(--accent-deep); text-decoration:underline; text-underline-offset:2px; }
 
-  .wrap { max-width:1220px; margin:0 auto; padding:20px 26px 64px; }
+  /* 탭 = 레일 항목. **라벨의 점**이 "안 보는 쪽이 아픈지"를 전환 없이 알려준다 —
+     탭으로 가리면 문제를 놓치기 쉬운데 그 대가를 점이 상쇄한다. */
+  .tabs { list-style:none; padding:0 8px; margin:0; display:block; border:0; }
+  .tabs button { width:100%; font:inherit; font-family:var(--sans); font-size:13.5px;
+                 font-weight:500; color:var(--sidebar-ink); background:none; border:0;
+                 border-radius:6px; padding:8px 12px; margin-bottom:1px; cursor:pointer;
+                 display:grid; grid-template-columns:auto 1fr; gap:2px 9px; text-align:left;
+                 align-items:center; }
+  .tabs button:hover { background:var(--sidebar-hi); color:var(--ink); }
+  .tabs button[aria-selected="true"] { background:var(--sidebar-hi); color:var(--ink);
+                 font-weight:600; box-shadow:inset 2px 0 0 var(--accent); }
+  .tabs button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+  .tabs button .dot { width:6px; height:6px; border-radius:50%; background:var(--line-strong);
+                      flex:none; grid-row:1; }
+  .tabs button .dot.ok { background:var(--ok); }
+  .tabs button .dot.bad { background:var(--red-ink); }
+  /* 부제는 점 아래가 아니라 라벨 아래에 붙는다 — 레일이 좁아 점 열을 비워 두는 게 낫다 */
+  .tabs button .sub { grid-column:2; font-weight:400; font-size:11px; color:var(--sidebar-dim);
+                      line-height:1.35; }
+  .tabs button[aria-selected="true"] .sub { color:var(--muted); }
+
+  /* 본문 머리 — 카탈로그의 .topbar 와 같은 높이·규칙 */
+  .main { min-width:0; }
+  .topbar { background:var(--panel); border-bottom:1px solid var(--line); padding:0 26px;
+            height:52px; display:flex; align-items:center; gap:12px;
+            position:sticky; top:0; z-index:9; }
+  .topbar h1 { font-size:14px; font-weight:600; letter-spacing:-.01em; padding-right:14px;
+               border-right:1px solid var(--line); white-space:nowrap; }
+  .topbar .sp { flex:1; }
+  .topbar .lab { font-size:12px; color:var(--faint); white-space:nowrap; }
+  .topbar select { font:inherit; font-size:12.5px; background:var(--panel); color:var(--ink);
+                   border:1px solid var(--line-strong); border-radius:6px; padding:4px 8px;
+                   cursor:pointer; }
+  .topbar select:hover { background:var(--hover); border-color:var(--accent-line); }
+  .topbar a { font-size:12.5px; color:var(--muted); text-decoration:none;
+              border-radius:5px; padding:4px 7px; white-space:nowrap; }
+  .topbar a:hover { color:var(--accent-deep); background:var(--hover); }
+  .topbar select:focus-visible, .topbar a:focus-visible,
+  .topbar .mode:focus-visible, .topbar .theme-btn:focus-visible {
+              outline:2px solid var(--accent); outline-offset:1px; }
+  /* 읽기 전용 ↔ 운영자 모드 — 지금 무엇을 할 수 있는 상태인지가 늘 보인다 */
+  .topbar .mode { font:inherit; font-family:var(--sans); font-size:12px; font-weight:600;
+                  cursor:pointer; background:var(--panel); color:var(--muted);
+                  border:1px solid var(--line-strong); border-radius:6px; padding:5px 11px;
+                  white-space:nowrap; }
+  .topbar .mode:hover { color:var(--accent-deep); background:var(--accent-soft);
+                        border-color:var(--accent-line); }
+  .topbar .mode.on { background:var(--ok-soft); color:var(--ok); border-color:var(--ok-line); }
+  .topbar .mode.on:hover { background:var(--ok-soft); color:var(--ok); }
+  /* 환경 표시 — 운영은 색으로 즉시 구분된다. 로컬과 운영을 헷갈리는 게 제일 나쁜 사고다 */
+  .topbar .envtag { font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:5px;
+                    background:var(--panel-2); color:var(--muted);
+                    border:1px solid var(--line); white-space:nowrap; }
+  .topbar .envtag.prod { background:var(--red-soft); color:var(--red-ink);
+                         border-color:var(--red-line); }
+  .topbar .envtag small { font-family:var(--mono); font-size:10px; opacity:.8; margin-left:5px; }
+  /* 테마 토글 — 마켓플레이스와 같은 자리·같은 아이콘 규칙 */
+  .theme-btn { background:none; border:1px solid var(--line-strong); border-radius:6px;
+               width:30px; height:28px; display:flex; align-items:center; justify-content:center;
+               cursor:pointer; color:var(--muted); flex:none; }
+  .theme-btn:hover { color:var(--accent-deep); border-color:var(--accent-line);
+                     background:var(--accent-soft); }
+  .theme-btn .sun { display:none; }
+  :root[data-theme="dark"] .theme-btn .sun { display:block; }
+  :root[data-theme="dark"] .theme-btn .moon { display:none; }
+
+  /* 좁은 화면 — 레일을 접고 탭을 가로 스크롤 줄로 되돌린다 */
+  @media (max-width:900px) {
+    .shell { grid-template-columns:1fr; }
+    .side { position:static; height:auto; border-right:0;
+            border-bottom:1px solid var(--sidebar-line); }
+    .side .brand { margin-bottom:0; }
+    .side .group, .side .foot { display:none; }
+    .tabs { display:flex; overflow-x:auto; gap:4px; padding:8px; }
+    .tabs button { width:auto; white-space:nowrap; }
+    .tabs button .sub { display:none; }
+    .topbar { padding:0 16px; gap:8px; }
+    .topbar h1 { display:none; }
+  }
+
+  .wrap { max-width:1180px; padding:20px 26px 64px; }
   /* ── 알림 줄 ──────────────────────────────────────────────────────────────────
      예전에는 사유를 한 문단씩 쌓아 배너 대여섯 개가 화면 위를 덮었다. 길게 쓴다고
      읽히는 게 아니라 **전부 안 읽히고** 진짜 신호가 묻힌다. x/LinkedIn 이 상태를
@@ -108,22 +219,6 @@
                  border:0; border-radius:7px; padding:0 18px; cursor:pointer; }
   .gate .err { color:var(--red-ink); font-size:12.5px; margin-top:10px; min-height:1.2em; }
 
-  /* 탭 — 두 품질을 나눠 보되, 라벨의 점이 "안 보는 쪽이 아픈지"를 먼저 알려준다.
-     탭으로 가리면 문제를 놓치기 쉬운데, 상태 점이 그 대가를 상쇄한다. */
-  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 18px; }
-  .tabs button { font:inherit; font-size:13.5px; font-weight:600; color:var(--muted);
-                 background:none; border:0; border-bottom:2px solid transparent; padding:9px 16px;
-                 cursor:pointer; display:flex; align-items:center; gap:8px; margin-bottom:-1px; }
-  /* 글자색만 바꾸면 흰 배경에서 바뀐 티가 안 난다 — 배경까지 준다. 이미 선택된 탭은
-     hover 로 흔들리지 않게 둬야 "지금 여기"가 계속 분명하다. */
-  .tabs button:hover:not([aria-selected="true"]) { color:var(--ink); background:var(--hover);
-                 border-radius:7px 7px 0 0; }
-  .tabs button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; border-radius:7px 7px 0 0; }
-  .tabs button[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--accent); }
-  .tabs button .dot { width:7px; height:7px; border-radius:50%; background:var(--line-strong); flex:none; }
-  .tabs button .dot.ok { background:var(--ok); }
-  .tabs button .dot.bad { background:var(--red-ink); }
-  .tabs button .sub { font-weight:400; font-size:11.5px; color:var(--faint); }
   .pane[hidden] { display:none; }
 
   h2.sec { font-size:15px; font-weight:700; margin:0 0 4px; display:flex; align-items:baseline; gap:10px; }
@@ -307,17 +402,90 @@
                      padding:7px 10px; border:1px solid var(--line-strong); border-radius:6px; outline:none; }
   .trace-row input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
 </style>
+<!-- 테마는 **페인트 전에** 정해야 한다. 이 6줄을 theme.js 로 합치면 <head> 동기 로드가
+     되어 첫 페인트가 왕복 하나만큼 밀린다 — 인라인이 그 값보다 싸다(마켓플레이스와 같은 규칙).
+     저장값이 있으면 = 사용자가 직접 골랐다. 그때만 OS 설정을 무시한다. -->
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem("theme");
+    document.documentElement.dataset.theme =
+      t || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  } catch (e) { document.documentElement.dataset.theme = "light"; }
+})();
+</script>
 </head>
 <body>
 
-<div class="top">
-  <span class="mark">OPS</span>
+<div class="shell">
+
+<!-- 왼쪽 레일 — 마켓플레이스 카탈로그와 같은 자리·같은 규칙. 탭이 여섯이라 가로로 늘어놓으면
+     라벨이 좁아지고, 무엇보다 저쪽과 다른 서비스처럼 보인다. -->
+<aside class="side">
+  <div class="brand">
+    <span class="logo">AS</span>
+    <span class="nm">ASK SEOUL<span class="sub">Ops Console</span></span>
+  </div>
+
+  <div class="group">품질 영역</div>
+  <ul class="tabs" role="tablist" aria-label="품질 영역">
+    <li role="presentation">
+      <button role="tab" id="tab-pipeline" aria-controls="pane-pipeline" aria-selected="true">
+        <span class="dot" id="dot-pipeline"></span>데이터 준비 상태
+        <span class="sub">매일 제때 갱신됐나</span>
+      </button>
+    </li>
+    <li role="presentation">
+      <button role="tab" id="tab-runs" aria-controls="pane-runs" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-runs"></span>실행 기록
+        <span class="sub">정기런·멈춤</span>
+      </button>
+    </li>
+    <li role="presentation">
+      <button role="tab" id="tab-serving" aria-controls="pane-serving" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-serving"></span>응답 상태
+        <span class="sub">실패·빈 응답</span>
+      </button>
+    </li>
+    <!-- 두 탭은 묻는 질문이 다르다 — '이용 행동'은 **누가**(사람·AI·여정),
+         'API 사용량'은 **무엇이**(제품별 수요). 원본이 겹쳐 보여 이름을 갈랐다. -->
+    <li role="presentation">
+      <button role="tab" id="tab-usage" aria-controls="pane-usage" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-usage"></span>이용 행동
+        <span class="sub">사람·AI·여정</span>
+      </button>
+    </li>
+    <li role="presentation">
+      <button role="tab" id="tab-apis" aria-controls="pane-apis" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-apis"></span>API 사용량
+        <span class="sub">무엇이 얼마나 쓰이나</span>
+      </button>
+    </li>
+    <li role="presentation">
+      <button role="tab" id="tab-keys" aria-controls="pane-keys" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-keys"></span>이용자 키
+        <span class="sub">발급·한도·차단</span>
+      </button>
+    </li>
+  </ul>
+
+  <!-- 콘솔이 무엇을 읽는지 — 붙일 때 실제로 필요한 정보만. 배포·인증 상태는 화면 위쪽
+       환경 배지와 잠금 버튼이 이미 말한다. -->
+  <div class="foot">
+    읽기 전용 소비자<br>
+    조회 DB · 게이트웨이 표<br>
+    <b>로컬 전용</b> — 배포 전
+  </div>
+</aside>
+
+<div class="main">
+<div class="topbar">
   <h1>품질 콘솔</h1>
   <!-- 지금 보고 있는 데이터의 출처. 숫자만 보고 어느 환경인지 추측하게 두면
        로컬 값을 운영 실적으로 오해하는 사고가 난다 — 그래서 늘 보이는 자리에 둔다 -->
   <span class="envtag" id="envTag" hidden></span>
   <span class="sp"></span>
-  <label class="lab" for="days" style="color:var(--deck-dim)">기간</label>
+  <label class="lab" for="days">기간</label>
   <select id="days">
     <option value="7">7일</option>
     <option value="14" selected>14일</option>
@@ -328,6 +496,10 @@
   <button id="autoBtn" class="mode" title="30초마다 자동으로 다시 읽습니다">자동 새로고침 꺼짐</button>
   <button id="modeBtn" class="mode">읽기 전용 · 잠금 해제</button>
   <a href="http://localhost:8787/" target="_blank" rel="noopener">마켓플레이스 ↗</a>
+  <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
+    <svg class="sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+    <svg class="moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.3A8.5 8.5 0 1 1 9.7 3.5a6.8 6.8 0 0 0 10.8 10.8Z"/></svg>
+  </button>
 </div>
 
 <div class="wrap">
@@ -343,35 +515,6 @@
   </div>
 
   <div id="app" hidden>
-    <div class="tabs" role="tablist" aria-label="품질 영역">
-      <button role="tab" id="tab-pipeline" aria-controls="pane-pipeline" aria-selected="true">
-        <span class="dot" id="dot-pipeline"></span>데이터 준비 상태
-        <span class="sub">매일 제때 갱신됐나</span>
-      </button>
-      <button role="tab" id="tab-runs" aria-controls="pane-runs" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-runs"></span>실행 기록
-        <span class="sub">정기런·멈춤</span>
-      </button>
-      <button role="tab" id="tab-serving" aria-controls="pane-serving" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-serving"></span>응답 상태
-        <span class="sub">실패·빈 응답</span>
-      </button>
-      <!-- 두 탭은 묻는 질문이 다르다 — '이용 행동'은 **누가**(사람·AI·여정),
-           'API 사용량'은 **무엇이**(제품별 수요). 원본이 겹쳐 보여 이름을 갈랐다. -->
-      <button role="tab" id="tab-usage" aria-controls="pane-usage" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-usage"></span>이용 행동
-        <span class="sub">사람·AI·여정</span>
-      </button>
-      <button role="tab" id="tab-apis" aria-controls="pane-apis" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-apis"></span>API 사용량
-        <span class="sub">무엇이 얼마나 쓰이나</span>
-      </button>
-      <button role="tab" id="tab-keys" aria-controls="pane-keys" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-keys"></span>이용자 키
-        <span class="sub">발급·한도·차단</span>
-      </button>
-    </div>
-
     <div class="notes" id="banners"></div>
 
     <section class="pane" id="pane-pipeline" role="tabpanel" aria-labelledby="tab-pipeline" tabindex="0">
@@ -1965,5 +2108,10 @@ $("days").addEventListener("change", load);
 syncAuto();
 load();   // 토큰 없이도 뜬다 — 막는 문이 아니라 여는 문이다
 </script>
+</div><!-- /.main -->
+</div><!-- /.shell -->
+
+<!-- 토글 배선. 적용은 <head> 인라인이 페인트 전에 끝낸다(마켓플레이스와 같은 한 벌). -->
+<script src="/theme.js"></script>
 </body>
 </html>
