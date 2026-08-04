@@ -30,7 +30,7 @@
   저장하지 않는 **파생 지표** — MCP·에이전트 툴은 대개 `python-httpx` 같은 `cli` 얼굴로 오므로,
   판정은 여정(llms.txt/openapi.json → 발급 → 호출 사슬)에서 한다.
 
-## 필드 v0 확정 — `_request_log` 추가 컬럼 8종 + intent (전부 nullable · 추가만 · 기존 불변)
+## 필드 v0 확정 — `_gateway_request_log` 컬럼 8종 + intent (전부 nullable · 추가만 · 기존 불변)
 
 | 컬럼 | 값 | 비고 |
 |---|---|---|

@@ -10,6 +10,7 @@ import {
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
 import { SKILL_BUNDLE_ID, handleSkillBundle, handleSkillData, handleSkillProduct } from "./skill.js";
+import { handleMcp } from "./mcp.js";
 
 const ISSUE_HOURLY_CAP = 5;
 const DEFAULT_LIMIT = 500;
@@ -317,7 +318,7 @@ const LOG_SWEEP_RATE = 0.02;  // 크론 없이, 로그 100건당 ~2회 낡은 �
 // 이 목록과 실제 스키마를 대조한다.
 export const LOG_COLUMNS = [
   "ts", "route", "table_name", "status", "key_hash", "filters", "row_count", "ms",
-  "request_id", "product_id", "env",
+  "request_id", "product_id", "env", "intent",
 ];
 
 export function logValues(trace, env) {
@@ -329,6 +330,9 @@ export function logValues(trace, env) {
     // 환경은 워커가 자기 설정에서 읽는다 — 값이 환경을 정하지, 키 이름이 정하지 않는다
     // (ASK-Seoul#78 `Z-7`). 미설정이면 NULL 로 남긴다 — "모른다"를 "local" 로 꾸미지 않는다.
     env.ASK_ENV ?? null,
+    // 질문 의도 슬러그(agreement §3-6) — 원문이 아니라 축만. MCP 는 인자로(src/mcp.js),
+    // 헤더 제어가 되는 클라이언트는 X-ASK-Intent 로 들어온다(헤더 배선은 별도).
+    trace.intent ?? null,
   ];
 }
 
@@ -363,6 +367,15 @@ async function route(request, env, url, trace) {
     if (error) return error;
     trace.keyHash = keyRow.key_hash;
     return revokeKey(env, keyRow, url.searchParams.get("purge") === "true");
+  }
+  // MCP 서버 — Streamable HTTP, stateless POST /mcp (#26 P0). shared 핸들러 재사용(내부 HTTP X).
+  if (path === "/mcp") {
+    if (request.method !== "POST") return problem(405, "method not allowed", "MCP 는 POST /mcp (Streamable HTTP)");
+    trace.route = "mcp";
+    return handleMcp(request, env, trace, {
+      authenticate, checkBurst,
+      handleCatalog, handlePreview, handleData, handleMe, handleProductBundle,
+    });
   }
   if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/v1/keys)");
   if (path === "/api/v1/catalog") { trace.route = "catalog"; return handleCatalog(env); }
@@ -443,6 +456,16 @@ async function route(request, env, url, trace) {
     "GET /v1/products/<product_id> · /v1/glossary · /skill/v1/bundles/seoul-urban-analytics — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
 }
 
+/**
+ * 로그에 남길 상태 — **핸들러가 정해 둔 값이 있으면 그게 결과의 뜻이다.**
+ *
+ * HTTP 상태가 곧 결과인 표면(`/api/v1`·`/skill/v1`·`/v1`)에서는 `trace.status` 가 비어 있어
+ * 그대로 응답 상태를 쓴다. MCP 는 다르다 — JSON-RPC 는 오류도 봉투에 담아 HTTP 는 200 이라,
+ * 응답 상태만 믿으면 **인증 실패·404·429·503 이 전부 `mcp/200` 으로 남는다.** 그러면 콘솔의
+ * 오류율이 영원히 0 이 되는데, 이건 관측 공백이 아니라 **틀린 값**이다(#62 · agreement §4).
+ */
+export const logStatus = (trace, res) => trace.status ?? res.status;
+
 // 요청 ID — 문의가 들어왔을 때 그 요청 하나를 로그에서 집어내는 열쇠다.
 // 이게 없으면 지원 대화가 "언제쯤 어떤 걸 부르셨나요"로 시작한다.
 const newRequestId = () => {
@@ -480,7 +503,7 @@ export default {
 
     // 라우트가 정해진 API 요청만 기록한다 (정적 자산·404 잡음 제외)
     if (trace.route) {
-      trace.status = res.status;
+      trace.status = logStatus(trace, res);
       trace.ms = Date.now() - started;
       const write = logRequest(env, trace);
       if (ctx && ctx.waitUntil) ctx.waitUntil(write);  // 응답을 붙잡지 않는다
