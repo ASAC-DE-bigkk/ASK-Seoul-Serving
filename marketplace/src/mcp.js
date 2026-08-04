@@ -59,6 +59,11 @@ export const TOOLS = [
         to: { type: "string", description: "시간축 끝(포함)" },
         limit: { type: "integer", minimum: 1, maximum: 5000 },
         cursor: { type: "string", description: "다음 페이지 커서(이전 응답의 next_cursor)" },
+        intent: {
+          type: "string",
+          description:
+            "질문 의도 슬러그(선택, 관측용 — 조회 결과에 영향 없음). describe_product 의 usage_patterns pattern_id 를 쓰고, 맞는 게 없으면 'other'.",
+        },
       },
       required: ["product_id"],
       additionalProperties: false,
@@ -132,6 +137,10 @@ async function callTool(name, args, ctx) {
     // 식별자 해석은 shared 해석기 한 곳에 맡긴다(decision/0003: product_id 정본, 테이블명은
     // 과도기 별칭). 없는/비공개 제품의 404 는 toToolResult 가 안내 문구로 바꾼다.
     if (name === "preview_product") return toToolResult(await deps.handlePreview(env, args.product_id, trace));
+    // intent 는 관측 축(agreement §3-6) — MCP 클라이언트는 헤더를 질의마다 못 바꾸므로 인자로
+    // 받아 trace 로 옮겨 싣는다(데이터 질의에는 미포함 — 필터로 새면 400 이 난다). 슬러그
+    // 모양이 아니면 'other' 로 뭉갠다 — 자유 문장이 오면 원문(PII 위험)을 로그에 남기지 않는다.
+    if (args.intent) trace.intent = /^[a-z0-9_]{1,64}$/.test(args.intent) ? args.intent : "other";
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(args.filters || {})) params.set(k, String(v));
     if (args.from) params.set("from", String(args.from));

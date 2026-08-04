@@ -87,6 +87,22 @@ test("tools/call query_product — product_id 를 shared 해석기에 그대로 
   assert.deepEqual(got, { id: "citydata_ppltn_daily", limit: "10" });
 });
 
+test("query_product intent 인자 — trace 로 옮겨 싣고, 슬러그 아니면 other", async () => {
+  const trace = {};
+  let params = null;
+  const deps = mkDeps({ handleData: async (_e, id, p) => { params = p; return jsonRes({ id, rows: [] }); } });
+  await handleMcp(
+    rpc("tools/call", { name: "query_product", arguments: { product_id: "p", intent: "vital_dongs_top" } }),
+    {}, trace, deps);
+  assert.equal(trace.intent, "vital_dongs_top");
+  assert.equal(params.has("intent"), false); // 데이터 질의로 새면 없는 필터라 400 이 난다
+  const trace2 = {};
+  await handleMcp(
+    rpc("tools/call", { name: "query_product", arguments: { product_id: "p", intent: "어느 동이 제일 붐비나요?" } }),
+    {}, trace2, mkDeps());
+  assert.equal(trace2.intent, "other");
+});
+
 test("tools/call 인증 실패 → 키 안내(isError)", async () => {
   const deps = mkDeps({ authenticate: async () => ({ error: jsonRes({ type: "unauthorized" }, 401) }) });
   const res = await handleMcp(rpc("tools/call", { name: "check_quota", arguments: {} }), {}, {}, deps);
