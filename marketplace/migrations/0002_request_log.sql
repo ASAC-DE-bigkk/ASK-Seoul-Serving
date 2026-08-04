@@ -12,11 +12,13 @@
 --    `ctx.waitUntil` 안이라 응답에 영향을 주지 않는다 — **요청 로그가 전량 버려진다**(#23 실사고).
 --
 --    실제로 겪었다: 운영·개발 D1 에 `(ts, path, query, token)` 4컬럼 표가 선점돼 있었고
---    (2026-07-21~, transit·citydata 쪽 사용분), 이 파일은 그 위를 그냥 지나갔다.
---    **운영자 협의로 정리에 합의**했고 절차는 ../../docs/agreement.md §2-1 에 있다.
+--    (2026-07-21~), 이 파일은 그 위를 그냥 지나갔다. 조사 결과 **transit 워커 소유**로
+--    확인돼, **게이트웨이가 이름을 비켰다** — `0005_gateway_request_log.sql` 이 정본이다.
+--    이 표는 **손대지 않는다**(DROP 도 ALTER 도). 결정은 ../../docs/agreement.md §2-2.
 --
---    그래서 **적용 전에 반드시 충돌 검사를 돌린다** — `scripts/check-request-log-schema.sql`.
---    마이그레이션만 믿으면 이 사실이 안 보인다. 배포 런북 0번이 이 검사다.
+--    그래서 **적용 전에 반드시 배포 전 검사를 돌린다** — 런북 §0 의 `npm run preflight`.
+--    마이그레이션만 믿으면 이 사실이 안 보인다. 적용 **뒤** 확인은 런북 §1 의
+--    `scripts/check-request-log-schema.sql` 이 "우리가 남의 표를 건드렸는가"로 한 번 더 본다.
 
 CREATE TABLE IF NOT EXISTS _request_log (
   ts         TEXT    NOT NULL,  -- ISO8601 UTC
