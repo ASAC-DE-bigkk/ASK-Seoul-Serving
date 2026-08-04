@@ -373,7 +373,8 @@ async function route(request, env, url, trace) {
     if (request.method !== "POST") return problem(405, "method not allowed", "MCP 는 POST /mcp (Streamable HTTP)");
     trace.route = "mcp";
     return handleMcp(request, env, trace, {
-      authenticate, handleCatalog, handlePreview, handleData, handleMe, handleProductBundle,
+      authenticate, checkBurst,
+      handleCatalog, handlePreview, handleData, handleMe, handleProductBundle,
     });
   }
   if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/v1/keys)");
@@ -455,6 +456,16 @@ async function route(request, env, url, trace) {
     "GET /v1/products/<product_id> · /v1/glossary · /skill/v1/bundles/seoul-urban-analytics — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
 }
 
+/**
+ * 로그에 남길 상태 — **핸들러가 정해 둔 값이 있으면 그게 결과의 뜻이다.**
+ *
+ * HTTP 상태가 곧 결과인 표면(`/api/v1`·`/skill/v1`·`/v1`)에서는 `trace.status` 가 비어 있어
+ * 그대로 응답 상태를 쓴다. MCP 는 다르다 — JSON-RPC 는 오류도 봉투에 담아 HTTP 는 200 이라,
+ * 응답 상태만 믿으면 **인증 실패·404·429·503 이 전부 `mcp/200` 으로 남는다.** 그러면 콘솔의
+ * 오류율이 영원히 0 이 되는데, 이건 관측 공백이 아니라 **틀린 값**이다(#62 · agreement §4).
+ */
+export const logStatus = (trace, res) => trace.status ?? res.status;
+
 // 요청 ID — 문의가 들어왔을 때 그 요청 하나를 로그에서 집어내는 열쇠다.
 // 이게 없으면 지원 대화가 "언제쯤 어떤 걸 부르셨나요"로 시작한다.
 const newRequestId = () => {
@@ -492,7 +503,7 @@ export default {
 
     // 라우트가 정해진 API 요청만 기록한다 (정적 자산·404 잡음 제외)
     if (trace.route) {
-      trace.status = res.status;
+      trace.status = logStatus(trace, res);
       trace.ms = Date.now() - started;
       const write = logRequest(env, trace);
       if (ctx && ctx.waitUntil) ctx.waitUntil(write);  // 응답을 붙잡지 않는다

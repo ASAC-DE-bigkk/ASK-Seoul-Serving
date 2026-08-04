@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LOG_COLUMNS, logValues } from "../src/index.js";
+import { LOG_COLUMNS, logValues, logStatus } from "../src/index.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS = join(HERE, "..", "migrations");
@@ -82,6 +82,22 @@ test("값이 아니라 축만 남는다 — 로그 컬럼에 원문이 들어갈
   const have = columnsOf(migratedDb(), "_gateway_request_log");
   const found = have.filter((c) => forbidden.includes(c));
   assert.deepEqual(found, [], `원문 축이 스키마에 들어왔다: ${found.join(", ")}`);
+});
+
+test("응답 상태가 곧 결과인 표면은 HTTP 상태를 그대로 쓴다", () => {
+  assert.equal(logStatus({}, { status: 200 }), 200);
+  assert.equal(logStatus({}, { status: 429 }), 429);
+});
+
+test("핸들러가 상태를 정해 뒀으면 그 값이 로그로 간다 — MCP 는 실패도 HTTP 200 이다", () => {
+  // 이 한 줄이 없으면 `mcp` route 의 오류율이 영원히 0 이 된다(#62). 200 이 아니라
+  // '실패했다'가 기록돼야 콘솔의 SUM(status >= 400) 이 뜻을 갖는다.
+  assert.equal(logStatus({ status: 404 }, { status: 200 }), 404);
+  assert.equal(logStatus({ status: 401 }, { status: 200 }), 401);
+});
+
+test("0 은 값이다 — ?? 가 아니라 || 였으면 조용히 응답 상태로 넘어간다", () => {
+  assert.equal(logStatus({ status: 0 }, { status: 200 }), 0);
 });
 
 test("남의 표는 손대지 않는다 — 0005 는 _request_log 를 DROP 하지도 ALTER 하지도 않는다",
