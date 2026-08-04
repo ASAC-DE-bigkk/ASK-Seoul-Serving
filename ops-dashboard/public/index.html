@@ -1019,10 +1019,6 @@ function render(d) {
 
   if (d.meta.missing.includes("pipeline") && hasSlo)
     N.pipeline.push(note("info", "데이터 없음", "<code>npm run seed</code> 를 먼저 실행하세요."));
-  if (d.meta.missing.includes("publication"))
-    N.pipeline.push(note("info", "연결되지 않음",
-      "발행 대장(<code>_publication_ledger</code>)을 읽지 못했습니다. 정본은 파이프라인이고 " +
-      "콘솔은 읽기만 합니다 — 로컬에는 이 표가 없을 수 있습니다."));
   // 발행이 깨지고 있으면 이 탭에서 먼저 보여야 한다 — 성공률만 보면 안 보이는 축이다.
   if (pTot.failed > 0 || pTot.mismatch > 0)
     N.pipeline.push(note("warn", "발행 문제 " + nf.format(pTot.failed + pTot.mismatch) + "건",
@@ -1030,9 +1026,6 @@ function render(d) {
       "</b> · 행수 안 맞음 <b>" + nf.format(pTot.mismatch) + "</b>. " +
       "어느 분야에 몰렸는지는 아래 '분야별 발행'에서 봅니다."));
 
-  if (d.meta.missing.includes("runs"))
-    N.runs.push(note("info", "연결되지 않음",
-      "조회 DB 표(<code>_ops_run_event</code> 외 3종)가 없습니다. <code>npm run seed</code> 로 같은 모양의 표를 만들 수 있습니다."));
   // 섞임은 **걸렀나 안 걸렀나**로 갈린다 — 운영자가 할 일이 다르다.
   if (envMix && d.meta.runs_env_scope)
     N.runs.push(note("info", esc(d.meta.runs_env_scope) + " 기록만",
@@ -1060,6 +1053,45 @@ function render(d) {
 
   if (!CAN_WRITE)
     N.keys.push(note("info", "보기 전용", "차단·해제·한도 변경·삭제는 오른쪽 위 <b>잠금 해제</b> 뒤에 할 수 있습니다."));
+
+  // ── 왜 비었나 — 표가 없는 것 / 표는 있는데 0행인 것을 가른다 ──────────────
+  //
+  // 이 리포는 환경이 둘로 갈려 있다. **파이프라인은 원격 D1 에만 쓰고, 게이트웨이는 아직
+  // 로컬에만 쓴다.** 그래서 로컬에서 실행 기록이 비고, 운영에서 응답 상태가 빈다 —
+  // 둘 다 정상인데 "데이터 없음"만 띄우면 "콘솔이 고장났나"로 읽힌다.
+  // 어느 표가 어디에 사는지는 서버가 `sources[].home` 으로 알려준다.
+  const isProd = (d.meta.env && d.meta.env.label) === "운영";
+  const WHERE = {
+    remote: "이 데이터는 <b>원격 D1</b> 에 있습니다 — 파이프라인이 거기에 씁니다. " +
+            "<code>npm run dev:remote</code>(개발) 또는 <code>npm run dev:prod-readonly</code>(운영)로 봅니다.",
+    local:  "이 데이터는 <b>로컬</b> 에 있습니다 — 게이트웨이가 아직 로컬에만 씁니다. " +
+            "<code>npm run dev</code> 로 봅니다(원격은 배포 뒤에 채워집니다).",
+    both:   "이 환경에서 읽을 수 있어야 하는 표입니다 — 시드 또는 마이그레이션을 확인하세요.",
+  };
+  // 같은 이유의 칩을 표마다 내면 시끄럽다 — **탭당 하나로 합치고 표 이름을 나열**한다.
+  const gap = new Map();   // "pane|kind" → { tables[], home, used[] }
+  for (const src of (d.sources || [])) {
+    const kind = src.state === "absent" ? "absent"
+      : (src.state === "ok" && src.rows === 0 && src.home === "remote" && !isProd) ? "empty"
+      : null;
+    if (!kind) continue;
+    for (const pane of [].concat(src.pane || [])) {
+      if (!N[pane]) continue;
+      const k = pane + "|" + kind;
+      const g = gap.get(k) || { pane, kind, tables: [], home: src.home, used: [] };
+      g.tables.push(src.table);
+      if (src.used) g.used.push(src.used);
+      gap.set(k, g);
+    }
+  }
+  for (const g of gap.values()) {
+    const tbl = g.tables.map((t) => "<code>" + esc(t) + "</code>").join(" · ");
+    N[g.pane].push(g.kind === "absent"
+      ? note("info", "이 환경에 없음",
+          tbl + " 이(가) 이 D1 에 없습니다.<br>" + WHERE[g.home || "both"])
+      : note("info", "로컬은 비어 있음",
+          tbl + " 은 있지만 <b>0행</b>입니다 — 파이프라인은 원격 D1 에만 씁니다.<br>" + WHERE.remote));
+  }
 
   let ni = 0;
   $("banners").innerHTML = Object.entries(N).flatMap(([pane, list]) => list.map((n) => {

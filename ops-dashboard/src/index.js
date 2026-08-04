@@ -289,32 +289,44 @@ async function summary(env, params, writable = false) {
 //
 // 그래서 콘솔이 읽는 표를 하나씩 진단해 **지표로** 내보낸다. 없으면 없다고, 스키마가
 // 어긋나면 어느 컬럼이 없는지까지.
+// 표마다 **어느 탭이 쓰고, 그 데이터가 어디에 사는지**를 같이 적는다.
+//
+// 화면이 비었을 때 "데이터 없음"만 띄우면 운영자는 원인을 못 찾는다. 이 리포는 환경이
+// 둘로 갈려 있어서 특히 그렇다 — **파이프라인은 원격 D1 에만 쓰고, 게이트웨이는 아직
+// 로컬에만 쓴다.** 그래서 로컬에서 실행 기록이 비고, 운영에서 응답 상태가 빈다.
+// 둘 다 정상인데 화면이 그걸 말하지 못하면 "콘솔이 고장났나"로 읽힌다.
+//
+//   home: "remote" 파이프라인이 원격에 쓴다 — 로컬에는 표만 있고 0행이다
+//         "local"  게이트웨이가 로컬에 쓴다 — 배포 전이라 원격에는 표가 없다
+//         "both"   양쪽에 있다
 const SOURCES = [
-  { table: "_ops_run_event", owner: "파이프라인", need: ["observed_date_kst", "domain", "status"],
-    used: "데이터 준비 상태" },
-  { table: "_ops_daily_metric", owner: "파이프라인", need: ["observed_date_kst", "domain", "layer", "event_count"],
-    used: "데이터 준비 상태(집계)" },
-  { table: "_ops_pipeline_state", owner: "파이프라인", need: ["dag_id", "last_status", "observation_state"],
-    used: "파이프라인 현재 상태" },
-  { table: "_ops_pipeline_expectation", owner: "파이프라인", need: ["dag_id", "monitored"],
-    used: "실행 주기 등록" },
-  // 옛 이름 `_request_log` 는 transit 워커 소유로 남았다(agreement §2) — 콘솔은 더 읽지 않는다.
-  { table: "_gateway_request_log", owner: "게이트웨이",
-    need: ["ts", "route", "status", "table_name", "key_hash", "product_id", "env"],
-    used: "응답 상태 · API 사용량" },
-  { table: "_catalog", owner: "도메인 export", need: ["name", "product_id", "external"],
-    used: "API 사용량" },
-  { table: "_keys", owner: "게이트웨이", need: ["key_hash", "email", "status", "daily_quota"],
-    used: "이용자 키" },
-  { table: "_publication_ledger", owner: "파이프라인",
+  { table: "_ops_run_event", owner: "파이프라인", home: "remote", pane: ["runs"],
+    need: ["observed_date_kst", "domain", "status"], used: "실행 기록" },
+  { table: "_ops_daily_metric", owner: "파이프라인", home: "remote", pane: ["runs"],
+    need: ["observed_date_kst", "domain", "layer", "event_count"], used: "실행 기록(집계)" },
+  { table: "_ops_pipeline_state", owner: "파이프라인", home: "remote", pane: ["runs"],
+    need: ["dag_id", "last_status", "observation_state"], used: "감시 대상 DAG" },
+  { table: "_ops_pipeline_expectation", owner: "파이프라인", home: "remote", pane: ["runs"],
+    need: ["dag_id", "monitored"], used: "실행 주기 등록" },
+  { table: "_publication_ledger", owner: "파이프라인", home: "remote", pane: ["pipeline"],
     need: ["product_id", "outcome", "stage", "published_row_count", "d1_row_count"],
     used: "발행 점검" },
-  { table: "_publication_log", owner: "파이프라인",
+  { table: "_publication_log", owner: "파이프라인", home: "remote", pane: ["pipeline"],
     need: ["product_id", "published_at", "serving_status"], used: "발행 점검(성공 대장)" },
-  { table: "_ops_slo", owner: "콘솔", need: ["domain", "event_date"],
-    used: "품질 기준(SLO)" },
-  { table: "_ops_domain", owner: "콘솔", need: ["domain", "label", "has_slo"], used: "분야 등록부" },
+  // 옛 이름 `_request_log` 는 transit 워커 소유로 남았다(agreement §2) — 콘솔은 더 읽지 않는다.
+  { table: "_gateway_request_log", owner: "게이트웨이", home: "local", pane: ["serving", "usage", "apis"],
+    need: ["ts", "route", "status", "table_name", "key_hash", "product_id", "env"],
+    used: "응답 상태 · 이용 행동 · API 사용량" },
+  { table: "_keys", owner: "게이트웨이", home: "local", pane: ["keys", "usage"],
+    need: ["key_hash", "email", "status", "daily_quota"], used: "이용자 키" },
+  { table: "_catalog", owner: "도메인 export", home: "both", pane: ["apis"],
+    need: ["name", "product_id", "external"], used: "API 사용량" },
+  { table: "_ops_slo", owner: "콘솔", home: "both", pane: ["pipeline"],
+    need: ["domain", "event_date"], used: "품질 기준(SLO)" },
+  { table: "_ops_domain", owner: "콘솔", home: "both", pane: ["pipeline"],
+    need: ["domain", "label", "has_slo"], used: "분야 등록부" },
 ];
+
 
 async function sources(env) {
   const out = await Promise.all(SOURCES.map(async (s) => {
@@ -327,7 +339,7 @@ async function sources(env) {
     // (이름을 선점한 다른 표가 실제로 운영 중인지 아닌지가 갈린다).
     const cnt = exists ? await safeRows(env, `SELECT COUNT(*) AS n FROM "${s.table}"`) : null;
     return {
-      table: s.table, owner: s.owner, used: s.used,
+      table: s.table, owner: s.owner, used: s.used, home: s.home, pane: s.pane,
       exists,
       // 셋으로 가른다 — 조치가 각각 다르다.
       //   ok        읽을 수 있다
