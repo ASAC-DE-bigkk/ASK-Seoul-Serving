@@ -428,7 +428,10 @@
          여기 있던 Daily quota(1,000회/일)를 시간축으로 갈았다 — 한도는 키를 받은 뒤의
          이야기고, 처음 온 사람이 재는 건 "무엇으로 자를 수 있나"다. 한도는 /docs 와
          카탈로그에 그대로 있다. -->
-    <div class="cell"><div class="lab ko">공간축</div><div class="v">행정동</div><div class="k">다른 데이터끼리 동네 단위로 붙여 볼 수 있습니다</div></div>
+    <!-- 공간축도 시간축처럼 "몇 종에 걸리는가"를 값으로 적는다 — 행정동 코드 보유
+         30/62(실측)라 이름만 적으면 전 제품이 되는 것처럼 읽힌다. 카운트는 하드코딩하지
+         않고 카탈로그 columns 에서 센다(시간축과 같은 이유 — 박아두면 조용히 거짓이 된다). -->
+    <div class="cell"><div class="lab ko">공간축</div><div class="v sk num" id="statDong">0종</div><div class="k">행정동(동네) 단위로 다른 데이터와 붙일 수 있는 제품</div></div>
     <div class="cell"><div class="lab ko">시간축</div><div class="v sk num" id="statTimed">0종</div><div class="k">원하는 기간만 잘라 받을 수 있는 제품</div></div>
     <div class="cell"><div class="lab ko">갱신</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
   </div>
@@ -793,7 +796,7 @@ async function bootCatalog() {
     if (!res.ok) throw new Error("HTTP " + res.status);
     products = (await res.json()).products || [];
   } catch {
-    setStat("statProducts", "—"); setStat("statTimed", "—"); setStat("statFresh", "—");
+    setStat("statProducts", "—"); setStat("statDong", "—"); setStat("statTimed", "—"); setStat("statFresh", "—");
     $("statFreshK").textContent = "마지막 갱신 · 확인 불가";
     failState("domains", "도메인 정보를 불러오지 못했습니다");
     failState("cards", "제품 목록을 불러오지 못했습니다");
@@ -801,7 +804,11 @@ async function bootCatalog() {
   }
 
   setStat("statProducts", products.length + "<span class='u'>종</span>");
-  // 시간축 수는 세어서 넣는다 — 하드코딩하면 제품이 늘 때 조용히 거짓이 된다.
+  // 두 축의 수는 세어서 넣는다 — 하드코딩하면 제품이 늘 때 조용히 거짓이 된다.
+  // 공간축 = 행정동 코드(#48 합의 조인 키) 보유 제품. 구 단위(gu_code)만 있는 제품은
+  // 동 단위로 못 붙으므로 세지 않는다(실측 30/62 — 구까지 치면 42).
+  const dong = products.filter((p) => (p.columns || []).some((c) => c.name === "admin_dong_code")).length;
+  setStat("statDong", dong + "<span class='u'>종</span>");
   // time_axis 가 null 인 제품(명부형)은 기간 필터를 못 걸므로 세지 않는다.
   const timed = products.filter((p) => p.time_axis).length;
   setStat("statTimed", timed + "<span class='u'>종</span>");
