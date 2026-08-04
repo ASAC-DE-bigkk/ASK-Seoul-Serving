@@ -74,13 +74,16 @@
           border-right:1px solid var(--sidebar-line); }
   .side .brand { display:flex; align-items:center; gap:10px; padding:6px 18px 16px;
                  border-bottom:1px solid var(--sidebar-line); margin-bottom:8px; }
+  /* 브랜드는 랜딩(index.html .brand)과 동일 규칙 — 로고 글자색은 accent 면 위 전용
+     토큰(--accent-ink)을 쓴다. 하드코딩하면 한쪽 테마에서 대비가 깨진다(라이트에서
+     딥 그린 위 #04211b 이 남아 있던 실사고). */
   .side .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
                        background:var(--accent);
                        display:flex; align-items:center; justify-content:center;
-                       font-weight:800; font-size:13.5px; color:#04211b; letter-spacing:-.02em; }
-  .side .brand .nm { font-weight:700; font-size:13.5px; color:var(--ink); letter-spacing:-.01em; line-height:1.25; }
-  .side .brand .sub { display:block; font-weight:500; font-size:11px; color:var(--sidebar-dim);
-                      letter-spacing:.02em; }
+                       font-weight:700; font-size:12.5px; color:var(--accent-ink); letter-spacing:.02em; }
+  .side .brand .nm { font-weight:700; font-size:14px; color:var(--ink); letter-spacing:-.01em; line-height:1.2; }
+  .side .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
+                      color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
   .side .group { padding:16px 18px 6px; font-size:10.5px; font-weight:700; letter-spacing:.1em;
                  color:var(--sidebar-dim); }
   .dnav { list-style:none; padding:0 8px; }
@@ -210,18 +213,22 @@
   .prow:hover { background:var(--panel-2); }
   .prow:last-child, .pdetail:last-child { border-bottom:0; }
   .prow .t { font-weight:600; font-size:13.5px; }
-  .prow .t small { display:block; font-family:var(--mono); font-size:11px; font-weight:400;
-                   color:var(--faint); margin-top:1px; }
   .prow .q { font-size:13px; color:var(--muted); }
   /* 설명은 2줄 클램프 — 전문은 펼침(스키마 설명·usage)에서 */
   .prow .desc { font-size:13px; color:var(--muted); line-height:1.5; display:-webkit-box;
                 -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .prow .n { font-size:13px; font-variant-numeric:tabular-nums; text-align:right; }
-  /* usage 배지 — 검증된 질의 예시 보유 신호. 없는 제품은 흐리게(#600 공백이 보이게) */
+  /* usage 배지 — 검증된 질의 예시 보유 신호. 없는 제품은 흐리게(#600 공백이 보이게).
+     보유 배지는 활용 예시 섹션을 여는 버튼을 겸한다 — 기본 상세는 엔드포인트·스키마·
+     미리보기만 보여주고, 예시는 이 배지를 눌렀을 때만 편다. */
   .ubadge { font-size:11.5px; font-weight:600; padding:2px 9px; border-radius:10px; white-space:nowrap;
             background:var(--accent-soft); color:var(--accent-deep); border:1px solid var(--accent-line);
-            justify-self:start; }
-  .ubadge.none { background:transparent; color:var(--faint); border:1px dashed var(--line-strong); font-weight:400; }
+            justify-self:start; cursor:pointer; }
+  .ubadge:hover { border-color:var(--accent); }
+  .ubadge.none { background:transparent; color:var(--faint); border:1px dashed var(--line-strong);
+                 font-weight:400; cursor:default; }
+  .usage-wrap { display:none; margin-bottom:14px; }
+  .usage-wrap.open { display:block; }
   .usage-item { border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin-top:8px; }
   .usage-item .uq { font-weight:600; font-size:13px; }
   .usage-item .umeta { font-size:11.5px; color:var(--muted); margin-top:2px; }
@@ -257,6 +264,11 @@
   @media (max-width:760px){
     .phead,.prow { grid-template-columns:1fr 90px; }
     .prow .q,.prow .n,.phead span:nth-child(2),.phead span:nth-child(3),.phead span:nth-child(4){ display:none; } }
+  /* 표 머리 — 세 칸이 각각 무엇인지 밝힌다. 없으면 가운데 TEXT 열이 무슨 뜻인지
+     읽는 쪽이 추측해야 한다(타입인지 값인지). 격자는 아래 행과 같은 정의를 쓴다 */
+  .pdetail .col-head { display:grid; grid-template-columns:minmax(170px,230px) 76px 1fr; gap:6px 14px;
+                       padding:7px 0; border-bottom:1px solid var(--line);
+                       font-size:10.5px; font-weight:600; letter-spacing:.06em; color:var(--faint); }
   .pdetail .col-item { display:grid; grid-template-columns:minmax(170px,230px) 76px 1fr; gap:6px 14px;
                        align-items:baseline; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; }
   .pdetail .col-item code { font-family:var(--mono); color:var(--ink); word-break:break-all; }
@@ -267,9 +279,14 @@
   .pdetail .col-item .kk { font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:.06em;
                            color:var(--accent-deep); background:var(--accent-soft); border:1px solid var(--accent-line);
                            border-radius:3px; padding:0 4px; margin-left:6px; vertical-align:1px; }
+  /* 좁은 화면: 설명은 자기 줄로 내려가므로 머리에서 그 칸을 빼고, 타입 칸은 **양쪽 다
+     고정폭**으로 둔다 — `auto` 는 격자마다 따로 계산돼서(머리는 "타입", 본문은 "INTEGER")
+     머리와 값이 6px 씩 어긋난다. 넓은 화면에서 이미 76px 이라 같은 값을 쓴다 */
   @media (max-width:760px){
-    .pdetail .col-item { grid-template-columns:1fr auto; }
+    .pdetail .col-item { grid-template-columns:1fr 76px; }
     .pdetail .col-item .ds { grid-column:1/-1; }
+    .pdetail .col-head { grid-template-columns:1fr 76px; }
+    .pdetail .col-head span:nth-child(3){ display:none; }
   }
   /* 호출 예시는 두 모드 모두 어둡다 — 랜딩의 터미널 데모와 같은 이유(실행 화면으로 읽혀야 한다).
      그래서 테두리도 본문 토큰이 아니라 판 위에서 흐린 흰선이다 — --line-strong 을 쓰면
@@ -330,7 +347,7 @@
 <div class="shell">
 
   <aside class="side">
-    <div class="brand" onclick="location.href='/'" style="cursor:pointer" title="홈으로"><span class="logo">AS</span><span class="nm">ASK SEOUL<span class="sub">Data Platform Console</span></span></div>
+    <div class="brand" onclick="location.href='/'" style="cursor:pointer" title="홈으로"><span class="logo">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></div>
     <div class="group">도메인</div>
     <ul class="dnav" id="dnav"></ul>
     <div class="group">이 페이지 안에서</div>
@@ -612,12 +629,14 @@ function renderList() {
     row.className = "prow";
     const usage = USAGE[p.name] || [];
     row.innerHTML =
-      "<div class='t'>" + titleOf(p) + "<small>" + p.name + "</small></div>" +
+      // 기술명은 목록에 싣지 않는다(랜딩 카드와 같은 결정) — 상세의 엔드포인트 줄이
+      // /api/data/<기술명> 으로 이미 보여주고, 검색 표면에는 남아 있다.
+      "<div class='t' title='" + esc(p.name) + "'>" + titleOf(p) + "</div>" +
       // 목록 설명은 쉬운 한 줄 문장(display 사전 desc)을 우선한다 — 계약 description 은
       // 그레인 기호·내부 용어 중심이라 처음 보는 사용자에게 안 읽힌다(멘토 피드백).
       "<div class='desc'>" + esc(d.desc || p.description || p.product_question || "—") + "</div>" +
       (usage.length
-        ? "<span class='ubadge'>질문 " + usage.length + "건</span>"
+        ? "<span class='ubadge' data-uq role='button' title='활용 예시 " + usage.length + "건 펼치기'>질문 " + usage.length + "건</span>"
         : "<span class='ubadge none'>예시 준비 중</span>") +
       "<div class='act'><button class='btn-g btn-sm' data-try='" + p.name + "'>써보기</button></div>";
     const detail = document.createElement("div");
@@ -637,14 +656,18 @@ function renderList() {
           "</div>").join("")
       : "";
     detail.innerHTML =
-      usageHtml +
-      "<div class='dhead'" + (usage.length ? " style='margin-top:14px'" : "") + ">엔드포인트</div>" +
+      // 활용 예시는 기본 접힘 — 목록의 "질문 N건" 배지를 눌렀을 때만 편다.
+      // 기본 상세는 엔드포인트·스키마·미리보기 셋으로 시작한다(제품의 실체 먼저).
+      (usageHtml ? "<div class='usage-wrap' data-usage>" + usageHtml + "</div>" : "") +
+      "<div class='dhead'>엔드포인트</div>" +
       "<div class='endpoint'><span class='m'>GET</span> /api/data/" + p.name + "?limit=100" +
       (p.time_axis ? "&from=2026-07-01&to=2026-07-31" : "") + "</div>" +
       "<div class='dhead' style='margin-top:12px'>스키마 · " + cols.length + "컬럼" + (d.unit ? " · 그레인: " + d.unit : "") +
       " · " + nf.format(p.row_count || 0) + "행 · " + (p.time_axis ? "시간축 " + p.time_axis : "명부형") +
       (p.exported_at ? " · 마지막 갱신 " + fmtFresh(p.exported_at) : "") + "</div>" +
-      "<div class='cols'>" + cols.map((c) => {
+      // 어휘는 바로 위 요약("N컬럼")과 맞춘다 — 같은 것을 두 이름으로 부르지 않는다.
+      "<div class='cols'><div class='col-head'><span>컬럼명</span><span>타입</span><span>설명</span></div>" +
+      cols.map((c) => {
         const ds = (COLUMN_DOCS[p.name] || {})[c.name];
         return "<div class='col-item'><span><code>" + c.name + "</code>" +
           (JOIN_KEY.test(c.name) ? "<span class='kk'>JOIN</span>" : "") + "</span>" +
@@ -656,6 +679,17 @@ function renderList() {
       "<div class='table-scroll' data-pvwrap style='display:none;margin-top:8px'><table class='data'></table></div>";
     row.addEventListener("click", (e) => {
       if (e.target.closest("[data-try]")) return;
+      // "질문 N건" 배지 — 상세를 열고(닫지 않고) 활용 예시 섹션만 토글한다
+      const uq = e.target.closest("[data-uq]");
+      if (uq) {
+        const wrap = detail.querySelector("[data-usage]");
+        if (wrap) {
+          const on = wrap.classList.toggle("open");
+          detail.classList.add("open");
+          uq.title = "활용 예시 " + usage.length + "건 " + (on ? "접기" : "펼치기");
+        }
+        return;
+      }
       detail.classList.toggle("open");
     });
     // 무인증 미리보기 — 물건을 먼저 보여준다 (쿼터 무과금)

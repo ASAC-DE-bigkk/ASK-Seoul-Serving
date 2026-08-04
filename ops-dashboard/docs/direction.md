@@ -33,7 +33,7 @@
 
 ### 축 2 — SLO 실적재 정규화
 
-`scripts/load_slo.py`(임시)를 culture DAG export task로 승격(팀 D1 쓰기 = 멘토 게이트).
+`_ops_slo` 실적재를 culture DAG 의 export task 로 올린다(팀 D1 쓰기 = 멘토 게이트).
 나머지 도메인의 SLO 마트는 각 도메인 담당의 몫이며, 콘솔은 그때까지 `1 / 6`을 계속 보여준다.
 
 ### 축 3 — 인증 승격
