@@ -1094,6 +1094,39 @@ function render(d) {
       gap.set(k, g);
     }
   }
+  // ── 서빙 로그의 환경 스코프(#64) ─────────────────────────────────────────
+  //
+  // 게이트웨이가 배포되면 한 D1 에 `local` 과 `prod` 가 함께 쌓인다. 파이프라인이 이미
+  // 겪은 함정이고(#52 §11 C-4), 서빙 쪽에서 그대로 반복될 자리였다.
+  // 운영 화면만 좁히므로, **좁혔으면 좁혔다고 · 안 좁혔으면 섞였다고** 각각 말한다.
+  const SPANES = ["serving", "usage", "apis", "keys"];
+  const mixRows = (d.meta.serving_env_mix || []).filter((r) => r.calls > 0);
+  const unknownN = d.meta.serving_env_unknown || 0;
+
+  if (d.meta.serving_env_scope) {
+    const excluded = d.meta.serving_env_excluded || 0;
+    if (excluded > 0) {
+      const parts = mixRows.filter((r) => r.env !== d.meta.serving_env_scope)
+        .map((r) => "<code>" + esc(r.env) + "</code> " + nf.format(r.calls) + "건").join(" · ");
+      const why = "이 D1 에 여러 환경의 요청이 함께 있어 <b>" + nf.format(excluded) + "건</b>을 뺐습니다 — " +
+        parts + ".<br>" +
+        (unknownN > 0
+          ? "그중 <b>" + nf.format(unknownN) + "건</b>은 <b>환경 미상</b>(이 컬럼 이전 행)입니다. " +
+            "<b>운영으로 채우지 않습니다</b> — 없는 정보를 운영이라 단정하면 로컬 요청이 운영으로 보입니다."
+          : "");
+      for (const q of SPANES)
+        N[q].push(note("info", esc(d.meta.serving_env_scope) + " 요청만", why));
+    }
+  } else if (mixRows.length > 1) {
+    // 개발 화면은 **좁히지 않는다** — 섞였다는 사실 자체가 이 콘솔이 드러내야 할 관측이다.
+    // 다만 섞인 채로 보고 있다는 것을 모르면 그것대로 오독하므로, 그 사실만 알린다.
+    const parts = mixRows.map((r) => "<code>" + esc(r.env) + "</code> " + nf.format(r.calls) + "건").join(" · ");
+    for (const q of SPANES)
+      N[q].push(note("warn", "환경이 섞여 있음",
+        "이 화면은 개발 화면이라 <b>좁히지 않습니다</b> — " + parts + " 이 함께 계산됩니다.<br>" +
+        "운영 수치는 운영 콘솔(<code>ENV_SCOPE=prod</code>)에서 보십시오."));
+  }
+
   // 데이터 서빙 집계에서 **뺀 것**을 말한다. MCP 는 route 가 한 값이라 `query_product`(데이터)와
   // `list_products`(목록)가 갈리지 않는다 — 넣으면 부풀고 빼면 모자란다. 뺐으니 뺐다고 적는다.
   // 침묵하면 "MCP 는 안 쓰인다"로 읽히고, 그건 관측 공백이 이상 없음으로 위장하는 것이다(§4).
