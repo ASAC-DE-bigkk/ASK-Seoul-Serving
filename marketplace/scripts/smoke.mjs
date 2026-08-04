@@ -93,7 +93,29 @@ await check("발급 경로 활성(솔트 설정 확인)", async () => {
   return "400 (솔트 설정됨, 발급 자체는 시도하지 않음)";
 });
 
-// 8) 인증 조회 — 키가 주어졌을 때만. 쿼터 헤더까지 확인한다
+// 8) MCP 발견 단계 — PlayMCP·claude.ai 등록의 첫 관문(#26). 인증·쿼터 미소모 설계라
+//    무인증으로 본다. run_worker_first 에 /mcp 가 빠지면 여기서 405/404 로 잡힌다.
+const mcpRpc = (method, id) =>
+  fetch(`${BASE}/mcp`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id, method, params: {} }),
+  });
+await check("MCP initialize", async () => {
+  const r = await mcpRpc("initialize", 1);
+  must(r.ok, `status ${r.status}`);
+  const j = await r.json();
+  must(j.result?.serverInfo?.name === "ask-seoul", "serverInfo 누락/불일치");
+  return `protocol ${j.result.protocolVersion}`;
+});
+await check("MCP tools/list 5툴", async () => {
+  const r = await mcpRpc("tools/list", 2);
+  must(r.ok, `status ${r.status}`);
+  const j = await r.json();
+  must(Array.isArray(j.result?.tools) && j.result.tools.length === 5, `tools ${j.result?.tools?.length ?? "없음"}`);
+  return j.result.tools.map((t) => t.name).join(",");
+});
+
+// 9) 인증 조회 — 키가 주어졌을 때만. 쿼터 헤더까지 확인한다
 if (KEY) {
   await check("인증 data 200 + 쿼터 헤더", async () => {
     must(firstProduct, "카탈로그 실패로 대상 없음");

@@ -50,6 +50,33 @@ test("tools/call list_products — 인증 후 handleCatalog 재사용", async ()
   assert.equal(payload.products[0].product_id, "citydata_ppltn_daily");
 });
 
+test("list_products — 검증 번들과 일반 카탈로그를 구분(verified)", async () => {
+  const deps = mkDeps({
+    handleCatalog: async () => jsonRes({
+      products: [
+        { product_id: "citydata_purchasing_power_daily" }, // exact-six(#4)
+        { product_id: "citydata_ppltn_daily" },            // 일반 카탈로그
+      ],
+    }),
+  });
+  const res = await handleMcp(rpc("tools/call", { name: "list_products", arguments: {} }), {}, {}, deps);
+  const payload = JSON.parse((await res.json()).result.content[0].text);
+  assert.equal(payload.verified_bundle, "seoul-urban-analytics");
+  assert.equal(payload.products[0].verified, true);
+  assert.equal(payload.products[1].verified, false);
+});
+
+test("check_quota — 이메일 미노출(#26 완료기준), 나머지는 유지", async () => {
+  const deps = mkDeps({
+    handleMe: async () => jsonRes({ key_prefix: "ask_0000", email: "user@example.com", used_today: 3, daily_quota: 100 }),
+  });
+  const res = await handleMcp(rpc("tools/call", { name: "check_quota", arguments: {} }), {}, {}, deps);
+  const payload = JSON.parse((await res.json()).result.content[0].text);
+  assert.equal(payload.email, undefined);
+  assert.equal(payload.used_today, 3);
+  assert.equal(payload.key_prefix, "ask_0000");
+});
+
 test("tools/call query_product — product_id→table 해석 후 handleData", async () => {
   const res = await handleMcp(
     rpc("tools/call", { name: "query_product", arguments: { product_id: "citydata_ppltn_daily", limit: 10 } }),

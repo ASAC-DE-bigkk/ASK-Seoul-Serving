@@ -8,6 +8,8 @@
 // P0 툴(5): list_products · describe_product · preview_product · query_product · check_quota.
 // run_pattern 은 서버 실행계약 확정 후 P1.
 
+import { SKILL_BUNDLE_ID, SKILL_PRODUCT_IDS } from "./skill.js";
+
 const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "ask-seoul", version: "0.1.0" };
 
@@ -15,7 +17,7 @@ export const TOOLS = [
   {
     name: "list_products",
     description:
-      "공개 서빙 제품 목록 — product_id·대표질문(product_question)·조인키·설명. 어느 제품이 사용자 질문에 맞는지 고를 때 먼저 부른다.",
+      "공개 서빙 제품 목록 — product_id·대표질문(product_question)·조인키·설명. 어느 제품이 사용자 질문에 맞는지 고를 때 먼저 부른다. verified=true 는 출처·품질 증거까지 닫힌 검증 번들(seoul-urban-analytics) 제품이고, 나머지는 일반 카탈로그다.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -109,8 +111,26 @@ async function resolveTable(env, productId) {
 async function callTool(name, args, ctx) {
   const { env, request, keyRow, trace, deps } = ctx;
   args = args || {};
-  if (name === "list_products") return toToolResult(await deps.handleCatalog(env));
-  if (name === "check_quota") return toToolResult(await deps.handleMe(env, keyRow));
+  if (name === "list_products") {
+    const res = await deps.handleCatalog(env);
+    if (res.status >= 400) return toToolResult(res);
+    const body = await res.json();
+    // 검증 번들(#4 exact-six)과 일반 카탈로그를 구분해 노출한다(#26). 스코프는 전체 공개
+    // 제품(팀 결정 2026-08-04) — verified 는 신뢰 표시이지 필터가 아니다.
+    const verified = new Set(SKILL_PRODUCT_IDS);
+    if (Array.isArray(body.products))
+      body.products = body.products.map((p) => ({ ...p, verified: verified.has(p.product_id) }));
+    body.verified_bundle = SKILL_BUNDLE_ID;
+    return okJson(body);
+  }
+  if (name === "check_quota") {
+    // /api/me 는 본인에게 주는 응답이라 이메일을 담지만, MCP 결과는 LLM 컨텍스트·제3자
+    // 클라이언트로 흘러간다 — 이메일 미노출(#26 완료기준). 키는 원래 prefix 만 나간다.
+    const res = await deps.handleMe(env, keyRow);
+    if (res.status >= 400) return toToolResult(res);
+    const { email, ...body } = await res.json();
+    return okJson(body);
+  }
   if (name === "describe_product") {
     if (!args.product_id) return errText("product_id 가 필요합니다.");
     return toToolResult(await deps.handleProductBundle(env, args.product_id, request, trace));
