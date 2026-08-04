@@ -22,6 +22,14 @@ function fixtureDb({
   sourcePublicationId = "active-publication",
   qualityPublicationId = "active-publication",
   evidence = false,
+  coverage = {
+    field: "admin_dong_code",
+    expected_distinct_count: 427,
+    observed_distinct_count: 427,
+    minimum_ratio: 1,
+    ratio: 1,
+    status: "passed",
+  },
 } = {}) {
   let usage = 0;
   const catalog = new Map(EXPECTED_PRODUCTS.map((productId) => [productId, {
@@ -72,14 +80,7 @@ function fixtureDb({
               measured_at: "2026-08-03T01:00:00Z",
               projection_schema_version: "1.1.0",
               projection_schema_hash: "evidence-fixture-projection-hash",
-              coverage_json: JSON.stringify({
-                field: "admin_dong_code",
-                expected_distinct_count: 427,
-                observed_distinct_count: 427,
-                minimum_ratio: 1,
-                ratio: 1,
-                status: "passed",
-              }),
+              coverage_json: JSON.stringify(coverage),
               publication_id: qualityPublicationId,
             };
           }
@@ -186,6 +187,43 @@ test("skill product becomes registration-ready only when publication-bound sourc
   assert.deepEqual(body.blockers, []);
   assert.equal(body.metadata.sources[0].attribution, "기상청");
   assert.equal(body.metadata.quality.coverage.status, "passed");
+});
+
+test("skill product accepts explicit not-applicable coverage with a reason", async () => {
+  const response = await handleSkillProduct(
+    {
+      DB: fixtureDb({
+        evidence: true,
+        coverage: {
+          status: "not_applicable",
+          reason: "최근 24시간 유효 관측 주차장 집합이 매 게시마다 변동",
+        },
+      }),
+    },
+    "transit_parking_full_risk",
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.registration_ready, true);
+  assert.deepEqual(body.blockers, []);
+  assert.equal(body.metadata.quality.coverage.status, "not_applicable");
+});
+
+test("skill product rejects not-applicable coverage without a reason", async () => {
+  const response = await handleSkillProduct(
+    {
+      DB: fixtureDb({
+        evidence: true,
+        coverage: { status: "not_applicable", reason: "" },
+      }),
+    },
+    "transit_parking_full_risk",
+  );
+  const body = await response.json();
+
+  assert.equal(body.registration_ready, false);
+  assert.ok(body.blockers.includes("quality_coverage_not_passing"));
 });
 
 test("skill data serves only declared public columns with a publication-bound cursor after readiness passes", async () => {

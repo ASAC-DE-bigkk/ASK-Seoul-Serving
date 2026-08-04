@@ -5,7 +5,7 @@
 // 제품만 노출하고, 출처·권리·품질 증거가 아직 게시되지 않은 동안에는 데이터보다 먼저
 // `product_not_ready`를 반환한다. "모르는 데이터를 성공으로 보인다"보다 실패를 명시하는
 // 편이 등록 심사와 사용자 모두에게 안전하다.
-import { countUsage, json, problem, quotaHeaders, safeRows } from "./shared.js";
+import { countUsage, json, problem, quotaExceededProblem, quotaHeaders, safeRows } from "./shared.js";
 
 export const SKILL_BUNDLE_ID = "seoul-urban-analytics";
 
@@ -50,6 +50,21 @@ function parseJsonObject(raw) {
 
 const nonEmpty = (value) => typeof value === "string" && value.trim().length > 0;
 const nonNegativeInteger = (value) => Number.isInteger(value) && value >= 0;
+
+function passingMeasuredCoverage(coverage) {
+  return coverage?.status === "passed" && nonEmpty(coverage.field) &&
+    Number.isInteger(coverage.expected_distinct_count) &&
+    Number.isInteger(coverage.observed_distinct_count) &&
+    typeof coverage.minimum_ratio === "number" && typeof coverage.ratio === "number" &&
+    coverage.expected_distinct_count >= 1 && coverage.observed_distinct_count >= 0 &&
+    coverage.minimum_ratio > 0 && coverage.minimum_ratio <= 1 &&
+    coverage.ratio >= coverage.minimum_ratio;
+}
+
+function explicitNotApplicableCoverage(coverage) {
+  return coverage?.status === "not_applicable" && nonEmpty(coverage.reason) &&
+    Object.keys(coverage).every((key) => key === "status" || key === "reason");
+}
 
 function quoteIdentifier(value) {
   if (!SQL_IDENTIFIER_RE.test(value)) throw new Error(`unsafe identifier: ${value}`);
@@ -193,12 +208,7 @@ async function loadSkillProduct(env, productId) {
     if (!nonEmpty(qualityRow.projection_schema_version) || !nonEmpty(qualityRow.projection_schema_hash)) {
       blockers.push("public_projection_identity_missing");
     }
-    if (!coverage || coverage.status !== "passed" || !nonEmpty(coverage.field) ||
-        !Number.isInteger(coverage.expected_distinct_count) || !Number.isInteger(coverage.observed_distinct_count) ||
-        typeof coverage.minimum_ratio !== "number" || typeof coverage.ratio !== "number" ||
-        coverage.expected_distinct_count < 1 || coverage.observed_distinct_count < 0 ||
-        !(coverage.minimum_ratio > 0 && coverage.minimum_ratio <= 1) ||
-        coverage.ratio < coverage.minimum_ratio) {
+    if (!passingMeasuredCoverage(coverage) && !explicitNotApplicableCoverage(coverage)) {
       blockers.push("quality_coverage_not_passing");
     }
   }
@@ -280,7 +290,9 @@ export async function handleSkillBundle(env, trace = {}) {
 }
 
 export async function handleSkillProduct(env, productId, trace = {}) {
+  // `/skill/v1` 은 계약상 경로 인자가 곧 공개 식별자다 — 해석을 기다릴 필요가 없다
   trace.table = productId;
+  trace.productId = productId;
   const product = await loadSkillProduct(env, productId);
   if (!product) return unknownProduct(productId);
   trace.rows = product.metadata.columns.length;
@@ -289,6 +301,7 @@ export async function handleSkillProduct(env, productId, trace = {}) {
 
 export async function handleSkillData(env, productId, _searchParams, _keyRow, trace = {}) {
   trace.table = productId;
+  trace.productId = productId;
   const product = await loadSkillProduct(env, productId);
   if (!product) return unknownProduct(productId);
 
@@ -357,7 +370,7 @@ export async function handleSkillData(env, productId, _searchParams, _keyRow, tr
 
   const usage = await countUsage(env, _keyRow);
   if (usage.exceeded) {
-    return problem(429, "daily quota exceeded", `일일 쿼터 ${usage.quota}건 소진 — KST 자정에 리셋`);
+    return quotaExceededProblem(usage.used, usage.quota);
   }
 
   const selectColumns = publicColumns.map(quoteIdentifier).join(", ");
