@@ -3,7 +3,7 @@
   "private": true,
   "description": "운영자용 통합 품질 콘솔 — 파이프라인 + 서빙 (ASK-Seoul#58, 로컬 전용)",
   "scripts": {
-    "seed": "wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state --file=scripts/backfill-migrations-ledger.sql && wrangler d1 migrations apply ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state && wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state --file=fixtures/slo_sample.sql && wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state --file=fixtures/ops_records_sample.sql",
+    "seed": "wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state --file=scripts/backfill-migrations-ledger.sql && wrangler d1 migrations apply ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state",
     "dev": "wrangler dev --inspector-port 9230 --persist-to ../marketplace/.wrangler/state",
     "dev:remote": "wrangler dev --remote --inspector-port 9230",
     "dev:prod-readonly": "wrangler dev --remote --env production --port 8798 --inspector-port 9231"

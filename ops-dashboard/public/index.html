@@ -7,61 +7,172 @@
 <title>품질 콘솔 — ASK: SEOUL 운영</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a534e'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='14' font-weight='700' fill='%23fff' text-anchor='middle'%3EOPS%3C/text%3E%3C/svg%3E">
 <style>
+  /* 팔레트·서체는 **마켓플레이스와 같은 값**이다(`../marketplace/public/site.css`).
+     값이 갈리면 같은 팀 서비스가 둘로 보인다 — 콘솔이라고 다른 색을 쓸 이유가 없다.
+     저쪽 토큰을 고칠 일이 생기면 여기도 같이 고친다.
+
+     액센트는 단청 청록을 낮춘 딥 그린 하나이고 **면을 칠하지 않는다**(링크·버튼·상태만).
+     예전 콘솔은 테라코타(#b8492a)를 썼는데, 그건 마켓플레이스가 팔레트를 통일하기 전의
+     잔재였다. 운영 도구라는 신호는 색이 아니라 **왼쪽 레일과 환경 배지**가 준다. */
   :root {
-    /* 마켓플레이스와 같은 단청 팔레트지만 표면은 더 어둡다 — 운영 도구라는 신호 */
-    --bg:#f4f6f5; --panel:#ffffff;
-    --ink:#12211f; --muted:#48605c; --faint:#8fa3a0; --line:#e6eae8; --line-strong:#ccd5d2;
-    --accent:#b8492a; --accent-deep:#8f3620; --accent-soft:#fdf1ec; --accent-line:#f0c3b2;
-    --teal:#0f6f68; --teal-deep:#0a534e; --teal-soft:#e9f4f2; --teal-line:#a9d5cf;
-    --ok:#0a6b45; --ok-soft:#e8f6ee;
-    --red-ink:#b42318; --red-soft:#fef3f2; --amber-ink:#b54708; --amber-soft:#fffaeb;
-    --deck:#08110f; --deck-line:rgba(214,240,235,.10); --deck-ink:#c2d6d1; --deck-dim:#71908a;
-    --shadow-xs:0 1px 2px rgba(16,24,40,.05);
-    --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono',monospace;
-    /* 마우스를 올렸을 때 **눈에 보이는** 변화. 예전에는 글자색만 바꿔서 흰 배경 위에서는
-       바뀐 티가 안 났다 — 표를 훑을 때 지금 어느 줄인지 놓친다. 배경으로 바꾼다. */
-    --hover:#eef2f1; --chip:#f1f4f3;
+    --bg:#f7f8f8; --panel:#ffffff; --panel-2:#f1f3f2;
+    --ink:#0f1b1a; --muted:#55655f; --faint:#64716d;
+    --line:#e5e9e7; --line-strong:#d3dad7;
+    --accent:#0b6e60; --accent-hover:#0a5c50; --accent-deep:#0b6e60; --accent-ink:#ffffff;
+    --accent-soft:rgba(11,110,96,.06); --accent-line:rgba(11,110,96,.22);
+    --teal:#0b6e60; --teal-deep:#0b6e60;
+    --teal-soft:rgba(11,110,96,.06); --teal-line:rgba(11,110,96,.22);
+    --ok:#15803d; --ok-soft:rgba(21,128,61,.08); --ok-line:rgba(21,128,61,.25);
+    --amber-ink:#b45309; --amber-soft:rgba(180,83,9,.08); --amber-line:rgba(180,83,9,.25);
+    --red-ink:#b91c1c; --red-soft:rgba(185,28,28,.07); --red-line:rgba(185,28,28,.25);
+    /* 왼쪽 레일 — 마켓플레이스 catalog.html 과 같은 토큰 */
+    --sidebar:#fbfcfc; --sidebar-hi:#eef2f0;
+    --sidebar-ink:#55655f; --sidebar-dim:#64716d; --sidebar-line:#e5e9e7;
+    --shadow-xs:none;
+    --shadow-sm:0 1px 2px rgba(15,27,26,.05);
+    /* mono 는 라틴 식별자 전용 — Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
+       굴림 계열에 대체돼 뭉개진다. 한글 라벨은 --sans 로 되돌린다 */
+    --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono','Malgun Gothic',monospace;
+    --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
+           system-ui,-apple-system,'Noto Sans KR',sans-serif;
+    /* 마우스를 올렸을 때 **눈에 보이는** 변화. 글자색만 바꾸면 흰 배경에서 티가 안 난다. */
+    --hover:#eef2f0; --chip:#f1f3f2;
+  }
+
+  /* 다크 — 어두운 바탕에서는 액센트가 밝아져야 읽힌다(라이트와 방향이 반대다) */
+  :root[data-theme="dark"] {
+    --bg:#0d1211; --panel:#141a19; --panel-2:#1a2220;
+    --ink:#e9eeec; --muted:#9aa8a4; --faint:#7d8b86;
+    --line:rgba(233,238,236,.08); --line-strong:rgba(233,238,236,.15);
+    --accent:#35a892; --accent-hover:#4cc4ac; --accent-deep:#5fceb6; --accent-ink:#04211b;
+    --accent-soft:rgba(53,168,146,.12); --accent-line:rgba(53,168,146,.30);
+    --teal:#35a892; --teal-deep:#5fceb6;
+    --teal-soft:rgba(53,168,146,.12); --teal-line:rgba(53,168,146,.30);
+    --ok:#4ade80; --ok-soft:rgba(74,222,128,.10); --ok-line:rgba(74,222,128,.30);
+    --amber-ink:#fbbf24; --amber-soft:rgba(251,191,36,.12); --amber-line:rgba(251,191,36,.30);
+    --red-ink:#f87171; --red-soft:rgba(248,113,113,.10); --red-line:rgba(248,113,113,.30);
+    --sidebar:#0a0f0e; --sidebar-hi:#1a2220;
+    --sidebar-ink:#9aa8a4; --sidebar-dim:#7d8b86; --sidebar-line:rgba(233,238,236,.08);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --hover:#1a2220; --chip:#1a2220;
   }
   * { box-sizing:border-box; margin:0; }
-  body { font-family:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
-                     system-ui,-apple-system,sans-serif;
+  html { scroll-behavior:smooth; }
+  body { font-family:var(--sans);
          background:var(--bg); color:var(--ink); font-size:14.5px; line-height:1.65; word-break:keep-all;
          -webkit-font-smoothing:antialiased; }
   a { color:inherit; }
   .lab { font-family:var(--mono); font-size:10.5px; font-weight:600; letter-spacing:.12em;
          text-transform:uppercase; color:var(--faint); }
 
-  .top { background:var(--deck); color:#fff; padding:0 26px; height:56px;
-         display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:5; }
-  .top .mark { font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:.1em;
-               background:var(--teal-deep); padding:4px 9px; border-radius:5px; }
-  .top h1 { font-size:15px; font-weight:600; letter-spacing:-.01em; }
-  .top .sp { flex:1; }
-  .top select { font:inherit; font-size:12.5px; background:rgba(255,255,255,.06); color:#fff;
-                border:1px solid var(--deck-line); border-radius:6px; padding:4px 8px; cursor:pointer; }
-  /* 어두운 바 위에서는 글자색 변화가 거의 안 보인다 — 배경을 같이 올려야 눌리는 게 보인다 */
-  .top select:hover { background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.3); }
-  .top select option { background:var(--deck); color:#fff; }
-  .top a { font-size:12.5px; color:var(--deck-ink); text-decoration:none; border-radius:5px;
-           padding:4px 7px; }
-  .top a:hover { color:#fff; background:rgba(255,255,255,.12); }
-  .top select:focus-visible, .top a:focus-visible, .top .mode:focus-visible {
-           outline:2px solid #fff; outline-offset:1px; }
-  /* 읽기 전용 ↔ 운영자 모드 표시 겸 토글 — 지금 무엇을 할 수 있는 상태인지가 상단에 늘 보인다 */
-  .top .mode { font:inherit; font-size:12px; font-weight:600; cursor:pointer;
-               background:rgba(255,255,255,.06); color:var(--deck-ink);
-               border:1px solid rgba(255,255,255,.14); border-radius:6px; padding:5px 11px; }
-  .top .mode:hover { color:#fff; background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.3); }
-  .top .mode.on:hover { background:#d3f0e0; color:var(--ok); }
-  .top .mode.on { background:var(--ok-soft); color:var(--ok); border-color:#b7e4cb; }
-  /* 환경 표시 — 운영은 색으로 즉시 구분된다. 로컬과 운영을 헷갈리는 게 제일 나쁜 사고다 */
-  .top .envtag { font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:5px;
-                 background:rgba(255,255,255,.07); color:var(--deck-ink);
-                 border:1px solid var(--deck-line); white-space:nowrap; }
-  .top .envtag.prod { background:var(--accent); color:#fff; border-color:var(--accent); }
-  .top .envtag small { font-family:var(--mono); font-size:10px; opacity:.75; margin-left:5px; }
+  /* ── 셸 — 마켓플레이스 카탈로그와 같은 구조(좌측 레일 248px + 본문) ──────────
+     예전에는 어두운 상단 바에 탭을 가로로 늘어놨는데, 탭이 여섯이 되면서 라벨이 좁아지고
+     마켓플레이스와 다른 서비스처럼 보였다. 레일로 옮기면 탭마다 **한 줄을 온전히** 쓸 수
+     있어 부제와 상태 점이 같이 들어가고, 저쪽 카탈로그와 눈에 익은 자리가 같아진다. */
+  .shell { display:grid; grid-template-columns:248px 1fr; min-height:100vh; }
+  .side { background:var(--sidebar); color:var(--sidebar-ink); padding:16px 0 0;
+          position:sticky; top:0; height:100vh; overflow-y:auto;
+          display:flex; flex-direction:column; border-right:1px solid var(--sidebar-line); }
+  .side .brand { display:flex; align-items:center; gap:10px; padding:6px 18px 16px;
+                 border-bottom:1px solid var(--sidebar-line); margin-bottom:4px; }
+  .side .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
+                       background:var(--accent); display:flex; align-items:center;
+                       justify-content:center; font-weight:700; font-size:12.5px;
+                       color:var(--accent-ink); letter-spacing:.02em; font-family:var(--mono); }
+  .side .brand .nm { font-weight:700; font-size:14px; color:var(--ink);
+                     letter-spacing:-.01em; line-height:1.2; }
+  .side .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
+                      color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
+  .side .group { padding:14px 18px 6px; font-size:10.5px; font-weight:700; letter-spacing:.1em;
+                 color:var(--sidebar-dim); }
+  .side .foot { margin-top:auto; padding:14px 18px 16px; font-size:11px;
+                color:var(--sidebar-dim); line-height:1.9;
+                border-top:1px solid var(--sidebar-line); }
+  .side .foot b { color:var(--sidebar-ink); font-weight:600; }
+  .side .foot a { color:var(--sidebar-ink); }
+  .side .foot a:hover { color:var(--accent-deep); text-decoration:underline; text-underline-offset:2px; }
 
-  .wrap { max-width:1220px; margin:0 auto; padding:20px 26px 64px; }
+  /* 탭 = 레일 항목. **라벨의 점**이 "안 보는 쪽이 아픈지"를 전환 없이 알려준다 —
+     탭으로 가리면 문제를 놓치기 쉬운데 그 대가를 점이 상쇄한다. */
+  .tabs { list-style:none; padding:0 8px; margin:0; display:block; border:0; }
+  .tabs button { width:100%; font:inherit; font-family:var(--sans); font-size:13.5px;
+                 font-weight:500; color:var(--sidebar-ink); background:none; border:0;
+                 border-radius:6px; padding:8px 12px; margin-bottom:1px; cursor:pointer;
+                 display:grid; grid-template-columns:auto 1fr; gap:2px 9px; text-align:left;
+                 align-items:center; }
+  .tabs button:hover { background:var(--sidebar-hi); color:var(--ink); }
+  .tabs button[aria-selected="true"] { background:var(--sidebar-hi); color:var(--ink);
+                 font-weight:600; box-shadow:inset 2px 0 0 var(--accent); }
+  .tabs button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+  .tabs button .dot { width:6px; height:6px; border-radius:50%; background:var(--line-strong);
+                      flex:none; grid-row:1; }
+  .tabs button .dot.ok { background:var(--ok); }
+  .tabs button .dot.bad { background:var(--red-ink); }
+  /* 부제는 점 아래가 아니라 라벨 아래에 붙는다 — 레일이 좁아 점 열을 비워 두는 게 낫다 */
+  .tabs button .sub { grid-column:2; font-weight:400; font-size:11px; color:var(--sidebar-dim);
+                      line-height:1.35; }
+  .tabs button[aria-selected="true"] .sub { color:var(--muted); }
+
+  /* 본문 머리 — 카탈로그의 .topbar 와 같은 높이·규칙 */
+  .main { min-width:0; }
+  .topbar { background:var(--panel); border-bottom:1px solid var(--line); padding:0 26px;
+            height:52px; display:flex; align-items:center; gap:12px;
+            position:sticky; top:0; z-index:9; }
+  .topbar h1 { font-size:14px; font-weight:600; letter-spacing:-.01em; padding-right:14px;
+               border-right:1px solid var(--line); white-space:nowrap; }
+  .topbar .sp { flex:1; }
+  .topbar .lab { font-size:12px; color:var(--faint); white-space:nowrap; }
+  .topbar select { font:inherit; font-size:12.5px; background:var(--panel); color:var(--ink);
+                   border:1px solid var(--line-strong); border-radius:6px; padding:4px 8px;
+                   cursor:pointer; }
+  .topbar select:hover { background:var(--hover); border-color:var(--accent-line); }
+  .topbar a { font-size:12.5px; color:var(--muted); text-decoration:none;
+              border-radius:5px; padding:4px 7px; white-space:nowrap; }
+  .topbar a:hover { color:var(--accent-deep); background:var(--hover); }
+  .topbar select:focus-visible, .topbar a:focus-visible,
+  .topbar .mode:focus-visible, .topbar .theme-btn:focus-visible {
+              outline:2px solid var(--accent); outline-offset:1px; }
+  /* 읽기 전용 ↔ 운영자 모드 — 지금 무엇을 할 수 있는 상태인지가 늘 보인다 */
+  .topbar .mode { font:inherit; font-family:var(--sans); font-size:12px; font-weight:600;
+                  cursor:pointer; background:var(--panel); color:var(--muted);
+                  border:1px solid var(--line-strong); border-radius:6px; padding:5px 11px;
+                  white-space:nowrap; }
+  .topbar .mode:hover { color:var(--accent-deep); background:var(--accent-soft);
+                        border-color:var(--accent-line); }
+  .topbar .mode.on { background:var(--ok-soft); color:var(--ok); border-color:var(--ok-line); }
+  .topbar .mode.on:hover { background:var(--ok-soft); color:var(--ok); }
+  /* 환경 표시 — 운영은 색으로 즉시 구분된다. 로컬과 운영을 헷갈리는 게 제일 나쁜 사고다 */
+  .topbar .envtag { font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:5px;
+                    background:var(--panel-2); color:var(--muted);
+                    border:1px solid var(--line); white-space:nowrap; }
+  .topbar .envtag.prod { background:var(--red-soft); color:var(--red-ink);
+                         border-color:var(--red-line); }
+  .topbar .envtag small { font-family:var(--mono); font-size:10px; opacity:.8; margin-left:5px; }
+  /* 테마 토글 — 마켓플레이스와 같은 자리·같은 아이콘 규칙 */
+  .theme-btn { background:none; border:1px solid var(--line-strong); border-radius:6px;
+               width:30px; height:28px; display:flex; align-items:center; justify-content:center;
+               cursor:pointer; color:var(--muted); flex:none; }
+  .theme-btn:hover { color:var(--accent-deep); border-color:var(--accent-line);
+                     background:var(--accent-soft); }
+  .theme-btn .sun { display:none; }
+  :root[data-theme="dark"] .theme-btn .sun { display:block; }
+  :root[data-theme="dark"] .theme-btn .moon { display:none; }
+
+  /* 좁은 화면 — 레일을 접고 탭을 가로 스크롤 줄로 되돌린다 */
+  @media (max-width:900px) {
+    .shell { grid-template-columns:1fr; }
+    .side { position:static; height:auto; border-right:0;
+            border-bottom:1px solid var(--sidebar-line); }
+    .side .brand { margin-bottom:0; }
+    .side .group, .side .foot { display:none; }
+    .tabs { display:flex; overflow-x:auto; gap:4px; padding:8px; }
+    .tabs button { width:auto; white-space:nowrap; }
+    .tabs button .sub { display:none; }
+    .topbar { padding:0 16px; gap:8px; }
+    .topbar h1 { display:none; }
+  }
+
+  .wrap { max-width:1180px; padding:20px 26px 64px; }
   /* ── 알림 줄 ──────────────────────────────────────────────────────────────────
      예전에는 사유를 한 문단씩 쌓아 배너 대여섯 개가 화면 위를 덮었다. 길게 쓴다고
      읽히는 게 아니라 **전부 안 읽히고** 진짜 신호가 묻힌다. x/LinkedIn 이 상태를
@@ -108,22 +219,6 @@
                  border:0; border-radius:7px; padding:0 18px; cursor:pointer; }
   .gate .err { color:var(--red-ink); font-size:12.5px; margin-top:10px; min-height:1.2em; }
 
-  /* 탭 — 두 품질을 나눠 보되, 라벨의 점이 "안 보는 쪽이 아픈지"를 먼저 알려준다.
-     탭으로 가리면 문제를 놓치기 쉬운데, 상태 점이 그 대가를 상쇄한다. */
-  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 18px; }
-  .tabs button { font:inherit; font-size:13.5px; font-weight:600; color:var(--muted);
-                 background:none; border:0; border-bottom:2px solid transparent; padding:9px 16px;
-                 cursor:pointer; display:flex; align-items:center; gap:8px; margin-bottom:-1px; }
-  /* 글자색만 바꾸면 흰 배경에서 바뀐 티가 안 난다 — 배경까지 준다. 이미 선택된 탭은
-     hover 로 흔들리지 않게 둬야 "지금 여기"가 계속 분명하다. */
-  .tabs button:hover:not([aria-selected="true"]) { color:var(--ink); background:var(--hover);
-                 border-radius:7px 7px 0 0; }
-  .tabs button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; border-radius:7px 7px 0 0; }
-  .tabs button[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--accent); }
-  .tabs button .dot { width:7px; height:7px; border-radius:50%; background:var(--line-strong); flex:none; }
-  .tabs button .dot.ok { background:var(--ok); }
-  .tabs button .dot.bad { background:var(--red-ink); }
-  .tabs button .sub { font-weight:400; font-size:11.5px; color:var(--faint); }
   .pane[hidden] { display:none; }
 
   h2.sec { font-size:15px; font-weight:700; margin:0 0 4px; display:flex; align-items:baseline; gap:10px; }
@@ -217,6 +312,10 @@
   .bars { display:flex; align-items:flex-end; gap:4px; height:70px; margin-top:6px; }
   .bars .b { flex:1; min-width:6px; background:var(--teal-soft); border-radius:3px 3px 0 0; }
   .bars .b > i { display:block; width:100%; background:var(--teal); border-radius:3px 3px 0 0; }
+  /* 기록이 없는 날 — 0 회가 아니라 **관측이 없는 날**이다. 막대를 안 그리고 바닥 선만 남긴다 */
+  .bars .b.none { opacity:.45; }
+  .bars .b.none::after { content:""; display:block; height:2px; background:var(--line-strong);
+                         border-radius:1px; }
   .bars-axis { display:flex; justify-content:space-between; margin-top:6px;
                font-family:var(--mono); font-size:10px; color:var(--faint); }
 
@@ -252,6 +351,19 @@
         white-space:nowrap; }
   .filters .hint { font-size:11.5px; color:var(--faint); margin-left:auto; }
   .filters select, .filters input { cursor:pointer; }
+  /* 구간·필터 줄 — 값이 기본과 다르면 눈에 띄어야 "왜 이 숫자지"를 안 묻는다 */
+  .filters input[type=date] { font:inherit; font-size:12.5px; padding:5px 8px;
+        border:1px solid var(--line-strong); border-radius:6px; background:var(--panel);
+        color:var(--ink); }
+  .filters .chips { display:inline-flex; gap:5px; flex-wrap:wrap; }
+  .filters .chip { font:inherit; font-size:11.5px; font-weight:600; cursor:pointer;
+        padding:4px 10px; border-radius:999px; border:1px solid var(--line-strong);
+        background:var(--panel); color:var(--muted); }
+  .filters .chip:hover { border-color:var(--accent-line); color:var(--accent-deep);
+        background:var(--accent-soft); }
+  .filters .chip.on { background:var(--accent); border-color:var(--accent);
+        color:var(--accent-ink); }
+  .filters .chip .n { font-variant-numeric:tabular-nums; opacity:.75; margin-left:4px; }
   .filters select:hover, .filters input:hover { border-color:var(--line-strong); background:var(--hover); }
   .filters input { cursor:text; }
 
@@ -307,17 +419,90 @@
                      padding:7px 10px; border:1px solid var(--line-strong); border-radius:6px; outline:none; }
   .trace-row input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
 </style>
+<!-- 테마는 **페인트 전에** 정해야 한다. 이 6줄을 theme.js 로 합치면 <head> 동기 로드가
+     되어 첫 페인트가 왕복 하나만큼 밀린다 — 인라인이 그 값보다 싸다(마켓플레이스와 같은 규칙).
+     저장값이 있으면 = 사용자가 직접 골랐다. 그때만 OS 설정을 무시한다. -->
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem("theme");
+    document.documentElement.dataset.theme =
+      t || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  } catch (e) { document.documentElement.dataset.theme = "light"; }
+})();
+</script>
 </head>
 <body>
 
-<div class="top">
-  <span class="mark">OPS</span>
+<div class="shell">
+
+<!-- 왼쪽 레일 — 마켓플레이스 카탈로그와 같은 자리·같은 규칙. 탭이 여섯이라 가로로 늘어놓으면
+     라벨이 좁아지고, 무엇보다 저쪽과 다른 서비스처럼 보인다. -->
+<aside class="side">
+  <div class="brand">
+    <span class="logo">AS</span>
+    <span class="nm">ASK SEOUL<span class="sub">Ops Console</span></span>
+  </div>
+
+  <div class="group">품질 영역</div>
+  <ul class="tabs" role="tablist" aria-label="품질 영역">
+    <li role="presentation">
+      <button role="tab" id="tab-pipeline" aria-controls="pane-pipeline" aria-selected="true">
+        <span class="dot" id="dot-pipeline"></span>데이터 준비 상태
+        <span class="sub">매일 제때 갱신됐나</span>
+      </button>
+    </li>
+    <li role="presentation">
+      <button role="tab" id="tab-runs" aria-controls="pane-runs" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-runs"></span>실행 기록
+        <span class="sub">정기런·멈춤</span>
+      </button>
+    </li>
+    <li role="presentation">
+      <button role="tab" id="tab-serving" aria-controls="pane-serving" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-serving"></span>응답 상태
+        <span class="sub">실패·빈 응답</span>
+      </button>
+    </li>
+    <!-- 두 탭은 묻는 질문이 다르다 — '이용 행동'은 **누가**(사람·AI·여정),
+         'API 사용량'은 **무엇이**(제품별 수요). 원본이 겹쳐 보여 이름을 갈랐다. -->
+    <li role="presentation">
+      <button role="tab" id="tab-usage" aria-controls="pane-usage" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-usage"></span>이용 행동
+        <span class="sub">사람·AI·여정</span>
+      </button>
+    </li>
+    <li role="presentation">
+      <button role="tab" id="tab-apis" aria-controls="pane-apis" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-apis"></span>API 사용량
+        <span class="sub">무엇이 얼마나 쓰이나</span>
+      </button>
+    </li>
+    <li role="presentation">
+      <button role="tab" id="tab-keys" aria-controls="pane-keys" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-keys"></span>이용자 키
+        <span class="sub">발급·한도·차단</span>
+      </button>
+    </li>
+  </ul>
+
+  <!-- 콘솔이 무엇을 읽는지 — 붙일 때 실제로 필요한 정보만. 배포·인증 상태는 화면 위쪽
+       환경 배지와 잠금 버튼이 이미 말한다. -->
+  <div class="foot">
+    읽기 전용 소비자<br>
+    조회 DB · 게이트웨이 표<br>
+    <b>로컬 전용</b> — 배포 전
+  </div>
+</aside>
+
+<div class="main">
+<div class="topbar">
   <h1>품질 콘솔</h1>
   <!-- 지금 보고 있는 데이터의 출처. 숫자만 보고 어느 환경인지 추측하게 두면
        로컬 값을 운영 실적으로 오해하는 사고가 난다 — 그래서 늘 보이는 자리에 둔다 -->
   <span class="envtag" id="envTag" hidden></span>
   <span class="sp"></span>
-  <label class="lab" for="days" style="color:var(--deck-dim)">기간</label>
+  <label class="lab" for="days">기간</label>
   <select id="days">
     <option value="7">7일</option>
     <option value="14" selected>14일</option>
@@ -328,6 +513,10 @@
   <button id="autoBtn" class="mode" title="30초마다 자동으로 다시 읽습니다">자동 새로고침 꺼짐</button>
   <button id="modeBtn" class="mode">읽기 전용 · 잠금 해제</button>
   <a href="http://localhost:8787/" target="_blank" rel="noopener">마켓플레이스 ↗</a>
+  <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
+    <svg class="sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+    <svg class="moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.3A8.5 8.5 0 1 1 9.7 3.5a6.8 6.8 0 0 0 10.8 10.8Z"/></svg>
+  </button>
 </div>
 
 <div class="wrap">
@@ -343,35 +532,6 @@
   </div>
 
   <div id="app" hidden>
-    <div class="tabs" role="tablist" aria-label="품질 영역">
-      <button role="tab" id="tab-pipeline" aria-controls="pane-pipeline" aria-selected="true">
-        <span class="dot" id="dot-pipeline"></span>데이터 준비 상태
-        <span class="sub">매일 제때 갱신됐나</span>
-      </button>
-      <button role="tab" id="tab-runs" aria-controls="pane-runs" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-runs"></span>실행 기록
-        <span class="sub">정기런·멈춤</span>
-      </button>
-      <button role="tab" id="tab-serving" aria-controls="pane-serving" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-serving"></span>응답 상태
-        <span class="sub">실패·빈 응답</span>
-      </button>
-      <!-- 두 탭은 묻는 질문이 다르다 — '이용 행동'은 **누가**(사람·AI·여정),
-           'API 사용량'은 **무엇이**(제품별 수요). 원본이 겹쳐 보여 이름을 갈랐다. -->
-      <button role="tab" id="tab-usage" aria-controls="pane-usage" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-usage"></span>이용 행동
-        <span class="sub">사람·AI·여정</span>
-      </button>
-      <button role="tab" id="tab-apis" aria-controls="pane-apis" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-apis"></span>API 사용량
-        <span class="sub">무엇이 얼마나 쓰이나</span>
-      </button>
-      <button role="tab" id="tab-keys" aria-controls="pane-keys" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-keys"></span>이용자 키
-        <span class="sub">발급·한도·차단</span>
-      </button>
-    </div>
-
     <div class="notes" id="banners"></div>
 
     <section class="pane" id="pane-pipeline" role="tabpanel" aria-labelledby="tab-pipeline" tabindex="0">
@@ -419,7 +579,7 @@
     </div>
 
     <div id="sloSection" hidden>
-    <h2 class="sec" style="margin-top:26px">품질 기준(SLO) <span>별도 지표 — 아직 합성 예시입니다</span></h2>
+    <h2 class="sec" style="margin-top:26px">품질 기준(SLO) <span>도메인별 일일 품질 판정 — 실적재분만 표시합니다</span></h2>
     <div class="kpis" id="pipeKpis"></div>
     <div class="grid">
       <div class="card wide">
@@ -593,6 +753,20 @@
 
     <section class="pane" id="pane-keys" role="tabpanel" aria-labelledby="tab-keys" tabindex="0" hidden>
     <h2 class="sec">이용자 키 <span>누가 쓰고 있나 · 하루 사용 한도와 차단</span></h2>
+
+    <!-- 구간과 필터는 주소(해시)에 실린다 — 다른 탭의 지표에서 여기로 넘어올 때 그 조건을
+         그대로 들고 온다. 그래야 "발급만 하고 무호출 1건"을 눌렀을 때 그 1건이 바로 보인다. -->
+    <div class="filters" id="keyFilters">
+      <label for="kFrom">시작</label>
+      <input type="date" id="kFrom" aria-label="시작일">
+      <label for="kTo">종료</label>
+      <input type="date" id="kTo" aria-label="종료일">
+      <button class="kbtn" id="kApply">적용</button>
+      <button class="kbtn" id="kReset" title="최근 1개월로">되돌리기</button>
+      <span class="chips" id="kChips"></span>
+      <span class="hint" id="kWindowNote"></span>
+    </div>
+
     <div class="kpis" id="keyKpis"></div>
     <div class="grid">
       <div class="card wide">
@@ -694,6 +868,23 @@ const bundleNote = (load) => !load || load.bundled ? ""
     "과거분까지 비어 있으면 번들 적재 쪽을 확인해야 한다'>로그 번들 <b>0건</b> / " +
     nf.format(load.total || 0) + "건</p>";
 
+// ── 창 채우기 ────────────────────────────────────────────────────────────────────
+// 기간을 14일로 고르면 **14칸이 나와야 한다.** 행이 있는 날만 그리면 하루치 데이터일 때
+// 막대 하나에 축 양끝이 같은 날짜가 되어, 고른 기간이 화면에 반영되지 않은 것처럼 보인다.
+// (실제로 "기간을 바꿔도 안 변한다"는 지적이 여기서 나왔다.)
+const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
+function fillDays(rows, days, keyOf, zero) {
+  const by = new Map(rows.map((r) => [keyOf(r), r]));
+  // 오늘(KST)을 끝으로 days 칸. 서버가 자르는 창과 같은 규약이라 칸과 값이 어긋나지 않는다.
+  const endMs = Date.parse(dayKey(Date.now() + 9 * 3600 * 1000) + "T00:00:00Z");
+  const out = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const k = dayKey(endMs - i * 86400000);
+    out.push(by.get(k) || { ...zero, day: k, _empty: true });
+  }
+  return out;
+}
+
 // ── 발행·단계·소요 표기 — 요약(render)과 드릴다운이 같은 번역을 쓴다 ────────────────
 const pubPill = (o) => o === "published" ? "<span class='pill ok'>성공</span>"
   : o === "degraded" ? "<span class='pill warn'>열화</span>"
@@ -717,8 +908,14 @@ const PANES = ["pipeline", "runs", "serving", "usage", "apis", "keys"];
 // 새로고침·링크 공유에도 보던 자리가 유지되고, "그 API 좀 봐 주세요"를 주소로 보낼 수 있다.
 const parseHash = () => {
   const raw = decodeURIComponent(location.hash.slice(1));
-  const at = raw.indexOf("/");
-  return at < 0 ? { pane: raw, api: null } : { pane: raw.slice(0, at), api: raw.slice(at + 1) };
+  // 두 형태를 받는다 — `apis/<이름>`(상세)과 `keys?filter=…&from=…`(구간·필터).
+  // 주소에 조건을 실어야 "그 숫자 좀 봐 주세요"를 링크로 보낼 수 있다.
+  const [path, qs] = raw.split("?");
+  const at = path.indexOf("/");
+  const q = new URLSearchParams(qs || "");
+  return at < 0
+    ? { pane: path, api: null, q }
+    : { pane: path.slice(0, at), api: path.slice(at + 1), q };
 };
 function showTab(name) {
   if (!PANES.includes(name)) name = PANES[0];
@@ -738,7 +935,10 @@ function showTab(name) {
     if (!same) { el.classList.remove("open"); el.setAttribute("aria-expanded", "false"); }
   }
   if (!same) for (const el of document.querySelectorAll("#banners .why")) el.hidden = true;
-  // 상세가 열려 있으면 그 주소를 지키고, 다른 탭으로 가면 탭 이름만 남긴다
+  // 상세·조건이 열려 있으면 그 주소를 지키고, 다른 탭으로 가면 탭 이름만 남긴다.
+  // 키 탭은 자기 조건을 syncKeyHash() 가 관리하므로 여기서 덮어쓰지 않는다 —
+  // 덮어쓰면 필터를 걸고 넘어온 링크가 그 즉시 '전체'로 되돌아간다.
+  if (name === "keys") return;
   const want = name === "apis" && DETAIL_OPEN ? name + "/" + DETAIL_OPEN : name;
   if (decodeURIComponent(location.hash.slice(1)) !== want)
     history.replaceState(null, "", "#" + encodeURI(want));
@@ -756,7 +956,17 @@ addEventListener("hashchange", () => {
   const h = parseHash();
   showTab(h.pane);
   if (h.pane === "apis" && h.api && h.api !== DETAIL_OPEN) openDetail(h.api, true);
+  if (h.pane === "keys") applyKeyHash(h.q);
 });
+
+// 주소의 키 조건을 상태에 반영하고, 달라졌으면 다시 읽는다.
+function applyKeyHash(q) {
+  const next = { from: q.get("from") || "", to: q.get("to") || "",
+                 filter: q.get("filter") || "all" };
+  if (next.from === KEYQ.from && next.to === KEYQ.to && next.filter === KEYQ.filter) return;
+  KEYQ = next;
+  loadKeys();
+}
 
 // 안정성 추이에서 펼쳐 둔 칸 — {domain, day}. 자동 새로고침이 히트맵을 다시 그려도
 // 이 값으로 선택 표시를 되살린다. 패널 내용은 다시 긁지 않는다(사용자가 연 시점의 스냅샷).
@@ -784,7 +994,7 @@ function render(d) {
   //
   // 예전에는 사유를 한 문단씩 쓴 배너를 대여섯 개 쌓았다. 길게 쓴다고 읽히는 게 아니라
   // **전부 안 읽히고** 진짜 신호가 묻혔다. 그래서 규칙을 뒤집는다:
-  //   보이는 것  = 아이콘 + 두세 단어 ("합성 샘플", "연결되지 않음", "미구현")
+  //   보이는 것  = 아이콘 + 두세 단어 ("연결되지 않음", "미구현 영역", "읽지 못함")
   //   접히는 것  = 사유·수치·규약 번호. 눌러야 나온다
   //   테두리     = **조치가 필요한 것에만.** 정보성은 배경만 — 눈이 조치할 것에 먼저 간다
   //
@@ -807,16 +1017,8 @@ function render(d) {
   // pane 별로 모은다 — 배너는 자기 탭에서만 보여야 남의 문제로 읽히지 않는다
   const N = { pipeline: [], runs: [], serving: [], usage: [], apis: [], keys: [] };
 
-  if (hasSlo && d.meta.pipeline_source === "sample")
-    N.pipeline.push(note("warn", "합성 샘플",
-      "품질 기준(SLO) " + d.meta.pipeline_sample_rows + "일치가 합성값입니다. 이 값으로 운영 판단을 하지 마세요 — " +
-      "실측 파이프라인 상태는 <b>실행 기록</b> 탭에 있습니다."));
   if (d.meta.missing.includes("pipeline") && hasSlo)
     N.pipeline.push(note("info", "데이터 없음", "<code>npm run seed</code> 를 먼저 실행하세요."));
-  if (d.meta.missing.includes("publication"))
-    N.pipeline.push(note("info", "연결되지 않음",
-      "발행 대장(<code>_publication_ledger</code>)을 읽지 못했습니다. 정본은 파이프라인이고 " +
-      "콘솔은 읽기만 합니다 — 로컬에는 이 표가 없을 수 있습니다."));
   // 발행이 깨지고 있으면 이 탭에서 먼저 보여야 한다 — 성공률만 보면 안 보이는 축이다.
   if (pTot.failed > 0 || pTot.mismatch > 0)
     N.pipeline.push(note("warn", "발행 문제 " + nf.format(pTot.failed + pTot.mismatch) + "건",
@@ -824,11 +1026,6 @@ function render(d) {
       "</b> · 행수 안 맞음 <b>" + nf.format(pTot.mismatch) + "</b>. " +
       "어느 분야에 몰렸는지는 아래 '분야별 발행'에서 봅니다."));
 
-  if (d.meta.runs_is_sample)
-    N.runs.push(note("warn", "합성 샘플", "팀 조회 DB 적재분이 아닙니다. 이 값으로 운영 판단을 하지 마세요."));
-  if (d.meta.missing.includes("runs"))
-    N.runs.push(note("info", "연결되지 않음",
-      "조회 DB 표(<code>_ops_run_event</code> 외 3종)가 없습니다. <code>npm run seed</code> 로 같은 모양의 표를 만들 수 있습니다."));
   // 섞임은 **걸렀나 안 걸렀나**로 갈린다 — 운영자가 할 일이 다르다.
   if (envMix && d.meta.runs_env_scope)
     N.runs.push(note("info", esc(d.meta.runs_env_scope) + " 기록만",
@@ -856,6 +1053,45 @@ function render(d) {
 
   if (!CAN_WRITE)
     N.keys.push(note("info", "보기 전용", "차단·해제·한도 변경·삭제는 오른쪽 위 <b>잠금 해제</b> 뒤에 할 수 있습니다."));
+
+  // ── 왜 비었나 — 표가 없는 것 / 표는 있는데 0행인 것을 가른다 ──────────────
+  //
+  // 이 리포는 환경이 둘로 갈려 있다. **파이프라인은 원격 D1 에만 쓰고, 게이트웨이는 아직
+  // 로컬에만 쓴다.** 그래서 로컬에서 실행 기록이 비고, 운영에서 응답 상태가 빈다 —
+  // 둘 다 정상인데 "데이터 없음"만 띄우면 "콘솔이 고장났나"로 읽힌다.
+  // 어느 표가 어디에 사는지는 서버가 `sources[].home` 으로 알려준다.
+  const isProd = (d.meta.env && d.meta.env.label) === "운영";
+  const WHERE = {
+    remote: "이 데이터는 <b>원격 D1</b> 에 있습니다 — 파이프라인이 거기에 씁니다. " +
+            "<code>npm run dev:remote</code>(개발) 또는 <code>npm run dev:prod-readonly</code>(운영)로 봅니다.",
+    local:  "이 데이터는 <b>로컬</b> 에 있습니다 — 게이트웨이가 아직 로컬에만 씁니다. " +
+            "<code>npm run dev</code> 로 봅니다(원격은 배포 뒤에 채워집니다).",
+    both:   "이 환경에서 읽을 수 있어야 하는 표입니다 — 시드 또는 마이그레이션을 확인하세요.",
+  };
+  // 같은 이유의 칩을 표마다 내면 시끄럽다 — **탭당 하나로 합치고 표 이름을 나열**한다.
+  const gap = new Map();   // "pane|kind" → { tables[], home, used[] }
+  for (const src of (d.sources || [])) {
+    const kind = src.state === "absent" ? "absent"
+      : (src.state === "ok" && src.rows === 0 && src.home === "remote" && !isProd) ? "empty"
+      : null;
+    if (!kind) continue;
+    for (const pane of [].concat(src.pane || [])) {
+      if (!N[pane]) continue;
+      const k = pane + "|" + kind;
+      const g = gap.get(k) || { pane, kind, tables: [], home: src.home, used: [] };
+      g.tables.push(src.table);
+      if (src.used) g.used.push(src.used);
+      gap.set(k, g);
+    }
+  }
+  for (const g of gap.values()) {
+    const tbl = g.tables.map((t) => "<code>" + esc(t) + "</code>").join(" · ");
+    N[g.pane].push(g.kind === "absent"
+      ? note("info", "이 환경에 없음",
+          tbl + " 이(가) 이 D1 에 없습니다.<br>" + WHERE[g.home || "both"])
+      : note("info", "로컬은 비어 있음",
+          tbl + " 은 있지만 <b>0행</b>입니다 — 파이프라인은 원격 D1 에만 씁니다.<br>" + WHERE.remote));
+  }
 
   let ni = 0;
   $("banners").innerHTML = Object.entries(N).flatMap(([pane, list]) => list.map((n) => {
@@ -1267,15 +1503,21 @@ function render(d) {
     ["사용 중인 이용자", nf.format(s.keys.length), "이 기간에 요청을 보낸 키 수", ""],
   ]);
 
-  if (s.daily.length) {
-    const max = Math.max(...s.daily.map((x) => x.calls));
-    $("daily").innerHTML =
-      "<div class='bars'>" + s.daily.map((x) =>
-        "<div class='b' title='" + esc(x.day) + " · " + x.calls + "회'>" +
-        "<i style='height:" + Math.max(3, Math.round(x.calls / max * 70)) + "px'></i></div>").join("") + "</div>" +
-      "<div class='bars-axis'><span>" + esc(s.daily[0].day) + "</span><span>" +
-      esc(s.daily[s.daily.length - 1].day) + "</span></div>";
-  } else $("daily").innerHTML = emptyBox("데이터 없음");
+  // 창 전체를 칸으로 깐다 — 빈 날이 보여야 "이 기간에 거의 안 왔다"가 읽힌다
+  const dSeries = fillDays(s.daily, d.window_days, (r) => r.day, { calls: 0, errors: 0 });
+  const dMax = Math.max(1, ...dSeries.map((x) => x.calls));
+  const dTotal = dSeries.reduce((a, x) => a + (x.calls || 0), 0);
+  $("daily").innerHTML = dTotal
+    ? "<div class='bars'>" + dSeries.map((x) =>
+        "<div class='b" + (x._empty ? " none" : "") + "' title='" + esc(x.day) +
+        (x._empty ? " · 기록 없음" : " · " + nf.format(x.calls) + "회" +
+          (x.errors ? " (실패 " + x.errors + ")" : "")) + "'>" +
+        "<i style='height:" + (x.calls ? Math.max(3, Math.round(x.calls / dMax * 70)) : 0) +
+        "px'></i></div>").join("") + "</div>" +
+      "<div class='bars-axis'><span>" + esc(dSeries[0].day) + "</span>" +
+      "<span>" + d.window_days + "일</span>" +
+      "<span>" + esc(dSeries[dSeries.length - 1].day) + "</span></div>"
+    : emptyBox(["데이터 없음", "최근 " + d.window_days + "일에 요청이 없습니다"]);
 
   $("failures").innerHTML = table([
     { t:"이유", get:(r) => "<span class='pill " + (r.status >= 500 ? "bad" : "warn") + "'>" +
@@ -1342,7 +1584,8 @@ function render(d) {
   const pendingBox = (axis) =>
     emptyBox(["미구현 영역", "수집 축 <code>" + axis + "</code> — 스펙 #9 확정 대기", 1]);
 
-  if (U.daily.length) {
+  U.daily = fillDays(U.daily, d.window_days, (r) => r.day, { keyed: 0, anon: 0 });
+  if (U.daily.some((x) => (x.keyed || 0) + (x.anon || 0) > 0)) {
     const maxU = Math.max(...U.daily.map((x) => x.keyed + x.anon));
     $("usageDaily").innerHTML =
       "<div class='bars'>" + U.daily.map((x) =>
@@ -1350,7 +1593,8 @@ function render(d) {
         "<i style='height:" + Math.max(3, Math.round((x.keyed + x.anon) / maxU * 70)) + "px'></i></div>").join("") + "</div>" +
       "<div class='bars-axis'><span>" + esc(U.daily[0].day) + "</span><span>" +
       esc(U.daily[U.daily.length - 1].day) + "</span></div>";
-  } else $("usageDaily").innerHTML = emptyBox("데이터 없음");
+  } else $("usageDaily").innerHTML =
+      emptyBox(["데이터 없음", "최근 " + d.window_days + "일에 요청이 없습니다"]);
 
   const CLASS_LABEL = { browser:"브라우저", ai_agent:"AI 대행", ai_crawler:"AI 크롤러",
                         bot:"봇", cli:"CLI·툴", unknown:"미상" };
@@ -1377,21 +1621,26 @@ function render(d) {
         { t:"hits", r:true, get:(r) => nf.format(r.hits) },
       ], U.pages.rows, "데이터 없음");
 
+  // 숫자를 보고 "그럼 그게 누구냐"가 바로 이어져야 한다 — 눌러서 키 목록으로 넘긴다.
+  // 넘길 때 **필터를 걸어** 그 숫자에 해당하는 키만 보이게 한다(주소에 실어서).
+  const funnelLink = (filter, label) =>
+    "<a href='#keys?filter=" + filter + "' data-goto-keys='" + filter + "'>" + label + "</a>";
   $("usageFunnel").innerHTML = f
     ? table([
         { t:"", get:(r) => r.k },
         { t:"", r:true, get:(r) => r.v },
       ], [
-        { k:"발급된 키", v: nf.format(f.issued || 0) },
-        { k:"데이터 호출까지 간 키", v: nf.format(f.activated || 0) },
-        { k:"발급만 하고 무호출", v: nf.format((f.issued || 0) - (f.activated || 0)) },
+        { k: funnelLink("all", "발급된 키"), v: nf.format(f.issued || 0) },
+        { k: funnelLink("called", "데이터 호출까지 간 키"), v: nf.format(f.activated || 0) },
+        { k: funnelLink("uncalled", "발급만 하고 무호출"),
+          v: nf.format((f.issued || 0) - (f.activated || 0)) },
         { k:"첫 호출까지 평균", v: f.avg_hours_to_first != null ? f.avg_hours_to_first + "시간" : "—" },
       ], "")
     : emptyBox(["연결되지 않음", "게이트웨이를 시드하세요"]);
 
   // ── 탭 라벨의 상태 점 — 탭으로 가린 쪽이 아픈지를 전환 없이 알려준다.
   // 판정 기준은 KPI 의 경고 조건과 같다(정기런 실패·계약 위반 / 에러율 5% 이상·0행 발생).
-  // 발행 실패·행수 불일치도 이 탭의 경보다. SLO 는 합성값이라 그것만으로는 점이 안 선다.
+  // 발행 실패·행수 불일치도 이 탭의 경보다 — SLO 만으로는 점이 안 선다(행이 없을 수 있다).
   const pipeBad = badDays.length > 0 || viol > 0 || pTot.failed > 0 || pTot.mismatch > 0;
   const runsBad = stallN > 0 || rTot.fail > 0 || rTot.empty > 0 || envMix;
   const servBad = errPct >= 5 || emptyN > 0;
@@ -1715,6 +1964,17 @@ async function openDetail(name, silent) {
   if (!silent) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
+// 이용 행동의 퍼널 숫자 → 키 목록. 앵커라 주소가 바뀌고 hashchange 가 나머지를 한다.
+$("usageFunnel").addEventListener("click", (e) => {
+  const a = e.target.closest("[data-goto-keys]");
+  if (!a) return;
+  e.preventDefault();
+  KEYQ = { from: "", to: "", filter: a.dataset.gotoKeys };  // 구간은 기본(최근 1개월)
+  showTab("keys");
+  syncKeyHash();
+  loadKeys();
+});
+
 $("apiTable").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-api]");
   if (b) openDetail(b.dataset.api);
@@ -1739,6 +1999,10 @@ async function loadApis() {
 // ── 키 관리 ────────────────────────────────────────────────────────────────────────
 // 이 표에는 이메일이 마스킹된 채 보인다. 운영자가 "누구 키인지" 없이는 조치를 못 하기 때문이다.
 let KEYS = [];
+// 키 화면의 창과 필터. 주소(#keys?from=&to=&filter=)에 실어서 다른 탭의 지표에서
+// 넘어올 때 조건을 그대로 들고 온다 — 숫자를 누른 사람이 그 숫자를 다시 찾지 않게.
+let KEYQ = { from: "", to: "", filter: "all" };
+let KEYCOUNTS = null;
 // 조치 가능 여부는 **서버가 알려준 값**을 그대로 쓴다. 화면에서 이걸 켠다고 뚫리지 않는다 —
 // 실제 차단은 POST 쪽 requireWrite 가 한다. 여기서 하는 일은 못 할 일을 버튼으로 내밀지 않는 것뿐이다.
 let CAN_WRITE = false;
@@ -1766,12 +2030,22 @@ function renderKeys(rows) {
   KEYS = rows || [];
   const active = KEYS.filter((k) => k.status === "active");
   const near = active.filter((k) => k.daily_quota > 0 && k.used_today / k.daily_quota >= 0.8);
+  const c = KEYCOUNTS || {};
   kpis("keyKpis", [
-    ["발급된 키", nf.format(KEYS.length), "전체"],
+    // "전체"가 아니라 **이 구간에 발급된** 키다 — 창이 있는 화면에서 전체를 세면 두 숫자가
+    // 서로를 설명하지 못한다(목록은 한 달인데 합계는 전량인 상태).
+    ["이 구간 발급", nf.format(c.all ?? KEYS.length), "선택한 기간에 발급된 키"],
     ["사용 가능", nf.format(active.length), "차단됨 " + (KEYS.length - active.length) + "개"],
     ["오늘 요청", nf.format(KEYS.reduce((a, k) => a + (k.used_today || 0), 0)), "모든 이용자 합계"],
     ["한도 임박", nf.format(near.length), "하루 한도의 80% 이상 사용", near.length ? "bad" : ""],
   ]);
+
+  // 필터 칩 — 건수를 같이 띄운다. 0 건인 필터도 남긴다(누를 게 없다는 것도 답이다).
+  const CHIPS = [["all", "전체"], ["called", "호출 있음"], ["uncalled", "발급만·무호출"],
+                 ["revoked", "차단됨"], ["over_quota", "한도 초과"]];
+  $("kChips").innerHTML = CHIPS.map(([k, label]) =>
+    "<button class='chip" + (KEYQ.filter === k ? " on" : "") + "' data-kfilter='" + k + "'>" +
+    label + "<span class='n'>" + nf.format(c[k] ?? 0) + "</span></button>").join("");
 
   $("keyTable").innerHTML = table([
     { t: "키", name: true, get: (r) => "<code>" + esc(r.key_prefix) + "…</code>" },
@@ -1787,16 +2061,23 @@ function renderKeys(rows) {
           ? "<input type='number' min='0' value='" + r.daily_quota + "' data-q='" + r.key_hash + "' aria-label='일일 쿼터'>" +
             "<button class='kbtn' data-act='quota' data-h='" + r.key_hash + "'>저장</button>"
           : "<span>/ " + nf.format(r.daily_quota) + "</span>") + "</div>"; } },
-    { t: "총 요청", r: true, get: (r) => nf.format(r.calls_logged) },
-    { t: "마지막 요청", r: true, get: (r) => fmtTs(r.last_call) },
-    { t: "발급일", r: true, get: (r) => fmtTs(r.created_at) },
+    // 이 열들은 **선택한 구간 기준**이다(전체 기간이 아니다) — 위 KPI 와 같은 창이라
+    // 두 숫자가 서로를 설명한다. 창 밖 호출은 여기 안 잡힌다.
+    { t: "구간 내 요청", r: true, get: (r) => num(r.calls) },
+    { t: "첫 데이터 호출", r: true, get: (r) => r.first_data_call
+        ? esc(fmtTs(r.first_data_call))
+        : "<span class='pill dim' title='발급만 하고 아직 데이터를 부르지 않았다'>없음</span>" },
+    { t: "마지막 요청", r: true, get: (r) => r.last_call ? esc(fmtTs(r.last_call)) : "<span class='zero'>—</span>" },
+    { t: "발급일", r: true, get: (r) => esc(fmtTs(r.created_at) || "—") },
     { t: "", r: true, get: (r) => CAN_WRITE
         ? "<div class='kacts'>" + (r.status === "active"
             ? "<button class='kbtn danger' data-act='revoke' data-h='" + r.key_hash + "'>차단</button>"
             : "<button class='kbtn' data-act='restore' data-h='" + r.key_hash + "'>차단 해제</button>") +
           "<button class='kbtn danger' data-act='delete' data-h='" + r.key_hash + "'>삭제</button></div>"
         : "" },
-  ], KEYS, "발급된 키가 없습니다 — 마켓플레이스에서 키를 발급하면 여기에 나타납니다");
+  ], KEYS, KEYQ.filter === "all"
+        ? ["데이터 없음", "이 기간에 발급된 키가 없습니다"]
+        : ["데이터 없음", "이 조건에 맞는 키가 없습니다 — 필터를 '전체'로 되돌려 보세요"]);
 
   $("dot-keys").className = "dot " + (KEYS.length ? (near.length ? "bad" : "ok") : "");
 }
@@ -1829,12 +2110,65 @@ $("keyTable").addEventListener("click", (e) => {
 });
 
 async function loadKeys() {
-  const res = await fetch("/api/keys", { headers: authHeaders() });
-  if (!res.ok) { renderKeys([]); return; }
-  const body = await res.json();
-  CAN_WRITE = Boolean(body.can_write);
+  const q = new URLSearchParams();
+  if (KEYQ.from) q.set("from", KEYQ.from);
+  if (KEYQ.to) q.set("to", KEYQ.to);
+  if (KEYQ.filter && KEYQ.filter !== "all") q.set("filter", KEYQ.filter);
+  let body;
+  try {
+    const res = await fetch("/api/keys?" + q, { headers: authHeaders() });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    body = await res.json();
+  } catch { KEYCOUNTS = null; renderKeys([]); return; }
+
+  CAN_WRITE = Boolean(body.meta && body.meta.can_write);
+  KEYCOUNTS = body.counts;
+  // 서버가 창을 접었을 수 있다(미래 종료일·1년 초과 시작일·뒤집힌 구간). 화면 입력을
+  // **서버가 실제로 쓴 값**으로 맞춘다 — 안 그러면 입력칸과 표가 다른 구간을 말한다.
+  const w = body.window || {};
+  KEYQ.from = w.from || ""; KEYQ.to = w.to || "";
+  $("kFrom").value = KEYQ.from; $("kTo").value = KEYQ.to;
+  $("kFrom").max = w.today || ""; $("kTo").max = w.today || "";
+  $("kFrom").min = w.min || "";   $("kTo").min = w.min || "";
+  // 접은 사실은 조용히 넘기지 않는다 — 숫자를 못 믿게 되는 건 그때부터다
+  $("kWindowNote").innerHTML = (w.clamped && w.clamped.length)
+    ? "<b class='bad-t'>" + w.clamped.map(esc).join(" · ") + "</b>"
+    : "발급일 기준 · 최대 1년 · 오늘 이후는 고를 수 없습니다";
+
   renderKeys(body.keys);
   if (!CAN_WRITE) { $("keyMsg").className = "keyMsg"; $("keyMsg").textContent = ""; }
+}
+
+// ── 구간·필터 배선 ───────────────────────────────────────────────────────────
+$("kApply").addEventListener("click", () => {
+  KEYQ.from = $("kFrom").value; KEYQ.to = $("kTo").value;
+  syncKeyHash(); loadKeys();
+});
+$("kReset").addEventListener("click", () => {
+  KEYQ = { from: "", to: "", filter: "all" };
+  syncKeyHash(); loadKeys();
+});
+// 칩은 매번 다시 그려지므로 리스너는 **컨테이너에 한 번만** 단다
+$("kChips").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-kfilter]");
+  if (!b) return;
+  KEYQ.filter = b.dataset.kfilter;
+  syncKeyHash(); loadKeys();
+});
+// 엔터로도 적용 — 달력에서 날짜만 고르고 엔터를 누르는 게 자연스럽다
+for (const id of ["kFrom", "kTo"])
+  $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") $("kApply").click(); });
+
+// 조건을 주소에 싣는다 — 새로고침·링크 공유에도 보던 조건이 유지되고,
+// 다른 탭의 지표가 `#keys?filter=uncalled` 로 넘길 수 있다.
+function syncKeyHash() {
+  const q = new URLSearchParams();
+  if (KEYQ.from) q.set("from", KEYQ.from);
+  if (KEYQ.to) q.set("to", KEYQ.to);
+  if (KEYQ.filter !== "all") q.set("filter", KEYQ.filter);
+  const want = "keys" + (q.toString() ? "?" + q : "");
+  if (decodeURIComponent(location.hash.slice(1)) !== want)
+    history.replaceState(null, "", "#" + want);
 }
 
 // ── 요청 추적 — request_id 하나로 그 요청 한 건을 특정한다 (GET /api/trace)
@@ -1908,6 +2242,15 @@ async function load(quiet) {
   syncMode();
   restore();
   // render() 가 showTab 으로 끝나므로 그 뒤에 채운다. 두 요청은 서로 무관하니 같이 보낸다.
+  // 첫 진입이 `#keys?filter=…` 이면 그 조건으로 읽는다 — 링크를 받은 사람이
+  // 전체 목록을 먼저 보고 다시 필터를 거는 일이 없게.
+  if (!quiet) {
+    const h = parseHash();
+    if (h.pane === "keys") {
+      KEYQ = { from: h.q.get("from") || "", to: h.q.get("to") || "",
+               filter: h.q.get("filter") || "all" };
+    }
+  }
   await Promise.all([loadKeys(), loadApis()]);
   restore();
   if (quiet) for (const ev of ["wheel", "touchstart", "keydown", "mousedown"])
@@ -1942,28 +2285,57 @@ $("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("enter"
 // 과하게 밀지 않으면서 사람이 기다릴 만한 간격이다. 상태는 sessionStorage 에 둬서
 // 새로고침해도 켜진 채로 유지된다(지켜보는 중에 꺼지면 그게 더 헷갈린다).
 const AUTO = "ops_auto_refresh";
-let autoTimer = null;
+const AUTO_SEC = 30;
+let autoTimer = null;   // 1초 틱 — 남은 시간을 세고, 0 이 되면 읽는다
+let autoLeft = AUTO_SEC;
+
+// 버튼이 "켜짐"만 말하면 **언제 바뀔지**를 알 수 없어 결국 F5 를 누르게 된다.
+// 남은 초를 세어 보여주면 기다릴지 지금 누를지를 사람이 정한다.
+function autoLabel() {
+  const b = $("autoBtn");
+  if (sessionStorage.getItem(AUTO) !== "1") { b.textContent = "자동 새로고침 꺼짐"; return; }
+  b.textContent = "자동 새로고침 " + autoLeft + "초";
+}
+
 function syncAuto() {
   const on = sessionStorage.getItem(AUTO) === "1";
-  const b = $("autoBtn");
-  b.textContent = on ? "자동 새로고침 켜짐 · 30초" : "자동 새로고침 꺼짐";
-  b.classList.toggle("on", on);
+  $("autoBtn").classList.toggle("on", on);
   clearInterval(autoTimer);
-  // 화면이 안 보이는 동안(다른 탭)에는 굳이 읽지 않는다 — 돌아오면 그때 한 번 읽는다
-  if (on) autoTimer = setInterval(() => { if (!document.hidden) load(true); }, 30000);
+  autoLeft = AUTO_SEC;
+  autoLabel();
+  if (!on) return;
+  autoTimer = setInterval(() => {
+    // 탭이 숨어 있으면 세지 않는다 — 돌아왔을 때 "0초"로 멈춰 있으면 멈춘 줄 안다.
+    // 그리고 안 보이는 화면을 위해 D1 을 미는 것도 낭비다.
+    if (document.hidden) return;
+    if (--autoLeft > 0) { autoLabel(); return; }
+    autoLeft = AUTO_SEC;
+    autoLabel();
+    load(true);
+  }, 1000);
 }
 $("autoBtn").addEventListener("click", () => {
   sessionStorage.setItem(AUTO, sessionStorage.getItem(AUTO) === "1" ? "0" : "1");
   syncAuto();
   if (sessionStorage.getItem(AUTO) === "1") load(true);
 });
+// 탭으로 돌아오면 그동안 멈춰 있던 만큼이 아니라 **지금부터** 다시 센다 —
+// 돌아오자마자 한 번 읽고 카운터를 되감는 편이 "지금 값인가"에 바로 답한다.
 addEventListener("visibilitychange", () => {
-  if (!document.hidden && sessionStorage.getItem(AUTO) === "1") load(true);
+  if (document.hidden || sessionStorage.getItem(AUTO) !== "1") return;
+  autoLeft = AUTO_SEC;
+  autoLabel();
+  load(true);
 });
+syncAuto();
 
 $("days").addEventListener("change", load);
-syncAuto();
 load();   // 토큰 없이도 뜬다 — 막는 문이 아니라 여는 문이다
 </script>
+</div><!-- /.main -->
+</div><!-- /.shell -->
+
+<!-- 토글 배선. 적용은 <head> 인라인이 페인트 전에 끝낸다(마켓플레이스와 같은 한 벌). -->
+<script src="/theme.js"></script>
 </body>
 </html>

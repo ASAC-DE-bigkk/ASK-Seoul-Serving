@@ -57,6 +57,7 @@ dbt manifest·Airflow 메타DB를 직접 읽는 경로는 존재하지 않는다
 | 문서 | 무엇 |
 |---|---|
 | [docs/agreement.md](docs/agreement.md) | **합의 정본** — 결정·경계·폐기된 안·남은 과제 |
+| [docs/change-log.md](docs/change-log.md) | **변경 이력** — 언제 무슨 의도로 코드에 닿았나(날짜·작업자·의도·조치·결과) |
 | [docs/setup.md](docs/setup.md) | 사전 준비(Node 20+)·OS별 실행 절차·증상별 해결 |
 | [docs/environments.md](docs/environments.md) | 환경 규약 — 설정 배치, local/prod 도메인·D1, 실행 파라미터 배분 |
 
