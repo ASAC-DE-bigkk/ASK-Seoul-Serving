@@ -248,7 +248,6 @@
         "properties": {
           "attribution": { "type": "string", "description": "출처·이용조건 고지" },
           "docs": { "type": "string" },
-          "column_docs": { "type": "string" },
           "join_axes": {
             "type": "array", "items": { "type": "string" },
             "description": "도메인 간 공통 조인 축"
