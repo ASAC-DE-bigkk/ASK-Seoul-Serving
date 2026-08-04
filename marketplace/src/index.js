@@ -10,6 +10,7 @@ import {
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
 import { SKILL_BUNDLE_ID, handleSkillBundle, handleSkillData, handleSkillProduct } from "./skill.js";
+import { handleMcp } from "./mcp.js";
 
 const ISSUE_HOURLY_CAP = 5;
 const DEFAULT_LIMIT = 500;
@@ -363,6 +364,14 @@ async function route(request, env, url, trace) {
     if (error) return error;
     trace.keyHash = keyRow.key_hash;
     return revokeKey(env, keyRow, url.searchParams.get("purge") === "true");
+  }
+  // MCP 서버 — Streamable HTTP, stateless POST /mcp (#26 P0). shared 핸들러 재사용(내부 HTTP X).
+  if (path === "/mcp") {
+    if (request.method !== "POST") return problem(405, "method not allowed", "MCP 는 POST /mcp (Streamable HTTP)");
+    trace.route = "mcp";
+    return handleMcp(request, env, trace, {
+      authenticate, handleCatalog, handlePreview, handleData, handleMe, handleProductBundle,
+    });
   }
   if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/v1/keys)");
   if (path === "/api/v1/catalog") { trace.route = "catalog"; return handleCatalog(env); }

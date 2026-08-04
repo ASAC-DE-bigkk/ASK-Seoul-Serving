@@ -190,7 +190,8 @@ cd marketplace
 npm run smoke -- https://<배포주소>
 ```
 
-10항목 중 무인증 9개가 자동으로 돈다. 인증 경로까지 보려면 키를 하나 발급해서:
+13항목 중 무인증 12개가 자동으로 돈다(MCP initialize·tools/list 포함 — PlayMCP·claude.ai
+등록 관문). 인증 경로까지 보려면 키를 하나 발급해서:
 
 ```bash
 curl -s -X POST https://<배포주소>/api/v1/keys -H 'content-type: application/json' \
