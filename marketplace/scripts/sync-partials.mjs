@@ -64,6 +64,8 @@ function renderNav(cfg) {
 }
 
 const check = process.argv.includes("--check");
+//: 줄끝만 다른 것은 같은 것으로 본다 — 정본(git 저장본)은 어차피 LF 하나다.
+const eqIgnoringEol = (a, b) => a.replace(/\r\n/g, "\n") === b.replace(/\r\n/g, "\n");
 const stale = [];
 let written = 0;
 
@@ -78,7 +80,12 @@ for (const [name, cfg] of Object.entries(PAGES)) {
   const nav = renderNav(cfg);
   const out = src.replace(NAV_RE, () => nav).replace(FOOTER_RE, () => footerTpl);
 
-  if (out === src) continue;
+  // 줄끝은 비교에서 뺀다. Windows 체크아웃은 `core.autocrlf=true` 로 CRLF 를 받는데,
+  // 여기서 끼워 넣는 partial 과 줄끝이 어긋나면 **내용이 같은데도** 드리프트로 잡힌다.
+  // 실측: 갓 clone/checkout 한 dev 에서 3페이지가 stale 로 뜨고, `npm run sync` 를 돌리면
+  // 사라지지만 `git diff` 는 0 줄이다(git 이 커밋 시 LF 로 정규화하므로 저장본은 늘 같다).
+  // 그 상태로 `npm test` 가 실패해 배포 런북 §0("로컬 npm test 통과")이 헛돈다.
+  if (eqIgnoringEol(out, src)) continue;
   if (check) { stale.push(name); continue; }
   writeFileSync(path, out, "utf8");
   written++;
