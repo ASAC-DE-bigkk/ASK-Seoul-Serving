@@ -9,11 +9,11 @@
 ## 1. 처음 여는 사람 — 구동까지
 
 콘솔은 게이트웨이([../../marketplace/](../../marketplace/))와 **같은 로컬 D1 상태**를 읽는다
-(`--persist-to`). 서빙 품질(`_request_log`)·키(`_keys`)는 저쪽이 만들기 때문에, 게이트웨이도
+(`--persist-to`). 서빙 품질(`_gateway_request_log`)·키(`_keys`)는 저쪽이 만들기 때문에, 게이트웨이도
 한 번은 시드해 두는 게 화면이 온전하다.
 
 ```bash
-# (선택이지만 권장) 게이트웨이 먼저 — _catalog·_keys·_request_log 가 생긴다
+# (선택이지만 권장) 게이트웨이 먼저 — _catalog·_keys·_gateway_request_log 가 생긴다
 cd marketplace && npm install && npm run seed
 
 # 콘솔

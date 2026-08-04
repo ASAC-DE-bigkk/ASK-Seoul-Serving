@@ -43,7 +43,7 @@
 
 ```text
 marketplace 시드  →  ops-dashboard 시드  →  둘 다 dev
-     (_keys · _request_log 생성)   (_ops_slo 생성)
+  (_keys · _gateway_request_log 생성)  (_ops_slo 생성)
 ```
 
 `ops-dashboard`의 `seed`·`dev`는 `--persist-to ../marketplace/.wrangler/state`로 돈다.
@@ -249,7 +249,7 @@ curl -s -X POST -H "X-Trino-User: ops" -H "Content-Type: text/plain" \
 | 조치만 `503 ops write disabled` | `.dev.vars`가 UTF-16LE | `-Encoding ascii`로 다시 쓰기 (3절) |
 | 조치만 `503` + 기동 로그에 `Using secrets...` 줄이 **아예 없음** | `.dev.vars`가 프로젝트 루트에 없음 | `wrangler.toml` 옆(루트)으로 옮긴다 (3절) |
 | 조치가 `401` | 토큰 불일치 | 화면 우상단 `잠금 해제`에 `.dev.vars` 값 그대로 입력 |
-| `meta.missing`에 `_keys`·`_request_log` | marketplace 미시드 **또는** 콘솔 `--persist-to` 누락 | marketplace `npm run seed` 먼저 (0절) / [environments.md §4-③](environments.md) |
+| `meta.missing`에 `_keys`·`_gateway_request_log` | marketplace 미시드 **또는** 콘솔 `--persist-to` 누락 | marketplace `npm run seed` 먼저 (0절) / [environments.md §4-③](environments.md) |
 | dev 가 `:8789` 등 엉뚱한 포트로 뜸 | 8787/8788 을 이전 프로세스가 쥐고 있음 | 아래 포트 항목 — 포트는 `[dev] port` 로 고정돼 있으나 점유 시 밀린다 |
 | `npm run seed`가 `&&`에서 멈춤 | npm의 script-shell이 PowerShell로 잡힘 | `npm config delete script-shell` |
 | `Address already in use :8787/:8788` | 이전 dev가 살아 있음 | `Get-Process workerd \| Stop-Process -Force` (전부 정리) |
