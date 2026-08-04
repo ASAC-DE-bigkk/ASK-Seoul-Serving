@@ -251,7 +251,8 @@ function judge(expected, remote) {
 }
 
 // ── 출력 ──────────────────────────────────────────────────────────────────────
-const MARK = { "없음": "· ", "일치": "OK", "일치+": "OK", "모양 다름": "!!", "남의 표": "~ ", "인수됨": "!!" };
+// 판정을 늘리면 여기도 늘린다 — 빠지면 표에 `undefined` 가 찍힌다(실제로 겪었다).
+const MARK = { "없음": "· ", "일치": "OK", "일치+": "OK", "모양 다름": "!!", "남의 표": "~ ", "오염": "!!", "인수됨": "!!" };
 
 function report(findings, { db, env, ack }) {
   const w = Math.max(...findings.map((f) => f.table.length), 12);

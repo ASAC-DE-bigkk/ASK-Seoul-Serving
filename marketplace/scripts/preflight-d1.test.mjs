@@ -9,6 +9,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { judge, expectedSchema, FOREIGN } from "./preflight-d1.mjs";
 
 let DatabaseSync;
@@ -91,6 +92,15 @@ test("🔴 남의 표가 **우리 모양이 되면** 중단한다 — 그 이름
   const f = find(judge(expected, remote), "_request_log");
   assert.equal(f.verdict, "인수됨");
   assert.equal(f.blocking, true);
+});
+
+test("판정마다 표시 기호가 있다 — 빠지면 표에 undefined 가 찍힌다", async () => {
+  // 실제로 겪었다. 판정을 하나 늘리고 MARK 를 안 늘려서 원격 출력에 `undefined 오염` 이 찍혔다.
+  const src = await readFile(new URL("./preflight-d1.mjs", import.meta.url), "utf8");
+  const marks = src.match(/^const MARK = \{[^}]*\}/m)?.[0] ?? "";
+  for (const verdict of ["없음", "일치", "일치+", "모양 다름", "남의 표", "오염", "인수됨"]) {
+    assert.ok(marks.includes(`"${verdict}"`), `MARK 에 '${verdict}' 이 없다`);
+  }
 });
 
 test("남의 표 목록에 사유와 기준 모양이 함께 있다 — 둘 다 없으면 판정이 안 선다", () => {
