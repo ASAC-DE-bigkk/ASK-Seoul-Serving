@@ -34,14 +34,13 @@ npm run verify:log  # 요청 로그 유실 검증(C-10)
 
 ```bash
 cd marketplace
-npx wrangler d1 execute ask-seoul-prod-d1 --remote --file=migrations/0001_keys_usage.sql
-npx wrangler d1 execute ask-seoul-prod-d1 --remote --file=migrations/0002_request_log.sql
-npx wrangler d1 execute ask-seoul-prod-d1 --remote --file=migrations/0003_burst.sql
-npx wrangler d1 execute ask-seoul-prod-d1 --remote --file=migrations/0004_request_id.sql
+npx wrangler d1 migrations apply ask-seoul-prod-d1 --remote --env production
 ```
 
-전부 `CREATE TABLE IF NOT EXISTS` 라 여러 번 돌려도 안전하다. 단 `0004` 는 `ALTER` 라
-이미 적용된 상태면 실패하는데, 그건 정상이고 넘어가면 된다.
+파일을 나열하지 않는다 — 적용 여부는 D1 안의 장부(`d1_migrations`)가 추적하고, 안 된
+파일만 실행된다. 그래서 여러 번 돌려도 안전하고("이미 적용된 ALTER 실패는 정상" 같은
+예외 규칙이 필요 없다), **나중에 0005 가 생기면 같은 명령 한 번이 그것만 마저 적용한다.**
+prod D1 은 8/3 신설이라 장부가 처음부터 추적기와 함께 시작한다 — 로컬처럼 백필이 필요 없다.
 
 확인:
 

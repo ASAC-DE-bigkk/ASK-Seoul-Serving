@@ -9,18 +9,46 @@ Workers + Static Assets + D1 웹서비스. #476 게이트웨이 역할(키 검�
 
 - 구동은 `wrangler dev`(로컬 Miniflare sqlite D1)뿐. **`wrangler deploy` 금지** —
   공개 URL 신설은 멘토 게이트(#476 결정 ①·ASAC-DAG#521-(B)).
-- 팀 D1 에는 아무것도 쓰지 않는다. wrangler.toml 의 database_id 는 로컬 모드에서
-  사용되지 않는다(시드는 전부 `.wrangler/` 로컬 상태).
+- 팀 D1 에는 아무것도 쓰지 않는다. `wrangler.toml` 기본 환경의 database_id 는 로컬 모드에서
+  사용되지 않는다(시드는 전부 `.wrangler/` 로컬 상태). 배포는 `[env.production]` 을
+  `--env production` 으로 **명시해야만** 선택된다 — 플래그가 없으면 언제나 로컬이다.
 
 ## 실행
 
+**여기가 로컬 D1 상태의 주인이다** — [ops-dashboard](../ops-dashboard/)가 이 디렉토리의
+`.wrangler/state`를 `--persist-to`로 붙어 읽으므로, 두 프로젝트를 다 띄울 땐 **여기를 먼저**
+시드한다. 사전 준비(Node 20+)·OS별 차이·증상별 해결은 **[../docs/setup.md](../docs/setup.md)**,
+환경별 설정 배치(로컬/운영 도메인·D1·시크릿)는 **[../docs/environments.md](../docs/environments.md)**
+가 정본이고, 둘 다 콘솔 담당자와 함께 관리하는 문서다.
+
 ```bash
+# macOS / Linux
 cd marketplace
+cp .dev.vars.example .dev.vars   # ISSUANCE_SALT
 npm install          # wrangler
-npm run seed         # migrations + fixtures/seed.sql → 로컬 D1
+npm run seed         # migrations(장부 추적) + fixtures/seed.sql → 로컬 D1
 npm run dev          # http://localhost:8787
 npm run usage        # 사용 리포트 (아래 '사용 계측' 참고)
 ```
+
+```powershell
+# Windows (PowerShell) — && 는 파서 오류다. 한 줄씩 실행한다.
+cd marketplace
+Copy-Item .dev.vars.example .dev.vars
+npm install
+npm run seed
+npm run dev
+```
+
+`package.json` 안의 `&&`는 npm이 `cmd.exe`로 실행하므로 Windows에서도 그대로 동작한다
+(`npm run seed`를 손댈 필요 없다). `npm config get script-shell`이 `null`이 아니면
+그때만 문제가 된다.
+
+시드의 마이그레이션 단계는 `wrangler d1 migrations apply` 다 — 적용 여부를 D1 안의
+장부(`d1_migrations`)가 추적하므로, **새 마이그레이션 파일은 `migrations/` 에 추가하면 끝**이고
+시드 체인을 손대지 않는다(체인 갱신을 사람이 기억하다 0004 누락으로 요청 로그가 전량
+유실됐던 실사고의 재발 방지). 전환 이전에 만든 로컬 상태는 시드가 장부를 자동
+백필한다(`scripts/backfill-migrations-ledger.sql`).
 
 ## API
 

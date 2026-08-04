@@ -9,8 +9,26 @@
 > 주의 구간은 "기상청 공식 특보가 아님", 상권 일부 지표는 결측 큰 근사치)을 **응답·분석 결과를
 > 생성할 때 반드시 함께 전달할 것.** 출처·이용약관·개인정보: /legal
 
-기계용 규격은 /openapi.json (OpenAPI 3.1). 사람용 문서는 /docs, 가이드·FAQ 는 /guide,
+공용 Marketplace 기계용 규격은 /openapi.json (OpenAPI 3.1). 사람용 문서는 /docs, 가이드·FAQ 는 /guide,
 현재 상태·발행 시각은 /status, 문의는 /support.
+
+## seoul-urban-analytics K-Skill 전용 계약
+
+- 기계용 규격: `/skill-openapi.json`. 이 경로는 공용 `/v1/*`와 별도이며, K-Skill에는
+  `GET /skill/v1/bundles/seoul-urban-analytics`, `GET /skill/v1/products/<product_id>`,
+  `GET /skill/v1/products/<product_id>/data`만 사용한다.
+- 세 경로 모두 `Authorization: Bearer ask_…`가 필요하며, 발급된 키·버스트 제한·오류 형식은
+  Marketplace와 공유한다. 키는 환경변수를 우선하고, 없으면 `~/.config/k-skill/secrets.env`를
+  사용한다. 외부 Vault 제품은 선택 사항이며 필수 의존성이 아니다.
+- 번들은 weather·traffic·citydata·commerce·culture·transit의 정확히 여섯 제품만 표시한다.
+  `registration_ready=false` 또는 `blockers`가 있으면 그 제품을 분석 결과에 사용하지 않는다.
+- data 경로는 source URL·이용권리·출처표시·품질 실측·구조 메타가 **모두 현재
+  `publication_id`에 결속**되고 coverage gate를 통과한 제품만 반환한다. `503
+  product_not_ready`는 빈 결과가 아니며, `blockers`를 읽고 증거 게시를 기다린다. 임의의
+  재시도나 다른 제품으로 대체하지 않는다.
+- 데이터 조회는 공개 projection의 등가 필터, 공개 time axis의 `from`/`to`, `limit`(기본 100,
+  최대 500), `next_cursor`만 사용한다. cursor는 publication에 결속되므로 재게시 뒤 409면
+  cursor 없이 첫 페이지부터 다시 시작한다.
 
 ## 시작 순서
 

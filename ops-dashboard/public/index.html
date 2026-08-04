@@ -44,6 +44,12 @@
                border:1px solid rgba(255,255,255,.14); border-radius:6px; padding:5px 11px; }
   .top .mode:hover { color:#fff; border-color:rgba(255,255,255,.3); }
   .top .mode.on { background:var(--ok-soft); color:var(--ok); border-color:#b7e4cb; }
+  /* 환경 표시 — 운영은 색으로 즉시 구분된다. 로컬과 운영을 헷갈리는 게 제일 나쁜 사고다 */
+  .top .envtag { font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:5px;
+                 background:rgba(255,255,255,.07); color:var(--deck-ink);
+                 border:1px solid var(--deck-line); white-space:nowrap; }
+  .top .envtag.prod { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .top .envtag small { font-family:var(--mono); font-size:10px; opacity:.75; margin-left:5px; }
 
   .wrap { max-width:1220px; margin:0 auto; padding:20px 26px 64px; }
   .banner { border-radius:8px; padding:10px 14px; font-size:12.5px; margin-bottom:16px; }
@@ -107,7 +113,12 @@
   td { padding:7px 10px 7px 0; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums;
        white-space:nowrap; }
   tr:last-child td { border-bottom:0; }
-  td.name { font-family:var(--mono); font-size:11.5px; white-space:normal; word-break:break-all; }
+  /* break-all 은 좁은 칸에서 한 글자씩 세로로 쪼갠다(`commerce_collect_raw` 가 세로로
+     늘어지던 실사례). 밑줄로 끊고, 그래도 좁으면 가로 스크롤에 맡긴다. */
+  td.name { font-family:var(--mono); font-size:11.5px; white-space:nowrap;
+            overflow-wrap:anywhere; word-break:normal; }
+  /* 식별자 칸은 최소 너비를 줘서 표가 이름부터 찌그러지지 않게 한다 */
+  td.name, th.name { min-width:180px; }
   td.r, th.r { text-align:right; }
   .pill { font-family:var(--mono); font-size:10px; font-weight:600; padding:1px 7px; border-radius:4px; }
   .pill.bad { background:var(--red-soft); color:var(--red-ink); }
@@ -149,6 +160,58 @@
   .bars .b > i { display:block; width:100%; background:var(--teal); border-radius:3px 3px 0 0; }
   .bars-axis { display:flex; justify-content:space-between; margin-top:6px;
                font-family:var(--mono); font-size:10px; color:var(--faint); }
+
+  /* 표가 길어지면 카드 안에서만 스크롤한다 — 페이지 전체가 늘어나면 위쪽 지표가 밀려
+     "숫자 보고 표 보기"가 스크롤 왕복이 된다. 헤더는 붙여 둔다(스크롤해도 무슨 열인지 안다). */
+  .scroll { max-height:360px; overflow-y:auto; }
+  .scroll.tall { max-height:460px; }
+  .scroll thead th { position:sticky; top:0; background:var(--panel); z-index:1; }
+  .scroll::-webkit-scrollbar { width:10px; }
+  .scroll::-webkit-scrollbar-thumb { background:var(--line-strong); border-radius:5px;
+                                     border:3px solid var(--panel); }
+
+  /* 도메인 점유 막대 — 파이 대신 가로 막대다. 6개뿐이라 순위·비율을 한 줄로 읽는 게 빠르다 */
+  .share { display:flex; flex-direction:column; gap:9px; margin-top:4px; }
+  .share .row { display:grid; grid-template-columns:110px 1fr 92px; align-items:center; gap:10px; }
+  .share .nm { font-size:12.5px; font-weight:600; }
+  .share .nm small { display:block; font-weight:400; font-size:10.5px; color:var(--faint); }
+  .share .track { background:var(--bg); border-radius:5px; height:16px; overflow:hidden; }
+  .share .fill { height:100%; background:var(--teal); border-radius:5px; }
+  .share .fill.dim { background:var(--line-strong); }
+  .share .num { text-align:right; font-size:12px; font-variant-numeric:tabular-nums; }
+  .share .num b { font-weight:700; } .share .num small { color:var(--faint); }
+
+  /* 필터 줄 — 도메인 드롭다운 + 설명 검색. 목록이 62개라 이게 없으면 눈으로 찾게 된다 */
+  .filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:0 18px 10px; }
+  .filters select, .filters input[type="search"] { font:inherit; font-size:12.5px; padding:5px 9px;
+        border:1px solid var(--line-strong); border-radius:6px; background:var(--panel); color:var(--ink); }
+  /* 검색칸만 늘린다 — input 전체를 늘리면 체크박스까지 flex 를 받아 200px 로 벌어진다 */
+  .filters input[type="search"] { flex:1; min-width:200px; }
+  .filters input:focus, .filters select:focus { outline:none; border-color:var(--accent);
+        box-shadow:0 0 0 3px var(--accent-soft); }
+  .filters label { display:flex; align-items:center; gap:5px; font-size:12.5px; color:var(--muted);
+        white-space:nowrap; }
+  .filters .hint { font-size:11.5px; color:var(--faint); margin-left:auto; }
+
+  td.desc { white-space:normal; color:var(--muted); font-size:11.5px; max-width:330px; }
+  .zero { color:var(--faint); }
+
+  /* 상세 보기 — 모달 대신 접히는 패널. 목록에서 위치를 잃지 않고, 뒤로가기 취급도 필요 없다 */
+  .detail { border-top:2px solid var(--accent); background:var(--accent-soft); padding:14px 18px 16px; }
+  .detail[hidden] { display:none; }
+  .detail .dhd { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .detail .dhd h4 { font-size:13.5px; font-weight:700; font-family:var(--mono); }
+  .detail .dhd .close { margin-left:auto; }
+  .detail .dsc { font-size:12px; color:var(--muted); margin:4px 0 12px; }
+  .detail .dgrid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:860px){ .detail .dgrid { grid-template-columns:1fr; } }
+  .detail .box { background:var(--panel); border:1px solid var(--accent-line); border-radius:8px;
+                 padding:10px 13px 12px; }
+  .detail .box.wide { grid-column:1/-1; }
+  .detail .box h5 { font-size:11.5px; font-weight:700; margin-bottom:2px; }
+  .detail .box p.note { font-size:11px; color:var(--faint); margin-bottom:6px; }
+  .detail .box .scroll { max-height:230px; }
+  .detail .box .scroll thead th { background:var(--panel); }
 </style>
 </head>
 <body>
@@ -156,6 +219,9 @@
 <div class="top">
   <span class="mark">OPS</span>
   <h1>품질 콘솔</h1>
+  <!-- 지금 보고 있는 데이터의 출처. 숫자만 보고 어느 환경인지 추측하게 두면
+       로컬 값을 운영 실적으로 오해하는 사고가 난다 — 그래서 늘 보이는 자리에 둔다 -->
+  <span class="envtag" id="envTag" hidden></span>
   <span class="sp"></span>
   <label class="lab" for="days" style="color:var(--deck-dim)">기간</label>
   <select id="days">
@@ -163,6 +229,9 @@
     <option value="14" selected>14일</option>
     <option value="30">30일</option>
   </select>
+  <!-- 재적재·정기런을 지켜볼 때 F5 를 반복해서 누르게 되는데, 그러면 "언제 바뀌었나"를
+       놓친다. 켜 두면 30초마다 다시 읽고 마지막 갱신 시각을 옆에 적는다. -->
+  <button id="autoBtn" class="mode" title="30초마다 자동으로 다시 읽습니다">자동 새로고침 꺼짐</button>
   <button id="modeBtn" class="mode">읽기 전용 · 잠금 해제</button>
   <a href="http://localhost:8787/" target="_blank" rel="noopener">마켓플레이스 ↗</a>
 </div>
@@ -171,7 +240,7 @@
   <!-- 막는 문이 아니라 여는 문이다 — 화면은 토큰 없이 뜨고, 여기서 푸는 건 '조치' 권한뿐이다 -->
   <div id="gate" class="gate" hidden>
     <h2>운영자 잠금 해제</h2>
-    <p>보는 데는 토큰이 필요 없습니다. <b>키 폐기·복구·쿼터 변경·삭제</b>처럼 되돌릴 수 없는 조치만 토큰을 요구합니다.</p>
+    <p>화면을 보는 데는 필요 없습니다. <b>키 차단·해제·하루 한도 변경·삭제</b>처럼 이용자에게 영향을 주는 조치에만 필요합니다.</p>
     <div class="row">
       <input type="password" id="token" placeholder="OPS_TOKEN" autocomplete="off" aria-label="운영자 토큰">
       <button id="enter">해제</button>
@@ -182,83 +251,151 @@
   <div id="app" hidden>
     <div class="tabs" role="tablist" aria-label="품질 영역">
       <button role="tab" id="tab-pipeline" aria-controls="pane-pipeline" aria-selected="true">
-        <span class="dot" id="dot-pipeline"></span>파이프라인 품질
-        <span class="sub">수집·변환</span>
+        <span class="dot" id="dot-pipeline"></span>데이터 준비 상태
+        <span class="sub">매일 제때 갱신됐나</span>
       </button>
       <button role="tab" id="tab-serving" aria-controls="pane-serving" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-serving"></span>서빙 품질
-        <span class="sub">외부 응답</span>
+        <span class="dot" id="dot-serving"></span>응답 상태
+        <span class="sub">실패·빈 응답</span>
+      </button>
+      <button role="tab" id="tab-usage" aria-controls="pane-usage" aria-selected="false" tabindex="-1">
+        <span class="dot" id="dot-usage"></span>API 사용량
+        <span class="sub">무엇이 얼마나 쓰이나</span>
       </button>
       <button role="tab" id="tab-keys" aria-controls="pane-keys" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-keys"></span>키 관리
-        <span class="sub">발급·쿼터·폐기</span>
+        <span class="dot" id="dot-keys"></span>이용자 키
+        <span class="sub">발급·한도·차단</span>
       </button>
     </div>
 
     <div id="banners"></div>
 
     <section class="pane" id="pane-pipeline" role="tabpanel" aria-labelledby="tab-pipeline" tabindex="0">
-    <h2 class="sec">파이프라인 품질 <span>수집·변환이 제 몫을 했나 · gold_*_slo_daily</span></h2>
+    <h2 class="sec">데이터 준비 상태 <span>서울시 원본을 받아 가공하는 작업이 매일 제때 끝났나</span></h2>
+    <div class="kpis" id="runKpis"></div>
+    <div class="grid">
+      <div class="card wide">
+        <div class="hd">
+          <h3>날짜별 · 분야별 실행 기록</h3>
+          <p>파이프라인이 실행할 때마다 남긴 기록입니다 — 이 화면의 실측 근거입니다</p>
+        </div>
+        <div class="bd"><div class="scroll" id="runDaily"></div></div>
+      </div>
+      <div class="card">
+        <div class="hd">
+          <h3>파이프라인 현재 상태</h3>
+          <p>작업(DAG) 하나가 한 줄 — 마지막 실행이 어땠나</p>
+        </div>
+        <div class="bd"><div class="scroll" id="pipeState"></div></div>
+      </div>
+      <div class="card">
+        <div class="hd">
+          <h3>실행 주기 등록</h3>
+          <p>얼마나 자주 돌아야 하는지 등록된 값 — 감시 대상이 아닌 것은 회색입니다</p>
+        </div>
+        <div class="bd"><div class="scroll" id="pipeExpect"></div></div>
+      </div>
+    </div>
+
+    <div id="sloSection" hidden>
+    <h2 class="sec" style="margin-top:26px">품질 기준(SLO) <span>별도 지표 — 아직 합성 예시입니다</span></h2>
     <div class="kpis" id="pipeKpis"></div>
     <div class="grid">
       <div class="card wide">
-        <div class="hd"><h3>일자별 SLO</h3><p>정기런 통과 = 초록 · 수동 복구로만 살림 = 노랑 · 그날 데이터 없음 = 빨강</p></div>
+        <div class="hd"><h3>날짜별 상태</h3><p>한 칸이 하루입니다 — 색이 그날 데이터 갱신 결과입니다</p></div>
         <div class="bd" id="cal"></div>
       </div>
       <div class="card">
-        <div class="hd"><h3>도메인 커버리지</h3><p>SLO 마트를 가진 도메인 — 없는 곳은 품질을 잴 수 없다</p></div>
+        <div class="hd"><h3>분야별 측정 가능 여부</h3><p>품질을 잴 기준이 아직 없는 분야는 여기서 문제가 있어도 알 수 없습니다</p></div>
         <div class="bd" id="domains"></div>
       </div>
       <div class="card">
-        <div class="hd"><h3>살펴야 할 날</h3><p>정기런 실패 + <b>초록 위장</b>(통과로 보였지만 빈 run)</p></div>
+        <div class="hd"><h3>확인이 필요한 날</h3><p>갱신에 실패했거나, <b>성공했다고 나왔지만 실제로 받은 데이터가 0건</b>이던 날</p></div>
         <div class="bd" id="badDays"></div>
       </div>
+    </div>
     </div>
     </section>
 
     <section class="pane" id="pane-serving" role="tabpanel" aria-labelledby="tab-serving" tabindex="0" hidden>
-    <h2 class="sec">서빙 품질 <span>외부에 잘 나가고 있나 · 게이트웨이 _request_log</span></h2>
+    <h2 class="sec">응답 상태 <span>외부에서 우리 API를 부를 때 제대로 답이 나갔나</span></h2>
     <div class="kpis" id="servKpis"></div>
     <div class="grid">
       <div class="card wide">
-        <div class="hd"><h3>일자별 호출</h3></div>
+        <div class="hd"><h3>날짜별 요청 건수</h3></div>
         <div class="bd" id="daily"></div>
       </div>
       <div class="card">
-        <div class="hd"><h3>없어서 못 판 것</h3><p>404·400 은 그대로 로드맵이다</p></div>
+        <div class="hd"><h3>답하지 못한 요청</h3><p>찾는 데이터가 없거나 요청 형식이 잘못된 경우입니다 — 무엇을 원했는지 알려주는 신호입니다</p></div>
         <div class="bd" id="failures"></div>
       </div>
       <div class="card">
-        <div class="hd"><h3>조용한 0행</h3><p>200 인데 빈 응답 — 커버리지 구멍</p></div>
+        <div class="hd"><h3>결과가 0건이던 요청</h3><p>오류는 아니지만 보여줄 데이터가 없었습니다 — 데이터가 비어 있는 구간입니다</p></div>
         <div class="bd" id="empty"></div>
       </div>
       <div class="card wide">
-        <div class="hd"><h3>제품별 수요</h3><p>구경(preview)만 하고 떠나나, 실제로 쓰나(data)</p></div>
+        <div class="hd"><h3>맛보기에서 실제 사용으로</h3><p>미리보기만 하고 떠났는지, 실제 조회까지 갔는지</p></div>
         <div class="bd" id="products"></div>
       </div>
       <div class="card">
-        <div class="hd"><h3>라우트</h3></div>
+        <div class="hd"><h3>요청 종류별</h3><p>미리보기 · 데이터 조회 · 목록 등</p></div>
         <div class="bd" id="routes"></div>
       </div>
       <div class="card">
-        <div class="hd"><h3>키별 재방문</h3><p>키 해시 앞 8자만</p></div>
+        <div class="hd"><h3>이용자별 재방문</h3><p>이용자 식별은 키 앞 8자로만 합니다</p></div>
         <div class="bd" id="keys"></div>
       </div>
     </div>
     </section>
 
+    <section class="pane" id="pane-usage" role="tabpanel" aria-labelledby="tab-usage" tabindex="0" hidden>
+    <h2 class="sec">API 사용량 <span>어떤 API가 얼마나 쓰이나 · 분야별 비중</span></h2>
+    <div class="kpis" id="useKpis"></div>
+    <div class="grid">
+      <div class="card">
+        <div class="hd"><h3>분야별 사용 비중</h3><p>전체 요청 중 각 분야가 차지하는 몫</p></div>
+        <div class="bd" id="domShare"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>선택한 분야의 API별 요청</h3><p id="domPickNote">분야를 고르면 그 안의 API 순위를 봅니다</p></div>
+        <div class="bd">
+          <div style="margin-bottom:8px">
+            <select id="domPick" aria-label="분야 선택" style="font:inherit;font-size:12.5px;padding:5px 9px;border:1px solid var(--line-strong);border-radius:6px"></select>
+          </div>
+          <div class="scroll" id="domApis"></div>
+        </div>
+      </div>
+      <div class="card wide">
+        <div class="hd">
+          <h3>API 전체 목록</h3>
+          <p>등록된 모든 API입니다 — 한 번도 호출되지 않은 것도 포함합니다. 이름이나 설명으로 검색할 수 있습니다.</p>
+        </div>
+        <div class="filters">
+          <select id="apiDom" aria-label="분야로 거르기"></select>
+          <input id="apiQ" type="search" placeholder="API 이름이나 설명으로 검색 (예: 상권, 날씨, 인구)" aria-label="API 검색">
+          <label><input type="checkbox" id="apiUsedOnly"> 요청이 있었던 것만</label>
+          <span class="hint" id="apiCount"></span>
+        </div>
+        <div class="bd" style="padding-top:0">
+          <div class="scroll tall" id="apiTable"></div>
+        </div>
+        <div class="detail" id="apiDetail" hidden></div>
+      </div>
+    </div>
+    </section>
+
     <section class="pane" id="pane-keys" role="tabpanel" aria-labelledby="tab-keys" tabindex="0" hidden>
-    <h2 class="sec">키 관리 <span>누가 쓰고 있나 · 발급된 키의 쿼터·상태</span></h2>
+    <h2 class="sec">이용자 키 <span>누가 쓰고 있나 · 하루 사용 한도와 차단</span></h2>
     <div class="kpis" id="keyKpis"></div>
     <div class="grid">
       <div class="card wide">
         <div class="hd">
           <h3>발급된 키</h3>
-          <p>이메일은 서버에서 가려 보낸다 — 응답에도 원문이 없다. 조치는 전부 키 단위라 주소가 필요 없다.<br>
-             오늘 사용량은 KST 기준 · 총 호출은 최근 30일 요청 로그 기준(그 전 기록은 지워진다)</p>
+          <p>이메일은 서버에서 일부를 가려 보냅니다 — 화면뿐 아니라 응답에도 원문이 없습니다. 모든 조치는 키 단위라 주소가 필요 없습니다.<br>
+             오늘 사용량은 한국 시간 자정 기준으로 초기화됩니다 · 총 요청은 최근 30일치입니다(그 이전 기록은 자동 삭제)</p>
         </div>
-        <div class="bd" id="keyTable"></div>
-        <div class="keyMsg" id="keyMsg"></div>
+        <div class="bd"><div class="scroll tall" id="keyTable"></div></div>
+        <div class="keyMsg" id="keyMsg" style="padding:0 18px 14px"></div>
       </div>
     </div>
     </section>
@@ -273,14 +410,31 @@ const TK = "ops_token";                       // sessionStorage 전용 — URL �
 const token = () => sessionStorage.getItem(TK) || "";
 const md = (d) => (d || "").slice(5).replace("-", "/");
 
+// 숫자 0 은 흐리게 — 표가 0 으로 가득할 때 "값이 있는 칸"이 먼저 눈에 들어오게 한다
+const num = (n) => (n ? nf.format(n) : "<span class='zero'>0</span>");
+
+// 화면에는 사람 말만 내보낸다. 내부 용어(route 값·HTTP 코드)는 여기서 한 번에 번역한다 —
+// 화면 곳곳에 한글을 흩뿌리면 어디를 고쳐야 할지 알 수 없게 된다.
+const ROUTE_KO = { catalog:"API 목록", preview:"미리보기", data:"데이터 조회",
+                   me:"내 사용량", keys:"키 발급·폐기" };
+const STATUS_KO = { 400:"요청 형식 오류", 401:"인증 실패", 403:"차단된 키", 404:"없는 데이터",
+                    409:"만료된 이어보기", 429:"한도 초과", 500:"서버 오류", 503:"기능 꺼짐" };
+// 분야 이름은 서버(_ops_domain)가 정본이라 받아서 채운다. 아직 못 받았을 때만 이 값을 쓴다.
+let DOM_LABEL = {};
+const domLabel = (d) => DOM_LABEL[d] || d;
+
 function table(cols, rows, empty) {
   if (!rows || !rows.length) return "<div class='empty'>" + empty + "</div>";
   return "<table><thead><tr>" +
-    cols.map((c) => "<th" + (c.r ? " class='r'" : "") + ">" + esc(c.t) + "</th>").join("") +
+    cols.map((c) => "<th class='" + (c.name ? "name " : "") + (c.r ? "r" : "") + "'>" +
+      esc(c.t) + "</th>").join("") +
     "</tr></thead><tbody>" + rows.map((r) => "<tr>" +
-      cols.map((c) => "<td class='" + (c.name ? "name " : "") + (c.r ? "r" : "") + "'>" +
-        (c.get(r) ?? "—") + "</td>").join("") + "</tr>").join("") + "</tbody></table>";
+      cols.map((c) => "<td class='" + (c.name ? "name " : "") + (c.cls ? c.cls + " " : "") +
+        (c.r ? "r" : "") + "'>" + (c.get(r) ?? "—") + "</td>").join("") + "</tr>").join("") +
+    "</tbody></table>";
 }
+// 시각은 초·밀리초까지 필요 없다 — "언제쯤"이면 충분하고, 짧을수록 표가 읽힌다
+const fmtTs = (s) => (s ? String(s).slice(0, 16).replace("T", " ") : null);
 const kpis = (el, items) => {
   $(el).innerHTML = items.map(([lab, v, k, cls]) =>
     "<div class='kpi'><div class='lab'>" + lab + "</div><div class='v" + (cls ? " " + cls : "") + "'>" +
@@ -288,7 +442,14 @@ const kpis = (el, items) => {
 };
 
 // ── 탭. 상태는 URL 해시에 둔다 — 새로고침·링크 공유에도 보던 자리가 유지된다.
-const PANES = ["pipeline", "serving", "keys"];
+const PANES = ["pipeline", "serving", "usage", "keys"];
+// 해시는 "탭" 또는 "usage/<API 이름>" 이다 — 탭과 같은 이유로 상세도 주소에 싣는다.
+// 새로고침·링크 공유에도 보던 자리가 유지되고, "그 API 좀 봐 주세요"를 주소로 보낼 수 있다.
+const parseHash = () => {
+  const raw = decodeURIComponent(location.hash.slice(1));
+  const at = raw.indexOf("/");
+  return at < 0 ? { pane: raw, api: null } : { pane: raw.slice(0, at), api: raw.slice(at + 1) };
+};
 function showTab(name) {
   if (!PANES.includes(name)) name = PANES[0];
   for (const p of PANES) {
@@ -300,7 +461,10 @@ function showTab(name) {
   // 배너는 자기 탭에서만 — 서빙 탭에서 파이프라인 경고를 띄우면 남의 문제로 읽힌다
   for (const el of document.querySelectorAll("#banners [data-pane]"))
     el.hidden = el.dataset.pane !== name;
-  if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
+  // 상세가 열려 있으면 그 주소를 지키고, 다른 탭으로 가면 탭 이름만 남긴다
+  const want = name === "usage" && DETAIL_OPEN ? name + "/" + DETAIL_OPEN : name;
+  if (decodeURIComponent(location.hash.slice(1)) !== want)
+    history.replaceState(null, "", "#" + encodeURI(want));
 }
 for (const p of PANES) {
   $("tab-" + p).addEventListener("click", () => showTab(p));
@@ -311,25 +475,64 @@ for (const p of PANES) {
     showTab(next); $("tab-" + next).focus();
   });
 }
-addEventListener("hashchange", () => showTab(location.hash.slice(1)));
+addEventListener("hashchange", () => {
+  const h = parseHash();
+  showTab(h.pane);
+  if (h.pane === "usage" && h.api && h.api !== DETAIL_OPEN) openDetail(h.api);
+});
 
 function render(d) {
+  // ── 지금 보고 있는 데이터의 출처(환경 + D1). wrangler.toml 의 [vars] 에서 온다.
+  const ev = (d.meta && d.meta.env) || null;
+  if (ev) {
+    const tag = $("envTag");
+    tag.hidden = false;
+    tag.className = "envtag" + (ev.label === "운영" ? " prod" : "");
+    // 언제 읽은 값인지를 붙인다 — 자동 새로고침 중이면 "멈춘 화면"과 구분이 되어야 한다
+    const at = new Date(d.generated_at).toLocaleTimeString("ko-KR", { hour12: false });
+    tag.innerHTML = esc(ev.label) + "<small>" + esc(ev.d1) + " · " + esc(at) + "</small>";
+    tag.title = "이 화면은 " + ev.label + " 환경의 " + ev.d1 + " 데이터를 읽고 있습니다\n"
+              + "마지막으로 읽은 시각: " + at;
+  }
+
   // ── 배너: 샘플 데이터·누락 섹션을 밝힌다. data-pane 이 붙은 것은 해당 탭에서만 보인다
   const b = [];
-  if (d.meta.pipeline_is_sample)
-    b.push("<div class='banner warn' data-pane='pipeline'><b>파이프라인 값은 합성 샘플입니다</b> — 팀 D1 쓰기가 막혀 있어 " +
-           "실제 SLO 마트를 가져오지 못했습니다. 이 값으로 운영 판단을 하지 마세요.</div>");
+  // 출처는 세 상태다. "샘플이냐"만 말하면 '데이터가 없다'와 '합성이 섞였다'가 같은 문구가 되고,
+  // 운영자는 어느 쪽인지 모른 채 원인을 찾게 된다. 무엇 때문인지와 **다음에 뭘 하면 되는지**까지 적는다.
+  // SLO 는 이제 **별도 지표**다(실측 근거는 실행 기록 쪽). 행이 없으면 섹션을 통째로
+  // 접고 배너도 띄우지 않는다 — 없는 보조 지표를 두 번 알리면 진짜 신호가 묻힌다.
+  const hasSlo = d.pipeline.slo.length > 0;
+  $("sloSection").hidden = !hasSlo;
+  const src = hasSlo ? d.meta.pipeline_source : null;
+  if (src === "sample")
+    b.push("<div class='banner warn' data-pane='pipeline'><b>이 숫자는 실측이 아니라 합성 예시입니다</b> " +
+           "(" + d.meta.pipeline_sample_rows + "일치). 파이프라인은 이미 실행 기록을 운영 DB 에 " +
+           "싣고 있지만(팀 규약 ASK-Seoul#78 · ASAC-DAG#655 적재 확인), <b>이 화면이 아직 그 기록을 " +
+           "읽지 않습니다.</b> 연결 작업이 끝날 때까지 여기에는 <code>npm run seed</code> 가 넣은 " +
+           "합성 값이 보입니다.<br>" +
+           "지금 당장 실측을 보고 싶으면 임시 폴백이 있습니다 — <code>python scripts/load_slo.py</code> " +
+           "(Trino 필요). <b>정식 경로는 아닙니다.</b></div>");
+  else if (src === "none")
+    b.push("<div class='banner info' data-pane='pipeline'>이 기간에 <b>데이터 준비 기록이 없습니다</b> — " +
+           "<code>_ops_slo</code> 가 비어 있습니다. 로컬이면 <code>npm run seed</code> 로 채웁니다. " +
+           "운영 기록을 읽는 연결 작업은 아직 진행 중입니다(팀 규약 ASK-Seoul#78).</div>");
   if (d.meta.missing.includes("serving"))
-    b.push("<div class='banner info' data-pane='serving'>서빙 로그를 찾지 못했습니다 — 게이트웨이 D1 상태를 공유하도록 " +
-           "<code>--persist-to</code> 설정을 확인하세요.</div>");
-  if (d.meta.missing.includes("pipeline"))
-    b.push("<div class='banner info' data-pane='pipeline'>파이프라인 테이블이 없습니다 — <code>npm run seed</code> 를 먼저 실행하세요.</div>");
+    b.push("<div class='banner info' data-pane='serving'>요청 기록을 찾지 못했습니다 — API 서버와 같은 데이터를 보도록 " +
+           "설정(<code>--persist-to</code>)이 맞는지 확인하세요.</div>");
+  // _ops_slo 표 자체가 없는 경우(원격 dev D1 등) — 실행 기록이 있으면 화면이 비지 않으므로
+  // 조용히 접는다. 실행 기록까지 없을 때만 loadPipeline 쪽이 안내한다.
+  if (d.meta.missing.includes("pipeline") && hasSlo)
+    b.push("<div class='banner info' data-pane='pipeline'>데이터 준비 기록이 아직 없습니다 — <code>npm run seed</code> 를 먼저 실행하세요.</div>");
   if (!CAN_WRITE)
-    b.push("<div class='banner info' data-pane='keys'>읽기 전용입니다 — 폐기·복구·쿼터·삭제는 상단 <b>잠금 해제</b> 뒤에 할 수 있습니다.</div>");
+    b.push("<div class='banner info' data-pane='keys'>지금은 <b>보기 전용</b>입니다 — 차단·해제·한도 변경·삭제는 오른쪽 위 <b>잠금 해제</b> 뒤에 할 수 있습니다.</div>");
+  b.push("<div class='banner info' data-pane='usage'>요청에 담긴 <b>값</b>과 응답 내용은 저장하지 않습니다(개인정보 최소 수집). " +
+         "그래서 상세 보기에서는 <b>어떤 항목으로 걸렀는지</b>와 응답 건수까지만 볼 수 있습니다. " +
+         "요청 기록은 30일 뒤 자동 삭제됩니다.</div>");
   $("banners").innerHTML = b.join("");
 
   // ── 파이프라인
   const slo = d.pipeline.slo, doms = d.pipeline.domains;
+  for (const x of doms) DOM_LABEL[x.domain] = x.label;   // 분야 한글명 — API 사용량 탭도 쓴다
   const withSlo = doms.filter((x) => x.has_slo).length;
   const passed = slo.filter((r) => r.scheduled_slo_passed).length;
   const viol = slo.reduce((a, r) => a + (r.violation_count || 0), 0);
@@ -339,12 +542,14 @@ function render(d) {
   // 정기런 실패 + 초록 위장 = 사람이 들여다봐야 하는 날
   const badDays = slo.filter((r) => !r.scheduled_slo_passed || (r.green_disguise_runs || 0) > 0);
   kpis("pipeKpis", [
-    ["Scheduled SLO", slo.length ? Math.round(passed / slo.length * 100) + "%" : "—",
-     slo.length ? passed + "/" + slo.length + "일 정기런 통과" : "데이터 없음",
+    ["제때 갱신된 날", slo.length ? Math.round(passed / slo.length * 100) + "%" : "—",
+     slo.length ? slo.length + "일 중 " + passed + "일 성공" : "데이터 없음",
      slo.length && passed / slo.length < 0.9 ? "bad" : "good"],
-    ["Domains", withSlo + " / " + doms.length, "SLO 마트 보유 도메인", withSlo < doms.length ? "bad" : "good"],
-    ["Violations", nf.format(viol), "계약 위반 누적", viol > 0 ? "bad" : "good"],
-    ["초록 위장", nf.format(disguise), "통과로 보였지만 빈 run", disguise > 0 ? "bad" : "good"],
+    ["측정 가능한 분야", withSlo + " / " + doms.length, "나머지는 문제가 생겨도 알 수 없음",
+     withSlo < doms.length ? "bad" : "good"],
+    ["데이터 규칙 위반", nf.format(viol), "값 범위·형식이 약속과 다른 건수", viol > 0 ? "bad" : "good"],
+    ["성공했지만 0건", nf.format(disguise), "성공 표시였으나 받은 데이터가 없던 작업",
+     disguise > 0 ? "bad" : "good"],
   ]);
 
   $("cal").innerHTML = slo.length
@@ -357,29 +562,29 @@ function render(d) {
           ((r.green_disguise_runs || 0) > 0 ? " · 초록 위장 " + r.green_disguise_runs : "") + "'>" +
           esc(md(r.event_date)) + "</div>";
       }).join("") + "</div>" +
-      "<div class='cal-legend'><span><span class='pill ok'>초록</span> 정기런 통과</span>" +
-      "<span><span class='pill warn'>노랑</span> 수동 복구로 살림</span>" +
-      "<span><span class='pill bad'>빨강</span> 그날 데이터 없음</span>" +
-      "<span><b style='color:var(--red-ink)'>붉은 테두리</b> 초록 위장 — 통과로 계산됐지만 빈 run</span></div>"
-    : "<div class='empty'>SLO 데이터가 없습니다</div>";
+      "<div class='cal-legend'><span><span class='pill ok'>초록</span> 정상 갱신</span>" +
+      "<span><span class='pill warn'>노랑</span> 실패했지만 나중에 되살림</span>" +
+      "<span><span class='pill bad'>빨강</span> 그날 데이터를 못 받음</span>" +
+      "<span><b style='color:var(--red-ink)'>붉은 테두리</b> 성공으로 기록됐지만 실제 데이터는 0건</span></div>"
+    : "<div class='empty'>표시할 기록이 없습니다</div>";
 
   $("domains").innerHTML = table([
-    { t:"domain", get:(r) => esc(r.label) + " <span class='pill dim'>" + esc(r.domain) + "</span>" },
-    { t:"SLO", get:(r) => r.has_slo
-        ? "<span class='pill ok'>보유</span>"
-        : "<span class='pill warn'>" + esc(r.note || "미보유") + "</span>" },
-  ], doms, "도메인 등록부가 비었습니다");
+    { t:"분야", get:(r) => esc(r.label) + " <span class='pill dim'>" + esc(r.domain) + "</span>" },
+    { t:"품질 측정", get:(r) => r.has_slo
+        ? "<span class='pill ok'>가능</span>"
+        : "<span class='pill warn'>" + esc(r.note || "기준 없음") + "</span>" },
+  ], doms, "분야 목록이 비었습니다");
 
   $("badDays").innerHTML = table([
-    { t:"date", get:(r) => esc(r.event_date) },
-    { t:"무슨 일", get:(r) => (r.green_disguise_runs || 0) > 0
-        ? "<span class='pill bad'>초록 위장 " + r.green_disguise_runs + "</span>"
-        : (r.eod_slo_passed ? "<span class='pill warn'>복구됨</span>"
-                            : "<span class='pill bad'>실패</span>") },
-    { t:"cov", r:true, get:(r) => (r.best_coverage_pct ?? "—") + "%" },
-    { t:"failed", r:true, get:(r) => r.failed_dataset_count },
-    { t:"viol", r:true, get:(r) => r.violation_count },
-  ], badDays, "살펴야 할 날이 없습니다");
+    { t:"날짜", get:(r) => esc(r.event_date) },
+    { t:"무슨 일이 있었나", get:(r) => (r.green_disguise_runs || 0) > 0
+        ? "<span class='pill bad'>성공했지만 0건 " + r.green_disguise_runs + "회</span>"
+        : (r.eod_slo_passed ? "<span class='pill warn'>나중에 되살림</span>"
+                            : "<span class='pill bad'>갱신 실패</span>") },
+    { t:"수집률", r:true, get:(r) => (r.best_coverage_pct ?? "—") + "%" },
+    { t:"실패한 데이터", r:true, get:(r) => r.failed_dataset_count },
+    { t:"규칙 위반", r:true, get:(r) => r.violation_count },
+  ], badDays, "확인이 필요한 날이 없습니다");
 
   // ── 서빙
   const s = d.serving;
@@ -388,10 +593,10 @@ function render(d) {
   const emptyN = s.empty.reduce((a, r) => a + r.empty_responses, 0);
   const errPct = calls ? errs / calls * 100 : 0;
   kpis("servKpis", [
-    ["Calls", nf.format(calls), "최근 " + d.window_days + "일 총 호출", ""],
-    ["Error rate", errPct.toFixed(1) + "%", errs + "건 실패", errPct >= 5 ? "bad" : ""],
-    ["Empty 200", nf.format(emptyN), "조용한 0행 응답", emptyN > 0 ? "bad" : ""],
-    ["Active keys", nf.format(s.keys.length), "이 기간에 호출한 키", ""],
+    ["전체 요청", nf.format(calls), "최근 " + d.window_days + "일 합계", ""],
+    ["실패율", errPct.toFixed(1) + "%", errs + "건이 답을 받지 못함", errPct >= 5 ? "bad" : ""],
+    ["결과 0건", nf.format(emptyN), "오류는 아니나 보여줄 게 없던 요청", emptyN > 0 ? "bad" : ""],
+    ["사용 중인 이용자", nf.format(s.keys.length), "이 기간에 요청을 보낸 키 수", ""],
   ]);
 
   if (s.daily.length) {
@@ -405,39 +610,42 @@ function render(d) {
   } else $("daily").innerHTML = "<div class='empty'>이 기간에 호출이 없습니다</div>";
 
   $("failures").innerHTML = table([
-    { t:"status", get:(r) => "<span class='pill " + (r.status >= 500 ? "bad" : "warn") + "'>" + r.status + "</span>" },
-    { t:"route", get:(r) => esc(r.route) },
-    { t:"table", get:(r) => esc(r.table_name || "—"), name:true },
-    { t:"hits", r:true, get:(r) => r.hits },
-  ], s.failures, "실패 없음");
+    { t:"이유", get:(r) => "<span class='pill " + (r.status >= 500 ? "bad" : "warn") + "'>" +
+        (STATUS_KO[r.status] || r.status) + "</span>" },
+    { t:"요청 종류", get:(r) => ROUTE_KO[r.route] || esc(r.route) },
+    { t:"대상 API", get:(r) => esc(r.table_name || "—"), name:true },
+    { t:"건수", r:true, get:(r) => nf.format(r.hits) },
+  ], s.failures, "답하지 못한 요청이 없습니다");
 
   $("empty").innerHTML = table([
-    { t:"table", get:(r) => esc(r.table_name || "—"), name:true },
-    { t:"filters", get:(r) => esc(r.filters || "(없음)") },
-    { t:"count", r:true, get:(r) => r.empty_responses },
-  ], s.empty, "0행 응답 없음");
+    { t:"대상 API", get:(r) => esc(r.table_name || "—"), name:true },
+    { t:"걸었던 조건", get:(r) => r.filters ? esc(r.filters) : "<span class='zero'>조건 없음</span>" },
+    { t:"건수", r:true, get:(r) => nf.format(r.empty_responses) },
+  ], s.empty, "결과가 0건이던 요청이 없습니다");
 
   $("products").innerHTML = table([
-    { t:"table", get:(r) => esc(r.table_name), name:true },
-    { t:"preview", r:true, get:(r) => r.previews },
-    { t:"data", r:true, get:(r) => r.calls },
-    { t:"전환", r:true, get:(r) => r.previews ? Math.round(r.calls / r.previews * 100) + "%" : "—" },
-    { t:"avg rows", r:true, get:(r) => r.avg_rows },
-  ], s.products, "조회된 제품 없음");
+    { t:"API", get:(r) => esc(r.table_name), name:true },
+    { t:"미리보기", r:true, get:(r) => num(r.previews) },
+    { t:"실제 조회", r:true, get:(r) => num(r.calls) },
+    // 비율(%)이 아니라 배수다 — 미리보기 1번 뒤 여러 번 조회하면 100%를 넘어 '전환율'로 읽히지 않는다
+    { t:"미리보기 1회당 조회", r:true, get:(r) => r.previews
+        ? (r.calls / r.previews).toFixed(1) + "배" : "—" },
+    { t:"평균 응답 건수", r:true, get:(r) => r.avg_rows },
+  ], s.products, "조회된 API가 없습니다");
 
   $("routes").innerHTML = table([
-    { t:"route", get:(r) => esc(r.route), name:true },
-    { t:"calls", r:true, get:(r) => nf.format(r.calls) },
-    { t:"errors", r:true, get:(r) => r.errors ? "<span class='pill bad'>" + r.errors + "</span>" : "0" },
-    { t:"avg ms", r:true, get:(r) => r.avg_ms },
-  ], s.routes, "호출 없음");
+    { t:"요청 종류", get:(r) => ROUTE_KO[r.route] || esc(r.route) },
+    { t:"요청 수", r:true, get:(r) => nf.format(r.calls) },
+    { t:"실패", r:true, get:(r) => r.errors ? "<span class='pill bad'>" + r.errors + "</span>" : num(0) },
+    { t:"평균 응답시간", r:true, get:(r) => r.avg_ms != null ? r.avg_ms + " ms" : "—" },
+  ], s.routes, "요청이 없습니다");
 
   $("keys").innerHTML = table([
-    { t:"key", get:(r) => esc(r.key_id), name:true },
-    { t:"calls", r:true, get:(r) => nf.format(r.calls) },
-    { t:"days", r:true, get:(r) => r.active_days > 1
-        ? "<span class='pill ok'>" + r.active_days + "</span>" : r.active_days },
-  ], s.keys, "인증 호출 없음");
+    { t:"이용자", get:(r) => esc(r.key_id), name:true },
+    { t:"요청 수", r:true, get:(r) => nf.format(r.calls) },
+    { t:"방문한 날", r:true, get:(r) => r.active_days > 1
+        ? "<span class='pill ok'>" + r.active_days + "일</span>" : r.active_days + "일" },
+  ], s.keys, "키를 쓴 요청이 없습니다");
 
   // ── 탭 라벨의 상태 점 — 탭으로 가린 쪽이 아픈지를 전환 없이 알려준다.
   // 판정 기준은 KPI 의 경고 조건과 같다(정기런 실패·계약 위반 / 에러율 5% 이상·0행 발생).
@@ -445,13 +653,319 @@ function render(d) {
   const servBad = errPct >= 5 || emptyN > 0;
   $("dot-pipeline").className = "dot " + (slo.length ? (pipeBad ? "bad" : "ok") : "");
   $("dot-serving").className = "dot " + (calls ? (servBad ? "bad" : "ok") : "");
-  showTab(location.hash.slice(1) || PANES[0]);   // 배너 가시성도 여기서 맞춰진다
+  showTab(parseHash().pane || PANES[0]);   // 배너 가시성도 여기서 맞춰진다
+}
+
+// ── 파이프라인 실행 기록 (팀 조회 DB 4종) ──────────────────────────────────────────
+// 이 화면의 실측 근거다. SLO(_ops_slo)는 아직 합성이라 아래쪽에 별도 지표로 내린다.
+// 원칙 하나 — **모른다 ≠ 0**: 못 잰 값은 0 이 아니라 "미확인"으로 그린다. 0 으로 그리면
+// 관측 공백이 "이상 없음"으로 위장된다(#78 F-3).
+const OBS_KO = { complete: "점검 완료", partial: "일부 미확인", unverified: "점검 전" };
+
+function renderPipeline(p) {
+  const rows = p.run_event_daily || [];
+  const totalEv = rows.reduce((a, r) => a + r.events, 0);
+  const totalOk = rows.reduce((a, r) => a + (r.success || 0), 0);
+  const totalNg = rows.reduce((a, r) => a + (r.failed || 0), 0);
+  const layerUnknown = p.meta.unknown ? p.meta.unknown.layer_unknown : null;
+
+  kpis("runKpis", [
+    ["실행 기록", nf.format(totalEv), "최근 " + p.window_days + "일 · 파이프라인이 남긴 건수", ""],
+    ["성공률", totalEv ? Math.round(totalOk / totalEv * 100) + "%" : "—",
+     totalEv ? totalOk + " / " + totalEv + "건 성공" : "기록 없음",
+     totalEv && totalOk / totalEv < 0.9 ? "bad" : "good"],
+    ["실패", nf.format(totalNg), "다시 봐야 하는 실행", totalNg > 0 ? "bad" : "good"],
+    // 미확인은 실패가 아니다 — 그래서 색을 달리 하고 "0 건"과 구분해 적는다
+    ["단계 미확인", layerUnknown == null ? "—" : nf.format(layerUnknown),
+     "어느 단계인지 기록이 없는 건수", layerUnknown ? "bad" : ""],
+  ]);
+
+  $("runDaily").innerHTML = table([
+    { t:"날짜", get:(r) => esc(r.day) },
+    { t:"분야", get:(r) => "<span class='pill dim'>" + esc(domLabel(r.domain)) + "</span>" },
+    { t:"작업 수", r:true, get:(r) => num(r.dags) },
+    { t:"실행", r:true, get:(r) => nf.format(r.events) },
+    { t:"성공", r:true, get:(r) => num(r.success) },
+    { t:"실패", r:true, get:(r) => r.failed ? "<span class='pill bad'>" + r.failed + "</span>" : num(0) },
+    { t:"단계 미확인", r:true, get:(r) => r.layer_unknown
+        ? "<span class='pill warn'>" + r.layer_unknown + "</span>" : num(0) },
+    { t:"건수 미확인", r:true, get:(r) => r.rows_unknown
+        ? "<span class='pill warn'>" + r.rows_unknown + "</span>" : num(0) },
+  ], rows, "이 기간에 실행 기록이 없습니다");
+
+  // 기대치를 dag_id 로 붙여 "감시 대상인가"를 상태 표에서 바로 본다
+  const expBy = {};
+  for (const e of p.expectation || []) expBy[e.dag_id] = e;
+  const st = (p.pipeline_state || []).slice().sort((a, b) =>
+    (a.last_status === "failed" ? -1 : 1) - (b.last_status === "failed" ? -1 : 1) ||
+    String(a.domain).localeCompare(String(b.domain)));
+
+  $("pipeState").innerHTML = table([
+    { t:"작업", get:(r) => esc(r.dag_id), name:true },
+    { t:"분야", get:(r) => esc(domLabel(r.domain)) },
+    { t:"마지막 결과", get:(r) => r.last_status === "success"
+        ? "<span class='pill ok'>성공</span>"
+        : r.last_status === "failed" ? "<span class='pill bad'>실패</span>"
+        : "<span class='pill dim'>" + esc(r.last_status || "기록 없음") + "</span>" },
+    { t:"마지막 실행", get:(r) => esc(r.last_observed_date_kst || "—") },
+    // 점검 상태 — "점검 전"은 정상이라는 뜻이 아니다(#78 C-9). 회색이 아니라 노랑으로 둔다.
+    { t:"점검", get:(r) => r.observation_state === "complete"
+        ? "<span class='pill ok'>" + OBS_KO.complete + "</span>"
+        : "<span class='pill warn'>" + esc(OBS_KO[r.observation_state] || r.observation_state) + "</span>" },
+    { t:"감시", get:(r) => expBy[r.dag_id]
+        ? (expBy[r.dag_id].monitored ? "<span class='pill ok'>대상</span>"
+                                     : "<span class='pill dim'>제외</span>")
+        : "<span class='pill warn'>미등록</span>" },
+  ], st, "등록된 파이프라인 상태가 없습니다");
+
+  $("pipeExpect").innerHTML = table([
+    { t:"작업", get:(r) => esc(r.dag_id), name:true },
+    { t:"분야", get:(r) => esc(domLabel(r.domain)) },
+    { t:"도는 방식", get:(r) => esc(r.trigger_type || "—") },
+    { t:"주기", get:(r) => esc(r.expected_interval || (r.upstream ? "상류: " + r.upstream : "—")) },
+    { t:"허용 지연", r:true, get:(r) => r.max_delay_minutes != null
+        ? nf.format(r.max_delay_minutes) + "분" : "<span class='zero'>미설정</span>" },
+    { t:"감시", get:(r) => r.monitored
+        ? "<span class='pill ok'>대상</span>" : "<span class='pill dim'>제외</span>" },
+  ], p.expectation, "등록된 실행 주기가 없습니다");
+
+  // 탭 점: 실패가 있거나 집계가 비었으면 붉게
+  const bad = totalNg > 0 || (p.meta.source && p.meta.source.aggregate_missing);
+  $("dot-pipeline").className = "dot " + (totalEv ? (bad ? "bad" : "ok") : "");
+  return p;
+}
+
+// 실행 기록 쪽 배너는 요약(/api/summary)이 아니라 이 응답을 보고 붙인다 — 데이터가 늦게
+// 오므로 render() 의 배너 묶음에 끼워 넣지 않고 뒤에서 앞에 덧댄다.
+function pipelineBanners(p) {
+  const b = [];
+  const src = p.meta.source || {};
+  if (src.aggregate_missing)
+    b.push("<div class='banner warn' data-pane='pipeline'><b>집계표가 비어 있습니다</b> — " +
+           "실행 기록(<code>_ops_run_event</code>)은 들어오는데 날짜별 집계" +
+           "(<code>_ops_daily_metric</code>)가 0행입니다. 화면은 기록을 직접 세어 보여주고 " +
+           "있지만, 규약상 집계는 파이프라인이 만듭니다(ASK-Seoul#78 D-7) — 집계 단계가 " +
+           "도는지 확인이 필요합니다.</div>");
+  const u = p.meta.unknown || {};
+  if (u.layer_unknown)
+    b.push("<div class='banner info' data-pane='pipeline'>실행 기록 " + nf.format(u.events_total) +
+           "건 중 <b>" + nf.format(u.layer_unknown) + "건은 어느 단계인지 기록이 없습니다.</b> " +
+           "실패가 아니라 <b>미확인</b>이며, 화면은 이걸 0 으로 세지 않습니다 — " +
+           "관측 공백을 '이상 없음'으로 보이게 하지 않기 위해서입니다.</div>");
+  if (b.length) $("banners").insertAdjacentHTML("afterbegin", b.join(""));
+  // 새로 넣은 배너에도 현재 탭 가시성 규칙을 적용한다
+  const cur = parseHash().pane || PANES[0];
+  for (const el of document.querySelectorAll("#banners [data-pane]"))
+    el.hidden = el.dataset.pane !== cur;
+}
+
+async function loadPipeline() {
+  try {
+    const res = await fetch("/api/pipeline?days=" + $("days").value);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return renderPipeline(await res.json());
+  } catch {
+    $("runDaily").innerHTML =
+      "<div class='empty'>실행 기록을 불러오지 못했습니다 — 팀 조회 DB 에 연결되어 있는지 확인하세요" +
+      "(로컬 Miniflare 에는 이 표가 없습니다. <code>npm run dev:remote</code>).</div>";
+    return null;
+  }
+}
+
+// ── API 사용량 ─────────────────────────────────────────────────────────────────────
+// 응답 상태 탭이 "잘 나갔나"라면 여기는 "무엇이 얼마나 쓰이나"다. 목록은 카탈로그 전체(62종)라
+// **한 번도 안 불린 API 도 나온다** — 안 쓰이는 것이야말로 알아야 하는 정보다.
+let USE = null;             // 서버 응답 원본
+// 열려 있는 상세의 API 이름 — 기간을 바꿔도 열린 채로 갱신한다.
+// 주소로 바로 들어온 경우(#usage/<API>)를 **여기서** 잡는다. showTab 이 loadUsage 보다 먼저
+// 돌면서 해시를 정규화하므로, 그 전에 값을 확보해 두지 않으면 딥링크가 지워진다.
+let DETAIL_OPEN = parseHash().pane === "usage" ? parseHash().api : null;
+
+function renderUsage(u) {
+  USE = u;
+  const totalCalls = u.domains.reduce((a, r) => a + r.calls, 0);
+  const usedApis = u.apis.filter((a) => a.calls > 0).length;
+  const errs = u.domains.reduce((a, r) => a + r.errors, 0);
+  kpis("useKpis", [
+    ["등록된 API", nf.format(u.apis.length), "외부에 열려 있는 전체", ""],
+    ["실제 쓰인 API", usedApis + " / " + u.apis.length,
+     "최근 " + u.window_days + "일 기준", usedApis === 0 ? "bad" : ""],
+    ["전체 요청", nf.format(totalCalls), "API 조회 요청만 (목록·사용량 조회 제외)", ""],
+    ["실패", nf.format(errs), "답을 받지 못한 요청", errs > 0 ? "bad" : ""],
+  ]);
+
+  // 분야별 비중 — 가로 막대. 요청이 0 인 분야도 남겨 둔다("안 쓰인다"가 정보다)
+  const max = Math.max(1, ...u.domains.map((r) => r.calls));
+  $("domShare").innerHTML = u.domains.length
+    ? "<div class='share'>" + u.domains.map((r) => {
+        const pct = totalCalls ? (r.calls / totalCalls * 100) : 0;
+        return "<div class='row'><div class='nm'>" + esc(domLabel(r.domain)) +
+          "<small>API " + r.apis_used + "/" + r.api_count + "개 사용</small></div>" +
+          "<div class='track'><div class='fill" + (r.calls ? "" : " dim") +
+          "' style='width:" + Math.max(r.calls ? 2 : 0, r.calls / max * 100) + "%'></div></div>" +
+          "<div class='num'><b>" + nf.format(r.calls) + "</b> <small>" + pct.toFixed(1) + "%</small></div></div>";
+      }).join("") + "</div>" +
+      "<p style='font-size:11px;color:var(--faint);margin-top:10px'>" +
+      "분야는 제품 이름 앞부분으로 나뉩니다. API 목록·내 사용량처럼 특정 데이터에 속하지 않는 요청은 여기 포함되지 않습니다.</p>"
+    : "<div class='empty'>분야 정보를 불러오지 못했습니다</div>";
+
+  // 분야 선택 드롭다운 두 개(비중 카드 옆 · 목록 필터) — 값은 서로 독립이다
+  const opts = (all) => (all ? "<option value=''>전체 분야</option>" : "") +
+    u.domains.map((r) => "<option value='" + esc(r.domain) + "'>" + esc(domLabel(r.domain)) +
+      " (" + r.calls + ")</option>").join("");
+  const keepPick = $("domPick").value, keepDom = $("apiDom").value;
+  $("domPick").innerHTML = opts(false);
+  $("apiDom").innerHTML = opts(true);
+  $("domPick").value = keepPick || (u.domains[0] && u.domains[0].domain) || "";
+  $("apiDom").value = keepDom || "";
+
+  renderDomApis();
+  renderApiList();
+  // 이 탭의 점: 등록만 되고 아무도 안 쓰는 API 가 절반을 넘으면 알린다(수요 신호)
+  $("dot-usage").className = "dot " + (u.apis.length
+    ? (usedApis === 0 || errs > 0 ? "bad" : "ok") : "");
+  if (DETAIL_OPEN) openDetail(DETAIL_OPEN);   // 기간 변경 후에도 열린 상세를 따라 갱신
+}
+
+function renderDomApis() {
+  if (!USE) return;
+  const dom = $("domPick").value;
+  const rows = USE.apis.filter((a) => a.domain === dom);
+  const tot = rows.reduce((a, r) => a + r.calls, 0);
+  $("domPickNote").textContent = tot
+    ? domLabel(dom) + " 분야 요청 " + nf.format(tot) + "건을 API별로 나눈 것입니다"
+    : domLabel(dom) + " 분야는 이 기간에 요청이 없습니다";
+  $("domApis").innerHTML = table([
+    { t:"API", get:(r) => esc(r.name), name:true },
+    { t:"요청", r:true, get:(r) => num(r.calls) },
+    { t:"비중", r:true, get:(r) => tot ? (r.calls / tot * 100).toFixed(1) + "%" : "—" },
+  ], rows, "이 분야에 등록된 API가 없습니다");
+}
+
+function renderApiList() {
+  if (!USE) return;
+  const dom = $("apiDom").value, q = $("apiQ").value.trim().toLowerCase();
+  const usedOnly = $("apiUsedOnly").checked;
+  const rows = USE.apis.filter((a) =>
+    (!dom || a.domain === dom) &&
+    (!usedOnly || a.calls > 0) &&
+    (!q || (a.name + " " + (a.product_id || "") + " " + (a.description || "")).toLowerCase().includes(q)));
+  $("apiCount").textContent = rows.length + " / " + USE.apis.length + "개 표시";
+  $("apiTable").innerHTML = table([
+    { t:"API", get:(r) => esc(r.name), name:true },
+    { t:"분야", get:(r) => "<span class='pill dim'>" + esc(domLabel(r.domain)) + "</span>" },
+    { t:"설명", get:(r) => esc(r.description || "—"), cls:"desc" },
+    { t:"요청", r:true, get:(r) => num(r.calls) },
+    { t:"미리보기", r:true, get:(r) => num(r.previews) },
+    { t:"실제 조회", r:true, get:(r) => num(r.data_calls) },
+    { t:"실패", r:true, get:(r) => r.errors ? "<span class='pill bad'>" + r.errors + "</span>" : num(0) },
+    { t:"0건 응답", r:true, get:(r) => r.empty_hits ? "<span class='pill warn'>" + r.empty_hits + "</span>" : num(0) },
+    { t:"마지막 요청", r:true, get:(r) => r.last_call ? esc(fmtTs(r.last_call)) : "<span class='zero'>없음</span>" },
+    { t:"", r:true, get:(r) => "<button class='kbtn' data-api='" + esc(r.name) + "'>상세보기</button>" },
+  ], rows, "조건에 맞는 API가 없습니다");
+}
+
+// 상세 — 값이 아니라 **축**을 보여준다. 요청 값·응답 본문은 애초에 저장하지 않기 때문이고,
+// 그 사실을 화면이 말해준다(없는 게 아니라 안 남긴 것 — 버그로 오해하지 않게).
+async function openDetail(name) {
+  DETAIL_OPEN = name;
+  const el = $("apiDetail");
+  el.hidden = false;
+  el.innerHTML = "<div class='empty'>불러오는 중…</div>";
+  let d;
+  try {
+    const res = await fetch("/api/usage/" + encodeURIComponent(name) + "?days=" + $("days").value);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    d = await res.json();
+  } catch (e) {
+    el.innerHTML = "<div class='empty'>상세를 불러오지 못했습니다 (" + esc(e.message) + ")</div>";
+    return;
+  }
+  const totalCalls = d.statuses.reduce((a, r) => a + r.calls, 0);
+  const okCalls = d.statuses.filter((r) => r.status < 400).reduce((a, r) => a + r.calls, 0);
+
+  el.innerHTML =
+    "<div class='dhd'><h4>" + esc(d.api.name) + "</h4>" +
+    "<span class='pill dim'>" + esc(domLabel(d.api.domain)) + "</span>" +
+    "<span style='font-size:11.5px;color:var(--muted)'>전체 " + nf.format(d.api.row_count || 0) + "건 보유</span>" +
+    "<button class='kbtn close' id='detClose'>닫기</button></div>" +
+    "<div class='dsc'>" + esc(d.api.description || "설명이 등록되어 있지 않습니다") + "</div>" +
+    "<div class='dgrid'>" +
+      "<div class='box'><h5>요청 결과</h5>" +
+      "<p class='note'>최근 " + d.window_days + "일 · 총 " + nf.format(totalCalls) + "건 중 " +
+      nf.format(okCalls) + "건 정상</p>" +
+      "<div class='scroll'>" + table([
+        { t:"결과", get:(r) => "<span class='pill " + (r.status >= 500 ? "bad" : r.status >= 400 ? "warn" : "ok") +
+            "'>" + (r.status < 400 ? "정상" : (STATUS_KO[r.status] || r.status)) + "</span>" },
+        { t:"요청 종류", get:(r) => ROUTE_KO[r.route] || esc(r.route) },
+        { t:"건수", r:true, get:(r) => nf.format(r.calls) },
+      ], d.statuses, "요청이 없습니다") + "</div></div>" +
+
+      "<div class='box'><h5>어떤 조건으로 찾았나</h5>" +
+      "<p class='note'>걸었던 조건의 <b>항목 이름</b>입니다 — 입력한 값은 개인정보 보호를 위해 저장하지 않습니다</p>" +
+      "<div class='scroll'>" + table([
+        { t:"조건 항목", get:(r) => r.filters ? esc(r.filters) : "<span class='zero'>조건 없이 전체</span>" },
+        { t:"요청", r:true, get:(r) => nf.format(r.calls) },
+        { t:"평균 응답 건수", r:true, get:(r) => r.avg_rows ?? "—" },
+        { t:"0건", r:true, get:(r) => r.empty_hits
+            ? "<span class='pill warn'>" + r.empty_hits + "</span>" : num(0) },
+      ], d.filters, "요청이 없습니다") + "</div></div>" +
+
+      "<div class='box wide'><h5>날짜별 요청</h5>" +
+      "<div class='scroll'>" + table([
+        { t:"날짜", get:(r) => esc(r.day) },
+        { t:"요청", r:true, get:(r) => nf.format(r.calls) },
+        { t:"실패", r:true, get:(r) => r.errors ? "<span class='pill bad'>" + r.errors + "</span>" : num(0) },
+        { t:"평균 응답 건수", r:true, get:(r) => r.avg_rows ?? "—" },
+      ], d.daily, "이 기간에 요청이 없습니다") + "</div></div>" +
+
+      "<div class='box wide'><h5>최근 요청 기록</h5>" +
+      "<p class='note'>최근 50건 · 문의가 들어오면 <b>요청 번호</b>로 그 요청을 특정할 수 있습니다. " +
+      "요청에 담긴 값과 응답 내용 자체는 저장하지 않으므로 여기서 볼 수 없습니다.</p>" +
+      "<div class='scroll'>" + table([
+        { t:"시각", get:(r) => esc(fmtTs(r.ts)) },
+        { t:"요청 종류", get:(r) => ROUTE_KO[r.route] || esc(r.route) },
+        { t:"결과", get:(r) => "<span class='pill " + (r.status >= 500 ? "bad" : r.status >= 400 ? "warn" : "ok") +
+            "'>" + (r.status < 400 ? "정상" : (STATUS_KO[r.status] || r.status)) + "</span>" },
+        { t:"조건 항목", get:(r) => r.filters ? esc(r.filters) : "<span class='zero'>없음</span>" },
+        { t:"응답 건수", r:true, get:(r) => r.row_count ?? "—" },
+        { t:"소요", r:true, get:(r) => r.ms != null ? r.ms + " ms" : "—" },
+        { t:"이용자", get:(r) => r.key_id ? esc(r.key_id) : "<span class='zero'>비로그인</span>", name:true },
+        { t:"요청 번호", get:(r) => esc(r.request_id || "—"), name:true },
+      ], d.recent, "이 기간에 요청이 없습니다") + "</div></div>" +
+    "</div>";
+
+  $("detClose").addEventListener("click", () => {
+    DETAIL_OPEN = null; el.hidden = true;
+    history.replaceState(null, "", "#usage");
+  });
+  if (decodeURIComponent(location.hash.slice(1)) !== "usage/" + name)
+    history.replaceState(null, "", "#" + encodeURI("usage/" + name));
+  el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+$("apiTable").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-api]");
+  if (b) openDetail(b.dataset.api);
+});
+$("domPick").addEventListener("change", renderDomApis);
+$("apiDom").addEventListener("change", renderApiList);
+$("apiUsedOnly").addEventListener("change", renderApiList);
+$("apiQ").addEventListener("input", renderApiList);
+
+async function loadUsage() {
+  try {
+    const res = await fetch("/api/usage?days=" + $("days").value);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    renderUsage(await res.json());
+  } catch {
+    $("useKpis").innerHTML = "";
+    $("apiTable").innerHTML = "<div class='empty'>사용량을 불러오지 못했습니다 — 게이트웨이 데이터가 공유되고 있는지 확인하세요</div>";
+  }
 }
 
 // ── 키 관리 ────────────────────────────────────────────────────────────────────────
-// 이 표에는 이메일이 그대로 보인다. 운영자가 "누구 키인지" 없이는 조치를 못 하기 때문인데,
-// 그래서 이 화면은 토큰 뒤에 있어야 한다(gate 참조).
-const fmtTs = (s) => (s ? s.slice(0, 16).replace("T", " ") : null);
+// 이 표에는 이메일이 마스킹된 채 보인다. 운영자가 "누구 키인지" 없이는 조치를 못 하기 때문이다.
 let KEYS = [];
 // 조치 가능 여부는 **서버가 알려준 값**을 그대로 쓴다. 화면에서 이걸 켠다고 뚫리지 않는다 —
 // 실제 차단은 POST 쪽 requireWrite 가 한다. 여기서 하는 일은 못 할 일을 버튼으로 내밀지 않는 것뿐이다.
@@ -469,9 +983,9 @@ async function keyAction(hash, action, extra) {
   if (!res.ok) { msg.className = "keyMsg err"; msg.textContent = body.detail || ("실패 (HTTP " + res.status + ")"); return; }
   msg.className = "keyMsg done";
   msg.textContent = ({
-    revoke: "폐기했습니다", restore: "복구했습니다",
-    quota: "쿼터를 " + nf.format(body.daily_quota) + "회로 바꿨습니다",
-    delete: "삭제했습니다 — 키·이메일·사용량이 지워졌습니다",
+    revoke: "차단했습니다", restore: "차단을 풀었습니다",
+    quota: "하루 한도를 " + nf.format(body.daily_quota) + "회로 바꿨습니다",
+    delete: "삭제했습니다 — 키·이메일·사용 기록이 지워졌습니다",
   })[action] + " (" + body.key_prefix + "…)";
   await loadKeys();
 }
@@ -481,18 +995,18 @@ function renderKeys(rows) {
   const active = KEYS.filter((k) => k.status === "active");
   const near = active.filter((k) => k.daily_quota > 0 && k.used_today / k.daily_quota >= 0.8);
   kpis("keyKpis", [
-    ["발급 키", nf.format(KEYS.length), "전체"],
-    ["활성", nf.format(active.length), "폐기 " + (KEYS.length - active.length) + "개"],
-    ["오늘 호출", nf.format(KEYS.reduce((a, k) => a + (k.used_today || 0), 0)), "모든 키 합계"],
-    ["쿼터 임박", nf.format(near.length), "80% 이상 소진", near.length ? "bad" : ""],
+    ["발급된 키", nf.format(KEYS.length), "전체"],
+    ["사용 가능", nf.format(active.length), "차단됨 " + (KEYS.length - active.length) + "개"],
+    ["오늘 요청", nf.format(KEYS.reduce((a, k) => a + (k.used_today || 0), 0)), "모든 이용자 합계"],
+    ["한도 임박", nf.format(near.length), "하루 한도의 80% 이상 사용", near.length ? "bad" : ""],
   ]);
 
   $("keyTable").innerHTML = table([
     { t: "키", name: true, get: (r) => "<code>" + esc(r.key_prefix) + "…</code>" },
     { t: "이메일", get: (r) => esc(r.email_masked) },
     { t: "상태", get: (r) => r.status === "active"
-        ? "<span class='pill ok'>활성</span>" : "<span class='pill bad'>폐기</span>" },
-    { t: "오늘 / 쿼터", r: true, get: (r) => {
+        ? "<span class='pill ok'>사용 가능</span>" : "<span class='pill bad'>차단됨</span>" },
+    { t: "오늘 / 하루 한도", r: true, get: (r) => {
         const ratio = r.daily_quota > 0 ? r.used_today / r.daily_quota : 0;
         const cls = ratio >= 1 ? "bad" : ratio >= 0.8 ? "warn" : "dim";
         const used = "<span class='pill " + cls + "'>" + nf.format(r.used_today) + "</span>";
@@ -501,13 +1015,13 @@ function renderKeys(rows) {
           ? "<input type='number' min='0' value='" + r.daily_quota + "' data-q='" + r.key_hash + "' aria-label='일일 쿼터'>" +
             "<button class='kbtn' data-act='quota' data-h='" + r.key_hash + "'>저장</button>"
           : "<span>/ " + nf.format(r.daily_quota) + "</span>") + "</div>"; } },
-    { t: "총 호출", r: true, get: (r) => nf.format(r.calls_logged) },
-    { t: "최근 호출", r: true, get: (r) => fmtTs(r.last_call) },
-    { t: "발급", r: true, get: (r) => fmtTs(r.created_at) },
+    { t: "총 요청", r: true, get: (r) => nf.format(r.calls_logged) },
+    { t: "마지막 요청", r: true, get: (r) => fmtTs(r.last_call) },
+    { t: "발급일", r: true, get: (r) => fmtTs(r.created_at) },
     { t: "", r: true, get: (r) => CAN_WRITE
         ? "<div class='kacts'>" + (r.status === "active"
-            ? "<button class='kbtn danger' data-act='revoke' data-h='" + r.key_hash + "'>폐기</button>"
-            : "<button class='kbtn' data-act='restore' data-h='" + r.key_hash + "'>복구</button>") +
+            ? "<button class='kbtn danger' data-act='revoke' data-h='" + r.key_hash + "'>차단</button>"
+            : "<button class='kbtn' data-act='restore' data-h='" + r.key_hash + "'>차단 해제</button>") +
           "<button class='kbtn danger' data-act='delete' data-h='" + r.key_hash + "'>삭제</button></div>"
         : "" },
   ], KEYS, "발급된 키가 없습니다 — 마켓플레이스에서 키를 발급하면 여기에 나타납니다");
@@ -528,15 +1042,15 @@ $("keyTable").addEventListener("click", (e) => {
   if (b.dataset.armed !== "1") {
     for (const other of $("keyTable").querySelectorAll("button[data-armed='1']")) {
       other.dataset.armed = ""; other.classList.remove("armed");
-      other.textContent = other.dataset.act === "revoke" ? "폐기" : "삭제";
+      other.textContent = other.dataset.act === "revoke" ? "차단" : "삭제";
     }
     b.dataset.armed = "1"; b.classList.add("armed");
-    b.textContent = act === "revoke" ? "정말 폐기" : "정말 삭제";
+    b.textContent = act === "revoke" ? "정말 차단" : "정말 삭제";
     const msg = $("keyMsg");
     msg.className = "keyMsg";
     msg.textContent = act === "revoke"
-      ? "폐기하면 그 키의 호출이 즉시 403이 됩니다 (복구 가능)."
-      : "삭제하면 키·이메일·사용량이 지워집니다 — 되돌릴 수 없습니다.";
+      ? "차단하면 그 키의 요청이 즉시 거부됩니다. 나중에 다시 풀 수 있습니다."
+      : "삭제하면 키·이메일·사용 기록이 지워집니다 — 되돌릴 수 없습니다.";
     return;
   }
   keyAction(hash, act);
@@ -559,12 +1073,15 @@ function syncMode() {
   b.classList.toggle("on", CAN_WRITE);
 }
 
-async function load() {
+// quiet=true 는 자동 새로고침이 부르는 경우다. 한 번 실패했다고 보고 있던 화면을 접으면
+// (재적재 중 일시적 오류에도) 지켜보던 것을 잃는다 — 조용히 넘기고 다음 주기를 기다린다.
+async function load(quiet) {
   let res;
   try {
     res = await fetch("/api/summary?days=" + $("days").value, { headers: authHeaders() });
-  } catch { return fail("서버에 닿지 못했습니다"); }
+  } catch { return quiet ? null : fail("서버에 닿지 못했습니다"); }
   if (!res.ok) {
+    if (quiet) return null;
     const b = await res.json().catch(() => ({}));
     return fail(b.detail || ("불러오지 못했습니다 (HTTP " + res.status + ")"));
   }
@@ -579,7 +1096,9 @@ async function load() {
   $("app").hidden = false;
   render(data);
   syncMode();
-  await loadKeys();   // render() 가 showTab 으로 끝나므로 그 뒤에 채운다
+  // render() 가 showTab 으로 끝나므로 그 뒤에 채운다. 세 요청은 서로 무관하니 같이 보낸다.
+  const [, , pipe] = await Promise.all([loadKeys(), loadUsage(), loadPipeline()]);
+  if (pipe) pipelineBanners(pipe);
 }
 // 데이터를 못 받은 상태 — 그릴 것이 없으니 화면을 접고 사유만 보여준다
 function fail(msg) {
@@ -605,7 +1124,32 @@ $("enter").addEventListener("click", () => {
   load();
 });
 $("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("enter").click(); });
+// ── 자동 새로고침 ──────────────────────────────────────────────────────────────────
+// 재적재가 도는 동안 F5 를 반복해 누르면 "언제 바뀌었나"를 놓친다. 30초는 D1 조회를
+// 과하게 밀지 않으면서 사람이 기다릴 만한 간격이다. 상태는 sessionStorage 에 둬서
+// 새로고침해도 켜진 채로 유지된다(지켜보는 중에 꺼지면 그게 더 헷갈린다).
+const AUTO = "ops_auto_refresh";
+let autoTimer = null;
+function syncAuto() {
+  const on = sessionStorage.getItem(AUTO) === "1";
+  const b = $("autoBtn");
+  b.textContent = on ? "자동 새로고침 켜짐 · 30초" : "자동 새로고침 꺼짐";
+  b.classList.toggle("on", on);
+  clearInterval(autoTimer);
+  // 화면이 안 보이는 동안(다른 탭)에는 굳이 읽지 않는다 — 돌아오면 그때 한 번 읽는다
+  if (on) autoTimer = setInterval(() => { if (!document.hidden) load(true); }, 30000);
+}
+$("autoBtn").addEventListener("click", () => {
+  sessionStorage.setItem(AUTO, sessionStorage.getItem(AUTO) === "1" ? "0" : "1");
+  syncAuto();
+  if (sessionStorage.getItem(AUTO) === "1") load(true);
+});
+addEventListener("visibilitychange", () => {
+  if (!document.hidden && sessionStorage.getItem(AUTO) === "1") load(true);
+});
+
 $("days").addEventListener("change", load);
+syncAuto();
 load();   // 토큰 없이도 뜬다 — 막는 문이 아니라 여는 문이다
 </script>
 </body>

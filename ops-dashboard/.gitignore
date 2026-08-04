@@ -2,3 +2,8 @@ node_modules/
 .wrangler/
 # 운영자 토큰 — 절대 커밋 금지
 .dev.vars
+# Cloudflare CLI 자격증명(원격 D1 접근) — 절대 커밋 금지.
+# .env.example 은 값이 빈 견본이라 추적한다.
+.env
+.env.*
+!.env.example

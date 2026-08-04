@@ -101,18 +101,216 @@ async function summary(env, params, writable = false) {
       "ORDER BY calls DESC LIMIT 10", since),
   ]);
 
+  // 데이터 출처를 세 상태로 갈라서 내보낸다. "샘플이냐 아니냐"만 알려주면 화면이
+  // "데이터가 없다"와 "합성이 섞였다"를 같은 문구로 말하게 되고, 운영자는 어느 쪽인지
+  // 모른 채 원인을 찾게 된다.
+  //   none  — _ops_slo 에 이 기간 행이 아예 없다 (시드 전이거나 실적재가 안 돌았다)
+  //   sample— 합성 샘플이 섞여 있다 (is_sample=1)
+  //   live  — 전부 실측이다
+  const sampleRows = slo.rows.filter((r) => r.is_sample === 1).length;
+  const pipelineSource = !slo.rows.length ? "none" : (sampleRows ? "sample" : "live");
+
   return json({
     window_days: days,
     generated_at: new Date().toISOString(),
     meta: {
       missing,
       can_write: writable,
+      // 이 콘솔이 지금 어느 환경의 무슨 DB 를 보고 있나. 숫자만 보고 추측하게 두면
+      // 로컬 샘플을 운영 실적으로 오해하는 사고가 난다(wrangler.toml [vars]).
+      env: { label: env.ENV_LABEL || "알 수 없음", d1: env.ENV_D1 || "알 수 없음" },
       // 샘플이 한 행이라도 섞여 있으면 화면 전체에 배지를 띄운다 — 조용히 섞이는 게 제일 나쁘다
-      pipeline_is_sample: slo.rows.some((r) => r.is_sample === 1),
+      pipeline_is_sample: pipelineSource === "sample",
+      pipeline_source: pipelineSource,
+      pipeline_sample_rows: sampleRows,
     },
     pipeline: { domains: domains.rows, slo: slo.rows },
     serving: { routes: routes.rows, daily: daily.rows, products: products.rows,
                failures: failures.rows, empty: empty.rows, keys: keys.rows },
+  });
+}
+
+// ── 파이프라인 실행 기록 (팀 조회 DB 4종) ──────────────────────────────────────────
+// 정본은 ASAC-DAG `common/ops/d1_ops.py` 이고 **콘솔은 읽기 전용 소비자**다
+// (ASK-Seoul#78 §8 · decision/0005·0007). 여기서 만들거나 고치는 표가 아니다.
+//
+// 화면이 읽어야 할 표는 `_ops_daily_metric`(날짜×도메인×단계 집계)이지만, 그게 비어 있어도
+// `_ops_run_event`(기록 원본)에는 값이 있을 수 있다 — 실측(2026-08-03) 그 상태였다.
+// 그래서 **둘 다 읽고, 어느 쪽이 비었는지를 화면에 그대로 알린다.** 집계가 비었다는 사실
+// 자체가 관측 공백이고, 콘솔의 존재 이유가 그걸 채워서가 아니라 **보여주는** 것이다.
+//
+// 🔴 `모른다 ≠ 0` (#78 공통 원칙·F-3): 측정 못 한 값은 NULL 로 두고 0 과 구분해 내보낸다.
+//    0 으로 그리면 관측 공백이 "이상 없음"으로 위장된다.
+async function pipeline(env, params) {
+  const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
+  const sinceDate = `-${days} days`;
+
+  const [metric, events, state, expectation, layerGap] = await Promise.all([
+    // 집계표 — D-7 이 지정한 화면용 표. 자연키(날짜·도메인·단계)로 이미 접혀 있다.
+    safeRows(env,
+      "SELECT observed_date_kst AS day, domain, layer, event_count, success_count, failed_count, " +
+      "skipped_count, degraded_count, retried_run_count, empty_run_count, " +
+      "row_count_sum, rows_observed_count, rows_unknown_count, duration_s_sum " +
+      "FROM _ops_daily_metric WHERE observed_date_kst >= date('now','+9 hours',?) " +
+      "ORDER BY observed_date_kst, domain, layer", sinceDate),
+    // 기록 원본 — 집계가 비었을 때 "그래도 기록은 있다"를 보이기 위한 것이지, 콘솔이 집계를
+    // 대신 만드는 게 아니다. 파이프라인의 집계 로직을 여기서 재현하면 정본이 둘이 된다.
+    safeRows(env,
+      "SELECT observed_date_kst AS day, domain, " +
+      "COUNT(*) AS events, " +
+      "SUM(status='success') AS success, SUM(status='failed') AS failed, " +
+      "COUNT(DISTINCT dag_id) AS dags, " +
+      // layer 가 NULL 인 기록 — #78 이 세라고 한 '단계 미기록 건수'. 0 과 구분해야 한다.
+      "SUM(layer IS NULL) AS layer_unknown, " +
+      "SUM(row_count IS NULL) AS rows_unknown " +
+      "FROM _ops_run_event WHERE observed_date_kst >= date('now','+9 hours',?) " +
+      "GROUP BY observed_date_kst, domain ORDER BY observed_date_kst, domain", sinceDate),
+    // DAG 현재 상태 — observation_state 가 C-9 의 complete/partial/unverified.
+    // unverified 는 "아직 점검이 안 지난 구간"이지 정상이라는 뜻이 **아니다.**
+    safeRows(env,
+      "SELECT dag_id, domain, last_status, last_observed_at, last_observed_date_kst, " +
+      "event_count_observed, observation_state, reconciled_through, updated_at " +
+      "FROM _ops_pipeline_state ORDER BY domain, dag_id"),
+    // 기대치 — 정본은 DAG 선언이고 이 표는 사본(S-1). 감시 대상만 비교에 쓴다(S-4).
+    safeRows(env,
+      "SELECT dag_id, domain, trigger_type, expected_interval, upstream, max_delay_minutes, " +
+      "schedule_timezone, monitored, owner, owner_confirmed_on FROM _ops_pipeline_expectation " +
+      "ORDER BY domain, dag_id"),
+    safeRows(env,
+      "SELECT COUNT(*) AS total, SUM(layer IS NULL) AS layer_unknown " +
+      "FROM _ops_run_event WHERE observed_date_kst >= date('now','+9 hours',?)", sinceDate),
+  ]);
+
+  const missing = [];
+  if (!metric.ok) missing.push("daily_metric");
+  if (!events.ok) missing.push("run_event");
+  if (!state.ok) missing.push("pipeline_state");
+  if (!expectation.ok) missing.push("expectation");
+
+  // 기록은 있는데 집계가 비었나 — 이게 실제로 일어나는 상태라 화면이 구분해서 말해야 한다.
+  const hasEvents = events.rows.some((r) => r.events > 0);
+  const gap = layerGap.rows[0] || {};
+
+  return json({
+    window_days: days,
+    generated_at: new Date().toISOString(),
+    meta: {
+      missing,
+      env: { label: env.ENV_LABEL || "알 수 없음", d1: env.ENV_D1 || "알 수 없음" },
+      // 표별 상태를 그대로 내보낸다. 화면이 "왜 비었나"를 말할 수 있어야 한다.
+      source: {
+        daily_metric_rows: metric.rows.length,
+        run_event_days: events.rows.length,
+        // 집계표가 비었는데 원본에는 기록이 있는 상태 — 관측 공백의 한 종류다
+        aggregate_missing: metric.ok && metric.rows.length === 0 && hasEvents,
+      },
+      // 모른다 ≠ 0 — 단계를 못 적은 기록이 몇 건인지 그대로 센다
+      unknown: { events_total: gap.total ?? null, layer_unknown: gap.layer_unknown ?? null },
+    },
+    daily_metric: metric.rows,
+    run_event_daily: events.rows,
+    pipeline_state: state.rows,
+    expectation: expectation.rows,
+  });
+}
+
+// ── API 사용 현황 ─────────────────────────────────────────────────────────────────
+// "어떤 API 가 얼마나 쓰이나"를 API 단위·도메인 단위로 본다. 위의 서빙 품질이 "잘 나가고
+// 있나"(실패·0행)를 본다면 여기는 "무엇이 쓰이나"(수요)를 본다.
+//
+// 도메인은 별도 컬럼이 아니라 _catalog.product_id 의 접두사다(commerce_age_band → commerce).
+// 파이프라인이 그 규칙으로 발행하고 _ops_domain 의 6개 도메인과 그대로 맞는다 —
+// 도메인 컬럼을 새로 만들거나 매핑 테이블을 두지 않는 이유다.
+const DOMAIN_EXPR = "substr(c.product_id, 1, instr(c.product_id, '_') - 1)";
+
+// 카탈로그를 왼쪽에 둔다 — **호출이 0인 API 도 목록에 나와야** "전체 리스트"가 된다.
+// 한 번도 안 불린 제품이야말로 알아야 하는 정보다.
+async function usage(env, params) {
+  const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
+  const since = `-${days} days`;
+
+  const [apis, domains, monthly] = await Promise.all([
+    safeRows(env,
+      "SELECT c.name, c.product_id, " + DOMAIN_EXPR + " AS domain, c.description, c.row_count AS rows_total, " +
+      "COUNT(r.rowid) AS calls, " +
+      "COALESCE(SUM(r.route = 'data'), 0) AS data_calls, " +
+      "COALESCE(SUM(r.route = 'preview'), 0) AS previews, " +
+      "COALESCE(SUM(r.status >= 400), 0) AS errors, " +
+      "COALESCE(SUM(r.status = 200 AND r.row_count = 0), 0) AS empty_hits, " +
+      "ROUND(AVG(r.ms), 1) AS avg_ms, MAX(r.ts) AS last_call " +
+      "FROM _catalog c LEFT JOIN _request_log r " +
+      "  ON r.table_name = c.name AND r.ts >= datetime('now', ?) " +
+      "GROUP BY c.name ORDER BY calls DESC, c.name", since),
+    // 도메인 비율 — 분모는 '카탈로그에 잡히는 호출'이다. catalog·me 처럼 제품이 없는 라우트는
+    // 도메인에 귀속되지 않으므로 여기서 빠진다(화면에 그 사실을 적는다).
+    safeRows(env,
+      "SELECT " + DOMAIN_EXPR + " AS domain, COUNT(DISTINCT c.name) AS api_count, " +
+      "COUNT(r.rowid) AS calls, COUNT(DISTINCT r.table_name) AS apis_used, " +
+      "COALESCE(SUM(r.status >= 400), 0) AS errors " +
+      "FROM _catalog c LEFT JOIN _request_log r " +
+      "  ON r.table_name = c.name AND r.ts >= datetime('now', ?) " +
+      "GROUP BY domain ORDER BY calls DESC, domain", since),
+    // 월별 — _request_log 는 30일 보존이라 실제로 잡히는 건 최대 두 달 조각이다.
+    // 그래도 내보내는 이유는 "지금 보이는 게 전부"라는 사실을 화면이 말해줄 수 있어서다.
+    safeRows(env,
+      "SELECT substr(r.ts,1,7) AS month, " + DOMAIN_EXPR + " AS domain, COUNT(*) AS calls " +
+      "FROM _request_log r JOIN _catalog c ON c.name = r.table_name " +
+      "WHERE r.ts >= datetime('now', ?) GROUP BY month, domain ORDER BY month, calls DESC", since),
+  ]);
+
+  return json({
+    window_days: days,
+    generated_at: new Date().toISOString(),
+    meta: {
+      missing: apis.ok ? [] : ["usage"],
+      // 요청 값·응답 본문은 애초에 저장하지 않는다(수집 원칙 ①·②). 화면이 "없는 게 아니라
+      // 안 남긴 것"이라고 말할 수 있도록 서버가 명시한다 — 사용자가 버그로 오해하지 않게.
+      detail_scope: "filters_axis_only",
+      log_retention_days: 30,
+    },
+    domains: domains.rows,
+    apis: apis.rows,
+    monthly: monthly.rows,
+  });
+}
+
+// 개별 API 상세. 값이 아니라 **축**을 보여준다 — 어떤 필터 조합으로 들어와서 몇 행이 나갔나.
+async function usageDetail(env, name, params) {
+  const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
+  const since = `-${days} days`;
+
+  // 사용자 입력이 테이블명으로 도는 유일한 지점 — 카탈로그 존재 확인으로 화이트리스트한다
+  // (게이트웨이 쪽과 같은 규약). 바인딩이라 주입은 아니지만, 없는 이름을 404 로 끊는 게 맞다.
+  const product = await env.DB.prepare(
+    "SELECT name, product_id, description, row_count, time_axis, columns FROM _catalog WHERE name = ?")
+    .bind(name).first().catch(() => null);
+  if (!product) return problem(404, "unknown api", "카탈로그에 없는 API 다");
+
+  const [daily, filters, statuses, recent] = await Promise.all([
+    safeRows(env, "SELECT substr(ts,1,10) AS day, COUNT(*) AS calls, " +
+      "SUM(status >= 400) AS errors, ROUND(AVG(row_count),1) AS avg_rows " +
+      "FROM _request_log WHERE table_name = ? AND ts >= datetime('now', ?) GROUP BY day ORDER BY day",
+      name, since),
+    // 필터 '축' — 컬럼명 조합이다. 값은 저장하지 않으므로 여기 나올 수 없다.
+    safeRows(env, "SELECT COALESCE(filters, '') AS filters, COUNT(*) AS calls, " +
+      "ROUND(AVG(row_count),1) AS avg_rows, SUM(status = 200 AND row_count = 0) AS empty_hits " +
+      "FROM _request_log WHERE table_name = ? AND ts >= datetime('now', ?) " +
+      "GROUP BY filters ORDER BY calls DESC LIMIT 20", name, since),
+    safeRows(env, "SELECT status, route, COUNT(*) AS calls FROM _request_log " +
+      "WHERE table_name = ? AND ts >= datetime('now', ?) GROUP BY status, route ORDER BY calls DESC",
+      name, since),
+    safeRows(env, "SELECT ts, route, status, COALESCE(filters,'') AS filters, row_count, ms, " +
+      "request_id, substr(key_hash,1,8) AS key_id FROM _request_log " +
+      "WHERE table_name = ? AND ts >= datetime('now', ?) ORDER BY ts DESC LIMIT 50", name, since),
+  ]);
+
+  return json({
+    window_days: days,
+    generated_at: new Date().toISOString(),
+    // columns 는 카탈로그가 가진 '이 제품이 어떤 컬럼을 가졌나'다 — 필터 축을 읽을 때의 사전.
+    api: { ...product, domain: String(product.product_id || "").split("_")[0] },
+    meta: { detail_scope: "filters_axis_only", log_retention_days: 30 },
+    daily: daily.rows, filters: filters.rows, statuses: statuses.rows, recent: recent.rows,
   });
 }
 
@@ -197,6 +395,20 @@ export default {
       if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
       return summary(env, url.searchParams, canWrite(env, request));
     }
+    if (url.pathname === "/api/pipeline") {
+      if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
+      return pipeline(env, url.searchParams);
+    }
+    if (url.pathname === "/api/usage") {
+      if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
+      return usage(env, url.searchParams);
+    }
+    if (url.pathname.startsWith("/api/usage/")) {
+      if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
+      const name = decodeURIComponent(url.pathname.slice("/api/usage/".length));
+      if (!name) return problem(400, "missing api", "API 이름이 필요하다");
+      return usageDetail(env, name, url.searchParams);
+    }
     if (url.pathname === "/api/keys") {
       if (request.method === "GET") {
         const res = await listKeys(env);
@@ -208,7 +420,9 @@ export default {
       if (request.method === "POST") return requireWrite(env, request) || keyAction(env, request);
       return problem(405, "method not allowed", "GET(목록) · POST(조치)");
     }
-    if (url.pathname.startsWith("/api/")) return problem(404, "not found", "GET /api/summary · /api/keys");
+    if (url.pathname.startsWith("/api/"))
+      return problem(404, "not found",
+        "GET /api/summary · /api/pipeline · /api/usage · /api/usage/<api> · /api/keys");
     return env.ASSETS ? env.ASSETS.fetch(request) : problem(404, "not found", "정적 자산 없음");
   },
 };
