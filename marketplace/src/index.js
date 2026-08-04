@@ -3,13 +3,14 @@
 //
 // 문이 셋이다(agreement §1-2 — 기술 계층이 아니라 **누가 쓰는가**로 가른다):
 // `/api/v1/*`(이 파일, 사람·일반 소비자) · `/skill/v1/*`(K-Skill 전용, 별도 담당) ·
-// `/mcp`(MCP 클라이언트, src/mcp.js). 옛 `/v1/*` 는 폐기했다(decision/0004 D-2).
+// `/mcp`(MCP 클라이언트, src/mcp.js). 옛 `/v1/*` 표면은 접고 기능은 `/api/v1` 로
+// 흡수했다(agreement §10 · decision/0004 D-2) — 제품 번들·용어 사전 두 경로다.
 // 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
 import {
   json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC,
   authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent,
 } from "./shared.js";
-import { handleProductBundle } from "./v1.js";
+import { handleProductBundle, handleGlossary } from "./v1.js";
 import { SKILL_BUNDLE_ID, handleSkillBundle, handleSkillData, handleSkillProduct } from "./skill.js";
 import { handleMcp } from "./mcp.js";
 
@@ -448,13 +449,32 @@ async function route(request, env, url, trace) {
       : handleSkillProduct(env, productId, trace);
   }
 
-  // `/v1/*` 는 폐기했다 — 소비자 전수 0 실측, ASAC-DAG#642 통지 후 제거(decision/0004 D-2).
-  // 그 문이 주려던 "제품 메타 한 번에"는 없어지지 않았다: K-Skill 은 `/skill/v1/products/<id>`,
-  // MCP 는 `describe_product` 가 각자 소비자에 맞는 모양으로 준다. 조립기(`handleProductBundle`)
-  // 는 그래서 살아 있고, `src/v1.js` 라는 파일 이름만 과거를 가리킨다.
+  // ── 옛 `/v1/*` 에서 흡수한 둘 (agreement §10 · decision/0004 D-2) ─────────────
+  // 표면은 접고 **기능은 `/api/v1` 아래로 옮겼다.** 지우지 않는 이유가 각각 있다:
+  // 제품 번들은 `column-docs.json`(손 갱신 사본, 계약과 어긋난 실사고가 있었다)의 퇴역
+  // 경로이고, 용어 사전은 `d1_catalog_glossary` 를 읽는 **유일한 문**이다(commerce 가 지금도
+  // 게시한다 — ASAC-DAG `common/serving/d1_client.py` 외 4).
+  //
+  // 인증·쿼터 정책은 옛 문 그대로다: **전 경로 Bearer**(#638), 메타 조회는 버스트만 적용하고
+  // 일일 쿼터를 소모하지 않는다 — 데이터가 아니라 판단 재료이고, 소비 순서상 데이터 호출
+  // 앞에 반드시 오는 단계라 여기서 깎으면 정작 쓸 몫이 준다.
+  const bundleMatch = path.match(/^\/api\/v1\/products\/([^/]+)$/);
+  if (bundleMatch || path === "/api/v1/glossary") {
+    trace.route = bundleMatch ? "product" : "glossary";
+    const { keyRow, error } = await authenticate(env, request);
+    if (error) return error;
+    trace.keyHash = keyRow.key_hash;
+    const burst = await checkBurst(env, "k:" + keyRow.key_hash);
+    if (burst.exceeded) return burstProblem(burst.retryAfter);
+
+    return bundleMatch
+      ? handleProductBundle(env, decodeURIComponent(bundleMatch[1]), request, trace)
+      : handleGlossary(env, url.searchParams.get("vocabulary_id"), trace);
+  }
 
   return problem(404, "not found",
-    "GET /api/v1/catalog · /api/v1/preview/<table> · /api/v1/data/<table> · /api/v1/me, POST·DELETE /api/v1/keys · " +
+    "GET /api/v1/catalog · /api/v1/preview/<table> · /api/v1/data/<table> · /api/v1/me · " +
+    "/api/v1/products/<product_id> · /api/v1/glossary, POST·DELETE /api/v1/keys · " +
     "GET /skill/v1/bundles/seoul-urban-analytics, POST /mcp — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
 }
 

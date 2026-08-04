@@ -43,6 +43,10 @@
 
 ### D-2. `/v1/*` 는 폐기한다 — 소비자가 0 이다
 
+> ⚠️ **처분은 삭제가 아니라 `/api/v1` 로 흡수다** — `agreement.md` v2 §10(17:15 전원 확인)이
+> 정본이고 이 초안(14:55)보다 나중이다. 아래 본문은 초안 그대로 남기고, 실제 이행 형태는
+> "되돌리기" 절의 정정 ①을 본다.
+
 전수 확인(2026-08-04): ops-dashboard · sample · marketplace 자체 · k-skill 레포 **모두 0건**.
 문서 안내도 `CLAUDE.md` 표 두 줄이 전부이고, `llms.txt` 는 스킬에게 *"공용 `/v1/*`와 별도이며
 `/skill/v1` 만 쓰라"* 고 명시한다. 만들어만 두고 아무도 안 쓰는 표면이다.
@@ -129,6 +133,7 @@ MCP 는 축이 둘인데 **경로는 둘 다 담당하지 않는다.**
 /api/v1/…         마켓플레이스   판: 경로 (D-5 확정)
   POST·DELETE /api/v1/keys · GET /api/v1/catalog
   GET /api/v1/preview/<product_id> · GET /api/v1/data/<product_id> · GET /api/v1/me
+  GET /api/v1/products/<product_id> · GET /api/v1/glossary   ← 옛 /v1 에서 흡수 (D-2)
 
 /skill/v1/…       K-Skill        판: 경로 (그대로)
   GET /skill/v1/bundles/seoul-urban-analytics
@@ -147,14 +152,26 @@ MCP 는 축이 둘인데 **경로는 둘 다 담당하지 않는다.**
 
 ## 되돌리기
 
-D-2 만 실제 코드를 지운다. 되돌리려면 라우터 분기와 `handleGlossary` 를 되살리면 된다.
+D-2 는 **지우는 게 아니라 옮기는 것**이다. 되돌리려면 라우터 분기 두 줄을 되살리면 된다.
 
-> ⚠️ **범위 정정(2026-08-04 이행 시점).** 이 문단은 원래 *"`src/v1.js` + 라우터 분기 +
-> `run_worker_first` 한 항목"* 이라고 적혀 있었는데, **그대로 하면 MCP `describe_product` 가
-> 깨진다** — 이 결정을 쓴 뒤 들어온 `/mcp`(#32)가 `src/v1.js` 의 `handleProductBundle` 을
-> 쓴다. 실제로 지운 것은 **라우터 `/v1/*` 분기 · `handleGlossary` · `run_worker_first` 두 곳**
-> (기본·`[env.production]` — env 섹션은 상속되지 않는다)이고, **`handleProductBundle` 은
-> 남는다.** 파일 이름은 소비자가 생긴 뒤 옮긴다.
+> ⚠️ **정정 2건(2026-08-04 이행 시점).** 이 문단은 원래 *"`src/v1.js` + 라우터 분기 +
+> `run_worker_first` 한 항목"을 지운다* 고 적혀 있었다. 둘 다 틀렸다.
+>
+> **① 형태 — 삭제가 아니라 흡수다.** 이 초안(14:55) 뒤에 `docs/agreement.md` v2 가
+> 전원 확인으로 확정됐고(17:15), §10 이 처분을 ***"소비자 전수 0 실측. `/api/v1` 로 흡수"***
+> 로 기록했다. **정본은 그쪽이다** — CLAUDE.md 첫머리가 "두 프로젝트에 걸친 합의는
+> agreement.md 가 정본"이라고 못박고 있고, v2 갱신 규칙에 "코드가 문서와 어긋나면 문서가
+> 맞다"가 있다. 그래서 두 경로를 **`/api/v1/products/<product_id>` · `/api/v1/glossary`**
+> 로 옮겼다(핸들러·인증 정책 그대로, route 값은 `product`·`glossary`).
+>
+> **② 범위 — `src/v1.js` 를 지우면 MCP 가 깨진다.** 이 결정을 쓴 뒤 들어온 `/mcp`(#32)가
+> `handleProductBundle` 을 쓴다. 그리고 `handleGlossary` 는 `d1_catalog_glossary` 를 읽는
+> **유일한 문**인데, 그 표는 commerce 가 지금도 게시한다(ASAC-DAG `common/serving/d1_client.py`
+> 외 4). 지우면 게시·이행·게이트가 "읽는 문 없는 표"를 향해 돈다.
+>
+> 실제로 지운 것은 **라우터 `/v1/*` 분기와 `run_worker_first` 두 곳**(기본·`[env.production]`
+> — env 섹션은 상속되지 않는다)뿐이다. 파일 이름은 소비자가 생긴 뒤 옮긴다.
+> 경위: ASAC-DAG#642 · Serving#67.
 
 D-5 는 경로 이동이라 되돌리기가 기계적이다 — 라우터의 접두 한 곳과 `run_worker_first`,
 그리고 문서의 예시들이다. **배포 후에는 되돌릴 수 없다**(그게 지금 하는 이유다).

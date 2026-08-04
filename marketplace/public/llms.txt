@@ -70,6 +70,13 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
    이미 있으면 409 가 오고, 기존 키를 만료시키려면 `"confirm_rotate": true` 를 추가한다.
 4. `GET /api/v1/data/<product_id>?...` — 헤더 `Authorization: Bearer ask_…` 로 조회.
 
+스키마를 더 자세히 봐야 하면 **2 와 4 사이**에 이 둘이 있다(Bearer 필요, 일일 쿼터 무과금):
+
+- `GET /api/v1/products/<product_id>` — 제품 번들. 컬럼 설명·grain·PK·시간축·질의 예시·
+  출처/신선도를 한 번에. 카탈로그보다 자세하고, MCP 의 `describe_product` 와 같은 내용이다.
+- `GET /api/v1/glossary?vocabulary_id=<id>` — 코드값 사전. 응답의 코드가 무엇을 뜻하는지
+  (`code` → `label_ko`) 알아야 할 때. 아직 게시 전이면 `503`.
+
 ## /api/v1/data 문법
 
 - 필터: `<컬럼명>=<값>` (등가만, 복수는 AND). 없는 컬럼명이면 400 + 사용 가능 컬럼 전체 목록.

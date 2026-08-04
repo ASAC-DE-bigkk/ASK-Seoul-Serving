@@ -1,8 +1,9 @@
-// 제품 메타 조립기 — 한 제품의 구조·컬럼 설명·질의 예시를 한 번에 만든다.
+// 제품 메타 조립기 + 용어 사전 — `/api/v1` 로 **흡수된** 두 핸들러.
 //
-// **파일 이름만 과거를 가리킨다.** 원래 `/v1/*`(ASAC-DAG#642 안 B) 전용이었는데 그 문은
-// 폐기했고(decision/0004 D-2, 소비자 전수 0), 조립기는 남았다 — MCP `describe_product` 가
-// 이걸 쓴다. 이름은 소비자가 생긴 뒤 옮긴다(지금 옮기면 열린 PR 들과 충돌한다).
+// **파일 이름만 과거를 가리킨다.** 원래 `/v1/*`(ASAC-DAG#642 안 B) 전용이었는데, 그 표면은
+// 접고 기능은 `/api/v1` 아래로 옮겼다 — agreement §10 이 처분을 *"소비자 전수 0 실측.
+// `/api/v1` 로 흡수"* 로 기록했고 그게 정본이다(decision/0004 D-2 초안이 "삭제"로 적었다가
+// 정정됐다). 파일 이름은 소비자가 생긴 뒤 옮긴다.
 //
 // 소비 순서는 ① 제품 고르기(`/api/v1/catalog`) → ② 그 제품 메타 전부 → ③ 질의 이고,
 // 여기는 ②를 한 번에 준다. 조립 쿼리 4개는 #642 §1 그대로다.
@@ -105,6 +106,27 @@ export async function handleProductBundle(env, productId, request, trace = {}) {
   };
   trace.rows = body.columns.length + body.patterns.length;
   return json(body, 200, etag ? { etag } : {});
+}
+
+export async function handleGlossary(env, vocabularyId, trace = {}) {
+  trace.table = "d1_catalog_glossary";
+  if (!vocabularyId)
+    return problem(400, "missing vocabulary_id",
+      "vocabulary_id 쿼리 파라미터가 필요하다 — 예: /api/v1/glossary?vocabulary_id=commerce:major");
+
+  const rows = await safeRows(env.DB.prepare(
+    "SELECT code, label_ko, origin, source_type FROM d1_catalog_glossary " +
+    "WHERE vocabulary_id = ? ORDER BY code"
+  ).bind(vocabularyId));
+
+  if (rows === null)
+    return problem(503, "glossary unavailable",
+      "용어 사전이 아직 게시되지 않았다 — 파이프라인 게시 후 다시 시도할 것");
+  if (!rows.length)
+    return problem(404, "unknown vocabulary", `'${vocabularyId}' 어휘가 없다`);
+
+  trace.rows = rows.length;
+  return json({ vocabulary_id: vocabularyId, terms: rows });
 }
 
 // primary_key·requires 는 D1 에 JSON 배열 문자열로 실린다(#638 §2). 깨진 값이 와도

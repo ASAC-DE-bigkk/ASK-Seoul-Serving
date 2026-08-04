@@ -26,6 +26,8 @@
 | `GET /api/v1/preview/<t>` | 고정 5행 미리보기, 무과금 | 무인증 + IP 버스트 |
 | `GET /api/v1/data/<t>` | 필터·기간·키셋 커서 조회 | Bearer + 버스트 + 일일 쿼터 |
 | `GET /api/v1/me` | 내 사용량 (이메일 원문은 여기만 — 본인 응답) | Bearer |
+| `GET /api/v1/products/<id>` | 제품 번들 — 구조·컬럼 설명·질의 예시 (옛 `/v1` 에서 흡수) | Bearer, 무과금 |
+| `GET /api/v1/glossary` | 용어 사전 (`?vocabulary_id=`) — `d1_catalog_glossary` 를 읽는 유일한 문 | Bearer, 무과금 |
 | `GET /skill/v1/…` | K-Skill 전용 계약(번들·제품·데이터) — src/skill.js | Bearer |
 | `POST /mcp` | MCP 서버(JSON-RPC, 툴 5종) — src/mcp.js | `tools/call` 부터 Bearer |
 | 정적 | `/docs` `/legal` `/llms.txt` `/openapi.json` `/column-docs.json` | Assets 서빙 |
