@@ -63,7 +63,7 @@ decision/ 이 정한다.
 | [`../../docs/environments.md`](../../docs/environments.md) | 환경 규약 — 설정 배치·로컬/운영 도메인·D1·`-c` 의 함정 셋. **공동 관리**([0011](decision/0011-per-env-config.md)의 실행 규약) |
 | ASK-Seoul#78 | 저장소·운영 기록 적용 규약 v1 — 존/경로/확인서/보관/기록 형식/값 집합/조회 DB |
 | ASAC-DAG `common/ops/d1_ops.py` | 조회 DB 테이블 4종(`_ops_run_event` 등) 스키마 정본 |
-| `../marketplace/migrations/` | `_keys`·`_usage`·`_burst`·`_request_log` 스키마 정본 |
+| `../marketplace/migrations/` | `_keys`·`_usage`·`_burst`·`_gateway_request_log` 스키마 정본 |
 | [`../marketplace/docs/decision/0001`](../../marketplace/docs/decision/0001-shared-contracts.md) | 두 앱 공통 계약 C-1~C-10 (problem+json·KST·key_hash·request_id·값 최소화·증분·정본/추종·유실 검증) — 개정은 상대 앱 담당 리뷰 필수 |
 
 ## 갱신 규칙
