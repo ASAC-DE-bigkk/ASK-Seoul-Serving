@@ -50,7 +50,7 @@ marketplace 는 모든 API 응답에 `x-request-id` 헤더, 오류 본문에 `re
 `_request_log` 에는 분류·축만 남긴다: 필터는 **컬럼명만**, 식별자는 **key_hash 만**.
 저장 금지: 키 원문 · 이메일 · 쿼리 값 · 원문 UA · 전체 Referer URL · Authorization.
 보존 30일(sweep). #9 의 신규 축(ua_class 등)과 #3 의 intent 축도 이 원칙 위에서만
-추가된다. 이메일 원문이 나가는 곳은 본인 인증 응답(`/api/me`)뿐 — 운영 화면은 마스킹.
+추가된다. 이메일 원문이 나가는 곳은 본인 인증 응답(`/api/v1/me`)뿐 — 운영 화면은 마스킹.
 
 ### C-7. NULL = 모른다 ≠ 0 (#78 F-3)
 

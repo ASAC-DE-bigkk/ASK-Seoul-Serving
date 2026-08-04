@@ -3,13 +3,13 @@
 사용법 (marketplace/ 에서, `npm run dev` 가 :8787 에 떠 있어야 한다):
     python fixtures/build_demo_samples.py
 
-**왜 스냅샷인가.** 랜딩 데모가 `/api/preview` 를 실호출하면 방문 1회마다 D1 에
+**왜 스냅샷인가.** 랜딩 데모가 `/api/v1/preview` 를 실호출하면 방문 1회마다 D1 에
 쓰기가 쌓인다 — `_burst` UPSERT + `_request_log` INSERT 가 호출당 2건이고,
 도메인 순환이라 방문 1회에 최대 6번이다. 비용보다 문제는 관측 오염이다:
 `_request_log` 는 "무엇이 실제로 쓰이나"를 재는 유일한 근거인데(CLAUDE.md §3),
 랜딩 장식 트래픽이 그 표를 채우면 콘솔 사용량 탭이 읽는 값이 흐려진다.
 
-**꾸며낸 행이 아니다.** 여기서 쓰는 행은 전부 실제 `/api/preview` 응답이다.
+**꾸며낸 행이 아니다.** 여기서 쓰는 행은 전부 실제 `/api/v1/preview` 응답이다.
 다만 시점이 고정되므로 화면에 생성 날짜를 함께 표시한다(index.html `.stamp`).
 갱신하려면 이 스크립트를 다시 돌려 산출물을 커밋한다.
 
@@ -41,7 +41,7 @@ OUT = Path(__file__).resolve().parent.parent / "public" / "demo-samples.json"
 
 
 def fetch(table: str) -> list[dict]:
-    url = f"{BASE}/api/preview/{table}"
+    url = f"{BASE}/api/v1/preview/{table}"
     try:
         with urllib.request.urlopen(url, timeout=15) as res:
             body = json.loads(res.read().decode("utf-8"))
@@ -57,7 +57,7 @@ def main() -> None:
     samples = {table: fetch(table) for table in TABLES}
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "source": "GET /api/preview/<table> (로컬 D1 — fixtures/seed.sql 기준)",
+        "source": "GET /api/v1/preview/<table> (로컬 D1 — fixtures/seed.sql 기준)",
         "samples": samples,
     }
     OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")

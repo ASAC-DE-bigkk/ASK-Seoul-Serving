@@ -374,7 +374,7 @@
       <!-- 축은 둘이고 성격이 다르다(#48 합의): 공간축 = 도메인을 **붙이는** 조인 축(행정동 코드),
            시간축 = 기간으로 **자르는** where 필터. 그래서 "하나의 축"도 "축은 행정동 코드"도
            반쪽이었다 — 시간축을 빼고 말하면 이 제품이 실제로 하는 일의 절반이 사라진다.
-           실측(2026-08-03, /api/catalog): 62종 중 공간 조인 키 42 · 시간축 33 · 둘 다 28 ·
+           실측(2026-08-03, /api/v1/catalog): 62종 중 공간 조인 키 42 · 시간축 33 · 둘 다 28 ·
            둘 다 없는 명부형 15. 시간축 컬럼명은 제품마다 달라(18종) 하나로 못 부른다 —
            그래서 컬럼명이 아니라 "기간"이라고 쓴다. 제품별 실제 축은 카드의 배지가 밝힌다. -->
       <h1>흩어진 서울 공공데이터를<span class="l2">같은 두 축 위에</span></h1>
@@ -598,7 +598,7 @@ function kstStamp(iso) {
 }
 
 // ── 데모: 질문 → 호출 → 응답 3박자.
-// 화면에 타이핑되는 명령은 누구나 그대로 실행할 수 있는 실제 주소다(무인증 /api/preview).
+// 화면에 타이핑되는 명령은 누구나 그대로 실행할 수 있는 실제 주소다(무인증 /api/v1/preview).
 // 다만 표에 그리는 행은 그 응답의 **커밋된 스냅샷**이지 지금 호출한 결과가 아니다 —
 // 이유는 아래 SAMPLES 주석. 꾸며낸 행은 넣지 않으며, 시점은 화면에 적는다.
 // 도메인마다 하나씩 — 한 도메인만 계속 보여주면 "문화 데이터 사이트"로 읽힌다.
@@ -642,7 +642,7 @@ let demoIdx = 0;
 let demoVisible = true;
 
 // 데모 행은 **정적 스냅샷**이다(fixtures/build_demo_samples.py 산출, 커밋됨).
-// /api/preview 를 실호출하면 방문 1회마다 D1 쓰기가 쌓인다 — 호출당 _burst UPSERT +
+// /api/v1/preview 를 실호출하면 방문 1회마다 D1 쓰기가 쌓인다 — 호출당 _burst UPSERT +
 // _request_log INSERT 2건이고 도메인 순환이라 최대 6번이다. 비용보다 관측 오염이
 // 문제다: _request_log 는 "무엇이 실제로 쓰이나"를 재는 근거인데 랜딩 장식 트래픽이
 // 그 표를 채우면 콘솔 사용량 탭이 읽는 값이 흐려진다.
@@ -678,7 +678,7 @@ async function playDemo(i, manual) {
   $("demoFoot").innerHTML = "&nbsp;";
   $("demoStamp").textContent = "";
 
-  const cmd = "curl " + location.origin + "/api/preview/" + d.pid;
+  const cmd = "curl " + location.origin + "/api/v1/preview/" + d.pid;
   const paint = (n) => {
     const shown = cmd.slice(0, n);
     $("demoCmd").innerHTML =
@@ -836,7 +836,7 @@ async function bootCatalog() {
   // 표시명은 부가 정보다 — 못 읽어도 카탈로그는 그대로 뜬다(제목이 product_id 로 내려앉을 뿐)
   try { DISPLAY = await (await fetch("/product-display.json")).json(); } catch { DISPLAY = {}; }
   try {
-    const res = await fetch("/api/catalog");
+    const res = await fetch("/api/v1/catalog");
     if (!res.ok) throw new Error("HTTP " + res.status);
     products = (await res.json()).products || [];
   } catch {

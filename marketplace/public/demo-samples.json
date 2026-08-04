@@ -1,6 +1,6 @@
 {
  "generated_at": "2026-08-04T01:22:59+00:00",
- "source": "GET /api/preview/<table> (로컬 D1 — fixtures/seed.sql 기준)",
+ "source": "GET /api/v1/preview/<table> (로컬 D1 — fixtures/seed.sql 기준)",
  "samples": {
   "gold_culture_activity_by_dong": [
    {

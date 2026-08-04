@@ -1,6 +1,6 @@
 // `/v1/*` — 마켓플레이스 공용 API (ASAC-DAG#642 안 B).
 //
-// 소비 순서는 ① 제품 고르기(`/api/catalog`) → ② 그 제품 메타 전부 → ③ 질의 이고,
+// 소비 순서는 ① 제품 고르기(`/api/v1/catalog`) → ② 그 제품 메타 전부 → ③ 질의 이고,
 // 여기는 ②를 한 번에 준다. 조립 쿼리 4개는 #642 §1 그대로다.
 //
 // 식별자가 테이블명이 아니라 **product_id** 인 게 `/api/*` 와의 결정적 차이다 —
@@ -30,7 +30,7 @@ export async function handleProductBundle(env, productId, request, trace = {}) {
   ).bind(productId).first();
   if (!cat)
     return problem(404, "unknown product",
-      `'${productId}' 은 서빙 카탈로그에 없다 — GET /api/catalog 로 목록을 확인할 것`);
+      `'${productId}' 은 서빙 카탈로그에 없다 — GET /api/v1/catalog 로 목록을 확인할 것`);
 
   const etag = etagOf(cat.publication_id);
   if (etag && request.headers.get("if-none-match") === etag)

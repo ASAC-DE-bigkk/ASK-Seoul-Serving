@@ -10,7 +10,7 @@
 지금 게이트웨이는 **같은 제품을 두 이름으로 부른다.**
 
 ```
-GET /api/data/gold_culture_activity_by_dong     ← 물리 테이블명
+GET /api/v1/data/gold_culture_activity_by_dong     ← 물리 테이블명
 GET /v1/products/culture_activity_by_dong       ← 계약 id
 ```
 
@@ -28,7 +28,7 @@ GET /v1/products/culture_activity_by_dong       ← 계약 id
 
 ### D-1. 공개 식별자는 `product_id` 다
 
-`/api/data/<id>`·`/api/preview/<id>` 도 `/v1/*`·`/skill/v1/*` 과 같은 식별자를 받는다.
+`/api/v1/data/<id>`·`/api/v1/preview/<id>` 도 `/v1/*`·`/skill/v1/*` 과 같은 식별자를 받는다.
 
 이유는 이미 코드에 적혀 있다(`src/v1.js` 머리주석) — **테이블명은 물리 이름이라 바뀔 수
 있고, `product_id` 는 계약(`meta.serving`)이 보증한다.** 새 경로 둘이 이미 그 판단으로
@@ -58,7 +58,7 @@ GET /v1/products/culture_activity_by_dong       ← 계약 id
 
 ### D-3. 카탈로그 응답은 두 값을 **모두** 싣는다
 
-`/api/catalog` 는 이미 `name`·`product_id` 를 함께 준다. 이걸 유지한다 — 소비자가 옮겨
+`/api/v1/catalog` 는 이미 `name`·`product_id` 를 함께 준다. 이걸 유지한다 — 소비자가 옮겨
 탈 근거가 응답 안에 있어야 하고, 콘솔·디버깅은 물리명이 필요하다.
 
 문서(`llms.txt`·`openapi.json`·`docs.html`)의 **예시는 `product_id` 로 바꾼다.** 사람과
@@ -80,14 +80,14 @@ GET /v1/products/culture_activity_by_dong       ← 계약 id
 이 문서를 쓰게 만든 최초 제안이다. 접두사가 갈린 게 문제라는 **진단은 맞지만** 처방이
 어긋난다.
 
-- **메서드가 이미 GET 이다.** `GET /api/data/get_flow_monthly` 는 같은 말을 두 번 한다.
+- **메서드가 이미 GET 이다.** `GET /api/v1/data/get_flow_monthly` 는 같은 말을 두 번 한다.
 - **뜻이 없다.** `gold_`·`d1_` 은 적어도 내부에서는 뜻이 있는 접두사다. `get_` 은 어디서도
   뜻이 없어서, 의미 없는 접두사를 의미 없는 접두사로 바꾸는 교환이 된다.
 - **유지 비용이 는다.** 도메인이 테이블을 새로 낼 때마다 "공개용 이름"을 하나 더 짓고
   맞춰야 한다 — `product_id` 는 계약이 이미 보증하는 값이라 그 일이 없다.
 - 목적이 "내부 어휘를 URL 에서 없애기"라면 **접두사를 없애는 쪽**이 곧장 그 목적이다.
 
-### 접두사만 떼서 `/api/data/flow_monthly` — 채택하지 않음
+### 접두사만 떼서 `/api/v1/data/flow_monthly` — 채택하지 않음
 
 `product_id` 와 거의 같아 보이지만 **도메인 토막이 빠져 충돌한다.** 예: 여러 도메인이
 `event_schedule`·`hourly` 같은 흔한 이름을 쓰면 전역 유일성이 깨진다. `product_id` 는
