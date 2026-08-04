@@ -494,14 +494,21 @@ P-3 은 P-1 이 끝나야 한다 — 정본이 안 선 상태에서 ALTER 를 �
 
 ### ⚪ 원천이 비어 있다 — 확인 요청
 
+**전부 ASAC-DAG 쪽에 올려 뒀다** — C-1·C-2·C-3 은 [ASAC-DAG#677](https://github.com/ASAC-DE-bigkk/ASAC-DAG/issues/677)
+(집계표 0행을 고친 그 이슈의 후속), C-3b 환경 섞임은 [ASAC-DAG#654](https://github.com/ASAC-DE-bigkk/ASAC-DAG/issues/654)
+(환경변수 이름 이슈 — "되살아날 통로"라고 경고한 그 자리다). 도메인 오너별로 무엇이
+해당되는지 그 두 코멘트에 나눠 적었다.
+
 | # | 무엇 | 실측 | 확인 |
 |---|---|---|---|
-| **C-1** | `log_bundle_key` | 운영 **15,873건 중 0건** — 당일분이 아니라 전 구간 | ASAC-DAG |
-| **C-2** | `_ops_daily_metric.environment` | **컬럼 자체가 없음** → 집계 층에서 Z-7 을 못 지킴 | ASAC-DAG |
-| **C-3** | `_ops_daily_metric` 개발 D1 | 운영 63행인데 **개발 0행** | ASAC-DAG |
+| **C-1** | `log_bundle_key` | 운영 **17,158건 중 0건** — 당일분이 아니라 전 구간(08-01~08-04) | ASAC-DAG **#677** |
+| **C-2** | `_ops_daily_metric.environment` | **컬럼 자체가 없음** → 집계 층에서 Z-7 을 못 지킴 | ASAC-DAG **#677** |
+| **C-3** | `_ops_daily_metric` 개발 D1 | 운영 63행인데 **개발 0행** | ASAC-DAG **#677** |
+| **C-3b** | **환경이 반대로 들어감** — 운영에 `dev` 17(citydata) · 개발에 `prod` 63(citydata 46 · traffic 7 · weather 6 · transit 4). NULL 은 없다 = 축이 빠진 게 아니라 **값이 틀림** | ASAC-DAG **#654** · 각 도메인 오너 |
 | **C-4** | `_catalog.freshness` | **전 행 빈 값** — 고객용 신선도 계약이 빔 | 도메인 export |
 | **C-5** | `_catalog.public_gold` | **published 60개 전부 0** | 도메인 export |
-| **C-6** | `_ops_pipeline_expectation` | **9행 / DAG 46개** — transit 8,979 · citydata 3,715 · traffic 1,695 · weather 1,441 실행이 판정 없이 돔 | 각 도메인 오너 |
+| **C-6** | `_ops_pipeline_expectation` | **9행 / DAG 46개**(commerce 만 등록) — transit 9,764 · citydata 3,825 · traffic 1,849 · weather 1,636 실행이 판정 없이 돔 | 각 도메인 오너 (ASAC-DAG #677) |
+| **C-8** | `layer`·행수 미상 | `layer` 미상 citydata **1,350** · 행수 미상 transit **8,318** · weather 1,538 — 관문 배선이 들어가면 줄어든다 | 각 도메인 오너 |
 | **C-7** | `api_name` · `bytes` · `sink_type` | 전량 NULL — 안 쓸 거면 화면에서도 뺀다 | ASAC-DAG |
 
 ### 배포 (§7)
