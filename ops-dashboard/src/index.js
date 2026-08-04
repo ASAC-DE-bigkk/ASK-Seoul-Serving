@@ -202,8 +202,9 @@ async function summary(env, params, writable = false) {
   // 초안 컬럼이 아직 없으면 safeRows 가 실패를 삼키고 그 카드는 '수집 전'으로 남는다 —
   // 콘솔은 게이트웨이 스키마를 만들지도 미러하지도 않는다(0010: ALTER 미러는 정본
   // 마이그레이션과 duplicate column 으로 충돌해 저쪽 시드를 깨뜨린다).
-  const [src, funnel, udaily, uclients, uagents, upages] = await Promise.all([
+  const [src, pub, funnel, udaily, uclients, uagents, upages] = await Promise.all([
     sources(env),
+    publication(env, days),
     safeRows(env,
       "SELECT COUNT(*) AS issued, SUM(first_call IS NOT NULL) AS activated, " +
       "ROUND(AVG(CASE WHEN first_call IS NOT NULL THEN (julianday(first_call) - julianday(created_at)) * 24 END), 1) AS avg_hours_to_first " +
@@ -227,7 +228,9 @@ async function summary(env, params, writable = false) {
     window_days: days,
     generated_at: new Date().toISOString(),
     meta: {
-      missing,
+      // pub.ok 는 위 Promise.all 에서 이미 판정됐다. 표가 없으면 그 섹션만 비우고
+      // 화면이 '연결되지 않음'으로 밝힌다 — 콘솔은 죽지 않는다(safeRows 강등).
+      missing: pub.ok ? missing : [...missing, "publication"],
       can_write: writable,
       // 이 콘솔이 지금 어느 환경의 무슨 DB 를 보고 있나. 숫자만 보고 추측하게 두면
       // 로컬 샘플을 운영 실적으로 오해하는 사고가 난다(wrangler.toml [vars]).
@@ -263,6 +266,8 @@ async function summary(env, params, writable = false) {
              clients: { pending: !uclients.ok, rows: uclients.rows },
              agents: { pending: !uagents.ok, rows: uagents.rows },
              pages: { pending: !upages.ok, rows: upages.rows } },
+    // 발행 점검 — #78 D-7 이 요구한 지표. 여기가 비면 "발행이 다 성공한 것처럼" 보인다.
+    publication: pub,
     // 화면의 숫자가 왜 그 모양인지는 **표를 읽었는지**에서 갈린다. meta.missing 한 줄로는
     // "없다"와 "이름은 같은데 남의 표다"가 구분되지 않아 진단을 따로 싣는다(아래 sources()).
     sources: src,
@@ -292,6 +297,11 @@ const SOURCES = [
     used: "API 사용량" },
   { table: "_keys", owner: "게이트웨이", need: ["key_hash", "email", "status", "daily_quota"],
     used: "이용자 키" },
+  { table: "_publication_ledger", owner: "파이프라인",
+    need: ["product_id", "outcome", "stage", "published_row_count", "d1_row_count"],
+    used: "발행 점검" },
+  { table: "_publication_log", owner: "파이프라인",
+    need: ["product_id", "published_at", "serving_status"], used: "발행 점검(성공 대장)" },
   { table: "_ops_slo", owner: "콘솔", need: ["domain", "event_date", "is_sample"],
     used: "품질 기준(SLO)" },
   { table: "_ops_domain", owner: "콘솔", need: ["domain", "label", "has_slo"], used: "분야 등록부" },
@@ -320,6 +330,67 @@ async function sources(env) {
     };
   }));
   return out;
+}
+
+// ── 발행 점검 ─────────────────────────────────────────────────────────────────────
+//
+// ASK-Seoul#78 `D-7` 이 화면에 요구한 지표 중 **"발행 점검 상태"** 가 이것이다.
+// 정본은 ASAC-DAG 의 `_publication_ledger`(시도 대장)·`_publication_log`(성공 대장)이고
+// 콘솔은 **읽기만** 한다.
+//
+// 왜 필요한가 — 지금까지 이 표를 질의조차 안 해서 **화면은 발행이 다 성공한 것처럼
+// 보였다.** 실측(운영, 2026-08-04): 시도 4,718건 중 **실패 60 · 열화 439 · 행수 불일치 63**.
+// 그리고 실패 60건 중 **56건이 traffic 한 도메인**이다 — 뭉뚱그리면 안 보이는 신호다.
+//
+// 도메인 축은 `product_id` 접두사다(`traffic_flow_…` → traffic). 파이프라인이 그 규칙으로
+// 발행하고 `_catalog` 와 같은 규약이라, 별도 컬럼이나 매핑 표를 두지 않는다(DOMAIN_EXPR 참고).
+const PUB_DOMAIN = "substr(product_id, 1, instr(product_id, '_') - 1)";
+
+async function publication(env, days) {
+  const since = `-${days} days`;
+
+  const [byDomain, byStage, worst, mismatch, recent] = await Promise.all([
+    // 분야별 rollup. **전체 합계는 화면에서 SUM 한다** — 같은 것을 두 번 묻지 않는다.
+    safeRows(env,
+      "SELECT " + PUB_DOMAIN + " AS domain, COUNT(*) AS attempts, " +
+      "SUM(outcome = 'published') AS published, SUM(outcome = 'degraded') AS degraded, " +
+      "SUM(outcome = 'failed') AS failed, SUM(outcome = 'skipped_retained') AS skipped, " +
+      "SUM(published_row_count <> d1_row_count) AS row_mismatch, " +
+      "COUNT(DISTINCT product_id) AS products, MAX(attempted_at) AS last_at " +
+      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
+      "GROUP BY domain ORDER BY attempts DESC", since),
+    // 어느 **단계**에서 깨지나 — write / read_back / source_primary_key / gate.
+    // 실패를 한 덩어리로 세면 "쓰다 실패"와 "쓰고 나서 확인 실패"가 같아 보인다.
+    safeRows(env,
+      "SELECT outcome, stage, COUNT(*) AS n, MAX(attempted_at) AS last_at " +
+      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
+      "AND outcome <> 'published' GROUP BY outcome, stage ORDER BY n DESC", since),
+    // 어느 **제품**에 몰렸나. reason 은 표에 안 싣고 title 로만 쓴다(화면 문구 규약).
+    safeRows(env,
+      "SELECT product_id, " + PUB_DOMAIN + " AS domain, outcome, stage, COUNT(*) AS n, " +
+      "MAX(attempted_at) AS last_at, MAX(reason) AS reason " +
+      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
+      "AND outcome IN ('failed', 'degraded') " +
+      "GROUP BY product_id, outcome, stage ORDER BY n DESC LIMIT 12", since),
+    // 행수 불일치 — 세 숫자(원본·발행·D1)가 어긋난다. 어느 게 맞는지는 콘솔이 판단하지 않고
+    // **그대로 드러낸다**(F-3: 모르는 것을 지어내지 않는다).
+    safeRows(env,
+      "SELECT product_id, " + PUB_DOMAIN + " AS domain, source_row_count, published_row_count, " +
+      "d1_row_count, api_smoke_status, rollback_status, attempted_at " +
+      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
+      "AND published_row_count <> d1_row_count ORDER BY attempted_at DESC LIMIT 10", since),
+    // 마지막 성공 발행 — 성공 대장은 행이 적어 단독 카드로 두지 않고 각주로 쓴다.
+    safeRows(env,
+      "SELECT product_id, published_at, serving_status, published_row_count, " +
+      "published_bytes, publication_mode FROM _publication_log " +
+      "ORDER BY published_at DESC LIMIT 5"),
+  ]);
+
+  return {
+    ok: byDomain.ok,
+    by_domain: byDomain.rows, by_stage: byStage.rows,
+    worst: worst.rows, row_mismatch: mismatch.rows, recent_published: recent.rows,
+  };
 }
 
 // ── API 사용 현황 ─────────────────────────────────────────────────────────────────
