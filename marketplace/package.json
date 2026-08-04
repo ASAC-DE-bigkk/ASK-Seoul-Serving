@@ -8,6 +8,7 @@
     "dev": "wrangler dev",
     "sync": "node scripts/sync-partials.mjs",
     "verify:log": "node scripts/verify-request-log.mjs",
+    "preflight": "node scripts/preflight-d1.mjs",
     "smoke": "node scripts/smoke.mjs",
     "test": "node --test \"scripts/*.test.mjs\" && node scripts/sync-partials.mjs --check",
     "usage": "wrangler d1 execute ask-seoul-dev-d1 --local --file=scripts/usage-report.sql"
