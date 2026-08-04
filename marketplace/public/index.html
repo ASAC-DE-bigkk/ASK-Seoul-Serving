@@ -435,7 +435,7 @@
 <main class="wrap">
 
   <section>
-    <div class="sec-head"><h2>데이터 제품</h2><span class="hint">질문에 바로 답하는 형태로 정제됨</span>
+    <div class="sec-head"><h2>데이터 제품</h2>
       <a class="more" href="/catalog" id="allLink">카탈로그 전체 보기 →</a></div>
     <div class="cards" id="cards">
       <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
@@ -833,7 +833,8 @@ async function bootCatalog() {
     // 있다"는 그레인 줄(행정동 × 날짜 …)이 이미 사람 말로 전달한다.
     return "<a class='card' href='/catalog?q=" + encodeURIComponent(p.name) + "'>" +
       "<span class='t'>" + esc(titleOf(p)) + "</span>" +
-      "<span class='q'>" + esc(p.product_question || "—") + "</span>" +
+      // 질문형 대신 설명 문장 — 카탈로그 목록과 같은 우선순위(쉬운 문장 desc 우선)
+      "<span class='q'>" + esc(d.desc || p.description || p.product_question || "—") + "</span>" +
       "<span class='meta'><span><b>" + nf.format(p.row_count || 0) + "</b> 행</span>" +
       (d.unit ? "<span>" + esc(d.unit) + "</span>" : "") +
       "<span class='free'>미리보기</span></span></span></a>";
