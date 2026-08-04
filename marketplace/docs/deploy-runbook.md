@@ -7,79 +7,65 @@
 > 정식 공개는 별도 판단(#20)이다. 이유는 ASK-Seoul-Serving#4 가 V1 6개 제품 계약 검증에
 > 실제 게시본을 읽는 타겟을 요구하기 때문이다.
 
-## 0. 전제 확인
-
-| 항목 | 확인 방법 | 기대 |
-|---|---|---|
-| **배포 승인** | [`../../docs/agreement.md` §8-3](../../docs/agreement.md#-8-3-원격-d1-에-표를-만드는-것--조율이-필요하다) | ⚠️ **승인 주체 미정** — prod D1 은 파이프라인의 DB 다. #476 ① 은 팀 투표였고 이미 통과했으므로 이 자리의 근거가 아니다 |
-| 대상 D1 | `wrangler.toml` `[env.production]` | `ask-seoul-prod-d1` — 파이프라인이 게시하는 prod D1(ASAC-DAG#668, 8/3 신설). 기본 환경의 dev D1 은 로컬 전용이다 |
-| Cloudflare 계정 | 팀 계정 로그인 | `npx wrangler whoami` — **publisher 와 같은 계정**이어야 바인딩이 같은 DB 로 풀린다(개인 계정 배포 금지) |
-| 코드 | 머지된 `dev` | 로컬 `npm test` · `npm run verify:log` 통과 |
-| **`_request_log` 이름 충돌** | 아래 검사 | ⚠️ **`STOP` 이면 배포 금지** |
-
-### 🔴 `_request_log` 이름 충돌 검사 (배포 전 필수)
-
-`migrations/0002_request_log.sql` 은 `CREATE TABLE IF NOT EXISTS` 라 **다른 주체가 같은 이름을
-선점하고 있으면 조용히 넘어간다.** 그 상태로 배포하면 게이트웨이가 없는 컬럼에 INSERT 하다
-실패하는데, `ctx.waitUntil` 안이라 **요청 로그가 전량 버려진다**(#23 에서 겪은 형태).
-
-```bash
-# 로컬은 --file 로 되지만, **원격은 --command 를 쓴다** — `--file` 은 원격에서 결과 대신
-# DB 통계를 돌려줘 verdict 가 안 보인다(실측).
-npx wrangler d1 execute <PROD_D1> --remote --env production --command \
-"SELECT CASE
-   WHEN NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_request_log')
-     THEN 'OK: 표가 없다'
-   WHEN (SELECT COUNT(*) FROM pragma_table_info('_request_log')
-         WHERE name IN ('route','table_name','status','key_hash','filters','row_count','ms')) = 7
-     THEN 'OK: 게이트웨이 스키마'
-   ELSE 'STOP: 다른 스키마가 이름을 선점' END AS verdict,
- (SELECT group_concat(name, ', ') FROM pragma_table_info('_request_log')) AS actual_columns"
-```
-
-실측(2026-08-04) 결과 — **운영에서 `STOP` 이 잡힌다:**
-
-```
-verdict        : STOP: 다른 스키마가 이름을 선점
-actual_columns : ts, path, query, token
-```
-
-**✅ 이 건은 합의가 끝났다** ([../../docs/agreement.md §2](../../docs/agreement.md#2--_request_log--이름-충돌-해소-신규-합의)).
-`(ts, path, query, token)` 4컬럼 표는 **transit·citydata 쪽에서 쓰던 것**이고,
-**운영자 협의로 게이트웨이 스키마로 정리하는 데 합의**했다. 이름은 `_request_log` 그대로 간다 —
-게이트웨이·콘솔·문서·MCP 가 전부 이 이름을 계약으로 쓰고 있어 개명은 그 전부를 흔든다.
-
-**기존 389~401행은 보존 대상이 아니다.** `query`·`token` 은 수집 원칙("값이 아니라 축만",
-decision/0001)상 애초에 남기면 안 되는 값이라, 옮겨 담을 곳이 없다. `token` 컬럼 값은
-확인하지 않았고 앞으로도 열지 않는다.
-
-### 정리 절차 — `STOP` 일 때만
-
-> ⚠️ **원격 D1 쓰기다.** 실행 전 팀에 알리고, 담당자가 **직접** 실행한다.
-
-```bash
-# ① 기존 표를 치운다 — 보존 대상이 아니다
-npx wrangler d1 execute <PROD_D1> --remote --env production   --command "DROP TABLE IF EXISTS _request_log"
-
-# ② 정본 스키마로 다시 만든다 (아래 1번과 같은 명령 — 장부가 안 된 파일만 실행한다)
-npx wrangler d1 migrations apply <PROD_D1> --remote --env production
-
-# ③ 위 검사를 다시 돌려 'OK: 게이트웨이 스키마' 를 확인한다
-```
-
-**개발 D1 에도 같은 표가 있다** — 로컬 개발이 원격 dev 를 볼 때 같은 문제가 나므로
-`ask-seoul-dev-d1` 에도 같은 절차를 적용한다(`--env` 없이).
-
-이 정리가 **`migrations/0005`(행동 로그 축 확장, #9·#3)의 선행 조건**이다. 정본이 안 선
-상태에서 ALTER 를 얹으면 어느 표에 붙는지가 배포 순서에 좌우된다.
-
-**로컬에서 먼저 통과시킨다** — 배포본이 아니라 코드가 맞는지는 여기서 본다.
+## 0. 배포 전 검사 — **먼저 이것부터**
 
 ```bash
 cd marketplace
-npm test          # classifyClient 계약
-npm run verify:log  # 요청 로그 유실 검증(C-10)
+npm run preflight -- <D1이름> [--env production]
 ```
+
+**표가 있는지만이 아니라 모양(컬럼)까지 봅니다.** 이름은 같은데 컬럼이 다른 표가 실제로
+있었고(`_request_log`), 그걸 못 잡으면 `CREATE TABLE IF NOT EXISTS` 가 조용히 넘어가
+**요청 로그가 전량 버려집니다**. 조건 없는 `ALTER` 가 있으면 **남의 표에 컬럼이 얹힙니다** —
+dev D1 에서 실제로 일어난 일입니다(`0004` 가 남의 표에 `request_id` 를 붙였다).
+
+| 판정 | 뜻 | 배포 |
+|---|---|---|
+| `없음` | 표가 없다 — apply 가 만든다 | ✅ 진행 |
+| `일치` | 있고 모양이 같다 | ✅ 진행 |
+| `일치+` | 컬럼이 더 있다 — 증분 규약상 추가는 허용 | ✅ 진행 |
+| **`모양 다름`** | 있는데 컬럼이 다르다 | 🔴 **중단** |
+| `남의 표` | 우리 소유가 아니다 — 다른 게 정상 | ⚠️ 감시만 |
+| **`인수됨`** | 남의 표가 우리 모양이 됐다 | 🔴 **중단** |
+
+종료 코드 `0` 진행 가능 · `1` **중단** · `2` 검사 실패(자격증명·네트워크).
+
+**기대 모양은 `migrations/*.sql` 에서 나옵니다** — 인메모리 sqlite 에 실제로 적용해 뽑으므로
+하드코딩 드리프트가 없습니다. 원격·로컬 D1 을 전혀 건드리지 않습니다.
+
+### 🔴 중단됐을 때
+
+**되돌리는 것보다 멈추는 게 쌉니다.** prod D1 은 62개 제품이 사는 파이프라인의 DB 이고,
+**D1 Time Travel 은 테이블 단위가 아니라 DB 전체를 덮어씁니다** — 제품 publish 하나를
+되돌리면 발급된 키·쿼터·요청 로그가 같이 과거로 갑니다(ASAC-DAG#476).
+
+1. 그 표가 누구 것인지 확인합니다 — [`../../docs/agreement.md` §5 소유 경계](../../docs/agreement.md)
+2. **이름을 비킬지 / 스키마를 맞출지 사람이 정합니다** (#52 에 적습니다)
+3. 정하고 나서 사유를 달아 다시 돌립니다:
+
+```bash
+npm run preflight -- <D1이름> --env production --ack "#52 합의: <결정과 근거>"
+```
+
+`--ack` 는 **판정을 바꾸지 않습니다.** '모양 다름'을 그대로 출력하고, 사유를 함께 찍고,
+종료 코드만 0 으로 바꿉니다 — 기록이 남아야 다음 사람이 "왜 통과시켰나"를 압니다.
+
+### 실측 (2026-08-04, 읽기만)
+
+```
+prod  _keys · _usage · _issuance_log · _burst  없음 (apply 가 만든다)
+      _request_log                             남의 표 (ts,path,query,token)
+dev   _keys · _usage · _issuance_log · _burst  일치
+      _request_log                             남의 표 (+ request_id — 0004 가 잘못 얹힘)
+```
+
+양쪽 다 **진행 가능**입니다.
+
+> ⚠️ **자격증명이 필요합니다.** `marketplace/.env` 에 `CLOUDFLARE_API_TOKEN`·
+> `CLOUDFLARE_ACCOUNT_ID` 를 넣으십시오(`.env.example` 참고). 읽기 검사만 하면 `D1:Read`
+> 로 충분합니다. 실측 시점에 자격증명이 `ops-dashboard/.env` 에만 있어 이쪽은 비어 있었습니다.
+
+## 0-1. 전제 확인
 
 ## 1. 팀 D1 에 운영 테이블 만들기 (최초 1회)
 

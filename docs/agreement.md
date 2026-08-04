@@ -169,17 +169,24 @@ transit 의 30일 지난 행을 지운다.** 지금까지 게이트웨이가 원
 > ⚠️ **원격 D1 쓰기다.** §8-3 의 조율을 먼저 거친다.
 
 ```bash
-# 0단계 ⚠️ 필수 — 장부 백필. 두 D1 모두 d1_migrations 가 없어서,
+# 0단계 ⚠️ 필수 — **배포 전 검사.** 표가 있는지만이 아니라 모양(컬럼)까지 본다.
+#   `모양 다름` 이면 여기서 멈춘다 — 되돌리는 것보다 멈추는 게 싸다.
+#   기대 모양은 migrations/*.sql 을 인메모리 sqlite 에 실제로 적용해 뽑는다(드리프트 없음).
+npm run preflight -- <D1> [--env production]        # 0=진행 1=중단 2=검사실패
+#   중단되면 → 소유 확인(§5) → 사람이 결정 → #52 에 적고 → --ack "<결정과 근거>" 로 재실행.
+#   --ack 는 판정을 바꾸지 않는다. 사유를 함께 찍고 종료 코드만 바꾼다.
+
+# 1단계 ⚠️ 필수 — 장부 백필. 두 D1 모두 d1_migrations 가 없어서,
 #   이걸 건너뛰면 apply 가 0001 부터 재실행하고 0004(조건 없는 ALTER)가
 #   **남의 표에 request_id 를 또 붙인다.** prod 에서 그 사고가 재연된다.
 #   백필은 이름이 아니라 route 컬럼 유무로 우리 표를 판정한다 (PR #50).
 npx wrangler d1 execute <D1> --remote [--env production] \
   --file=scripts/backfill-migrations-ledger.sql
 
-# 1단계 — 안 된 파일만 실행된다
+# 2단계 — 안 된 파일만 실행된다
 npx wrangler d1 migrations apply <D1> --remote [--env production]
 
-# 2단계 — 우리 표가 정본 스키마인가 (컬럼 수가 아니라 **필수 이름 집합**으로 본다.
+# 3단계 — 우리 표가 정본 스키마인가 (컬럼 수가 아니라 **필수 이름 집합**으로 본다.
 #   개수 하드코딩은 컬럼이 하나 늘면 바로 STOP 을 뱉는다)
 npx wrangler d1 execute <D1> --remote [--env production] --command \
 "SELECT CASE WHEN (SELECT COUNT(*) FROM pragma_table_info('_gateway_request_log')
@@ -187,7 +194,7 @@ npx wrangler d1 execute <D1> --remote [--env production] --command \
                   'request_id','product_id','env','intent')) = 11
  THEN 'OK' ELSE 'STOP' END verdict"
 
-# 3단계 — 남의 표를 안 건드렸는가. **행 수만 보면 안 된다** —
+# 4단계 — 남의 표를 안 건드렸는가. **행 수만 보면 안 된다** —
 #   ALTER 로 컬럼이 붙는 사고는 행 수가 그대로다. 컬럼 수를 같이 본다.
 #   기대: prod cols=4 · dev cols=5
 npx wrangler d1 execute <D1> --remote [--env production] --command \
@@ -196,6 +203,8 @@ npx wrangler d1 execute <D1> --remote [--env production] --command \
 ```
 
 **dev D1 에 돌릴 때는 `--env production` 을 뺀다.**
+
+3·4단계는 `npm run preflight` 가 같은 것을 보므로, 적용 뒤 한 번 더 돌려 확인해도 된다.
 
 `scripts/check-request-log-schema.sql` 은 역할이 바뀐다 — "이름 충돌 검사"가 아니라
 **"남의 표를 안 건드렸는지"** 확인용이다.
