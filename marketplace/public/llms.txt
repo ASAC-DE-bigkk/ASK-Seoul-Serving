@@ -108,6 +108,10 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
 
 - 컬럼 의미: `GET /api/v1/catalog` 응답의 `columns[].description` 에 실려 온다(게시본 정본).
   아직 게시 전인 컬럼은 `null` — 설명이 없다는 뜻이지 컬럼이 없다는 뜻이 아니다.
+- 활용 예시: 같은 응답의 `usage_patterns[]` — `question_ko`(이 제품이 답하는 질문) ·
+  `axes`(자르는 축) · `sql`(**참조 구현**, 그대로 실행하는 값이 아니다) · `requires` ·
+  `verified_rows` · `insight_sample_ko`(그 질의를 실제로 돌렸을 때 나온 문장 — 현재값이 아니라
+  검증 증거다). 제품 고르기와 필터 설계에 이걸 먼저 본다.
 - 신선도: 카탈로그 `freshness`(데이터 기준 시점) · `exported_at`(적재 시점). "지금/현재" 질문에
   답할 때는 이 시점을 함께 밝힐 것.
 - 키 폐기: `DELETE /api/v1/keys`(Bearer). `?purge=true` 면 이메일·사용 기록까지 삭제.

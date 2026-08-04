@@ -10,7 +10,7 @@
 // (버스트만 적용) — 데이터가 아니라 판단 재료이고, 소비 순서상 데이터 호출 앞에 반드시
 // 오는 단계라 여기서 쿼터를 깎으면 정작 쓸 몫이 준다. #642 의 "경로 등급이 아니라 키
 // 정책으로" 를 이렇게 해석했다.
-import { json, problem, safeRows, PUBLIC } from "./shared.js";
+import { json, problem, safeRows, parseJsonArray, PUBLIC } from "./shared.js";
 
 const ID_RE = /^[a-z0-9_]+$/;
 
@@ -124,16 +124,4 @@ export async function handleGlossary(env, vocabularyId, trace = {}) {
 
   trace.rows = rows.length;
   return json({ vocabulary_id: vocabularyId, terms: rows });
-}
-
-// primary_key·requires 는 D1 에 JSON 배열 문자열로 실린다(#638 §2). 깨진 값이 와도
-// 번들 전체를 죽이지 않는다 — 그 필드만 빈 배열로 두고 나머지를 서빙한다.
-function parseJsonArray(raw) {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
 }

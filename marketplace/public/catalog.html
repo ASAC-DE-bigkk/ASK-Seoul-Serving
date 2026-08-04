@@ -491,7 +491,6 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;
 // `d1_catalog_columns` 이고, 서버가 붙인다 — 화면이 따로 사전을 들고 있지 않는다.
 // 옛 정적 `column-docs.json` 과 생성기는 여기서 지웠다: 그 파일의 퇴역 조건이
 // *"계약에 컬럼 설명이 들어가면"* 이었고, 게시본에 68제품 939컬럼이 실리며 충족됐다.
-let USAGE = {};
 // 조인 키 표시 — 이 데이터를 남의 데이터에 붙이는 지점
 const JOIN_KEY = /^(admin_dong_code|gu_code|stat_region_cd)$/;
 
@@ -517,7 +516,6 @@ async function boot() {
   try { DISPLAY = await (await fetch("/product-display.json")).json(); } catch { DISPLAY = {}; }
   // 검증된 질의 예시(usage) — 라이브 d1_usage_patterns(commerce) + culture Phase 0 검증분.
   // #600 채택 시 이 정적 자산은 게시 테이블 조회(안 B 번들)로 교체된다.
-  try { USAGE = await (await fetch("/usage-patterns.json")).json(); } catch { USAGE = {}; }
   const q0 = new URLSearchParams(location.search).get("q");
   if (q0) { $("q").value = q0; query = q0.trim().toLowerCase(); }
   renderNav(); renderStart(); renderList(); renderSelect();
@@ -582,7 +580,7 @@ function visible() {
     if (activeDomain !== "all" && domainOf(p) !== activeDomain) return false;
     if (!query) return true;
     // 검색 표면: 표시명·기술명·설명(쉬운 문장 + 계약 원문) + usage 질문들
-    const uq = (USAGE[p.name] || []).map((u) => u.question).join(" ");
+    const uq = (p.usage_patterns || []).map((u) => u.question_ko).join(" ");
     const hay = (titleOf(p) + " " + ((DISPLAY[p.product_id] || {}).desc || "") + " " +
       (p.product_question || "") + " " + (p.description || "") + " " + uq + " " + p.name).toLowerCase();
     return hay.includes(query);
@@ -626,7 +624,7 @@ function renderList() {
     const d = DISPLAY[p.product_id] || {};
     const row = document.createElement("div");
     row.className = "prow";
-    const usage = USAGE[p.name] || [];
+    const usage = p.usage_patterns || [];
     row.innerHTML =
       // 기술명은 목록에 싣지 않는다(랜딩 카드와 같은 결정) — 상세의 엔드포인트 줄이
       // /api/v1/data/<기술명> 으로 이미 보여주고, 검색 표면에는 남아 있다.
@@ -647,11 +645,11 @@ function renderList() {
       ? "<div class='dhead'>활용 예시 · 실제로 돌려본 질문 " + usage.length + "건</div>" +
         usage.map((u) =>
           "<div class='usage-item'>" +
-          "<div class='uq'>" + esc(u.question) +
+          "<div class='uq'>" + esc(u.question_ko) +
           (u.verified_rows != null ? "<span class='uchip'>검증 " + u.verified_rows + "행</span>" : "") + "</div>" +
           (u.axes ? "<div class='umeta'>" + esc(u.axes) + "</div>" : "") +
           "<pre>" + esc(u.sql || "") + "</pre>" +
-          (u.insight ? "<div class='uins'>실행 예시 — " + esc(u.insight) + "</div>" : "") +
+          (u.insight_sample_ko ? "<div class='uins'>실행 예시 — " + esc(u.insight_sample_ko) + "</div>" : "") +
           "</div>").join("")
       : "";
     detail.innerHTML =
