@@ -80,7 +80,7 @@
 
   <div class="overall" id="overall">
     <span class="dot" aria-hidden="true"></span>
-    <span class="txt"><b id="ovTitle">확인하는 중…</b><span id="ovSub">/api/catalog 를 호출하고 있습니다</span></span>
+    <span class="txt"><b id="ovTitle">확인하는 중…</b><span id="ovSub">/api/v1/catalog 를 호출하고 있습니다</span></span>
     <span class="lat" id="ovLat"></span>
   </div>
 
@@ -216,12 +216,12 @@ async function check() {
   const t0 = performance.now();
   let res, body;
   try {
-    res = await fetch("/api/catalog", { cache: "no-store" });
+    res = await fetch("/api/v1/catalog", { cache: "no-store" });
     body = await res.json();
   } catch (e) {
     // 네트워크 자체가 실패 — 이 페이지가 떴다는 건 정적 자산은 살아 있다는 뜻이라
     // API 계층만 죽은 상황이다. 그 구분을 그대로 알린다.
-    setOverall("bad", "API 에 연결할 수 없습니다", "정적 페이지는 응답하지만 /api/catalog 호출이 실패했습니다 — " + e);
+    setOverall("bad", "API 에 연결할 수 없습니다", "정적 페이지는 응답하지만 /api/v1/catalog 호출이 실패했습니다 — " + e);
     $("ovLat").textContent = "";
     $("domRows").innerHTML = "<tr><td colspan='5'>도메인 상태를 불러오지 못했습니다</td></tr>";
     return;

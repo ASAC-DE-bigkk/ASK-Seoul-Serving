@@ -20,22 +20,23 @@
 </script>
 <style>
   :root {
-    /* 팔레트는 랜딩(index.html)과 같은 다크 단청 — 두 페이지가 어긋나면 다른 서비스로 보인다.
-       액센트는 민트 하나(테라코타 2색 체제 폐기), hover 는 어두워지지 않고 밝아진다 */
-    --bg:#070c0b; --panel:#0d1413; --panel-2:#111a18;
-    --sidebar:#0a100f; --sidebar-hi:#15201e;
-    --sidebar-ink:#c6d8d2; --sidebar-dim:#647a74;
-    --ink:#e7f2ee; --muted:#9db3ac; --faint:#647a74;
-    --line:rgba(231,242,238,.07); --line-strong:rgba(231,242,238,.14);
-    --accent:#3ce0c4; --accent-deep:#7deed8; --accent-ink:#04211b;
-    --accent-soft:rgba(60,224,196,.09); --accent-line:rgba(60,224,196,.30);
-    --green-soft:rgba(64,222,142,.10); --green-ink:#4ade80;
-    --amber-soft:rgba(251,191,36,.12); --amber-ink:#fbbf24; --red-soft:rgba(248,113,113,.10); --red-ink:#f87171;
-    --shadow-xs:0 0 0 0 transparent;
-    --shadow-sm:0 1px 3px rgba(0,0,0,.3);
-    /* hover 를 accent-deep 이 아니라 따로 둔 이유는 index.html 과 같다 — 두 모드에서
-       방향이 반대다(다크는 밝아지고, 라이트는 진해진다) */
-    --accent-hover:#7deed8;
+    /* 팔레트는 랜딩(index.html)의 :root 와 같은 값이다 — 어긋나면 다른 서비스로 보인다.
+       라이트 기본이고 액센트는 딥 그린 하나이며 면을 칠하지 않는다(링크·버튼·상태만). */
+    --bg:#f7f8f8; --panel:#ffffff; --panel-2:#f1f3f2;
+    --ink:#0f1b1a; --muted:#55655f; --faint:#64716d;
+    --line:#e5e9e7; --line-strong:#d3dad7;
+    /* 사이드바도 이제 밝은 판이다 — 콘솔이라고 어두울 이유는 없고, 어두운 면이 여럿이면
+       무엇이 강조인지 사라진다. 어두운 건 호출 예시(.endpoint) 하나만 남긴다. */
+    --sidebar:#fbfcfc; --sidebar-hi:#eef2f0;
+    --sidebar-ink:#55655f; --sidebar-dim:#64716d; --sidebar-line:#e5e9e7;
+    --accent:#0b6e60; --accent-hover:#0a5c50; --accent-deep:#0b6e60; --accent-ink:#ffffff;
+    --accent-soft:rgba(11,110,96,.06); --accent-line:rgba(11,110,96,.22);
+    --green-ink:#15803d; --green-soft:rgba(21,128,61,.08);
+    --amber-ink:#b45309; --amber-soft:rgba(180,83,9,.08);
+    --red-ink:#b91c1c; --red-soft:rgba(185,28,28,.07);
+    --term:#0f1b1a; --term-line:rgba(255,255,255,.10);
+    --shadow-xs:none;
+    --shadow-sm:0 1px 2px rgba(15,27,26,.05);
     --mono:ui-monospace,'Cascadia Code',Consolas,'Malgun Gothic',monospace;
     /* mono 는 라틴 식별자 전용이다 — Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
        굴림 계열에 대체되고 작은 급수에서 뭉개진다(실측). 한글 라벨은 --sans 로 되돌린다 */
@@ -43,18 +44,20 @@
            system-ui,-apple-system,'Noto Sans KR',sans-serif;
   }
 
-  /* ─── 라이트 모드 ── 랜딩(index.html)의 같은 블록과 값이 같아야 한다.
-     --sidebar* 는 덮어쓰지 않는다: 사이드바는 두 모드 모두 어둡다(랜딩의 nav 와 같은 이유). */
-  :root[data-theme="light"] {
-    --bg:#f6f7f6; --panel:#ffffff; --panel-2:#eef3f1;
-    --ink:#12211f; --muted:#3d534f;
-    /* 다크의 #75898b 를 그대로 쓰면 흰 바탕에서 3.5:1 로 AA 미달 — 흐림의 방향이 반대다 */
-    --faint:#5f7375;
-    --line:#e6eae8; --line-strong:#ccd5d2;
-    /* 흰 바탕 위 민트는 대비 1.7:1 로 글자에 못 쓴다 — 글자용만 진청록으로 내린다 */
-    --accent-deep:#0b6e60; --accent-hover:#23cdb0;
-    --green-ink:#15803d; --amber-ink:#b45309; --red-ink:#b91c1c;
-    --shadow-sm:0 1px 2px rgba(18,33,31,.06);
+  /* ─── 다크 모드 ── 랜딩(index.html)의 같은 블록과 값이 같아야 한다 */
+  :root[data-theme="dark"] {
+    --bg:#0d1211; --panel:#141a19; --panel-2:#1a2220;
+    --ink:#e9eeec; --muted:#9aa8a4; --faint:#7d8b86;
+    --line:rgba(233,238,236,.08); --line-strong:rgba(233,238,236,.15);
+    --sidebar:#0a0f0e; --sidebar-hi:#1a2220;
+    --sidebar-ink:#9aa8a4; --sidebar-dim:#7d8b86; --sidebar-line:rgba(233,238,236,.08);
+    --accent:#35a892; --accent-hover:#4cc4ac; --accent-deep:#5fceb6; --accent-ink:#04211b;
+    --accent-soft:rgba(53,168,146,.12); --accent-line:rgba(53,168,146,.30);
+    --green-ink:#4ade80; --green-soft:rgba(74,222,128,.10);
+    --amber-ink:#fbbf24; --amber-soft:rgba(251,191,36,.12);
+    --red-ink:#f87171; --red-soft:rgba(248,113,113,.10);
+    --term:#0a100f;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
   }
   * { box-sizing:border-box; margin:0; }
   html { scroll-behavior:smooth; }
@@ -68,38 +71,41 @@
 
   .side { background:var(--sidebar); color:var(--sidebar-ink); padding:16px 0 0; position:sticky; top:0;
           height:100vh; overflow-y:auto; display:flex; flex-direction:column;
-          border-right:1px solid rgba(255,255,255,.06); }
+          border-right:1px solid var(--sidebar-line); }
   .side .brand { display:flex; align-items:center; gap:10px; padding:6px 18px 16px;
-                 border-bottom:1px solid rgba(255,255,255,.07); margin-bottom:8px; }
+                 border-bottom:1px solid var(--sidebar-line); margin-bottom:8px; }
+  /* 브랜드는 랜딩(index.html .brand)과 동일 규칙 — 로고 글자색은 accent 면 위 전용
+     토큰(--accent-ink)을 쓴다. 하드코딩하면 한쪽 테마에서 대비가 깨진다(라이트에서
+     딥 그린 위 #04211b 이 남아 있던 실사고). */
   .side .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
-                       background:linear-gradient(140deg,#0f6f68,#2ee6c3);
+                       background:var(--accent);
                        display:flex; align-items:center; justify-content:center;
-                       font-weight:800; font-size:13.5px; color:#04211b; letter-spacing:-.02em; }
-  .side .brand .nm { font-weight:700; font-size:13.5px; color:#fff; letter-spacing:-.01em; line-height:1.25; }
-  .side .brand .sub { display:block; font-weight:500; font-size:11px; color:var(--sidebar-dim);
-                      letter-spacing:.02em; }
+                       font-weight:700; font-size:12.5px; color:var(--accent-ink); letter-spacing:.02em; }
+  .side .brand .nm { font-weight:700; font-size:14px; color:var(--ink); letter-spacing:-.01em; line-height:1.2; }
+  .side .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
+                      color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
   .side .group { padding:16px 18px 6px; font-size:10.5px; font-weight:700; letter-spacing:.1em;
                  color:var(--sidebar-dim); }
   .dnav { list-style:none; padding:0 8px; }
   .dnav li { display:flex; align-items:center; gap:9px; padding:7px 12px; font-size:13.5px; cursor:pointer;
              border-radius:6px; margin-bottom:1px; font-weight:500; color:var(--sidebar-ink); }
-  .dnav li:hover { background:rgba(255,255,255,.05); color:#fff; }
-  .dnav li.active { background:var(--sidebar-hi); color:#fff; font-weight:600;
+  .dnav li:hover { background:var(--sidebar-hi); color:var(--ink); }
+  .dnav li.active { background:var(--sidebar-hi); color:var(--ink); font-weight:600;
                     box-shadow:inset 2px 0 0 var(--accent); }
   .dnav li.soon { cursor:default; color:var(--sidebar-dim); }
   .dnav li.soon:hover { background:none; color:var(--sidebar-dim); }
   .dnav .dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none; }
   .dnav li.soon .dot { background:#294a45; }
   .dnav .cnt { margin-left:auto; font-size:11px; font-variant-numeric:tabular-nums;
-               background:rgba(255,255,255,.08); border-radius:4px; padding:1px 6px; color:var(--sidebar-ink); }
+               background:var(--sidebar-hi); border-radius:4px; padding:1px 6px; color:var(--sidebar-ink); }
   .dnav .soon-tag { margin-left:auto; font-size:9.5px; padding:1px 6px; border-radius:4px;
-                    background:rgba(255,255,255,.06); color:var(--sidebar-dim); letter-spacing:.02em; }
+                    background:var(--sidebar-hi); color:var(--sidebar-dim); letter-spacing:.02em; }
   .side .foot { margin-top:auto; padding:14px 18px 16px; font-size:11px; color:var(--sidebar-dim);
-                line-height:1.9; border-top:1px solid rgba(255,255,255,.07); }
+                line-height:1.9; border-top:1px solid var(--sidebar-line); }
   .side .foot b { color:var(--sidebar-ink); font-weight:600; }
   .side .foot code { font-family:var(--mono); font-size:10.5px; }
   .side .foot a { color:var(--sidebar-ink); text-decoration:none; }
-  .side .foot a:hover { color:#fff; text-decoration:underline; text-underline-offset:2px; }
+  .side .foot a:hover { color:var(--accent-deep); text-decoration:underline; text-underline-offset:2px; }
 
   .main { min-width:0; }
   .topbar { background:var(--panel); border-bottom:1px solid var(--line); padding:0 28px; height:52px;
@@ -131,9 +137,9 @@
                padding:0; border:1px solid var(--line-strong); border-radius:6px; background:var(--panel);
                color:var(--muted); cursor:pointer; }
   .theme-btn:hover { border-color:var(--accent-line); color:var(--accent-deep); }
-  .theme-btn .moon { display:none; }
-  :root[data-theme="light"] .theme-btn .sun { display:none; }
-  :root[data-theme="light"] .theme-btn .moon { display:block; }
+  .theme-btn .sun { display:none; }
+  :root[data-theme="dark"] .theme-btn .sun { display:block; }
+  :root[data-theme="dark"] .theme-btn .moon { display:none; }
 
   .content { padding:24px 28px 64px; max-width:1160px; }
   .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; }
@@ -207,18 +213,22 @@
   .prow:hover { background:var(--panel-2); }
   .prow:last-child, .pdetail:last-child { border-bottom:0; }
   .prow .t { font-weight:600; font-size:13.5px; }
-  .prow .t small { display:block; font-family:var(--mono); font-size:11px; font-weight:400;
-                   color:var(--faint); margin-top:1px; }
   .prow .q { font-size:13px; color:var(--muted); }
   /* 설명은 2줄 클램프 — 전문은 펼침(스키마 설명·usage)에서 */
   .prow .desc { font-size:13px; color:var(--muted); line-height:1.5; display:-webkit-box;
                 -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .prow .n { font-size:13px; font-variant-numeric:tabular-nums; text-align:right; }
-  /* usage 배지 — 검증된 질의 예시 보유 신호. 없는 제품은 흐리게(#600 공백이 보이게) */
+  /* usage 배지 — 검증된 질의 예시 보유 신호. 없는 제품은 흐리게(#600 공백이 보이게).
+     보유 배지는 활용 예시 섹션을 여는 버튼을 겸한다 — 기본 상세는 엔드포인트·스키마·
+     미리보기만 보여주고, 예시는 이 배지를 눌렀을 때만 편다. */
   .ubadge { font-size:11.5px; font-weight:600; padding:2px 9px; border-radius:10px; white-space:nowrap;
             background:var(--accent-soft); color:var(--accent-deep); border:1px solid var(--accent-line);
-            justify-self:start; }
-  .ubadge.none { background:transparent; color:var(--faint); border:1px dashed var(--line-strong); font-weight:400; }
+            justify-self:start; cursor:pointer; }
+  .ubadge:hover { border-color:var(--accent); }
+  .ubadge.none { background:transparent; color:var(--faint); border:1px dashed var(--line-strong);
+                 font-weight:400; cursor:default; }
+  .usage-wrap { display:none; margin-bottom:14px; }
+  .usage-wrap.open { display:block; }
   .usage-item { border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin-top:8px; }
   .usage-item .uq { font-weight:600; font-size:13px; }
   .usage-item .umeta { font-size:11.5px; color:var(--muted); margin-top:2px; }
@@ -254,6 +264,11 @@
   @media (max-width:760px){
     .phead,.prow { grid-template-columns:1fr 90px; }
     .prow .q,.prow .n,.phead span:nth-child(2),.phead span:nth-child(3),.phead span:nth-child(4){ display:none; } }
+  /* 표 머리 — 세 칸이 각각 무엇인지 밝힌다. 없으면 가운데 TEXT 열이 무슨 뜻인지
+     읽는 쪽이 추측해야 한다(타입인지 값인지). 격자는 아래 행과 같은 정의를 쓴다 */
+  .pdetail .col-head { display:grid; grid-template-columns:minmax(170px,230px) 76px 1fr; gap:6px 14px;
+                       padding:7px 0; border-bottom:1px solid var(--line);
+                       font-size:10.5px; font-weight:600; letter-spacing:.06em; color:var(--faint); }
   .pdetail .col-item { display:grid; grid-template-columns:minmax(170px,230px) 76px 1fr; gap:6px 14px;
                        align-items:baseline; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; }
   .pdetail .col-item code { font-family:var(--mono); color:var(--ink); word-break:break-all; }
@@ -264,14 +279,19 @@
   .pdetail .col-item .kk { font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:.06em;
                            color:var(--accent-deep); background:var(--accent-soft); border:1px solid var(--accent-line);
                            border-radius:3px; padding:0 4px; margin-left:6px; vertical-align:1px; }
+  /* 좁은 화면: 설명은 자기 줄로 내려가므로 머리에서 그 칸을 빼고, 타입 칸은 **양쪽 다
+     고정폭**으로 둔다 — `auto` 는 격자마다 따로 계산돼서(머리는 "타입", 본문은 "INTEGER")
+     머리와 값이 6px 씩 어긋난다. 넓은 화면에서 이미 76px 이라 같은 값을 쓴다 */
   @media (max-width:760px){
-    .pdetail .col-item { grid-template-columns:1fr auto; }
+    .pdetail .col-item { grid-template-columns:1fr 76px; }
     .pdetail .col-item .ds { grid-column:1/-1; }
+    .pdetail .col-head { grid-template-columns:1fr 76px; }
+    .pdetail .col-head span:nth-child(3){ display:none; }
   }
   /* 호출 예시는 두 모드 모두 어둡다 — 랜딩의 터미널 데모와 같은 이유(실행 화면으로 읽혀야 한다).
      그래서 테두리도 본문 토큰이 아니라 판 위에서 흐린 흰선이다 — --line-strong 을 쓰면
      라이트에서 어두운 블록을 밝은 테가 두르는 꼴이 된다 */
-  .endpoint { font-family:var(--mono); font-size:12.5px; background:#050908; color:#e4e9f1;
+  .endpoint { font-family:var(--mono); font-size:12.5px; background:var(--term); color:#e4e9f1;
               border-radius:6px; padding:10px 13px; overflow-x:auto; white-space:pre;
               border:1px solid rgba(255,255,255,.10); }
   .endpoint .m { color:#4ade80; font-weight:700; }
@@ -284,11 +304,18 @@
   /* grid 칸의 기본 min-width 는 auto(=내용의 최소 너비)라, 데이터 선택 목록의 긴 항목명이
      칸을 통째로 밀어 좁은 화면에서 페이지가 옆으로 스크롤됐다. 0 으로 풀어 줄어들게 한다 */
   .play-grid > * { min-width:0; }
-  @media (max-width:760px){ .play-grid { grid-template-columns:1fr; } }
+  /* 760px 에서만 접으면 1024px 폭에서 결과 칸이 399px 로 남는다(실측) — 16컬럼 표가
+     2,039px 라 창의 5배다. 스크롤은 되지만 못 쓴다. 조작부(240px)를 위로 올려
+     결과에 폭을 통째로 주는 편이 낫다. */
+  @media (max-width:1100px){ .play-grid { grid-template-columns:1fr; } }
   .field { margin-bottom:12px; }
   .field label { display:block; font-size:11px; font-weight:600; letter-spacing:.05em;
                  color:var(--muted); margin-bottom:5px; }
+  /* select 는 내용이 넘쳐도 줄바꿈도 말줄임도 없이 글자 중간에서 잘린다 —
+     그래서 긴 항목이 깨져 보였다. ellipsis 를 켜고, 라벨 자체도 한국어 제목만 남겼다
+     (테이블명은 바로 아래 호출 미리보기에 그대로 뜬다). */
   .field input, .field select { width:100%; }
+  .field select { text-overflow:ellipsis; }
   .resp-head { display:flex; align-items:center; gap:10px; margin:14px 0 8px; }
   .status { font-family:var(--mono); font-size:12px; font-weight:700; padding:2px 9px; border-radius:4px;
             display:none; }
@@ -302,7 +329,12 @@
   table.data th { background:var(--panel-2); font-family:var(--mono); font-size:10.5px; color:var(--muted);
                   font-weight:600; text-align:left; padding:7px 11px; white-space:nowrap;
                   border-bottom:1px solid var(--line); position:sticky; top:0; }
-  table.data td { padding:6px 11px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  /* 한 칸이 길면(행사 제목 등) 그 컬럼 하나가 표 전체를 밀어낸다 — 실측에서 title 컬럼
+     하나가 347px 였다. 폭을 잘라 말줄임하고 전체 값은 title 속성(마우스 올림)으로 넘긴다.
+     table-layout 이 auto 라 max-width 는 "이보다 넓어지지 말라"는 상한으로만 작동한다 —
+     짧은 값은 그대로 좁게 남으므로 컬럼이 균등해지지 않는다. */
+  table.data td { padding:6px 11px; border-bottom:1px solid var(--line); white-space:nowrap;
+                  max-width:240px; overflow:hidden; text-overflow:ellipsis; }
   table.data tr:last-child td { border-bottom:0; }
   table.data tbody tr:hover td { background:var(--panel-2); }
   .raw-json { display:none; font-family:var(--mono); font-size:12px; background:var(--panel-2);
@@ -315,7 +347,7 @@
 <div class="shell">
 
   <aside class="side">
-    <div class="brand" onclick="location.href='/'" style="cursor:pointer" title="홈으로"><span class="logo">AS</span><span class="nm">ASK SEOUL<span class="sub">Data Platform Console</span></span></div>
+    <div class="brand" onclick="location.href='/'" style="cursor:pointer" title="홈으로"><span class="logo">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></div>
     <div class="group">도메인</div>
     <ul class="dnav" id="dnav"></ul>
     <div class="group">이 페이지 안에서</div>
@@ -404,7 +436,7 @@
             <button class="btn-p" id="runBtn" style="width:100%">호출</button>
           </div>
           <div>
-            <div class="endpoint" id="reqPreview"><span class="m">GET</span> /api/data/&lt;table&gt;?limit=10</div>
+            <div class="endpoint" id="reqPreview"><span class="m">GET</span> /api/v1/data/&lt;table&gt;?limit=10</div>
             <div class="resp-head">
               <span class="status" id="respStatus"></span>
               <span class="resp-meta" id="respMeta"></span>
@@ -479,7 +511,7 @@ function goHash(hash, behavior) {
 }
 
 async function boot() {
-  const res = await fetch("/api/catalog");
+  const res = await fetch("/api/v1/catalog");
   PRODUCTS = (await res.json()).products || [];
   // 설명·표시명이 없어도 카탈로그는 그대로 뜬다 — 부가 정보라 실패를 삼킨다
   try { COLUMN_DOCS = await (await fetch("/column-docs.json")).json(); } catch { COLUMN_DOCS = {}; }
@@ -597,12 +629,14 @@ function renderList() {
     row.className = "prow";
     const usage = USAGE[p.name] || [];
     row.innerHTML =
-      "<div class='t'>" + titleOf(p) + "<small>" + p.name + "</small></div>" +
+      // 기술명은 목록에 싣지 않는다(랜딩 카드와 같은 결정) — 상세의 엔드포인트 줄이
+      // /api/v1/data/<기술명> 으로 이미 보여주고, 검색 표면에는 남아 있다.
+      "<div class='t' title='" + esc(p.name) + "'>" + titleOf(p) + "</div>" +
       // 목록 설명은 쉬운 한 줄 문장(display 사전 desc)을 우선한다 — 계약 description 은
       // 그레인 기호·내부 용어 중심이라 처음 보는 사용자에게 안 읽힌다(멘토 피드백).
       "<div class='desc'>" + esc(d.desc || p.description || p.product_question || "—") + "</div>" +
       (usage.length
-        ? "<span class='ubadge'>질문 " + usage.length + "건</span>"
+        ? "<span class='ubadge' data-uq role='button' title='활용 예시 " + usage.length + "건 펼치기'>질문 " + usage.length + "건</span>"
         : "<span class='ubadge none'>예시 준비 중</span>") +
       "<div class='act'><button class='btn-g btn-sm' data-try='" + p.name + "'>써보기</button></div>";
     const detail = document.createElement("div");
@@ -622,14 +656,18 @@ function renderList() {
           "</div>").join("")
       : "";
     detail.innerHTML =
-      usageHtml +
-      "<div class='dhead'" + (usage.length ? " style='margin-top:14px'" : "") + ">엔드포인트</div>" +
-      "<div class='endpoint'><span class='m'>GET</span> /api/data/" + p.name + "?limit=100" +
+      // 활용 예시는 기본 접힘 — 목록의 "질문 N건" 배지를 눌렀을 때만 편다.
+      // 기본 상세는 엔드포인트·스키마·미리보기 셋으로 시작한다(제품의 실체 먼저).
+      (usageHtml ? "<div class='usage-wrap' data-usage>" + usageHtml + "</div>" : "") +
+      "<div class='dhead'>엔드포인트</div>" +
+      "<div class='endpoint'><span class='m'>GET</span> /api/v1/data/" + p.name + "?limit=100" +
       (p.time_axis ? "&from=2026-07-01&to=2026-07-31" : "") + "</div>" +
       "<div class='dhead' style='margin-top:12px'>스키마 · " + cols.length + "컬럼" + (d.unit ? " · 그레인: " + d.unit : "") +
       " · " + nf.format(p.row_count || 0) + "행 · " + (p.time_axis ? "시간축 " + p.time_axis : "명부형") +
       (p.exported_at ? " · 마지막 갱신 " + fmtFresh(p.exported_at) : "") + "</div>" +
-      "<div class='cols'>" + cols.map((c) => {
+      // 어휘는 바로 위 요약("N컬럼")과 맞춘다 — 같은 것을 두 이름으로 부르지 않는다.
+      "<div class='cols'><div class='col-head'><span>컬럼명</span><span>타입</span><span>설명</span></div>" +
+      cols.map((c) => {
         const ds = (COLUMN_DOCS[p.name] || {})[c.name];
         return "<div class='col-item'><span><code>" + c.name + "</code>" +
           (JOIN_KEY.test(c.name) ? "<span class='kk'>JOIN</span>" : "") + "</span>" +
@@ -641,6 +679,17 @@ function renderList() {
       "<div class='table-scroll' data-pvwrap style='display:none;margin-top:8px'><table class='data'></table></div>";
     row.addEventListener("click", (e) => {
       if (e.target.closest("[data-try]")) return;
+      // "질문 N건" 배지 — 상세를 열고(닫지 않고) 활용 예시 섹션만 토글한다
+      const uq = e.target.closest("[data-uq]");
+      if (uq) {
+        const wrap = detail.querySelector("[data-usage]");
+        if (wrap) {
+          const on = wrap.classList.toggle("open");
+          detail.classList.add("open");
+          uq.title = "활용 예시 " + usage.length + "건 " + (on ? "접기" : "펼치기");
+        }
+        return;
+      }
       detail.classList.toggle("open");
     });
     // 무인증 미리보기 — 물건을 먼저 보여준다 (쿼터 무과금)
@@ -650,7 +699,7 @@ function renderList() {
       if (wrap.style.display === "block") { wrap.style.display = "none"; btn.textContent = "샘플 5행 미리보기 — 키 없이"; return; }
       btn.disabled = true; btn.textContent = "불러오는 중…";
       try {
-        const res = await fetch("/api/preview/" + btn.dataset.pv);
+        const res = await fetch("/api/v1/preview/" + btn.dataset.pv);
         const b = await res.json();
         const rows = b.rows || [];
         const tcols = rows.length ? Object.keys(rows[0]) : [];
@@ -706,7 +755,10 @@ function renderSelect() {
   sel.innerHTML = "";
   for (const p of PRODUCTS) {
     const o = document.createElement("option");
-    o.value = p.name; o.textContent = titleOf(p) + " — " + p.name;
+    // 라벨은 한국어 제목만 — "제목 — 테이블명"은 가장 긴 게 414px 라 240px 칸에서 잘렸다.
+    // 테이블명은 잃지 않는다: 아래 호출 미리보기에 그대로 뜨고, 여기선 tooltip 으로 남긴다.
+    // (62종 제목에 중복 없음을 확인하고 제목만 남겼다 — 중복이 생기면 구분이 사라진다.)
+    o.value = p.name; o.textContent = titleOf(p); o.title = p.name;
     sel.appendChild(o);
   }
   onTableChange();
@@ -728,7 +780,7 @@ function buildPath() {
   q.set("limit", $("pLimit").value || "10");
   if (p.time_axis && $("pFrom").value.trim()) q.set("from", $("pFrom").value.trim());
   if (p.time_axis && $("pTo").value.trim()) q.set("to", $("pTo").value.trim());
-  return "/api/data/" + p.name + "?" + q.toString();
+  return "/api/v1/data/" + p.name + "?" + q.toString();
 }
 function updatePreview() {
   const key = $("pKey").value.trim();
@@ -743,7 +795,7 @@ async function refreshQuota() {
   const key = $("pKey").value.trim();
   if (!key) return;
   try {
-    const res = await fetch("/api/me", { headers: { authorization: "Bearer " + key } });
+    const res = await fetch("/api/v1/me", { headers: { authorization: "Bearer " + key } });
     if (!res.ok) return;
     const b = await res.json();
     $("quotaFill").style.width = Math.min(100, (b.used_today / b.daily_quota) * 100) + "%";
@@ -756,10 +808,15 @@ function renderRows(rows) {
   tbl.innerHTML = "";
   if (!rows.length) { $("tableWrap").style.display = "none"; return; }
   const cols = Object.keys(rows[0]);
+  // 값은 반드시 esc 를 태운다. 여기만 raw 로 들어가고 있었는데, 행사 제목에 & 나 < 가
+  // 하나만 있어도 표가 통째로 깨진다(공공 원천 텍스트라 충분히 있을 수 있다).
+  // title 속성으로 원값을 넘겨, 칸에서 말줄임된 값도 마우스를 올리면 다 보이게 한다.
   tbl.innerHTML =
-    "<thead><tr>" + cols.map((c) => "<th>" + c + "</th>").join("") + "</tr></thead>" +
+    "<thead><tr>" + cols.map((c) => "<th>" + esc(c) + "</th>").join("") + "</tr></thead>" +
     "<tbody>" + rows.slice(0, 15).map((r) =>
-      "<tr>" + cols.map((c) => "<td>" + (r[c] ?? "<span style='color:var(--faint)'>∅</span>") + "</td>").join("") + "</tr>"
+      "<tr>" + cols.map((c) => (r[c] === null || r[c] === undefined
+        ? "<td><span style='color:var(--faint)'>∅</span></td>"
+        : "<td title=\"" + esc(r[c]) + "\">" + esc(r[c]) + "</td>")).join("") + "</tr>"
     ).join("") + "</tbody>";
   $("tableWrap").style.display = "block";
 }
@@ -840,7 +897,7 @@ function resetIssueBtn() {
 $("issueBtn").addEventListener("click", async () => {
   $("issueErr").textContent = "";
   const confirmRotate = $("issueBtn").dataset.confirm === "1";
-  const res = await fetch("/api/keys", {
+  const res = await fetch("/api/v1/keys", {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ email: $("email").value, ...(confirmRotate ? { confirm_rotate: true } : {}) }),
   });
@@ -894,7 +951,7 @@ async function callRevoke(purge) {
   const btn = purge ? $("purgeBtn") : $("revokeBtn");
   btn.disabled = true;
   try {
-    const res = await fetch("/api/keys" + (purge ? "?purge=true" : ""),
+    const res = await fetch("/api/v1/keys" + (purge ? "?purge=true" : ""),
       { method: "DELETE", headers: { authorization: "Bearer " + key } });
     const body = await res.json();
     if (!res.ok) { $("revokeNote").className = ""; $("revokeNote").textContent = friendly(res.status, body); return; }

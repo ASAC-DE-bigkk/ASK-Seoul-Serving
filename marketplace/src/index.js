@@ -173,32 +173,55 @@ async function handleCatalog(env) {
   });
 }
 
+// 공개 식별자 해석 — `product_id` 가 정본이고 테이블명은 과도기 별칭이다(decision/0003).
+//
+// 왜 둘 다 받나: 테이블명은 물리 이름이라 바뀔 수 있고 도메인마다 접두사가 갈리는데
+// (`gold_` 40종 · `d1_` 22종), `product_id` 는 계약(meta.serving)이 보증하고 접두사가 없다.
+// `/v1/*`·`/skill/v1/*` 은 이미 product_id 를 쓰고 있어서, 옛 `/api/*` 만 맞추는 것이다.
+// 별칭을 끊는 시점은 공개 배포 이후 별도 판단(#20) — 지금 끊으면 붙어 있는 소비자가 깨진다.
+//
+// 우선순위를 명시하는 이유: 지금은 두 이름 공간이 안 겹치지만(테이블은 gold_/d1_, id 는
+// 도메인 접두), 언젠가 어떤 제품의 테이블명이 다른 제품의 id 와 같아지면 `.first()` 가
+// 어느 행을 줄지 알 수 없다. product_id 가 이긴다고 못박아 둔다.
+async function lookupProduct(env, id, cols) {
+  return env.DB.prepare(
+    `SELECT ${cols} FROM _catalog WHERE (product_id = ?1 OR name = ?1) AND ${PUBLIC} ` +
+    "ORDER BY CASE WHEN product_id = ?1 THEN 0 ELSE 1 END LIMIT 1"
+  ).bind(id).first();
+}
+
 // 무인증 샘플 미리보기 — 고정 5행, 필터 없음, 쿼터 무과금 ("물건을 먼저 보여준다")
 const PREVIEW_ROWS = 5;
-async function handlePreview(env, table, trace = {}) {
-  trace.table = table;
-  if (!/^[a-z0-9_]+$/.test(table))
-    return problem(400, "invalid table", "테이블 이름 형식이 아니다");
+async function handlePreview(env, id, trace = {}) {
+  // 해석 전에는 "요청된 것"을 기록해 둔다 — 400·404 로 끝나는 요청도 무엇을 찾다 못 찾았는지
+  // 남아야 한다. 성공하면 아래에서 해석된 물리명으로 덮는다(decision/0003 D-4).
+  trace.table = id;
+  if (!/^[a-z0-9_]+$/.test(id))
+    return problem(400, "invalid id", "제품 id 형식이 아니다");
   // 비공개 제품은 404 로 답한다 — 403 이면 "있긴 있다"를 알려주는 셈이다
-  const meta = await env.DB.prepare(`SELECT name, time_axis FROM _catalog WHERE name = ? AND ${PUBLIC}`)
-    .bind(table).first();
-  if (!meta) return problem(404, "unknown table", `'${table}' 은 서빙 카탈로그에 없다 — GET /api/catalog 참조`);
+  const meta = await lookupProduct(env, id, "name, product_id, time_axis");
+  if (!meta) return problem(404, "unknown product", `'${id}' 은 서빙 카탈로그에 없다 — GET /api/v1/catalog 참조`);
+  // 조회는 **카탈로그가 준 물리명**으로만 한다 — 요청 문자열을 식별자로 쓰지 않는다
+  const table = meta.name;
+  trace.table = table;
   // 시간축이 있으면 최신 구간을 보여준다 — 미리보기의 존재 이유는 "실물이 쓸만한가"의 판단
   const order = meta.time_axis ? ` ORDER BY "${meta.time_axis}" DESC` : "";
   const { results } = await env.DB.prepare(
     `SELECT * FROM "${table}"${order} LIMIT ${PREVIEW_ROWS}`
   ).all();
   trace.rows = results.length;
-  return json({ table, preview: true, row_count: results.length, rows: results });
+  return json({ product_id: meta.product_id, table, preview: true, row_count: results.length, rows: results });
 }
 
-async function handleData(env, table, params, keyRow, trace = {}) {
+async function handleData(env, id, params, keyRow, trace = {}) {
+  trace.table = id;   // handlePreview 와 같은 이유 — 실패 요청도 무엇을 찾았는지 남는다
+  if (!/^[a-z0-9_]+$/.test(id))
+    return problem(400, "invalid id", "제품 id 형식이 아니다");
+  const meta = await lookupProduct(env, id, "*");
+  if (!meta) return problem(404, "unknown product", `'${id}' 은 서빙 카탈로그에 없다 — GET /api/v1/catalog 참조`);
+  // 아래 SQL 에 들어가는 이름은 여기 하나뿐이다 — 요청 문자열이 아니라 카탈로그가 준 값
+  const table = meta.name;
   trace.table = table;
-  if (!/^[a-z0-9_]+$/.test(table))
-    return problem(400, "invalid table", "테이블 이름 형식이 아니다");
-  const meta = await env.DB.prepare(`SELECT * FROM _catalog WHERE name = ? AND ${PUBLIC}`)
-    .bind(table).first();
-  if (!meta) return problem(404, "unknown table", `'${table}' 은 서빙 카탈로그에 없다 — GET /api/catalog 참조`);
 
   const columns = JSON.parse(meta.columns);
   const colSet = new Set(columns.map((c) => c.name));
@@ -215,7 +238,7 @@ async function handleData(env, table, params, keyRow, trace = {}) {
   }
   if (params.get("from") || params.get("to")) {
     if (!meta.time_axis)
-      return problem(400, "no time axis", `'${table}' 은 시간축이 없어 from/to 를 지원하지 않는다`);
+      return problem(400, "no time axis", `'${id}' 은 시간축이 없어 from/to 를 지원하지 않는다`);
     if (params.get("from")) { where.push(`"${meta.time_axis}" >= ?`); binds.push(params.get("from")); }
     if (params.get("to")) { where.push(`"${meta.time_axis}" <= ?`); binds.push(params.get("to")); }
   }
@@ -228,7 +251,7 @@ async function handleData(env, table, params, keyRow, trace = {}) {
     // 커서를 발급한 발행이 아니면 rowid 의 의미가 다르다 — 이어받으면 조용히 유실된다
     if (cur.stamp !== String(meta.exported_at))
       return problem(409, "cursor expired",
-        `'${table}' 이 그 사이 재발행됐다 — 커서를 버리고 첫 페이지부터 다시 받을 것`,
+        `'${id}' 이 그 사이 재발행됐다 — 커서를 버리고 첫 페이지부터 다시 받을 것`,
         { exported_at: meta.exported_at });
     where.push("rowid > ?");
     binds.push(cur.rid);
@@ -254,6 +277,7 @@ async function handleData(env, table, params, keyRow, trace = {}) {
 
   trace.rows = rows.length;
   return json({
+    product_id: meta.product_id,
     table,
     row_count: rows.length,
     limit,
@@ -309,21 +333,21 @@ async function logRequest(env, trace) {
 async function route(request, env, url, trace) {
   const path = url.pathname;
 
-  if (path === "/api/keys" && request.method === "POST") {
+  if (path === "/api/v1/keys" && request.method === "POST") {
     trace.route = "keys";
     return issueKey(env, request);
   }
-  if (path === "/api/keys" && request.method === "DELETE") {
+  if (path === "/api/v1/keys" && request.method === "DELETE") {
     trace.route = "revoke";
     const { keyRow, error } = await authenticate(env, request, { allowRevoked: true });
     if (error) return error;
     trace.keyHash = keyRow.key_hash;
     return revokeKey(env, keyRow, url.searchParams.get("purge") === "true");
   }
-  if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/keys)");
-  if (path === "/api/catalog") { trace.route = "catalog"; return handleCatalog(env); }
+  if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/v1/keys)");
+  if (path === "/api/v1/catalog") { trace.route = "catalog"; return handleCatalog(env); }
 
-  const previewMatch = path.match(/^\/api\/preview\/([^/]+)$/);
+  const previewMatch = path.match(/^\/api\/v1\/preview\/([^/]+)$/);
   if (previewMatch) {
     trace.route = "preview";
     // 익명 경로라 셀 식별자가 IP 밖에 없다 — 키 버킷과 같은 상한을 쓴다
@@ -333,8 +357,8 @@ async function route(request, env, url, trace) {
     return handlePreview(env, decodeURIComponent(previewMatch[1]), trace);
   }
 
-  const dataMatch = path.match(/^\/api\/data\/([^/]+)$/);
-  if (dataMatch || path === "/api/me") {
+  const dataMatch = path.match(/^\/api\/v1\/data\/([^/]+)$/);
+  if (dataMatch || path === "/api/v1/me") {
     trace.route = dataMatch ? "data" : "me";
     const { keyRow, error } = await authenticate(env, request);
     if (error) return error;
@@ -342,7 +366,7 @@ async function route(request, env, url, trace) {
     // 버스트는 쿼터보다 **앞**에서 본다 — 400·404 로 끝날 요청도 서버를 미는 건 같다
     const burst = await checkBurst(env, "k:" + keyRow.key_hash);
     if (burst.exceeded) return burstProblem(burst.retryAfter);
-    if (path === "/api/me") return handleMe(env, keyRow);
+    if (path === "/api/v1/me") return handleMe(env, keyRow);
     return handleData(env, decodeURIComponent(dataMatch[1]), url.searchParams, keyRow, trace);
   }
 
@@ -395,7 +419,7 @@ async function route(request, env, url, trace) {
   }
 
   return problem(404, "not found",
-    "GET /api/catalog · /api/preview/<table> · /api/data/<table> · /api/me, POST·DELETE /api/keys · " +
+    "GET /api/v1/catalog · /api/v1/preview/<table> · /api/v1/data/<table> · /api/v1/me, POST·DELETE /api/v1/keys · " +
     "GET /v1/products/<product_id> · /v1/glossary · /skill/v1/bundles/seoul-urban-analytics — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
 }
 

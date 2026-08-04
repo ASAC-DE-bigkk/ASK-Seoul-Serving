@@ -20,12 +20,12 @@
 
 | 경로 | 무엇 | 인증 |
 |---|---|---|
-| `POST /api/keys` | 키 발급 (이메일당 1키, rotate 는 confirm 필수) | 무인증 + IP 시간당 5회 |
-| `DELETE /api/keys` | 폐기 / `?purge=true` 완전삭제(지울 권리 셀프 경로) | Bearer (폐기된 키 허용) |
-| `GET /api/catalog` | 공개 제품 목록 + join_axes + 문서 포인터 | 무인증 |
-| `GET /api/preview/<t>` | 고정 5행 미리보기, 무과금 | 무인증 + IP 버스트 |
-| `GET /api/data/<t>` | 필터·기간·키셋 커서 조회 | Bearer + 버스트 + 일일 쿼터 |
-| `GET /api/me` | 내 사용량 (이메일 원문은 여기만 — 본인 응답) | Bearer |
+| `POST /api/v1/keys` | 키 발급 (이메일당 1키, rotate 는 confirm 필수) | 무인증 + IP 시간당 5회 |
+| `DELETE /api/v1/keys` | 폐기 / `?purge=true` 완전삭제(지울 권리 셀프 경로) | Bearer (폐기된 키 허용) |
+| `GET /api/v1/catalog` | 공개 제품 목록 + join_axes + 문서 포인터 | 무인증 |
+| `GET /api/v1/preview/<t>` | 고정 5행 미리보기, 무과금 | 무인증 + IP 버스트 |
+| `GET /api/v1/data/<t>` | 필터·기간·키셋 커서 조회 | Bearer + 버스트 + 일일 쿼터 |
+| `GET /api/v1/me` | 내 사용량 (이메일 원문은 여기만 — 본인 응답) | Bearer |
 | `GET /v1/products/<id>` | 제품 번들 — 구조·컬럼 설명·질의 예시 (ASAC-DAG#642) | Bearer |
 | `GET /v1/glossary` | 용어 사전 (`?vocabulary_id=`) | Bearer |
 | 정적 | `/docs` `/legal` `/llms.txt` `/openapi.json` `/column-docs.json` | Assets 서빙 |
@@ -126,8 +126,8 @@ npm run seed   # migrations + fixtures → 로컬 D1 (Windows 는 npm 셸을 Git
 npm run dev    # :8787 — 콘솔(:8788)과 동시 구동 가능
 ```
 
-- 발급→조회 한 바퀴: `POST /api/keys` → `GET /api/data/<t>` (Bearer) → `GET /api/me` 로 카운트 확인.
-- 무과금 확인: 400(없는 필터)·404(없는 테이블) 뒤 `/api/me` 카운트가 안 늘었는지.
+- 발급→조회 한 바퀴: `POST /api/v1/keys` → `GET /api/v1/data/<t>` (Bearer) → `GET /api/v1/me` 로 카운트 확인.
+- 무과금 확인: 400(없는 필터)·404(없는 테이블) 뒤 `/api/v1/me` 카운트가 안 늘었는지.
 - 커서: 재시드 후 이전 커서가 409 `cursor expired` 로 거절되는지.
 - 한도: 429 응답에 `Retry-After` / `X-RateLimit-*` 헤더가 있는지.
 - 관측: 요청 후 `_request_log` 에 행이 실제로 늘었는지 — **조용한 유실 검증, 생략 금지**.

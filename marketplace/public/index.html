@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ASK: SEOUL — 서울 데이터 API 허브</title>
-<meta name="description" content="서울의 문화·인구·교통·상권·날씨 데이터를 행정동 코드 하나로 조인해 쓰는 API 허브. 커버리지는 도메인마다 다르며 제품마다 명시. 이메일만으로 즉시 키 발급.">
-<meta name="theme-color" content="#070c0b">
+<meta name="description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 매일 쌓아 시계열·공간계열 데이터로 제공하는 API 허브. 미리보기는 키 없이, 키 발급은 이메일만.">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1211" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ASK: SEOUL">
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
-<meta property="og:description" content="흩어진 서울 데이터를 같은 축 위에. 미리보기는 키 없이 바로.">
+<meta property="og:description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 매일 쌓아 시계열·공간계열 데이터로 제공합니다.">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
 <script>
@@ -29,53 +30,55 @@
 </script>
 <style>
   :root {
-    /* 팔레트 — 다크 단청. 바탕은 청록으로 기운 근흑, 액센트는 단청 청록을 밝힌
-       민트 하나뿐이다(테라코타 2색 체제 폐기 — 초점 분산). 제네릭 SaaS 블루·바이올렛을
-       쓰지 않는 이유는 전과 같다: 이 제품의 소재가 서울이기 때문이다. */
-    --bg:#070c0b; --panel:#0d1413; --panel-2:#111a18;
-    --ink:#e7f2ee; --muted:#9db3ac; --faint:#647a74;
-    --line:rgba(231,242,238,.07); --line-strong:rgba(231,242,238,.14);
-    /* 다크 UI 의 hover 는 어두워지는 게 아니라 밝아진다 — accent-deep 이 더 밝은 이유 */
-    --accent:#3ce0c4; --accent-deep:#7deed8; --accent-ink:#04211b;
-    --accent-soft:rgba(60,224,196,.09); --accent-line:rgba(60,224,196,.30);
-    --teal:#3ce0c4; --teal-deep:#7deed8; --teal-soft:rgba(60,224,196,.09); --teal-line:rgba(60,224,196,.30);
-    --green-soft:rgba(64,222,142,.10); --green-ink:#4ade80; --red-ink:#f87171; --red-soft:rgba(248,113,113,.10);
-    /* 어두운 표면 — 히어로·데모·CTA 가 공유한다. 전면 다크라 바탕과 한 몸이다 */
-    --deck:#070c0b; --deck-2:#0d1413; --deck-line:rgba(214,240,235,.10);
-    --deck-ink:#c6d8d2; --deck-dim:#647a74;
-    --shadow-xs:0 0 0 0 transparent;
-    --shadow-sm:0 1px 3px rgba(0,0,0,.3);
-    --shadow-md:0 12px 32px rgba(0,0,0,.45);
-    /* hover 를 accent-deep 이 아니라 별도 토큰으로 뺀 이유: 두 모드에서 방향이 반대다.
-       다크는 밝아지고(#7deed8), 라이트는 진해진다(#23cdb0). accent-deep 은 "바탕 위에서
-       읽히는 글자색" 쪽이라 라이트에서 훨씬 어두워져야 해서 hover 로 겸할 수 없다. */
-    --accent-hover:#7deed8;
-    --sk:#15201e; --sk-sheen:rgba(255,255,255,.06);
+    /* 팔레트 — 라이트 기본. 액센트는 단청 청록을 낮춘 딥 그린 하나이고 **면을 칠하지 않는다**:
+       링크·버튼·상태 표시에만 쓴다. 전에는 근흑 바탕에 채도 높은 민트(#3ce0c4)라
+       개발자 툴·크립토 쪽으로 읽혔다. 제네릭 SaaS 블루·바이올렛을 안 쓰는 이유는
+       그대로다 — 이 제품의 소재가 서울이기 때문이다.
+       모드 기본값이 다크에서 라이트로 뒤집혔으므로 :root 가 라이트고 [data-theme=dark]가 덮는다. */
+    --bg:#f7f8f8; --panel:#ffffff; --panel-2:#f1f3f2;
+    --ink:#0f1b1a; --muted:#55655f; --faint:#64716d;
+    --line:#e5e9e7; --line-strong:#d3dad7;
+    /* accent = 버튼 면, accent-ink = 그 위 글자, accent-deep = 바탕 위 글자(링크).
+       라이트에서는 셋 다 같은 딥 그린이면 되고, hover 는 진해진다. */
+    --accent:#0b6e60; --accent-hover:#0a5c50; --accent-deep:#0b6e60; --accent-ink:#ffffff;
+    --accent-soft:rgba(11,110,96,.06); --accent-line:rgba(11,110,96,.22);
+    --teal:#0b6e60; --teal-deep:#0b6e60;
+    --teal-soft:rgba(11,110,96,.06); --teal-line:rgba(11,110,96,.22);
+    --green-ink:#15803d; --green-soft:rgba(21,128,61,.08);
+    --red-ink:#b91c1c; --red-soft:rgba(185,28,28,.07);
+    /* 터미널 — 이제 **유일하게** 두 모드 모두 어두운 면이다. 코드 표면이 어두운 건 표준이고,
+       그 하나만 어두워야 강조가 된다. 전에는 nav·히어로·CTA 까지 어두워 강조가 없었다.
+       (구 --deck* 를 대신한다 — 이름을 바꾼 건 역할이 "어두운 판 일반"에서 "터미널"로 좁아져서다.) */
+    --term:#0f1b1a; --term-2:#16241f; --term-line:rgba(255,255,255,.10);
+    --term-ink:#c9d6d1; --term-dim:#7d918b;
+    /* 그림자는 거의 쓰지 않는다 — 경계선 하나로 판을 나눈다 */
+    --shadow-xs:none;
+    --shadow-sm:0 1px 2px rgba(15,27,26,.05);
+    --shadow-md:0 6px 20px rgba(15,27,26,.07);
+    --sk:#eceeed; --sk-sheen:rgba(255,255,255,.7);
     --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono','Malgun Gothic',monospace;
     /* 본문 서체를 변수로 — 한글 라벨이 mono 에서 빠져나올 때 되돌아올 곳이 필요하다 */
     --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
            system-ui,-apple-system,'Noto Sans KR',sans-serif;
   }
 
-  /* ─── 라이트 모드 ───
-     토큰만 덮어쓴다 — 컴포넌트 규칙은 한 벌이다. 덮어쓰지 않는 --deck* 는 그대로
-     어둡게 남고, 그래서 nav·히어로·데모·CTA 는 두 모드에서 모두 다크다. 의도한 것이다:
-     터미널 데모가 밝아지면 "실행 화면"으로 안 읽히고, 히어로의 격자도 사라진다. */
-  :root[data-theme="light"] {
-    --bg:#f6f7f6; --panel:#ffffff; --panel-2:#eef3f1;
-    --ink:#12211f; --muted:#3d534f;
-    /* faint 는 다크 팔레트의 #75898b 를 그대로 못 가져온다 — 흰 바탕에서 3.5:1 로 AA 미달이다
-       (어두운 바탕에서 흐린 색은 밝고, 밝은 바탕에서는 어두워야 같은 "흐림"이 된다) */
-    --faint:#5f7375;
-    --line:#e6eae8; --line-strong:#ccd5d2;
-    /* 흰 바탕 위 민트(#3ce0c4)는 대비 1.7:1 로 글자로 못 쓴다 — 글자용만 진청록으로 내린다.
-       배경으로 쓰이는 --accent 는 그대로다(그 위 글자는 --accent-ink 로 어둡다). */
-    --accent-deep:#0b6e60; --accent-hover:#23cdb0;
-    --teal-deep:#0b6e60;
-    --green-ink:#15803d; --red-ink:#b91c1c;
-    --sk:#e9eeec; --sk-sheen:rgba(255,255,255,.7);
-    --shadow-sm:0 1px 2px rgba(18,33,31,.06);
-    --shadow-md:0 10px 28px rgba(18,33,31,.10);
+  /* ─── 다크 모드 ───
+     토큰만 덮어쓴다 — 컴포넌트 규칙은 한 벌이다. 어두운 바탕에서는 액센트가 **밝아져야**
+     읽히므로 accent-deep 이 accent 보다 밝고, hover 도 밝아진다(라이트와 방향이 반대다). */
+  :root[data-theme="dark"] {
+    --bg:#0d1211; --panel:#141a19; --panel-2:#1a2220;
+    --ink:#e9eeec; --muted:#9aa8a4; --faint:#7d8b86;
+    --line:rgba(233,238,236,.08); --line-strong:rgba(233,238,236,.15);
+    --accent:#35a892; --accent-hover:#4cc4ac; --accent-deep:#5fceb6; --accent-ink:#04211b;
+    --accent-soft:rgba(53,168,146,.12); --accent-line:rgba(53,168,146,.30);
+    --teal:#35a892; --teal-deep:#5fceb6;
+    --teal-soft:rgba(53,168,146,.12); --teal-line:rgba(53,168,146,.30);
+    --green-ink:#4ade80; --green-soft:rgba(74,222,128,.10);
+    --red-ink:#f87171; --red-soft:rgba(248,113,113,.10);
+    --term:#0a100f; --term-2:#111917;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:0 8px 24px rgba(0,0,0,.35);
+    --sk:#1a2220; --sk-sheen:rgba(255,255,255,.05);
   }
   * { box-sizing:border-box; margin:0; }
   html { scroll-behavior:smooth; }
@@ -89,7 +92,6 @@
   a { color:inherit; text-decoration:none; }
   .wrap { max-width:1140px; margin:0 auto; padding:0 24px; }
   :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:6px; }
-  .deck :focus-visible, .nav :focus-visible { outline-color:var(--accent); }
   /* 데이터를 가리키는 미세 라벨 — 이 페이지의 서체 규칙.
      mono 는 라틴 전용이다: Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
      굴림 계열에 대체되고, 10px 대 + 자간 .12em 이 겹쳐 뭉개진다(실측). 한글이 실리는
@@ -98,42 +100,41 @@
          text-transform:uppercase; color:var(--faint); }
   .lab.ko { font-family:var(--sans); font-size:12px; letter-spacing:.01em;
             text-transform:none; }
-  .deck .lab { color:var(--deck-dim); }
   .num { font-variant-numeric:tabular-nums; }
 
   /* ─── nav ─── */
-  .nav { background:var(--deck); border-bottom:1px solid var(--deck-line); position:sticky; top:0; z-index:20; }
+  .nav { background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
   .nav-in { display:flex; align-items:center; gap:20px; height:56px; }
   .brand { display:flex; align-items:center; gap:10px; }
   .brand .logo { width:30px; height:30px; border-radius:7px;
-                 background:linear-gradient(140deg,#0f6f68,#2ee6c3);
-                 display:flex; align-items:center; justify-content:center;
-                 font-weight:800; font-size:13px; color:#04211b; }
-  .brand .nm { font-weight:700; font-size:14px; color:#fff; letter-spacing:-.01em; line-height:1.2; }
+                 background:var(--accent); display:flex; align-items:center; justify-content:center;
+                 /* accent 면 위 글자는 --accent-ink — 다크 테마에선 accent 가 밝아져 흰 글자가 안 보인다 */
+                 font-weight:700; font-size:12.5px; letter-spacing:.02em; color:var(--accent-ink); }
+  .brand .nm { font-weight:700; font-size:14px; color:var(--ink); letter-spacing:-.01em; line-height:1.2; }
   .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
-                color:var(--deck-dim); letter-spacing:.1em; text-transform:uppercase; }
+                color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
   .nav-links { display:flex; gap:2px; margin-left:6px; }
-  .nav-links a { font-size:13px; font-weight:500; color:var(--deck-ink); padding:6px 12px; border-radius:6px; }
-  .nav-links a:hover { background:rgba(255,255,255,.06); color:#fff; }
-  .nav-links a.active { color:#fff; font-weight:600; background:rgba(255,255,255,.08); }
+  .nav-links a { font-size:13px; font-weight:500; color:var(--muted); padding:6px 12px; border-radius:6px; }
+  .nav-links a:hover { background:var(--panel-2); color:var(--ink); }
+  .nav-links a.active { color:var(--ink); font-weight:600; background:var(--panel-2); }
   .nav .spacer { flex:1; }
   /* 한글 라벨이라 자간을 벌리지 않는다 — 라틴 대문자용 .08em 을 한글에 주면 낱글자로 흩어져 읽힌다 */
   .env-pill { display:inline-flex; align-items:center; gap:6px; font-family:var(--sans); font-size:11.5px;
               font-weight:600; letter-spacing:.01em; padding:4px 10px; border-radius:5px;
-              border:1px solid var(--deck-line); color:var(--deck-ink); white-space:nowrap; }
+              border:1px solid var(--line-strong); color:var(--muted); white-space:nowrap; }
   .env-pill i { width:5px; height:5px; border-radius:50%; background:#f79009; }
   .nav-cta { font-size:12.5px; font-weight:600; color:var(--accent-ink); background:var(--accent);
              padding:7px 14px; border-radius:6px; white-space:nowrap; }
   .nav-cta:hover { background:var(--accent-hover); }
-  /* 테마 토글 — nav 는 두 모드 모두 다크라 버튼 색도 deck 계열 고정이다.
-     아이콘은 "지금 상태"가 아니라 "누르면 갈 곳"을 보여준다: 다크에서는 해(→라이트). */
+  /* 테마 토글 — 아이콘은 "지금 상태"가 아니라 "누르면 갈 곳"을 보여준다.
+     기본이 라이트로 뒤집혔으므로 기본 아이콘은 달(→다크)이다. */
   .theme-btn { width:30px; height:30px; flex:none; display:flex; align-items:center; justify-content:center;
-               border:1px solid var(--deck-line); border-radius:7px; background:transparent;
-               color:var(--deck-ink); cursor:pointer; padding:0; transition:background .12s, color .12s; }
-  .theme-btn:hover { background:rgba(255,255,255,.07); color:#fff; }
-  .theme-btn .moon { display:none; }
-  :root[data-theme="light"] .theme-btn .sun { display:none; }
-  :root[data-theme="light"] .theme-btn .moon { display:block; }
+               border:1px solid var(--line-strong); border-radius:7px; background:transparent;
+               color:var(--muted); cursor:pointer; padding:0; transition:background .12s, color .12s; }
+  .theme-btn:hover { background:var(--panel-2); color:var(--ink); }
+  .theme-btn .sun { display:none; }
+  :root[data-theme="dark"] .theme-btn .sun { display:block; }
+  :root[data-theme="dark"] .theme-btn .moon { display:none; }
   @media (max-width:900px){ .env-pill { display:none; } .nav-in { gap:12px; } }
   @media (max-width:760px){
     .nav-links a { display:none; }
@@ -144,46 +145,43 @@
   /* ─── hero: 공간축 격자 위 ───
      배경은 426칸 격자다 — 서울의 행정동 수와 같은 칸 수. 이 제품의 차별점이
      "행정동 단위로 자를 수 있다"인데, 그 사실을 문장이 아니라 표면으로 말한다.
-     칸의 밝기는 장식이지 실측이 아니다(그래서 지도라고 부르지 않는다). */
-  .deck { background:var(--deck); color:#fff; }
+     칸의 밝기는 장식이지 실측이 아니다(그래서 지도라고 부르지 않는다).
+     각주("격자 한 칸 = 행정동 하나")는 뺐다 — 격자가 아무 주장도 하지 않게 되어
+     오해할 것도 없어졌다. 칸 수를 426 으로 유지하는 건 이제 우리끼리의 규칙이다. */
+  .deck { background:var(--bg); color:var(--ink); }
   .hero { position:relative; overflow:hidden; padding:84px 0 92px; }
   #field { position:absolute; inset:0; width:100%; height:100%; pointer-events:none;
            -webkit-mask-image:radial-gradient(120% 100% at 78% 44%, #000 12%, transparent 72%);
                    mask-image:radial-gradient(120% 100% at 78% 44%, #000 12%, transparent 72%); }
   /* 아래 섹션으로 넘어가는 경계를 지운다 */
   .hero::after { content:""; position:absolute; left:0; right:0; bottom:0; height:170px;
-                 background:linear-gradient(transparent, var(--deck)); pointer-events:none; }
+                 background:linear-gradient(transparent, var(--bg)); pointer-events:none; }
   .hero .wrap { position:relative; }
   .hero-in { position:relative; z-index:2; max-width:700px; }
 
   .hero h1 { font-size:clamp(34px, 5.6vw, 62px); font-weight:800; letter-spacing:-.038em;
              line-height:1.06; text-wrap:balance; margin-top:18px; }
   .hero h1 .n { font-variant-numeric:tabular-nums; color:var(--accent); }
-  .hero h1 .l2 { display:block; color:var(--deck-ink); font-weight:400; letter-spacing:-.03em; }
-  .hero .sub { font-size:16.5px; color:var(--deck-ink); margin-top:20px; max-width:470px; }
-  .hero .sub b { color:#fff; font-weight:600; }
-  /* 격자가 무엇인지 밝히는 각주 — 데이터인 척하지 않는다 */
-  .hero .fieldnote { position:absolute; right:0; bottom:-4px; z-index:2; text-align:right;
-                     max-width:200px; line-height:1.5; }
-  @media (max-width:1080px){ .hero .fieldnote { display:none; } }
+  .hero h1 .l2 { display:block; color:var(--muted); font-weight:400; letter-spacing:-.03em; }
+  .hero .sub { font-size:16.5px; color:var(--muted); margin-top:20px; max-width:470px; }
+  .hero .sub b { color:var(--ink); font-weight:600; }
   .search-hero { margin-top:28px; display:flex; gap:8px; max-width:470px; }
   .search-hero .box { flex:1; position:relative; }
   .search-hero input { width:100%; font:inherit; font-size:14px; padding:12px 14px 12px 40px;
-                       border-radius:8px; border:1px solid var(--deck-line);
-                       background:rgba(255,255,255,.05); color:#fff; outline:none;
+                       border-radius:8px; border:1px solid var(--line-strong);
+                       background:var(--panel); color:var(--ink); outline:none;
                        transition:border-color .12s, background .12s, box-shadow .12s; }
-  .search-hero input::placeholder { color:var(--deck-dim); }
-  .search-hero input:focus { border-color:var(--accent); background:rgba(255,255,255,.08);
-                             box-shadow:0 0 0 3px rgba(60,224,196,.22); }
+  .search-hero input::placeholder { color:var(--faint); }
+  .search-hero input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
   .search-hero .ico { position:absolute; left:13px; top:50%; transform:translateY(-50%);
-                      color:var(--deck-dim); display:flex; }
+                      color:var(--faint); display:flex; }
   .search-hero button { font:inherit; font-size:13.5px; font-weight:600; color:var(--accent-ink); background:var(--accent);
                         border:0; border-radius:8px; padding:0 20px; cursor:pointer; }
   .search-hero button:hover { background:var(--accent-hover); }
   .hot { display:flex; gap:6px; flex-wrap:wrap; margin-top:13px; align-items:center; }
-  .hot a { font-size:12px; font-weight:500; color:var(--deck-ink); padding:3px 10px;
-           border:1px solid var(--deck-line); border-radius:999px; }
-  .hot a:hover { border-color:var(--accent); color:#fff; }
+  .hot a { font-size:12px; font-weight:500; color:var(--muted); padding:3px 10px;
+           border:1px solid var(--line-strong); border-radius:999px; background:var(--panel); }
+  .hot a:hover { border-color:var(--accent-line); color:var(--accent-deep); }
 
   /* ─── 계기 스트립 (통계) — 카드 4장 대신 구획된 한 줄 ─── */
   .strip { background:var(--panel); border:1px solid var(--line-strong); border-radius:10px;
@@ -215,15 +213,7 @@
           box-shadow:var(--shadow-xs); display:flex; flex-direction:column; gap:8px;
           transition:border-color .12s, box-shadow .12s, transform .12s; }
   a.card:hover { border-color:var(--accent-line); box-shadow:var(--shadow-md); transform:translateY(-1px); }
-  .card .top { display:flex; align-items:flex-start; gap:10px; }
   .card .t { font-weight:700; font-size:14px; letter-spacing:-.01em; }
-  .card .t small { display:block; font-family:var(--mono); font-size:10.5px; font-weight:400;
-                   color:var(--faint); margin-top:2px; }
-  .card .badge { margin-left:auto; flex:none; font-family:var(--mono); font-size:10px; font-weight:600;
-                 padding:2px 8px; border-radius:4px; background:var(--accent-soft);
-                 color:var(--accent-deep); border:1px solid var(--accent-line); white-space:nowrap; }
-  .card .badge.dim { background:var(--panel); color:var(--muted); border-color:var(--line-strong);
-                     font-family:inherit; }
   .card .q { font-size:13.5px; color:var(--muted); flex:1; }
   .card .meta { display:flex; gap:12px; font-size:12px; color:var(--faint);
                 font-variant-numeric:tabular-nums; border-top:1px solid var(--line); padding-top:9px; }
@@ -277,11 +267,14 @@
   .hstep .dd code { font-family:var(--mono); font-size:11px; background:var(--bg);
                     border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
   /* 데모 — 질문에서 응답까지를 3박자로 보여준다. 화면의 명령이 실제로 호출되는 것과 같다 */
-  .demo { background:var(--deck-2); border:1px solid var(--deck-line); border-radius:10px;
+  .demo { background:var(--term); border:1px solid var(--term-line); border-radius:10px;
           overflow:hidden; box-shadow:var(--shadow-md); }
   .demo .bar { display:flex; align-items:center; gap:8px; padding:10px 15px;
-               border-bottom:1px solid var(--deck-line); }
+               border-bottom:1px solid var(--term-line); }
   .demo .bar i { width:7px; height:7px; border-radius:50%; background:#294a45; flex:none; }
+  /* 지금 보고 있는 도메인 — 시나리오가 도메인마다 하나씩이라 어디 데이터인지 늘 밝힌다 */
+  .demo .dchip { font-size:11px; font-weight:600; padding:1px 8px; border-radius:9px; white-space:nowrap;
+                 background:rgba(255,255,255,.07); color:var(--term-ink); border:1px solid var(--term-line); }
   .demo .qs { margin-left:auto; display:flex; gap:6px; }
   .demo .qs button { width:7px; height:7px; padding:0; border:0; border-radius:50%;
                      background:#294a45; cursor:pointer; transition:background .15s; }
@@ -298,37 +291,34 @@
   .demo .out { overflow-x:auto; }
   .demo table { width:100%; border-collapse:collapse; margin-top:12px; font-size:12.5px; }
   .demo th { text-align:left; font-family:var(--mono); font-size:9.5px; font-weight:600;
-             letter-spacing:.06em; text-transform:uppercase; color:var(--deck-dim);
+             letter-spacing:.06em; text-transform:uppercase; color:var(--term-dim);
              padding:0 12px 6px 0; white-space:nowrap; }
-  .demo td { padding:6px 12px 6px 0; color:var(--deck-ink); border-top:1px solid var(--deck-line);
+  .demo td { padding:6px 12px 6px 0; color:var(--term-ink); border-top:1px solid var(--term-line);
              font-variant-numeric:tabular-nums; max-width:220px; overflow:hidden;
              text-overflow:ellipsis; white-space:nowrap; }
   .demo td.k { color:#fff; font-weight:600; }
   .demo tr.in td { animation:rowin .3s ease both; }
   @keyframes rowin { from { opacity:0; transform:translateY(5px); } }
-  .demo .fo { margin-top:11px; font-size:12px; color:var(--deck-dim); line-height:1.5; }
+  /* 스냅샷 시점 — 화면의 행이 지금 호출한 결과가 아니라는 걸 밝힌다 */
+  .demo .stamp { margin-top:7px; font-family:var(--mono); font-size:10px; color:var(--term-dim);
+                 letter-spacing:.02em; }
+  .demo .fo { margin-top:11px; font-size:12px; color:var(--term-dim); line-height:1.5; }
   .demo .fo b { color:var(--accent); font-weight:600; }
   .demo .fo code { font-family:var(--mono); font-size:10.5px; }
 
   /* cta */
-  .cta { margin:56px 0 0; background:var(--deck); border:1px solid var(--deck-line); border-radius:12px; padding:34px 38px;
-         display:flex; align-items:center; gap:24px; flex-wrap:wrap; position:relative; overflow:hidden; }
-  .cta::before { content:""; position:absolute; inset:0; pointer-events:none;
-    background-image:linear-gradient(var(--deck-line) 1px, transparent 1px),
-                     linear-gradient(90deg, var(--deck-line) 1px, transparent 1px);
-    background-size:44px 44px;
-    -webkit-mask-image:radial-gradient(520px 200px at 88% 20%, #000, transparent 72%);
-            mask-image:radial-gradient(520px 200px at 88% 20%, #000, transparent 72%); }
-  .cta > * { position:relative; }
-  .cta h3 { color:#fff; font-size:19px; font-weight:800; letter-spacing:-.015em; }
-  .cta p { color:var(--deck-ink); font-size:13.5px; margin-top:4px; }
+  /* CTA — 격자 오버레이를 걷어냈다. 히어로에 이미 격자가 있어 같은 무늬가 한 페이지에
+     두 번 나오면 장식으로만 읽힌다. 판 하나에 경계선 하나면 충분하다. */
+  .cta { margin:64px 0 0; background:var(--panel); border:1px solid var(--line); border-radius:12px;
+         padding:32px 36px; display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+  .cta h3 { color:var(--ink); font-size:20px; font-weight:700; letter-spacing:-.02em; }
+  .cta p { color:var(--muted); font-size:14px; margin-top:5px; }
   .cta .btns { margin-left:auto; display:flex; gap:10px; flex-wrap:wrap; }
   .btn-p, .btn-g { display:inline-flex; align-items:center; font-size:13.5px; font-weight:600;
                    border-radius:8px; padding:10px 18px; }
   .btn-p { background:var(--accent); color:var(--accent-ink); } .btn-p:hover { background:var(--accent-hover); }
-  /* CTA 판이 두 모드 모두 다크라 여기 글자는 토큰이 아니라 흰색이 맞다 */
-  .btn-g { background:transparent; color:#fff; border:1px solid var(--deck-line); }
-  .btn-g:hover { border-color:#fff; }
+  .btn-g { background:transparent; color:var(--ink); border:1px solid var(--line-strong); }
+  .btn-g:hover { border-color:var(--accent-line); color:var(--accent-deep); }
 
   footer { margin-top:54px; border-top:1px solid var(--line); background:var(--panel); }
   /* 바닥 — 문서형 페이지(site.css)와 같은 구조·같은 값. 어긋나면 페이지를 옮길 때 티가 난다 */
@@ -381,10 +371,35 @@
   <div class="wrap">
     <div class="hero-in">
       <div class="lab">Seoul Open Data · Multi-domain API</div>
-      <h1>흩어진 서울 데이터를<span class="l2">같은 축 위에</span></h1>
-      <p class="sub">문화·인구·교통·상권·날씨를 <b>행정동 코드 하나</b>로 붙여 씁니다.
-         커버리지는 도메인마다 다르고, <b>제품마다 그대로 적어둡니다</b> — 문화 426동 전역,
-         실시간 도시데이터 121곳처럼.</p>
+      <!-- 축은 둘이고 성격이 다르다(#48 합의): 공간축 = 도메인을 **붙이는** 조인 축(행정동 코드),
+           시간축 = 기간으로 **자르는** where 필터. 그래서 "하나의 축"도 "축은 행정동 코드"도
+           반쪽이었다 — 시간축을 빼고 말하면 이 제품이 실제로 하는 일의 절반이 사라진다.
+           실측(2026-08-03, /api/v1/catalog): 62종 중 공간 조인 키 42 · 시간축 33 · 둘 다 28 ·
+           둘 다 없는 명부형 15. 시간축 컬럼명은 제품마다 달라(18종) 하나로 못 부른다 —
+           그래서 컬럼명이 아니라 "기간"이라고 쓴다. 제품별 실제 축은 카드의 배지가 밝힌다. -->
+      <h1>흩어진 서울 공공데이터를<span class="l2">같은 두 축 위에</span></h1>
+      <!-- 축을 동사로 풀어 쓰던 것("행정동 코드로 붙이고 기간으로 자릅니다")을 한 층 올려
+           결과물의 이름으로 요약한다 — 시계열·공간계열. 축 이름과 조작 방법은 카탈로그와
+           문서가 말할 자리이고, 히어로는 무엇을 얻는지만 말하면 된다.
+           ⚠️ "연속 적재"로 쓰지 않았다. 이 사이트가 다른 데서 정면으로 부인한다:
+           guide FAQ "실시간 데이터인가요? 아닙니다 … 발행 시점의 스냅샷입니다. 매일 1회 발행",
+           status "실시간이 아닙니다", docs "제품은 매일 통째로 재발행되고".
+           실측도 같다 — 62종의 exported_at 이 단일 배치 하나다(2026-08-03).
+           히어로만 "연속"이라고 하면 FAQ 를 여는 순간 배신이 되므로 "매일"로 적는다.
+
+           커버리지 단서("커버리지는 도메인마다 다르고…")는 히어로에서 뺐다 — 첫 화면에서
+           할 말이 아니라는 판단(오너 결정, 2026-08-03). 감춘 건 아니고 자리를 옮긴 것이다:
+           도메인 섹션 힌트 "지역을 나누는 단위는 도메인마다 다릅니다" · 도메인 칸의 unit 과
+           title · 제품 카드의 unit 이 그대로 말한다. 셋 다 폭에 상관없이 보인다. -->
+      <!-- 분야를 앞에 세우고 "…를 쌓아 …로 제공합니다"로 를-목적어를 하나만 둔다
+           ("…를 쌓아 …를 제공합니다"는 목적어가 둘이라 걸린다).
+           "데이터"가 두 번 나오는 건 의도한 것이다 — 앞은 원천이 무엇인지, 뒤는 그 결과가
+           어떤 모양인지라 가리키는 대상이 다르다. 줄인다고 앞을 빼면 분야 이름이 데이터가
+           아니라 도메인 자체로 읽힌다.
+           교통은 대중교통과 도로 소통 둘을 덮는 말이다. 수를 말하지 않으므로(전에는 헤드라인이
+           "여섯"이라고 세서 목록도 여섯이어야 했다) 이렇게 묶어도 아래 도메인 격자와 어긋나지 않는다. -->
+      <p class="sub"><b>문화·인구·교통·상권·날씨</b> 데이터를 시간과 공간 두 축으로 <b>매일</b> 쌓아
+         <b>시계열·공간계열</b> 데이터로 제공합니다.</p>
       <form class="search-hero" id="heroSearch">
         <div class="box">
           <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span>
@@ -399,28 +414,39 @@
         <a href="/catalog?q=외식">동네 상권</a>
       </div>
     </div>
-    <p class="lab ko fieldnote">격자 한 칸 = 행정동 하나<br>커버리지는 도메인마다 다름</p>
   </div>
 </header>
 
 <div class="wrap">
   <div class="strip">
-    <div class="cell"><div class="lab">Products</div><div class="v sk" id="statProducts">0종</div><div class="k">제공 중인 데이터 제품</div></div>
+    <!-- 라벨은 한국어 — 히어로·카드·카탈로그가 전부 한국어인데 스트립만 영어면 어휘가
+         갈린다. 공간축·시간축은 히어로 문구("시간과 공간 두 축")를 그대로 받는 이름이다. -->
+    <div class="cell"><div class="lab ko">데이터 제품</div><div class="v sk" id="statProducts">0종</div><div class="k">제공 중인 데이터 제품</div></div>
     <!-- 여기에 "426개 행정동"을 커버리지로 적었었는데, 그건 culture 한 도메인의 커버리지다.
          citydata 는 실시간 관측 121곳, weather 는 KMA 격자 80칸이라 플랫폼 공통값이 아니다.
          공통인 것은 커버리지가 아니라 **조인 축**(행정동 코드, #48 합의)이라 그것만 적는다.
          도메인별 실측 커버리지는 아래 도메인 격자에서 각각 밝힌다. 총 행수도 쓰지 않는다 —
          그레인이 다른 제품을 더한 값이라 의미가 없다(제품별 행수는 카드에 유지) -->
-    <div class="cell"><div class="lab">Join axis</div><div class="v">행정동<span class="u"> 코드</span></div><div class="k">도메인 공통 조인 키</div></div>
-    <div class="cell"><div class="lab">Freshness</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
-    <div class="cell"><div class="lab">Daily quota</div><div class="v">1,000<span class="u">회/일</span></div><div class="k">키당 하루 호출 한도</div></div>
+    <!-- 두 축을 나란히 둔다 — 히어로가 "붙이고 자릅니다"라고 주장하는 그 둘이다.
+         공간축은 이름이 하나라 이름을 적고(행정동 코드), 시간축은 컬럼명이 제품마다 달라
+         (실측 18종) 이름 대신 "몇 종에 걸리는가"를 적는다. 둘의 표시가 다른 건 값의
+         성질이 달라서지 일관성이 없어서가 아니다.
+         여기 있던 Daily quota(1,000회/일)를 시간축으로 갈았다 — 한도는 키를 받은 뒤의
+         이야기고, 처음 온 사람이 재는 건 "무엇으로 자를 수 있나"다. 한도는 /docs 와
+         카탈로그에 그대로 있다. -->
+    <!-- 공간축도 시간축처럼 "몇 종에 걸리는가"를 값으로 적는다 — 행정동 코드 보유
+         30/62(실측)라 이름만 적으면 전 제품이 되는 것처럼 읽힌다. 카운트는 하드코딩하지
+         않고 카탈로그 columns 에서 센다(시간축과 같은 이유 — 박아두면 조용히 거짓이 된다). -->
+    <div class="cell"><div class="lab ko">공간축</div><div class="v sk num" id="statDong">0종</div><div class="k">행정동(동네) 단위로 다른 데이터와 붙일 수 있는 제품</div></div>
+    <div class="cell"><div class="lab ko">시간축</div><div class="v sk num" id="statTimed">0종</div><div class="k">원하는 기간만 잘라 받을 수 있는 제품</div></div>
+    <div class="cell"><div class="lab ko">갱신</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
   </div>
 </div>
 
 <main class="wrap">
 
   <section>
-    <div class="sec-head"><h2>데이터 제품</h2><span class="hint">질문에 바로 답하는 형태로 정제됨</span>
+    <div class="sec-head"><h2>데이터 제품</h2>
       <a class="more" href="/catalog" id="allLink">카탈로그 전체 보기 →</a></div>
     <div class="cards" id="cards">
       <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
@@ -434,7 +460,7 @@
   </section>
 
   <section>
-    <div class="sec-head"><h2>시작하기</h2><span class="hint">가입 없음 · 이메일만 · 아래 데모는 문화·행사 데이터입니다</span></div>
+    <div class="sec-head"><h2>시작하기</h2><span class="hint">가입 없음 · 이메일만 · 아래 데모는 도메인을 돌아가며 실제 응답을 보여줍니다</span></div>
     <div class="how">
       <div>
         <div class="hstep"><div class="num2">1</div><div>
@@ -450,11 +476,13 @@
           <div class="dd">REST · JSON 표준. 컬럼 필터와 기간(<code>from</code>/<code>to</code>) 조회를 지원합니다.</div>
         </div></div>
       </div>
-      <!-- 데모: 화면에 뜬 명령을 실제로 호출한다(무인증 /api/preview). 응답도 실물 -->
+      <!-- 데모: 화면에 뜬 명령은 그대로 실행 가능한 실제 주소이고, 표의 행은 그 응답의
+           커밋된 스냅샷이다(D1 쓰기를 만들지 않기 위해 — 스크립트 주석 참고) -->
       <div class="demo" id="demo">
         <div class="bar">
           <i aria-hidden="true"></i>
           <span class="lab ko">질문 → 호출 → 응답</span>
+          <span class="dchip" id="demoDom">&nbsp;</span>
           <div class="qs" id="demoDots" role="tablist" aria-label="데모 시나리오"></div>
         </div>
         <div class="body">
@@ -462,6 +490,7 @@
           <div class="cmd" id="demoCmd"></div>
           <div class="out" id="demoOut"></div>
           <div class="fo" id="demoFoot">&nbsp;</div>
+          <div class="stamp" id="demoStamp"></div>
         </div>
       </div>
     </div>
@@ -569,43 +598,72 @@ function kstStamp(iso) {
 }
 
 // ── 데모: 질문 → 호출 → 응답 3박자.
-// 화면에 타이핑되는 명령과 실제로 호출하는 주소가 같다(무인증 /api/preview). 응답도 실물이라
-// 픽스처가 비면 그대로 "표시할 행이 없습니다"가 뜬다 — 꾸며낸 행을 넣지 않는다.
+// 화면에 타이핑되는 명령은 누구나 그대로 실행할 수 있는 실제 주소다(무인증 /api/v1/preview).
+// 다만 표에 그리는 행은 그 응답의 **커밋된 스냅샷**이지 지금 호출한 결과가 아니다 —
+// 이유는 아래 SAMPLES 주석. 꾸며낸 행은 넣지 않으며, 시점은 화면에 적는다.
+// 도메인마다 하나씩 — 한 도메인만 계속 보여주면 "문화 데이터 사이트"로 읽힌다.
+// 순서는 히어로 문구(문화·인구·교통·상권·날씨)를 따르고 도로 소통을 끝에 붙였다.
+// dom 은 DOMAINS 의 id — 표시명을 여기 복제하지 않는다.
+// pid 는 화면에 뜨는 공개 식별자(decision/0003)이고 table 은 스냅샷 파일의 조회 키다.
+// 스냅샷(demo-samples.json)은 테이블명으로 키잉돼 있고 그건 생성기 사정이라 그대로 둔다 —
+// 사람에게 보이는 곳만 공개 식별자를 쓴다.
 const DEMOS = [
-  { table: "gold_culture_event_schedule",
-    q: "이번에 서울에서 무슨 행사가 열리나?",
-    cols: [["title", "행사"], ["gu", "자치구"], ["event_start_date", "시작일"]],
-    foot: "행사 하나가 한 행. <b>기간 겹침</b> 조회를 지원해 '이번 주말에 열리는 것'을 한 번에 받습니다." },
-  { table: "gold_culture_activity_by_dong",
+  { dom: "culture", pid: "culture_activity_by_dong", table: "gold_culture_activity_by_dong",
     q: "어느 동네에 문화 활동이 몰리나?",
     cols: [["admin_dong", "행정동"], ["event_date", "날짜"], ["activities_count", "활동"], ["free_events_count", "무료"]],
     foot: "<b>admin_dong_code</b>(행안부 10자리)를 그대로 실어 인구·상권·교통 데이터에 바로 조인됩니다." },
-  { table: "gold_culture_boxoffice_daily",
-    q: "지금 잘 팔리는 공연은?",
-    cols: [["rank_no", "순위"], ["performance_name", "공연"], ["genre", "장르"]],
-    foot: "일자 × 순위 스냅샷이라 <b>순위 변동</b>을 시계열로 추적할 수 있습니다." },
+  { dom: "citydata", pid: "citydata_ppltn_hourly", table: "gold_citydata_ppltn_hourly",
+    q: "이 시각 서울 어디가 붐비나?",
+    cols: [["area_nm", "장소"], ["time_bucket", "시각"], ["average_population", "평균 인원"], ["peak_congestion_level", "혼잡"]],
+    foot: "관측 지점 <b>121곳</b>의 시간 단위 인구. 장소마다 행정동 코드가 붙어 동네 단위로 말아 볼 수 있습니다." },
+  { dom: "transit", pid: "transit_dong_now", table: "gold_transit_dong_now",
+    q: "지금 이 동네 버스는 어떤가?",
+    cols: [["admin_dong", "행정동"], ["gu", "자치구"], ["bus_congestion_grade", "버스 혼잡"], ["bus_veh_cnt", "관측 차량"]],
+    foot: "버스·지하철·주차를 <b>행정동 한 줄</b>로 합칩니다 — 세 원천을 각각 부를 필요가 없습니다." },
+  { dom: "commerce", pid: "commerce_dong_category_matrix", table: "d1_dong_category_matrix",
+    q: "이 동네엔 무슨 업종이 많나?",
+    cols: [["admin_dong", "행정동"], ["category_ko", "업종"], ["active_cnt", "영업 중"], ["opened_last_365d", "최근 1년 개업"]],
+    foot: "행정동 × 업종 격자라, 위 문화 활동과 <b>같은 키로 붙여</b> '행사 많은 동네의 상권'을 볼 수 있습니다." },
+  { dom: "weather", pid: "weather_place_risk_window", table: "gold_weather_place_risk_window",
+    q: "언제 더위·비를 조심해야 하나?",
+    cols: [["place_name", "장소"], ["forecast_at", "예보 시각"], ["temp_c", "기온"], ["risk_labels", "주의"]],
+    foot: "KMA 예보를 시간 단위로 펼치고 <b>주의 구간에 이름을 붙여</b> 둡니다 — 임계값을 직접 계산하지 않아도 됩니다." },
+  { dom: "traffic", pid: "traffic_incident_x_weather_current_hourly", table: "gold_traffic_incident_x_weather_current_hourly",
+    q: "돌발이 난 동네, 그때 날씨는?",
+    cols: [["admin_dong", "행정동"], ["hour_at", "시각"], ["incident_count", "돌발"], ["tmp_value_num", "기온"]],
+    foot: "도로 돌발과 같은 시각 예보를 <b>미리 붙여 둔</b> 제품 — 두 도메인을 직접 맞출 필요가 없습니다." },
 ];
+const domName = (id) => (DOMAINS.find((d) => d.id === id) || {}).name || id;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const PREVIEW_CACHE = {};
 let demoRun = 0;          // 시나리오 전환 시 진행 중인 재생을 무효화하는 토큰
 let demoIdx = 0;
 let demoVisible = true;
 
+// 데모 행은 **정적 스냅샷**이다(fixtures/build_demo_samples.py 산출, 커밋됨).
+// /api/v1/preview 를 실호출하면 방문 1회마다 D1 쓰기가 쌓인다 — 호출당 _burst UPSERT +
+// _request_log INSERT 2건이고 도메인 순환이라 최대 6번이다. 비용보다 관측 오염이
+// 문제다: _request_log 는 "무엇이 실제로 쓰이나"를 재는 근거인데 랜딩 장식 트래픽이
+// 그 표를 채우면 콘솔 사용량 탭이 읽는 값이 흐려진다.
+// 꾸며낸 행은 아니다 — 전부 실제 preview 응답이고, 시점이 고정되므로 화면에
+// 생성 날짜를 밝힌다. 정적 자산이라 워커에도 닿지 않는다.
+let SAMPLES = null;
+const samplesReady = fetch("/demo-samples.json")
+  .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+  .then((j) => { SAMPLES = j; return j; })
+  .catch(() => null);
+
 async function previewRows(table) {
-  if (!PREVIEW_CACHE[table]) {
-    PREVIEW_CACHE[table] = fetch("/api/preview/" + table)
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((j) => j.rows || [])
-      .catch(() => null);
-  }
-  return PREVIEW_CACHE[table];
+  const j = SAMPLES || (await samplesReady);
+  if (!j) return null;
+  return (j.samples || {})[table] || [];
 }
 
 function demoDots() {
   $("demoDots").innerHTML = DEMOS.map((d, i) =>
-    "<button role='tab' aria-selected='" + (i === demoIdx) + "' aria-label='" + esc(d.q) + "'></button>").join("");
+    "<button role='tab' aria-selected='" + (i === demoIdx) + "' aria-label='" +
+    esc(domName(d.dom) + " — " + d.q) + "'></button>").join("");
   [...$("demoDots").children].forEach((b, i) => (b.onclick = () => playDemo(i, true)));
 }
 
@@ -614,11 +672,13 @@ async function playDemo(i, manual) {
   demoIdx = i;
   const d = DEMOS[i];
   demoDots();
+  $("demoDom").textContent = domName(d.dom);
   $("demoQ").textContent = d.q;
   $("demoOut").innerHTML = "";
   $("demoFoot").innerHTML = "&nbsp;";
+  $("demoStamp").textContent = "";
 
-  const cmd = "curl " + location.origin + "/api/preview/" + d.table;
+  const cmd = "curl " + location.origin + "/api/v1/preview/" + d.pid;
   const paint = (n) => {
     const shown = cmd.slice(0, n);
     $("demoCmd").innerHTML =
@@ -660,6 +720,10 @@ async function playDemo(i, manual) {
   }
   if (run !== demoRun) return;
   $("demoFoot").innerHTML = d.foot;
+  // 위 curl 은 지금도 유효한 명령이지만, 화면의 행은 고정된 시점의 응답이다 — 그 사실을 적는다
+  const at = (SAMPLES && SAMPLES.generated_at || "").slice(0, 10);
+  $("demoStamp").textContent = at ? at + " 응답 스냅샷 — 위 명령으로 최신 5행을 직접 받을 수 있습니다"
+                                  : "응답 스냅샷 — 위 명령으로 최신 5행을 직접 받을 수 있습니다";
 
   if (manual || REDUCED) return;   // 직접 고른 뒤에는 자동 전환하지 않는다
   await sleep(4200);
@@ -674,9 +738,25 @@ function bootField() {
   const cv = $("field");
   const ctx = cv.getContext("2d");
   const CELLS = 426;
-  // 스파크도 민트 단일 팔레트 — 밝기 차이(연한 민트)로만 변화를 준다(테라코타 폐기와 동일 결정)
-  const TEAL = [60, 224, 196], EMBER = [125, 238, 216];
-  let cols = 0, rows = 0, cw = 0, ch = 0, dpr = 1, sparks = [], raf = 0, t0 = 0;
+  // 정지 격자다. 움직이던 것을 세운 이유: 히어로는 헤드라인과 검색창이 주인공인데
+  // 배경이 계속 숨을 쉬면 시선이 갈린다. 칸 수(426=행정동)라는 뜻은 정지 상태에서도
+  // 그대로 전달되므로 애니메이션이 나르던 정보는 없었다 — 장식만 빠진 셈이다.
+  // 프레임 루프와 그 루프를 껐다 켜던 관찰자들이 통째로 사라져 코드도 절반이 됐다.
+  //
+  // 잉크는 테마마다 다르다. 라이트 판에서 민트는 거의 안 보이고 다크 판에서 딥 그린은
+  // 바탕에 묻힌다 — 방향이 반대라 값을 나눈다. 둘째 값은 첫 값을 밝힌/진하게 한
+  // 같은 색이다(2색 체제가 아니다).
+  const INK = { light: [[11, 110, 96], [10, 92, 80]], dark: [[53, 168, 146], [95, 206, 182]] };
+  const isDark = () => document.documentElement.dataset.theme === "dark";
+  // 라이트는 흰 바탕이라 같은 알파로는 격자가 안 보인다 — 바닥과 진폭을 따로 준다
+  const AMP = () => (isDark() ? { base: 0.055, wave: 0.085, lit: 0.34 }
+                              : { base: 0.045, wave: 0.075, lit: 0.26 });
+  let cols = 0, rows = 0, cw = 0, ch = 0, dpr = 1;
+
+  // 밝은 칸 14개를 한 번만 뽑아 고정한다. 매 페인트마다 새로 뽑으면 창 크기를 바꾸거나
+  // 테마를 토글할 때마다 무늬가 튀어 "정지"로 안 읽힌다.
+  const LIT = new Map();
+  for (let k = 0; k < 14; k++) LIT.set((Math.random() * CELLS) | 0, k % 6 === 0);
 
   function layout() {
     const r = cv.getBoundingClientRect();
@@ -694,57 +774,32 @@ function bootField() {
     return true;
   }
 
-  function paint(now) {
-    const t = (now - t0) / 1000;
+  function paint() {
     const r = cv.getBoundingClientRect();
     ctx.clearRect(0, 0, r.width, r.height);
     const gap = 5, sw = cw - gap, sh = ch - gap, rad = Math.min(2.5, sw / 4);
+    const ink = INK[isDark() ? "dark" : "light"], amp = AMP();
     for (let i = 0; i < CELLS; i++) {
       const c = i % cols, rw = (i / cols) | 0;
-      const x = c * cw, y = rw * ch;
-      const wave = 0.5 + 0.5 * Math.sin(t * 0.55 - (c * 0.19 + rw * 0.31));
-      let a = 0.055 + wave * 0.085;
-      let col = TEAL;
-      for (const s of sparks) {
-        if (s.i !== i) continue;
-        const k = 1 - (t - s.t) / s.life;
-        if (k > 0) { a = Math.max(a, 0.10 + k * 0.62); col = s.col; }
-      }
+      // 시간 항을 뺀 같은 파형 — 흐르지 않고 대각선 결로 남는다
+      const wave = 0.5 + 0.5 * Math.sin(-(c * 0.19 + rw * 0.31));
+      let a = amp.base + wave * amp.wave;
+      let col = ink[0];
+      if (LIT.has(i)) { a = amp.base * 1.8 + amp.lit; col = ink[LIT.get(i) ? 1 : 0]; }
       ctx.fillStyle = "rgba(" + col[0] + "," + col[1] + "," + col[2] + "," + a.toFixed(3) + ")";
       ctx.beginPath();
-      ctx.roundRect(x, y, sw, sh, rad);
+      ctx.roundRect(c * cw, rw * ch, sw, sh, rad);
       ctx.fill();
     }
-    sparks = sparks.filter((s) => t - s.t < s.life);
-    if (sparks.length < 9 && Math.random() < 0.09) {
-      sparks.push({ i: (Math.random() * CELLS) | 0, t, life: 1.4 + Math.random() * 1.2,
-                    col: Math.random() < 0.18 ? EMBER : TEAL });
-    }
-  }
-
-  function loop(now) { paint(now); raf = requestAnimationFrame(loop); }
-  function stop() { if (raf) { cancelAnimationFrame(raf); raf = 0; } }
-  function start() {
-    if (raf || !layout()) return;
-    t0 = performance.now();
-    // 애니메이션을 끈 사용자도 격자에 리듬이 보이게 — 밝은 칸 몇 개를 미리 심어 한 장으로 완성한다
-    if (REDUCED && !sparks.length) {
-      for (let k = 0; k < 14; k++)
-        sparks.push({ i: (Math.random() * CELLS) | 0, t: 0, life: 1e6,
-                      col: k % 6 === 0 ? EMBER : TEAL });
-    }
-    paint(t0);                 // 첫 프레임은 rAF 를 기다리지 않는다 — 빈 격자가 한 순간도 보이지 않게
-    if (REDUCED) return;       // 정지 화면 한 장만
-    raf = requestAnimationFrame(loop);
   }
 
   // roundRect 가 없는 구형 브라우저 — 격자를 포기하고 조용히 빠진다(배경일 뿐이다)
   if (!ctx || !ctx.roundRect) { cv.style.display = "none"; return; }
-  addEventListener("resize", () => { if (layout()) paint(performance.now()); });
-  document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
-  new IntersectionObserver((es) => (es[0].isIntersecting ? start() : stop()),
-                           { threshold: 0 }).observe(cv);
-  start();
+  const draw = () => { if (layout()) paint(); };
+  addEventListener("resize", draw);
+  // 테마가 바뀌면 잉크를 다시 골라야 한다
+  new MutationObserver(draw).observe(document.documentElement, { attributeFilter: ["data-theme"] });
+  draw();
 }
 
 function bootDemo() {
@@ -781,11 +836,11 @@ async function bootCatalog() {
   // 표시명은 부가 정보다 — 못 읽어도 카탈로그는 그대로 뜬다(제목이 product_id 로 내려앉을 뿐)
   try { DISPLAY = await (await fetch("/product-display.json")).json(); } catch { DISPLAY = {}; }
   try {
-    const res = await fetch("/api/catalog");
+    const res = await fetch("/api/v1/catalog");
     if (!res.ok) throw new Error("HTTP " + res.status);
     products = (await res.json()).products || [];
   } catch {
-    setStat("statProducts", "—"); setStat("statFresh", "—");
+    setStat("statProducts", "—"); setStat("statDong", "—"); setStat("statTimed", "—"); setStat("statFresh", "—");
     $("statFreshK").textContent = "마지막 갱신 · 확인 불가";
     failState("domains", "도메인 정보를 불러오지 못했습니다");
     failState("cards", "제품 목록을 불러오지 못했습니다");
@@ -793,10 +848,19 @@ async function bootCatalog() {
   }
 
   setStat("statProducts", products.length + "<span class='u'>종</span>");
+  // 두 축의 수는 세어서 넣는다 — 하드코딩하면 제품이 늘 때 조용히 거짓이 된다.
+  // 공간축 = 행정동 코드(#48 합의 조인 키) 보유 제품. 구 단위(gu_code)만 있는 제품은
+  // 동 단위로 못 붙으므로 세지 않는다(실측 30/62 — 구까지 치면 42).
+  const dong = products.filter((p) => (p.columns || []).some((c) => c.name === "admin_dong_code")).length;
+  setStat("statDong", dong + "<span class='u'>종</span>");
+  // time_axis 가 null 인 제품(명부형)은 기간 필터를 못 걸므로 세지 않는다.
+  const timed = products.filter((p) => p.time_axis).length;
+  setStat("statTimed", timed + "<span class='u'>종</span>");
   const stamps = products.map((p) => p.exported_at).filter(Boolean).sort();
   const newest = stamps[stamps.length - 1];
   setStat("statFresh", (newest && relTime(newest)) || "—");
   $("statFreshK").textContent = newest ? "마지막 갱신 · " + kstStamp(newest) : "마지막 갱신 · 정보 없음";
+
 
   const counts = {};
   for (const p of products) counts[domainOf(p)] = (counts[domainOf(p)] || 0) + 1;
@@ -817,11 +881,13 @@ async function bootCatalog() {
   if (!shown.length) { failState("cards", "아직 공개된 제품이 없습니다"); return; }
   $("cards").innerHTML = shown.map((p) => {
     const d = DISPLAY[p.product_id] || {};
+    // 기술명·시간축 컬럼명은 카드에 싣지 않는다 — 호출 직전 정보라 카탈로그 상세·docs 의
+    // 몫이고, 시간축 컬럼명은 제품마다 달라(18종) 랜딩 어휘가 흩어진다. "기간으로 자를 수
+    // 있다"는 그레인 줄(행정동 × 날짜 …)이 이미 사람 말로 전달한다.
     return "<a class='card' href='/catalog?q=" + encodeURIComponent(p.name) + "'>" +
-      "<span class='top'><span class='t'>" + esc(titleOf(p)) + "<small>" + esc(p.name) + "</small></span>" +
-      (p.time_axis ? "<span class='badge'>" + esc(p.time_axis) + "</span>"
-                   : "<span class='badge dim'>명부형</span>") + "</span>" +
-      "<span class='q'>" + esc(p.product_question || "—") + "</span>" +
+      "<span class='t'>" + esc(titleOf(p)) + "</span>" +
+      // 질문형 대신 설명 문장 — 카탈로그 목록과 같은 우선순위(쉬운 문장 desc 우선)
+      "<span class='q'>" + esc(d.desc || p.description || p.product_question || "—") + "</span>" +
       "<span class='meta'><span><b>" + nf.format(p.row_count || 0) + "</b> 행</span>" +
       (d.unit ? "<span>" + esc(d.unit) + "</span>" : "") +
       "<span class='free'>미리보기</span></span></span></a>";

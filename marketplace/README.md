@@ -54,11 +54,11 @@ npm run dev
 
 | 엔드포인트 | 인증 | 설명 |
 |---|---|---|
-| `POST /api/keys` `{email}` | — | 키 발급(1회 표시). 이메일당 1키 — 재요청 = rotate(기존 키 즉시 무효, **오늘 사용량 승계** = rotate 로 쿼터 리셋 불가). IP당 시간당 5회 |
-| `DELETE /api/keys` | Bearer | **폐기** — 키 즉시 무효(이후 403). `?purge=true` 면 이메일·사용량까지 삭제. 폐기된 키로도 호출 가능(아래 '키 폐기') |
-| `GET /api/catalog` | — | **공개 제품** 목록(계약 v1.1 `_catalog` 15컬럼) + `attribution` 문구 |
-| `GET /api/data/<table>` | Bearer | 조회. `<col>=<val>` 등가 필터 · `from`/`to`(time_axis) · `limit`(≤5000) · `cursor`(아래 '페이지네이션'). 유효 요청만 쿼터 소모(400/404/409 무과금), 초과 시 429 |
-| `GET /api/me` | Bearer | 오늘 사용량/쿼터 (쿼터 무소모) |
+| `POST /api/v1/keys` `{email}` | — | 키 발급(1회 표시). 이메일당 1키 — 재요청 = rotate(기존 키 즉시 무효, **오늘 사용량 승계** = rotate 로 쿼터 리셋 불가). IP당 시간당 5회 |
+| `DELETE /api/v1/keys` | Bearer | **폐기** — 키 즉시 무효(이후 403). `?purge=true` 면 이메일·사용량까지 삭제. 폐기된 키로도 호출 가능(아래 '키 폐기') |
+| `GET /api/v1/catalog` | — | **공개 제품** 목록(계약 v1.1 `_catalog` 15컬럼) + `attribution` 문구 |
+| `GET /api/v1/data/<table>` | Bearer | 조회. `<col>=<val>` 등가 필터 · `from`/`to`(time_axis) · `limit`(≤5000) · `cursor`(아래 '페이지네이션'). 유효 요청만 쿼터 소모(400/404/409 무과금), 초과 시 429 |
+| `GET /api/v1/me` | Bearer | 오늘 사용량/쿼터 (쿼터 무소모) |
 
 ## 사용 계측 — 무엇이 실제로 쓰이나
 
@@ -110,7 +110,7 @@ npm run dev
 
 ## 키 폐기 — 폐기와 삭제는 다르다
 
-`DELETE /api/keys` 는 **폐기**(`status='revoked'`)다. 키는 즉시 403 이 되지만 이메일 행은 남아
+`DELETE /api/v1/keys` 는 **폐기**(`status='revoked'`)다. 키는 즉시 403 이 되지만 이메일 행은 남아
 같은 주소로 재발급(rotate)할 수 있다. `?purge=true` 는 거기서 더 나아가 **이메일·사용량·버스트
 버킷까지 지운다** — 처리방침이 약속한 삭제 요청의 셀프 경로다.
 
@@ -127,12 +127,12 @@ npm run dev
 ## 페이지네이션 — offset 이 아니라 rowid 키셋 커서
 
 `limit` 상한이 5,000 이라 큰 제품(weather `risk_window` 30만 행)은 한 번에 다 못 받는다.
-`/api/data` 응답의 **`next_cursor`** 를 다음 요청의 `cursor` 로 그대로 넣으면 이어서 받는다.
+`/api/v1/data` 응답의 **`next_cursor`** 를 다음 요청의 `cursor` 로 그대로 넣으면 이어서 받는다.
 `has_more` 가 `false` 면 `next_cursor` 는 `null` 이다.
 
 ```bash
-curl -H "Authorization: Bearer $KEY" "$BASE/api/data/gold_weather_place_risk_window?limit=5000"
-curl -H "Authorization: Bearer $KEY" "$BASE/api/data/gold_weather_place_risk_window?limit=5000&cursor=<next_cursor>"
+curl -H "Authorization: Bearer $KEY" "$BASE/api/v1/data/gold_weather_place_risk_window?limit=5000"
+curl -H "Authorization: Bearer $KEY" "$BASE/api/v1/data/gold_weather_place_risk_window?limit=5000&cursor=<next_cursor>"
 ```
 
 **offset 을 안 쓴 이유는 성능이 아니라 정확성이다.** 제품은 매일 스냅샷으로 통째 재적재되고
@@ -167,7 +167,7 @@ append 제품은 계속 늘어난다. 그 사이 `offset` 은 같은 행을 두 
 
 ## 공개 게이트 — 등록 ≠ 공개
 
-세 조회 경로(`/api/catalog`·`/api/preview/*`·`/api/data/*`)가 전부 **`external = 1`** 로
+세 조회 경로(`/api/v1/catalog`·`/api/v1/preview/*`·`/api/v1/data/*`)가 전부 **`external = 1`** 로
 필터한다. `_catalog` 등록은 "publisher 가 실었다"는 사실이고, 공개는 도메인 오너가
 계약(`meta.serving`)에 `external` 을 켰다는 **의사표시**다. 이 구분이 없으면 어느 도메인이
 내부용 마트를 등록하는 순간 그대로 공개된다.
@@ -182,7 +182,7 @@ append 제품은 계속 늘어난다. 그 사이 `offset` 은 같은 행을 두 
 
 출처·이용약관·개인정보 처리방침 3종. **법률 검토 전 초안**이며 페이지 상단에 그렇게 명시한다.
 배치 원칙 둘: 고지는 **수집 지점**(키 발급 폼)에 있어야 의미가 있고, 출처는 화면을 거치지 않는
-API 소비자에게도 닿아야 해서 `/api/catalog` 응답에 `attribution` 을 함께 싣는다.
+API 소비자에게도 닿아야 해서 `/api/v1/catalog` 응답에 `attribution` 을 함께 싣는다.
 
 정식 공개 전 해소할 항목은 처방침의 '알려진 한계'에 적어 뒀다 — 발급 IP 무만료·이메일 평문
 저장·이메일 소유 확인 부재.
@@ -210,6 +210,13 @@ API 소비자에게도 닿아야 해서 `/api/catalog` 응답에 `attribution` �
 - **표시명은 생성물** — `public/product-display.json`. 계약에 display 필드가 없어
   서빙 응답에 안 실려오기 때문이고, 두 화면(`index.html`·`catalog.html`)이 같은 파일을
   읽는다. 계약 v1.2 에 들어가면 이 파일과 생성기의 `DISPLAY` 표는 지운다(#476).
+- **랜딩 데모 행도 생성물** — `public/demo-samples.json`
+  (`fixtures/build_demo_samples.py`, 로컬 `:8787` 이 떠 있어야 한다). 도메인당 한 표씩
+  3행. 랜딩이 `/api/v1/preview` 를 실호출하면 방문 1회마다 D1 쓰기가 쌓이는데
+  (`_burst` UPSERT + `_request_log` INSERT = 호출당 2건, 도메인 순환이라 최대 6번),
+  비용보다 **관측 오염**이 문제다 — `_request_log` 는 "무엇이 실제로 쓰이나"를 재는
+  근거이고 콘솔 사용량 탭이 그 표를 읽는다. 꾸며낸 행은 아니고 실제 preview 응답이며,
+  시점이 고정되므로 화면에 생성 날짜를 적는다. 갱신은 스크립트 재실행 후 커밋.
 
 ## 승격 경로 (배포 게이트에 동승할 것)
 

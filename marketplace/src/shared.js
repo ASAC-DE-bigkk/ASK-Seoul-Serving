@@ -58,7 +58,7 @@ export const PUBLIC = "external = 1";
 export async function authenticate(env, request, { allowRevoked = false } = {}) {
   const auth = request.headers.get("authorization") || "";
   const m = auth.match(/^Bearer\s+(ask_[0-9a-f]{32})$/i);
-  if (!m) return { error: problem(401, "missing api key", "Authorization: Bearer ask_… 헤더가 필요하다 — POST /api/keys 로 발급") };
+  if (!m) return { error: problem(401, "missing api key", "Authorization: Bearer ask_… 헤더가 필요하다 — POST /api/v1/keys 로 발급") };
   const hash = await sha256hex(m[1]);
   const row = await env.DB.prepare(
     "SELECT key_hash, key_prefix, email, status, daily_quota FROM _keys WHERE key_hash = ?"

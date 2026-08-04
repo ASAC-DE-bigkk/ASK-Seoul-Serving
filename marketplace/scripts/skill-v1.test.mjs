@@ -17,13 +17,20 @@ const EXPECTED_PRODUCTS = [
   "transit_parking_full_risk",
 ];
 
-function fixtureDb({ metadataPublicationId = "active-publication" } = {}) {
+function fixtureDb({
+  metadataPublicationId = "active-publication",
+  sourcePublicationId = "active-publication",
+  qualityPublicationId = "active-publication",
+  evidence = false,
+} = {}) {
+  let usage = 0;
   const catalog = new Map(EXPECTED_PRODUCTS.map((productId) => [productId, {
     name: `gold_${productId}`,
     product_id: productId,
     external: 1,
     serving_status: "published",
     publication_id: "active-publication",
+    row_count: 427,
     freshness: "2026-08-03",
     time_axis: "observed_at",
     columns: JSON.stringify([
@@ -52,6 +59,31 @@ function fixtureDb({ metadataPublicationId = "active-publication" } = {}) {
               publication_id: metadataPublicationId,
             };
           }
+          if (sql.includes("FROM d1_product_quality") && evidence) {
+            return {
+              product_id: params[0],
+              source_row_count: 427,
+              d1_row_count: 427,
+              duplicate_primary_key_count: 0,
+              null_primary_key_count: 0,
+              freshness_as_of: "2026-08-03",
+              freshness_slo_minutes: 240,
+              serving_status: "published",
+              measured_at: "2026-08-03T01:00:00Z",
+              projection_schema_version: "1.1.0",
+              projection_schema_hash: "evidence-fixture-projection-hash",
+              coverage_json: JSON.stringify({
+                field: "admin_dong_code",
+                expected_distinct_count: 427,
+                observed_distinct_count: 427,
+                minimum_ratio: 1,
+                ratio: 1,
+                status: "passed",
+              }),
+              publication_id: qualityPublicationId,
+            };
+          }
+          if (sql.includes("SELECT count FROM _usage")) return usage ? { count: usage } : null;
           return null;
         },
         async all() {
@@ -63,7 +95,34 @@ function fixtureDb({ metadataPublicationId = "active-publication" } = {}) {
               ],
             };
           }
+          if (sql.includes("FROM d1_catalog_sources")) {
+            if (!evidence) throw new Error("evidence table is not published");
+            return {
+              results: [{
+                source_id: "kma_vilage_fcst",
+                source_url: "https://example.test/kma",
+                license: "KOGL-1",
+                license_url: "https://example.test/kogl",
+                redistribution: "allowed_with_attribution",
+                attribution: "기상청",
+                rights_checked_at: "2026-08-04",
+                publication_id: sourcePublicationId,
+              }],
+            };
+          }
+          if (sql.includes("SELECT rowid AS \"_rid\"")) {
+            return {
+              results: [
+                { _rid: 7, admin_dong_code: "1111051500", observed_at: "2026-08-03T00:00:00+09:00" },
+                { _rid: 8, admin_dong_code: "1111053000", observed_at: "2026-08-03T00:00:00+09:00" },
+              ],
+            };
+          }
           return { results: [] };
+        },
+        async run() {
+          if (sql.includes("INSERT INTO _usage")) usage += 1;
+          return {};
         },
       };
     },
@@ -113,4 +172,62 @@ test("skill data fails closed while required product evidence is unavailable", a
   assert.equal(body.code, "product_not_ready");
   assert.equal(body.product_id, "weather_place_forecast_change_daily");
   assert.ok(body.blockers.includes("source_rights_metadata_contract_unavailable"));
+});
+
+test("skill product becomes registration-ready only when publication-bound source and quality evidence pass", async () => {
+  const response = await handleSkillProduct(
+    { DB: fixtureDb({ evidence: true }) },
+    "weather_place_forecast_change_daily",
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.registration_ready, true);
+  assert.deepEqual(body.blockers, []);
+  assert.equal(body.metadata.sources[0].attribution, "기상청");
+  assert.equal(body.metadata.quality.coverage.status, "passed");
+});
+
+test("skill data serves only declared public columns with a publication-bound cursor after readiness passes", async () => {
+  const response = await handleSkillData(
+    { DB: fixtureDb({ evidence: true }) },
+    "weather_place_forecast_change_daily",
+    new URLSearchParams("admin_dong_code=1111051500&limit=1"),
+    { key_hash: "test-key", daily_quota: 1000 },
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.publication_id, "active-publication");
+  assert.equal(body.row_count, 1);
+  assert.deepEqual(body.rows, [{ admin_dong_code: "1111051500", observed_at: "2026-08-03T00:00:00+09:00" }]);
+  assert.equal(body.has_more, true);
+  assert.ok(body.next_cursor);
+  assert.equal(response.headers.get("x-ratelimit-remaining"), "999");
+});
+
+test("skill product stays blocked when even one source evidence row belongs to another publication", async () => {
+  const response = await handleSkillProduct(
+    { DB: fixtureDb({ evidence: true, sourcePublicationId: "previous-publication" }) },
+    "weather_place_forecast_change_daily",
+  );
+  const body = await response.json();
+
+  assert.equal(body.registration_ready, false);
+  assert.ok(body.blockers.includes("source_rights_publication_mismatch"));
+});
+
+test("skill data rejects a cursor from a prior publication before consuming quota", async () => {
+  const staleCursor = btoa(JSON.stringify({ publication_id: "previous-publication", rowid: 7 }))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const response = await handleSkillData(
+    { DB: fixtureDb({ evidence: true }) },
+    "weather_place_forecast_change_daily",
+    new URLSearchParams(`cursor=${staleCursor}`),
+    { key_hash: "test-key", daily_quota: 1000 },
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.equal(body.publication_id, "active-publication");
 });
