@@ -210,6 +210,13 @@ API 소비자에게도 닿아야 해서 `/api/catalog` 응답에 `attribution` �
 - **표시명은 생성물** — `public/product-display.json`. 계약에 display 필드가 없어
   서빙 응답에 안 실려오기 때문이고, 두 화면(`index.html`·`catalog.html`)이 같은 파일을
   읽는다. 계약 v1.2 에 들어가면 이 파일과 생성기의 `DISPLAY` 표는 지운다(#476).
+- **랜딩 데모 행도 생성물** — `public/demo-samples.json`
+  (`fixtures/build_demo_samples.py`, 로컬 `:8787` 이 떠 있어야 한다). 도메인당 한 표씩
+  3행. 랜딩이 `/api/preview` 를 실호출하면 방문 1회마다 D1 쓰기가 쌓이는데
+  (`_burst` UPSERT + `_request_log` INSERT = 호출당 2건, 도메인 순환이라 최대 6번),
+  비용보다 **관측 오염**이 문제다 — `_request_log` 는 "무엇이 실제로 쓰이나"를 재는
+  근거이고 콘솔 사용량 탭이 그 표를 읽는다. 꾸며낸 행은 아니고 실제 preview 응답이며,
+  시점이 고정되므로 화면에 생성 날짜를 적는다. 갱신은 스크립트 재실행 후 커밋.
 
 ## 승격 경로 (배포 게이트에 동승할 것)
 

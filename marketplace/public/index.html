@@ -108,7 +108,8 @@
   .brand { display:flex; align-items:center; gap:10px; }
   .brand .logo { width:30px; height:30px; border-radius:7px;
                  background:var(--accent); display:flex; align-items:center; justify-content:center;
-                 font-weight:700; font-size:12.5px; letter-spacing:.02em; color:#fff; }
+                 /* accent 면 위 글자는 --accent-ink — 다크 테마에선 accent 가 밝아져 흰 글자가 안 보인다 */
+                 font-weight:700; font-size:12.5px; letter-spacing:.02em; color:var(--accent-ink); }
   .brand .nm { font-weight:700; font-size:14px; color:var(--ink); letter-spacing:-.01em; line-height:1.2; }
   .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
                 color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
@@ -212,15 +213,7 @@
           box-shadow:var(--shadow-xs); display:flex; flex-direction:column; gap:8px;
           transition:border-color .12s, box-shadow .12s, transform .12s; }
   a.card:hover { border-color:var(--accent-line); box-shadow:var(--shadow-md); transform:translateY(-1px); }
-  .card .top { display:flex; align-items:flex-start; gap:10px; }
   .card .t { font-weight:700; font-size:14px; letter-spacing:-.01em; }
-  .card .t small { display:block; font-family:var(--mono); font-size:10.5px; font-weight:400;
-                   color:var(--faint); margin-top:2px; }
-  .card .badge { margin-left:auto; flex:none; font-family:var(--mono); font-size:10px; font-weight:600;
-                 padding:2px 8px; border-radius:4px; background:var(--accent-soft);
-                 color:var(--accent-deep); border:1px solid var(--accent-line); white-space:nowrap; }
-  .card .badge.dim { background:var(--panel); color:var(--muted); border-color:var(--line-strong);
-                     font-family:inherit; }
   .card .q { font-size:13.5px; color:var(--muted); flex:1; }
   .card .meta { display:flex; gap:12px; font-size:12px; color:var(--faint);
                 font-variant-numeric:tabular-nums; border-top:1px solid var(--line); padding-top:9px; }
@@ -279,6 +272,9 @@
   .demo .bar { display:flex; align-items:center; gap:8px; padding:10px 15px;
                border-bottom:1px solid var(--term-line); }
   .demo .bar i { width:7px; height:7px; border-radius:50%; background:#294a45; flex:none; }
+  /* 지금 보고 있는 도메인 — 시나리오가 도메인마다 하나씩이라 어디 데이터인지 늘 밝힌다 */
+  .demo .dchip { font-size:11px; font-weight:600; padding:1px 8px; border-radius:9px; white-space:nowrap;
+                 background:rgba(255,255,255,.07); color:var(--term-ink); border:1px solid var(--term-line); }
   .demo .qs { margin-left:auto; display:flex; gap:6px; }
   .demo .qs button { width:7px; height:7px; padding:0; border:0; border-radius:50%;
                      background:#294a45; cursor:pointer; transition:background .15s; }
@@ -303,6 +299,9 @@
   .demo td.k { color:#fff; font-weight:600; }
   .demo tr.in td { animation:rowin .3s ease both; }
   @keyframes rowin { from { opacity:0; transform:translateY(5px); } }
+  /* 스냅샷 시점 — 화면의 행이 지금 호출한 결과가 아니라는 걸 밝힌다 */
+  .demo .stamp { margin-top:7px; font-family:var(--mono); font-size:10px; color:var(--term-dim);
+                 letter-spacing:.02em; }
   .demo .fo { margin-top:11px; font-size:12px; color:var(--term-dim); line-height:1.5; }
   .demo .fo b { color:var(--accent); font-weight:600; }
   .demo .fo code { font-family:var(--mono); font-size:10.5px; }
@@ -420,7 +419,9 @@
 
 <div class="wrap">
   <div class="strip">
-    <div class="cell"><div class="lab">Products</div><div class="v sk" id="statProducts">0종</div><div class="k">제공 중인 데이터 제품</div></div>
+    <!-- 라벨은 한국어 — 히어로·카드·카탈로그가 전부 한국어인데 스트립만 영어면 어휘가
+         갈린다. 공간축·시간축은 히어로 문구("시간과 공간 두 축")를 그대로 받는 이름이다. -->
+    <div class="cell"><div class="lab ko">데이터 제품</div><div class="v sk" id="statProducts">0종</div><div class="k">제공 중인 데이터 제품</div></div>
     <!-- 여기에 "426개 행정동"을 커버리지로 적었었는데, 그건 culture 한 도메인의 커버리지다.
          citydata 는 실시간 관측 121곳, weather 는 KMA 격자 80칸이라 플랫폼 공통값이 아니다.
          공통인 것은 커버리지가 아니라 **조인 축**(행정동 코드, #48 합의)이라 그것만 적는다.
@@ -433,16 +434,19 @@
          여기 있던 Daily quota(1,000회/일)를 시간축으로 갈았다 — 한도는 키를 받은 뒤의
          이야기고, 처음 온 사람이 재는 건 "무엇으로 자를 수 있나"다. 한도는 /docs 와
          카탈로그에 그대로 있다. -->
-    <div class="cell"><div class="lab">Join axis</div><div class="v">행정동<span class="u"> 코드</span></div><div class="k">도메인을 붙이는 공통 키</div></div>
-    <div class="cell"><div class="lab">Time axis</div><div class="v sk num" id="statTimed">0종</div><div class="k">기간(from/to)으로 자를 수 있는 제품</div></div>
-    <div class="cell"><div class="lab">Freshness</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
+    <!-- 공간축도 시간축처럼 "몇 종에 걸리는가"를 값으로 적는다 — 행정동 코드 보유
+         30/62(실측)라 이름만 적으면 전 제품이 되는 것처럼 읽힌다. 카운트는 하드코딩하지
+         않고 카탈로그 columns 에서 센다(시간축과 같은 이유 — 박아두면 조용히 거짓이 된다). -->
+    <div class="cell"><div class="lab ko">공간축</div><div class="v sk num" id="statDong">0종</div><div class="k">행정동(동네) 단위로 다른 데이터와 붙일 수 있는 제품</div></div>
+    <div class="cell"><div class="lab ko">시간축</div><div class="v sk num" id="statTimed">0종</div><div class="k">원하는 기간만 잘라 받을 수 있는 제품</div></div>
+    <div class="cell"><div class="lab ko">갱신</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
   </div>
 </div>
 
 <main class="wrap">
 
   <section>
-    <div class="sec-head"><h2>데이터 제품</h2><span class="hint">질문에 바로 답하는 형태로 정제됨</span>
+    <div class="sec-head"><h2>데이터 제품</h2>
       <a class="more" href="/catalog" id="allLink">카탈로그 전체 보기 →</a></div>
     <div class="cards" id="cards">
       <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
@@ -456,7 +460,7 @@
   </section>
 
   <section>
-    <div class="sec-head"><h2>시작하기</h2><span class="hint">가입 없음 · 이메일만 · 아래 데모는 문화·행사 데이터입니다</span></div>
+    <div class="sec-head"><h2>시작하기</h2><span class="hint">가입 없음 · 이메일만 · 아래 데모는 도메인을 돌아가며 실제 응답을 보여줍니다</span></div>
     <div class="how">
       <div>
         <div class="hstep"><div class="num2">1</div><div>
@@ -472,11 +476,13 @@
           <div class="dd">REST · JSON 표준. 컬럼 필터와 기간(<code>from</code>/<code>to</code>) 조회를 지원합니다.</div>
         </div></div>
       </div>
-      <!-- 데모: 화면에 뜬 명령을 실제로 호출한다(무인증 /api/preview). 응답도 실물 -->
+      <!-- 데모: 화면에 뜬 명령은 그대로 실행 가능한 실제 주소이고, 표의 행은 그 응답의
+           커밋된 스냅샷이다(D1 쓰기를 만들지 않기 위해 — 스크립트 주석 참고) -->
       <div class="demo" id="demo">
         <div class="bar">
           <i aria-hidden="true"></i>
           <span class="lab ko">질문 → 호출 → 응답</span>
+          <span class="dchip" id="demoDom">&nbsp;</span>
           <div class="qs" id="demoDots" role="tablist" aria-label="데모 시나리오"></div>
         </div>
         <div class="body">
@@ -484,6 +490,7 @@
           <div class="cmd" id="demoCmd"></div>
           <div class="out" id="demoOut"></div>
           <div class="fo" id="demoFoot">&nbsp;</div>
+          <div class="stamp" id="demoStamp"></div>
         </div>
       </div>
     </div>
@@ -591,43 +598,69 @@ function kstStamp(iso) {
 }
 
 // ── 데모: 질문 → 호출 → 응답 3박자.
-// 화면에 타이핑되는 명령과 실제로 호출하는 주소가 같다(무인증 /api/preview). 응답도 실물이라
-// 픽스처가 비면 그대로 "표시할 행이 없습니다"가 뜬다 — 꾸며낸 행을 넣지 않는다.
+// 화면에 타이핑되는 명령은 누구나 그대로 실행할 수 있는 실제 주소다(무인증 /api/preview).
+// 다만 표에 그리는 행은 그 응답의 **커밋된 스냅샷**이지 지금 호출한 결과가 아니다 —
+// 이유는 아래 SAMPLES 주석. 꾸며낸 행은 넣지 않으며, 시점은 화면에 적는다.
+// 도메인마다 하나씩 — 한 도메인만 계속 보여주면 "문화 데이터 사이트"로 읽힌다.
+// 순서는 히어로 문구(문화·인구·교통·상권·날씨)를 따르고 도로 소통을 끝에 붙였다.
+// dom 은 DOMAINS 의 id — 표시명을 여기 복제하지 않는다.
 const DEMOS = [
-  { table: "gold_culture_event_schedule",
-    q: "이번에 서울에서 무슨 행사가 열리나?",
-    cols: [["title", "행사"], ["gu", "자치구"], ["event_start_date", "시작일"]],
-    foot: "행사 하나가 한 행. <b>기간 겹침</b> 조회를 지원해 '이번 주말에 열리는 것'을 한 번에 받습니다." },
-  { table: "gold_culture_activity_by_dong",
+  { dom: "culture", table: "gold_culture_activity_by_dong",
     q: "어느 동네에 문화 활동이 몰리나?",
     cols: [["admin_dong", "행정동"], ["event_date", "날짜"], ["activities_count", "활동"], ["free_events_count", "무료"]],
     foot: "<b>admin_dong_code</b>(행안부 10자리)를 그대로 실어 인구·상권·교통 데이터에 바로 조인됩니다." },
-  { table: "gold_culture_boxoffice_daily",
-    q: "지금 잘 팔리는 공연은?",
-    cols: [["rank_no", "순위"], ["performance_name", "공연"], ["genre", "장르"]],
-    foot: "일자 × 순위 스냅샷이라 <b>순위 변동</b>을 시계열로 추적할 수 있습니다." },
+  { dom: "citydata", table: "gold_citydata_ppltn_hourly",
+    q: "이 시각 서울 어디가 붐비나?",
+    cols: [["area_nm", "장소"], ["time_bucket", "시각"], ["average_population", "평균 인원"], ["peak_congestion_level", "혼잡"]],
+    foot: "관측 지점 <b>121곳</b>의 시간 단위 인구. 장소마다 행정동 코드가 붙어 동네 단위로 말아 볼 수 있습니다." },
+  { dom: "transit", table: "gold_transit_dong_now",
+    q: "지금 이 동네 버스는 어떤가?",
+    cols: [["admin_dong", "행정동"], ["gu", "자치구"], ["bus_congestion_grade", "버스 혼잡"], ["bus_veh_cnt", "관측 차량"]],
+    foot: "버스·지하철·주차를 <b>행정동 한 줄</b>로 합칩니다 — 세 원천을 각각 부를 필요가 없습니다." },
+  { dom: "commerce", table: "d1_dong_category_matrix",
+    q: "이 동네엔 무슨 업종이 많나?",
+    cols: [["admin_dong", "행정동"], ["category_ko", "업종"], ["active_cnt", "영업 중"], ["opened_last_365d", "최근 1년 개업"]],
+    foot: "행정동 × 업종 격자라, 위 문화 활동과 <b>같은 키로 붙여</b> '행사 많은 동네의 상권'을 볼 수 있습니다." },
+  { dom: "weather", table: "gold_weather_place_risk_window",
+    q: "언제 더위·비를 조심해야 하나?",
+    cols: [["place_name", "장소"], ["forecast_at", "예보 시각"], ["temp_c", "기온"], ["risk_labels", "주의"]],
+    foot: "KMA 예보를 시간 단위로 펼치고 <b>주의 구간에 이름을 붙여</b> 둡니다 — 임계값을 직접 계산하지 않아도 됩니다." },
+  { dom: "traffic", table: "gold_traffic_incident_x_weather_current_hourly",
+    q: "돌발이 난 동네, 그때 날씨는?",
+    cols: [["admin_dong", "행정동"], ["hour_at", "시각"], ["incident_count", "돌발"], ["tmp_value_num", "기온"]],
+    foot: "도로 돌발과 같은 시각 예보를 <b>미리 붙여 둔</b> 제품 — 두 도메인을 직접 맞출 필요가 없습니다." },
 ];
+const domName = (id) => (DOMAINS.find((d) => d.id === id) || {}).name || id;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const PREVIEW_CACHE = {};
 let demoRun = 0;          // 시나리오 전환 시 진행 중인 재생을 무효화하는 토큰
 let demoIdx = 0;
 let demoVisible = true;
 
+// 데모 행은 **정적 스냅샷**이다(fixtures/build_demo_samples.py 산출, 커밋됨).
+// /api/preview 를 실호출하면 방문 1회마다 D1 쓰기가 쌓인다 — 호출당 _burst UPSERT +
+// _request_log INSERT 2건이고 도메인 순환이라 최대 6번이다. 비용보다 관측 오염이
+// 문제다: _request_log 는 "무엇이 실제로 쓰이나"를 재는 근거인데 랜딩 장식 트래픽이
+// 그 표를 채우면 콘솔 사용량 탭이 읽는 값이 흐려진다.
+// 꾸며낸 행은 아니다 — 전부 실제 preview 응답이고, 시점이 고정되므로 화면에
+// 생성 날짜를 밝힌다. 정적 자산이라 워커에도 닿지 않는다.
+let SAMPLES = null;
+const samplesReady = fetch("/demo-samples.json")
+  .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+  .then((j) => { SAMPLES = j; return j; })
+  .catch(() => null);
+
 async function previewRows(table) {
-  if (!PREVIEW_CACHE[table]) {
-    PREVIEW_CACHE[table] = fetch("/api/preview/" + table)
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((j) => j.rows || [])
-      .catch(() => null);
-  }
-  return PREVIEW_CACHE[table];
+  const j = SAMPLES || (await samplesReady);
+  if (!j) return null;
+  return (j.samples || {})[table] || [];
 }
 
 function demoDots() {
   $("demoDots").innerHTML = DEMOS.map((d, i) =>
-    "<button role='tab' aria-selected='" + (i === demoIdx) + "' aria-label='" + esc(d.q) + "'></button>").join("");
+    "<button role='tab' aria-selected='" + (i === demoIdx) + "' aria-label='" +
+    esc(domName(d.dom) + " — " + d.q) + "'></button>").join("");
   [...$("demoDots").children].forEach((b, i) => (b.onclick = () => playDemo(i, true)));
 }
 
@@ -636,9 +669,11 @@ async function playDemo(i, manual) {
   demoIdx = i;
   const d = DEMOS[i];
   demoDots();
+  $("demoDom").textContent = domName(d.dom);
   $("demoQ").textContent = d.q;
   $("demoOut").innerHTML = "";
   $("demoFoot").innerHTML = "&nbsp;";
+  $("demoStamp").textContent = "";
 
   const cmd = "curl " + location.origin + "/api/preview/" + d.table;
   const paint = (n) => {
@@ -682,6 +717,10 @@ async function playDemo(i, manual) {
   }
   if (run !== demoRun) return;
   $("demoFoot").innerHTML = d.foot;
+  // 위 curl 은 지금도 유효한 명령이지만, 화면의 행은 고정된 시점의 응답이다 — 그 사실을 적는다
+  const at = (SAMPLES && SAMPLES.generated_at || "").slice(0, 10);
+  $("demoStamp").textContent = at ? at + " 응답 스냅샷 — 위 명령으로 최신 5행을 직접 받을 수 있습니다"
+                                  : "응답 스냅샷 — 위 명령으로 최신 5행을 직접 받을 수 있습니다";
 
   if (manual || REDUCED) return;   // 직접 고른 뒤에는 자동 전환하지 않는다
   await sleep(4200);
@@ -798,7 +837,7 @@ async function bootCatalog() {
     if (!res.ok) throw new Error("HTTP " + res.status);
     products = (await res.json()).products || [];
   } catch {
-    setStat("statProducts", "—"); setStat("statTimed", "—"); setStat("statFresh", "—");
+    setStat("statProducts", "—"); setStat("statDong", "—"); setStat("statTimed", "—"); setStat("statFresh", "—");
     $("statFreshK").textContent = "마지막 갱신 · 확인 불가";
     failState("domains", "도메인 정보를 불러오지 못했습니다");
     failState("cards", "제품 목록을 불러오지 못했습니다");
@@ -806,7 +845,11 @@ async function bootCatalog() {
   }
 
   setStat("statProducts", products.length + "<span class='u'>종</span>");
-  // 시간축 수는 세어서 넣는다 — 하드코딩하면 제품이 늘 때 조용히 거짓이 된다.
+  // 두 축의 수는 세어서 넣는다 — 하드코딩하면 제품이 늘 때 조용히 거짓이 된다.
+  // 공간축 = 행정동 코드(#48 합의 조인 키) 보유 제품. 구 단위(gu_code)만 있는 제품은
+  // 동 단위로 못 붙으므로 세지 않는다(실측 30/62 — 구까지 치면 42).
+  const dong = products.filter((p) => (p.columns || []).some((c) => c.name === "admin_dong_code")).length;
+  setStat("statDong", dong + "<span class='u'>종</span>");
   // time_axis 가 null 인 제품(명부형)은 기간 필터를 못 걸므로 세지 않는다.
   const timed = products.filter((p) => p.time_axis).length;
   setStat("statTimed", timed + "<span class='u'>종</span>");
@@ -835,11 +878,13 @@ async function bootCatalog() {
   if (!shown.length) { failState("cards", "아직 공개된 제품이 없습니다"); return; }
   $("cards").innerHTML = shown.map((p) => {
     const d = DISPLAY[p.product_id] || {};
+    // 기술명·시간축 컬럼명은 카드에 싣지 않는다 — 호출 직전 정보라 카탈로그 상세·docs 의
+    // 몫이고, 시간축 컬럼명은 제품마다 달라(18종) 랜딩 어휘가 흩어진다. "기간으로 자를 수
+    // 있다"는 그레인 줄(행정동 × 날짜 …)이 이미 사람 말로 전달한다.
     return "<a class='card' href='/catalog?q=" + encodeURIComponent(p.name) + "'>" +
-      "<span class='top'><span class='t'>" + esc(titleOf(p)) + "<small>" + esc(p.name) + "</small></span>" +
-      (p.time_axis ? "<span class='badge'>" + esc(p.time_axis) + "</span>"
-                   : "<span class='badge dim'>명부형</span>") + "</span>" +
-      "<span class='q'>" + esc(p.product_question || "—") + "</span>" +
+      "<span class='t'>" + esc(titleOf(p)) + "</span>" +
+      // 질문형 대신 설명 문장 — 카탈로그 목록과 같은 우선순위(쉬운 문장 desc 우선)
+      "<span class='q'>" + esc(d.desc || p.description || p.product_question || "—") + "</span>" +
       "<span class='meta'><span><b>" + nf.format(p.row_count || 0) + "</b> 행</span>" +
       (d.unit ? "<span>" + esc(d.unit) + "</span>" : "") +
       "<span class='free'>미리보기</span></span></span></a>";
