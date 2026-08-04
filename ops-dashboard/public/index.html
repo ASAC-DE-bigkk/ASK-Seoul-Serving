@@ -312,6 +312,10 @@
   .bars { display:flex; align-items:flex-end; gap:4px; height:70px; margin-top:6px; }
   .bars .b { flex:1; min-width:6px; background:var(--teal-soft); border-radius:3px 3px 0 0; }
   .bars .b > i { display:block; width:100%; background:var(--teal); border-radius:3px 3px 0 0; }
+  /* 기록이 없는 날 — 0 회가 아니라 **관측이 없는 날**이다. 막대를 안 그리고 바닥 선만 남긴다 */
+  .bars .b.none { opacity:.45; }
+  .bars .b.none::after { content:""; display:block; height:2px; background:var(--line-strong);
+                         border-radius:1px; }
   .bars-axis { display:flex; justify-content:space-between; margin-top:6px;
                font-family:var(--mono); font-size:10px; color:var(--faint); }
 
@@ -347,6 +351,19 @@
         white-space:nowrap; }
   .filters .hint { font-size:11.5px; color:var(--faint); margin-left:auto; }
   .filters select, .filters input { cursor:pointer; }
+  /* 구간·필터 줄 — 값이 기본과 다르면 눈에 띄어야 "왜 이 숫자지"를 안 묻는다 */
+  .filters input[type=date] { font:inherit; font-size:12.5px; padding:5px 8px;
+        border:1px solid var(--line-strong); border-radius:6px; background:var(--panel);
+        color:var(--ink); }
+  .filters .chips { display:inline-flex; gap:5px; flex-wrap:wrap; }
+  .filters .chip { font:inherit; font-size:11.5px; font-weight:600; cursor:pointer;
+        padding:4px 10px; border-radius:999px; border:1px solid var(--line-strong);
+        background:var(--panel); color:var(--muted); }
+  .filters .chip:hover { border-color:var(--accent-line); color:var(--accent-deep);
+        background:var(--accent-soft); }
+  .filters .chip.on { background:var(--accent); border-color:var(--accent);
+        color:var(--accent-ink); }
+  .filters .chip .n { font-variant-numeric:tabular-nums; opacity:.75; margin-left:4px; }
   .filters select:hover, .filters input:hover { border-color:var(--line-strong); background:var(--hover); }
   .filters input { cursor:text; }
 
@@ -562,7 +579,7 @@
     </div>
 
     <div id="sloSection" hidden>
-    <h2 class="sec" style="margin-top:26px">품질 기준(SLO) <span>별도 지표 — 아직 합성 예시입니다</span></h2>
+    <h2 class="sec" style="margin-top:26px">품질 기준(SLO) <span>도메인별 일일 품질 판정 — 실적재분만 표시합니다</span></h2>
     <div class="kpis" id="pipeKpis"></div>
     <div class="grid">
       <div class="card wide">
@@ -736,6 +753,20 @@
 
     <section class="pane" id="pane-keys" role="tabpanel" aria-labelledby="tab-keys" tabindex="0" hidden>
     <h2 class="sec">이용자 키 <span>누가 쓰고 있나 · 하루 사용 한도와 차단</span></h2>
+
+    <!-- 구간과 필터는 주소(해시)에 실린다 — 다른 탭의 지표에서 여기로 넘어올 때 그 조건을
+         그대로 들고 온다. 그래야 "발급만 하고 무호출 1건"을 눌렀을 때 그 1건이 바로 보인다. -->
+    <div class="filters" id="keyFilters">
+      <label for="kFrom">시작</label>
+      <input type="date" id="kFrom" aria-label="시작일">
+      <label for="kTo">종료</label>
+      <input type="date" id="kTo" aria-label="종료일">
+      <button class="kbtn" id="kApply">적용</button>
+      <button class="kbtn" id="kReset" title="최근 1개월로">되돌리기</button>
+      <span class="chips" id="kChips"></span>
+      <span class="hint" id="kWindowNote"></span>
+    </div>
+
     <div class="kpis" id="keyKpis"></div>
     <div class="grid">
       <div class="card wide">
@@ -837,6 +868,23 @@ const bundleNote = (load) => !load || load.bundled ? ""
     "과거분까지 비어 있으면 번들 적재 쪽을 확인해야 한다'>로그 번들 <b>0건</b> / " +
     nf.format(load.total || 0) + "건</p>";
 
+// ── 창 채우기 ────────────────────────────────────────────────────────────────────
+// 기간을 14일로 고르면 **14칸이 나와야 한다.** 행이 있는 날만 그리면 하루치 데이터일 때
+// 막대 하나에 축 양끝이 같은 날짜가 되어, 고른 기간이 화면에 반영되지 않은 것처럼 보인다.
+// (실제로 "기간을 바꿔도 안 변한다"는 지적이 여기서 나왔다.)
+const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
+function fillDays(rows, days, keyOf, zero) {
+  const by = new Map(rows.map((r) => [keyOf(r), r]));
+  // 오늘(KST)을 끝으로 days 칸. 서버가 자르는 창과 같은 규약이라 칸과 값이 어긋나지 않는다.
+  const endMs = Date.parse(dayKey(Date.now() + 9 * 3600 * 1000) + "T00:00:00Z");
+  const out = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const k = dayKey(endMs - i * 86400000);
+    out.push(by.get(k) || { ...zero, day: k, _empty: true });
+  }
+  return out;
+}
+
 // ── 발행·단계·소요 표기 — 요약(render)과 드릴다운이 같은 번역을 쓴다 ────────────────
 const pubPill = (o) => o === "published" ? "<span class='pill ok'>성공</span>"
   : o === "degraded" ? "<span class='pill warn'>열화</span>"
@@ -860,8 +908,14 @@ const PANES = ["pipeline", "runs", "serving", "usage", "apis", "keys"];
 // 새로고침·링크 공유에도 보던 자리가 유지되고, "그 API 좀 봐 주세요"를 주소로 보낼 수 있다.
 const parseHash = () => {
   const raw = decodeURIComponent(location.hash.slice(1));
-  const at = raw.indexOf("/");
-  return at < 0 ? { pane: raw, api: null } : { pane: raw.slice(0, at), api: raw.slice(at + 1) };
+  // 두 형태를 받는다 — `apis/<이름>`(상세)과 `keys?filter=…&from=…`(구간·필터).
+  // 주소에 조건을 실어야 "그 숫자 좀 봐 주세요"를 링크로 보낼 수 있다.
+  const [path, qs] = raw.split("?");
+  const at = path.indexOf("/");
+  const q = new URLSearchParams(qs || "");
+  return at < 0
+    ? { pane: path, api: null, q }
+    : { pane: path.slice(0, at), api: path.slice(at + 1), q };
 };
 function showTab(name) {
   if (!PANES.includes(name)) name = PANES[0];
@@ -881,7 +935,10 @@ function showTab(name) {
     if (!same) { el.classList.remove("open"); el.setAttribute("aria-expanded", "false"); }
   }
   if (!same) for (const el of document.querySelectorAll("#banners .why")) el.hidden = true;
-  // 상세가 열려 있으면 그 주소를 지키고, 다른 탭으로 가면 탭 이름만 남긴다
+  // 상세·조건이 열려 있으면 그 주소를 지키고, 다른 탭으로 가면 탭 이름만 남긴다.
+  // 키 탭은 자기 조건을 syncKeyHash() 가 관리하므로 여기서 덮어쓰지 않는다 —
+  // 덮어쓰면 필터를 걸고 넘어온 링크가 그 즉시 '전체'로 되돌아간다.
+  if (name === "keys") return;
   const want = name === "apis" && DETAIL_OPEN ? name + "/" + DETAIL_OPEN : name;
   if (decodeURIComponent(location.hash.slice(1)) !== want)
     history.replaceState(null, "", "#" + encodeURI(want));
@@ -899,7 +956,17 @@ addEventListener("hashchange", () => {
   const h = parseHash();
   showTab(h.pane);
   if (h.pane === "apis" && h.api && h.api !== DETAIL_OPEN) openDetail(h.api, true);
+  if (h.pane === "keys") applyKeyHash(h.q);
 });
+
+// 주소의 키 조건을 상태에 반영하고, 달라졌으면 다시 읽는다.
+function applyKeyHash(q) {
+  const next = { from: q.get("from") || "", to: q.get("to") || "",
+                 filter: q.get("filter") || "all" };
+  if (next.from === KEYQ.from && next.to === KEYQ.to && next.filter === KEYQ.filter) return;
+  KEYQ = next;
+  loadKeys();
+}
 
 // 안정성 추이에서 펼쳐 둔 칸 — {domain, day}. 자동 새로고침이 히트맵을 다시 그려도
 // 이 값으로 선택 표시를 되살린다. 패널 내용은 다시 긁지 않는다(사용자가 연 시점의 스냅샷).
@@ -927,7 +994,7 @@ function render(d) {
   //
   // 예전에는 사유를 한 문단씩 쓴 배너를 대여섯 개 쌓았다. 길게 쓴다고 읽히는 게 아니라
   // **전부 안 읽히고** 진짜 신호가 묻혔다. 그래서 규칙을 뒤집는다:
-  //   보이는 것  = 아이콘 + 두세 단어 ("합성 샘플", "연결되지 않음", "미구현")
+  //   보이는 것  = 아이콘 + 두세 단어 ("연결되지 않음", "미구현 영역", "읽지 못함")
   //   접히는 것  = 사유·수치·규약 번호. 눌러야 나온다
   //   테두리     = **조치가 필요한 것에만.** 정보성은 배경만 — 눈이 조치할 것에 먼저 간다
   //
@@ -950,10 +1017,6 @@ function render(d) {
   // pane 별로 모은다 — 배너는 자기 탭에서만 보여야 남의 문제로 읽히지 않는다
   const N = { pipeline: [], runs: [], serving: [], usage: [], apis: [], keys: [] };
 
-  if (hasSlo && d.meta.pipeline_source === "sample")
-    N.pipeline.push(note("warn", "합성 샘플",
-      "품질 기준(SLO) " + d.meta.pipeline_sample_rows + "일치가 합성값입니다. 이 값으로 운영 판단을 하지 마세요 — " +
-      "실측 파이프라인 상태는 <b>실행 기록</b> 탭에 있습니다."));
   if (d.meta.missing.includes("pipeline") && hasSlo)
     N.pipeline.push(note("info", "데이터 없음", "<code>npm run seed</code> 를 먼저 실행하세요."));
   if (d.meta.missing.includes("publication"))
@@ -967,8 +1030,6 @@ function render(d) {
       "</b> · 행수 안 맞음 <b>" + nf.format(pTot.mismatch) + "</b>. " +
       "어느 분야에 몰렸는지는 아래 '분야별 발행'에서 봅니다."));
 
-  if (d.meta.runs_is_sample)
-    N.runs.push(note("warn", "합성 샘플", "팀 조회 DB 적재분이 아닙니다. 이 값으로 운영 판단을 하지 마세요."));
   if (d.meta.missing.includes("runs"))
     N.runs.push(note("info", "연결되지 않음",
       "조회 DB 표(<code>_ops_run_event</code> 외 3종)가 없습니다. <code>npm run seed</code> 로 같은 모양의 표를 만들 수 있습니다."));
@@ -1410,15 +1471,21 @@ function render(d) {
     ["사용 중인 이용자", nf.format(s.keys.length), "이 기간에 요청을 보낸 키 수", ""],
   ]);
 
-  if (s.daily.length) {
-    const max = Math.max(...s.daily.map((x) => x.calls));
-    $("daily").innerHTML =
-      "<div class='bars'>" + s.daily.map((x) =>
-        "<div class='b' title='" + esc(x.day) + " · " + x.calls + "회'>" +
-        "<i style='height:" + Math.max(3, Math.round(x.calls / max * 70)) + "px'></i></div>").join("") + "</div>" +
-      "<div class='bars-axis'><span>" + esc(s.daily[0].day) + "</span><span>" +
-      esc(s.daily[s.daily.length - 1].day) + "</span></div>";
-  } else $("daily").innerHTML = emptyBox("데이터 없음");
+  // 창 전체를 칸으로 깐다 — 빈 날이 보여야 "이 기간에 거의 안 왔다"가 읽힌다
+  const dSeries = fillDays(s.daily, d.window_days, (r) => r.day, { calls: 0, errors: 0 });
+  const dMax = Math.max(1, ...dSeries.map((x) => x.calls));
+  const dTotal = dSeries.reduce((a, x) => a + (x.calls || 0), 0);
+  $("daily").innerHTML = dTotal
+    ? "<div class='bars'>" + dSeries.map((x) =>
+        "<div class='b" + (x._empty ? " none" : "") + "' title='" + esc(x.day) +
+        (x._empty ? " · 기록 없음" : " · " + nf.format(x.calls) + "회" +
+          (x.errors ? " (실패 " + x.errors + ")" : "")) + "'>" +
+        "<i style='height:" + (x.calls ? Math.max(3, Math.round(x.calls / dMax * 70)) : 0) +
+        "px'></i></div>").join("") + "</div>" +
+      "<div class='bars-axis'><span>" + esc(dSeries[0].day) + "</span>" +
+      "<span>" + d.window_days + "일</span>" +
+      "<span>" + esc(dSeries[dSeries.length - 1].day) + "</span></div>"
+    : emptyBox(["데이터 없음", "최근 " + d.window_days + "일에 요청이 없습니다"]);
 
   $("failures").innerHTML = table([
     { t:"이유", get:(r) => "<span class='pill " + (r.status >= 500 ? "bad" : "warn") + "'>" +
@@ -1485,7 +1552,8 @@ function render(d) {
   const pendingBox = (axis) =>
     emptyBox(["미구현 영역", "수집 축 <code>" + axis + "</code> — 스펙 #9 확정 대기", 1]);
 
-  if (U.daily.length) {
+  U.daily = fillDays(U.daily, d.window_days, (r) => r.day, { keyed: 0, anon: 0 });
+  if (U.daily.some((x) => (x.keyed || 0) + (x.anon || 0) > 0)) {
     const maxU = Math.max(...U.daily.map((x) => x.keyed + x.anon));
     $("usageDaily").innerHTML =
       "<div class='bars'>" + U.daily.map((x) =>
@@ -1493,7 +1561,8 @@ function render(d) {
         "<i style='height:" + Math.max(3, Math.round((x.keyed + x.anon) / maxU * 70)) + "px'></i></div>").join("") + "</div>" +
       "<div class='bars-axis'><span>" + esc(U.daily[0].day) + "</span><span>" +
       esc(U.daily[U.daily.length - 1].day) + "</span></div>";
-  } else $("usageDaily").innerHTML = emptyBox("데이터 없음");
+  } else $("usageDaily").innerHTML =
+      emptyBox(["데이터 없음", "최근 " + d.window_days + "일에 요청이 없습니다"]);
 
   const CLASS_LABEL = { browser:"브라우저", ai_agent:"AI 대행", ai_crawler:"AI 크롤러",
                         bot:"봇", cli:"CLI·툴", unknown:"미상" };
@@ -1520,21 +1589,26 @@ function render(d) {
         { t:"hits", r:true, get:(r) => nf.format(r.hits) },
       ], U.pages.rows, "데이터 없음");
 
+  // 숫자를 보고 "그럼 그게 누구냐"가 바로 이어져야 한다 — 눌러서 키 목록으로 넘긴다.
+  // 넘길 때 **필터를 걸어** 그 숫자에 해당하는 키만 보이게 한다(주소에 실어서).
+  const funnelLink = (filter, label) =>
+    "<a href='#keys?filter=" + filter + "' data-goto-keys='" + filter + "'>" + label + "</a>";
   $("usageFunnel").innerHTML = f
     ? table([
         { t:"", get:(r) => r.k },
         { t:"", r:true, get:(r) => r.v },
       ], [
-        { k:"발급된 키", v: nf.format(f.issued || 0) },
-        { k:"데이터 호출까지 간 키", v: nf.format(f.activated || 0) },
-        { k:"발급만 하고 무호출", v: nf.format((f.issued || 0) - (f.activated || 0)) },
+        { k: funnelLink("all", "발급된 키"), v: nf.format(f.issued || 0) },
+        { k: funnelLink("called", "데이터 호출까지 간 키"), v: nf.format(f.activated || 0) },
+        { k: funnelLink("uncalled", "발급만 하고 무호출"),
+          v: nf.format((f.issued || 0) - (f.activated || 0)) },
         { k:"첫 호출까지 평균", v: f.avg_hours_to_first != null ? f.avg_hours_to_first + "시간" : "—" },
       ], "")
     : emptyBox(["연결되지 않음", "게이트웨이를 시드하세요"]);
 
   // ── 탭 라벨의 상태 점 — 탭으로 가린 쪽이 아픈지를 전환 없이 알려준다.
   // 판정 기준은 KPI 의 경고 조건과 같다(정기런 실패·계약 위반 / 에러율 5% 이상·0행 발생).
-  // 발행 실패·행수 불일치도 이 탭의 경보다. SLO 는 합성값이라 그것만으로는 점이 안 선다.
+  // 발행 실패·행수 불일치도 이 탭의 경보다 — SLO 만으로는 점이 안 선다(행이 없을 수 있다).
   const pipeBad = badDays.length > 0 || viol > 0 || pTot.failed > 0 || pTot.mismatch > 0;
   const runsBad = stallN > 0 || rTot.fail > 0 || rTot.empty > 0 || envMix;
   const servBad = errPct >= 5 || emptyN > 0;
@@ -1858,6 +1932,17 @@ async function openDetail(name, silent) {
   if (!silent) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
+// 이용 행동의 퍼널 숫자 → 키 목록. 앵커라 주소가 바뀌고 hashchange 가 나머지를 한다.
+$("usageFunnel").addEventListener("click", (e) => {
+  const a = e.target.closest("[data-goto-keys]");
+  if (!a) return;
+  e.preventDefault();
+  KEYQ = { from: "", to: "", filter: a.dataset.gotoKeys };  // 구간은 기본(최근 1개월)
+  showTab("keys");
+  syncKeyHash();
+  loadKeys();
+});
+
 $("apiTable").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-api]");
   if (b) openDetail(b.dataset.api);
@@ -1882,6 +1967,10 @@ async function loadApis() {
 // ── 키 관리 ────────────────────────────────────────────────────────────────────────
 // 이 표에는 이메일이 마스킹된 채 보인다. 운영자가 "누구 키인지" 없이는 조치를 못 하기 때문이다.
 let KEYS = [];
+// 키 화면의 창과 필터. 주소(#keys?from=&to=&filter=)에 실어서 다른 탭의 지표에서
+// 넘어올 때 조건을 그대로 들고 온다 — 숫자를 누른 사람이 그 숫자를 다시 찾지 않게.
+let KEYQ = { from: "", to: "", filter: "all" };
+let KEYCOUNTS = null;
 // 조치 가능 여부는 **서버가 알려준 값**을 그대로 쓴다. 화면에서 이걸 켠다고 뚫리지 않는다 —
 // 실제 차단은 POST 쪽 requireWrite 가 한다. 여기서 하는 일은 못 할 일을 버튼으로 내밀지 않는 것뿐이다.
 let CAN_WRITE = false;
@@ -1909,12 +1998,22 @@ function renderKeys(rows) {
   KEYS = rows || [];
   const active = KEYS.filter((k) => k.status === "active");
   const near = active.filter((k) => k.daily_quota > 0 && k.used_today / k.daily_quota >= 0.8);
+  const c = KEYCOUNTS || {};
   kpis("keyKpis", [
-    ["발급된 키", nf.format(KEYS.length), "전체"],
+    // "전체"가 아니라 **이 구간에 발급된** 키다 — 창이 있는 화면에서 전체를 세면 두 숫자가
+    // 서로를 설명하지 못한다(목록은 한 달인데 합계는 전량인 상태).
+    ["이 구간 발급", nf.format(c.all ?? KEYS.length), "선택한 기간에 발급된 키"],
     ["사용 가능", nf.format(active.length), "차단됨 " + (KEYS.length - active.length) + "개"],
     ["오늘 요청", nf.format(KEYS.reduce((a, k) => a + (k.used_today || 0), 0)), "모든 이용자 합계"],
     ["한도 임박", nf.format(near.length), "하루 한도의 80% 이상 사용", near.length ? "bad" : ""],
   ]);
+
+  // 필터 칩 — 건수를 같이 띄운다. 0 건인 필터도 남긴다(누를 게 없다는 것도 답이다).
+  const CHIPS = [["all", "전체"], ["called", "호출 있음"], ["uncalled", "발급만·무호출"],
+                 ["revoked", "차단됨"], ["over_quota", "한도 초과"]];
+  $("kChips").innerHTML = CHIPS.map(([k, label]) =>
+    "<button class='chip" + (KEYQ.filter === k ? " on" : "") + "' data-kfilter='" + k + "'>" +
+    label + "<span class='n'>" + nf.format(c[k] ?? 0) + "</span></button>").join("");
 
   $("keyTable").innerHTML = table([
     { t: "키", name: true, get: (r) => "<code>" + esc(r.key_prefix) + "…</code>" },
@@ -1930,16 +2029,23 @@ function renderKeys(rows) {
           ? "<input type='number' min='0' value='" + r.daily_quota + "' data-q='" + r.key_hash + "' aria-label='일일 쿼터'>" +
             "<button class='kbtn' data-act='quota' data-h='" + r.key_hash + "'>저장</button>"
           : "<span>/ " + nf.format(r.daily_quota) + "</span>") + "</div>"; } },
-    { t: "총 요청", r: true, get: (r) => nf.format(r.calls_logged) },
-    { t: "마지막 요청", r: true, get: (r) => fmtTs(r.last_call) },
-    { t: "발급일", r: true, get: (r) => fmtTs(r.created_at) },
+    // 이 열들은 **선택한 구간 기준**이다(전체 기간이 아니다) — 위 KPI 와 같은 창이라
+    // 두 숫자가 서로를 설명한다. 창 밖 호출은 여기 안 잡힌다.
+    { t: "구간 내 요청", r: true, get: (r) => num(r.calls) },
+    { t: "첫 데이터 호출", r: true, get: (r) => r.first_data_call
+        ? esc(fmtTs(r.first_data_call))
+        : "<span class='pill dim' title='발급만 하고 아직 데이터를 부르지 않았다'>없음</span>" },
+    { t: "마지막 요청", r: true, get: (r) => r.last_call ? esc(fmtTs(r.last_call)) : "<span class='zero'>—</span>" },
+    { t: "발급일", r: true, get: (r) => esc(fmtTs(r.created_at) || "—") },
     { t: "", r: true, get: (r) => CAN_WRITE
         ? "<div class='kacts'>" + (r.status === "active"
             ? "<button class='kbtn danger' data-act='revoke' data-h='" + r.key_hash + "'>차단</button>"
             : "<button class='kbtn' data-act='restore' data-h='" + r.key_hash + "'>차단 해제</button>") +
           "<button class='kbtn danger' data-act='delete' data-h='" + r.key_hash + "'>삭제</button></div>"
         : "" },
-  ], KEYS, "발급된 키가 없습니다 — 마켓플레이스에서 키를 발급하면 여기에 나타납니다");
+  ], KEYS, KEYQ.filter === "all"
+        ? ["데이터 없음", "이 기간에 발급된 키가 없습니다"]
+        : ["데이터 없음", "이 조건에 맞는 키가 없습니다 — 필터를 '전체'로 되돌려 보세요"]);
 
   $("dot-keys").className = "dot " + (KEYS.length ? (near.length ? "bad" : "ok") : "");
 }
@@ -1972,12 +2078,65 @@ $("keyTable").addEventListener("click", (e) => {
 });
 
 async function loadKeys() {
-  const res = await fetch("/api/keys", { headers: authHeaders() });
-  if (!res.ok) { renderKeys([]); return; }
-  const body = await res.json();
-  CAN_WRITE = Boolean(body.can_write);
+  const q = new URLSearchParams();
+  if (KEYQ.from) q.set("from", KEYQ.from);
+  if (KEYQ.to) q.set("to", KEYQ.to);
+  if (KEYQ.filter && KEYQ.filter !== "all") q.set("filter", KEYQ.filter);
+  let body;
+  try {
+    const res = await fetch("/api/keys?" + q, { headers: authHeaders() });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    body = await res.json();
+  } catch { KEYCOUNTS = null; renderKeys([]); return; }
+
+  CAN_WRITE = Boolean(body.meta && body.meta.can_write);
+  KEYCOUNTS = body.counts;
+  // 서버가 창을 접었을 수 있다(미래 종료일·1년 초과 시작일·뒤집힌 구간). 화면 입력을
+  // **서버가 실제로 쓴 값**으로 맞춘다 — 안 그러면 입력칸과 표가 다른 구간을 말한다.
+  const w = body.window || {};
+  KEYQ.from = w.from || ""; KEYQ.to = w.to || "";
+  $("kFrom").value = KEYQ.from; $("kTo").value = KEYQ.to;
+  $("kFrom").max = w.today || ""; $("kTo").max = w.today || "";
+  $("kFrom").min = w.min || "";   $("kTo").min = w.min || "";
+  // 접은 사실은 조용히 넘기지 않는다 — 숫자를 못 믿게 되는 건 그때부터다
+  $("kWindowNote").innerHTML = (w.clamped && w.clamped.length)
+    ? "<b class='bad-t'>" + w.clamped.map(esc).join(" · ") + "</b>"
+    : "발급일 기준 · 최대 1년 · 오늘 이후는 고를 수 없습니다";
+
   renderKeys(body.keys);
   if (!CAN_WRITE) { $("keyMsg").className = "keyMsg"; $("keyMsg").textContent = ""; }
+}
+
+// ── 구간·필터 배선 ───────────────────────────────────────────────────────────
+$("kApply").addEventListener("click", () => {
+  KEYQ.from = $("kFrom").value; KEYQ.to = $("kTo").value;
+  syncKeyHash(); loadKeys();
+});
+$("kReset").addEventListener("click", () => {
+  KEYQ = { from: "", to: "", filter: "all" };
+  syncKeyHash(); loadKeys();
+});
+// 칩은 매번 다시 그려지므로 리스너는 **컨테이너에 한 번만** 단다
+$("kChips").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-kfilter]");
+  if (!b) return;
+  KEYQ.filter = b.dataset.kfilter;
+  syncKeyHash(); loadKeys();
+});
+// 엔터로도 적용 — 달력에서 날짜만 고르고 엔터를 누르는 게 자연스럽다
+for (const id of ["kFrom", "kTo"])
+  $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") $("kApply").click(); });
+
+// 조건을 주소에 싣는다 — 새로고침·링크 공유에도 보던 조건이 유지되고,
+// 다른 탭의 지표가 `#keys?filter=uncalled` 로 넘길 수 있다.
+function syncKeyHash() {
+  const q = new URLSearchParams();
+  if (KEYQ.from) q.set("from", KEYQ.from);
+  if (KEYQ.to) q.set("to", KEYQ.to);
+  if (KEYQ.filter !== "all") q.set("filter", KEYQ.filter);
+  const want = "keys" + (q.toString() ? "?" + q : "");
+  if (decodeURIComponent(location.hash.slice(1)) !== want)
+    history.replaceState(null, "", "#" + want);
 }
 
 // ── 요청 추적 — request_id 하나로 그 요청 한 건을 특정한다 (GET /api/trace)
@@ -2051,6 +2210,15 @@ async function load(quiet) {
   syncMode();
   restore();
   // render() 가 showTab 으로 끝나므로 그 뒤에 채운다. 두 요청은 서로 무관하니 같이 보낸다.
+  // 첫 진입이 `#keys?filter=…` 이면 그 조건으로 읽는다 — 링크를 받은 사람이
+  // 전체 목록을 먼저 보고 다시 필터를 거는 일이 없게.
+  if (!quiet) {
+    const h = parseHash();
+    if (h.pane === "keys") {
+      KEYQ = { from: h.q.get("from") || "", to: h.q.get("to") || "",
+               filter: h.q.get("filter") || "all" };
+    }
+  }
   await Promise.all([loadKeys(), loadApis()]);
   restore();
   if (quiet) for (const ev of ["wheel", "touchstart", "keydown", "mousedown"])
@@ -2085,27 +2253,51 @@ $("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("enter"
 // 과하게 밀지 않으면서 사람이 기다릴 만한 간격이다. 상태는 sessionStorage 에 둬서
 // 새로고침해도 켜진 채로 유지된다(지켜보는 중에 꺼지면 그게 더 헷갈린다).
 const AUTO = "ops_auto_refresh";
-let autoTimer = null;
+const AUTO_SEC = 30;
+let autoTimer = null;   // 1초 틱 — 남은 시간을 세고, 0 이 되면 읽는다
+let autoLeft = AUTO_SEC;
+
+// 버튼이 "켜짐"만 말하면 **언제 바뀔지**를 알 수 없어 결국 F5 를 누르게 된다.
+// 남은 초를 세어 보여주면 기다릴지 지금 누를지를 사람이 정한다.
+function autoLabel() {
+  const b = $("autoBtn");
+  if (sessionStorage.getItem(AUTO) !== "1") { b.textContent = "자동 새로고침 꺼짐"; return; }
+  b.textContent = "자동 새로고침 " + autoLeft + "초";
+}
+
 function syncAuto() {
   const on = sessionStorage.getItem(AUTO) === "1";
-  const b = $("autoBtn");
-  b.textContent = on ? "자동 새로고침 켜짐 · 30초" : "자동 새로고침 꺼짐";
-  b.classList.toggle("on", on);
+  $("autoBtn").classList.toggle("on", on);
   clearInterval(autoTimer);
-  // 화면이 안 보이는 동안(다른 탭)에는 굳이 읽지 않는다 — 돌아오면 그때 한 번 읽는다
-  if (on) autoTimer = setInterval(() => { if (!document.hidden) load(true); }, 30000);
+  autoLeft = AUTO_SEC;
+  autoLabel();
+  if (!on) return;
+  autoTimer = setInterval(() => {
+    // 탭이 숨어 있으면 세지 않는다 — 돌아왔을 때 "0초"로 멈춰 있으면 멈춘 줄 안다.
+    // 그리고 안 보이는 화면을 위해 D1 을 미는 것도 낭비다.
+    if (document.hidden) return;
+    if (--autoLeft > 0) { autoLabel(); return; }
+    autoLeft = AUTO_SEC;
+    autoLabel();
+    load(true);
+  }, 1000);
 }
 $("autoBtn").addEventListener("click", () => {
   sessionStorage.setItem(AUTO, sessionStorage.getItem(AUTO) === "1" ? "0" : "1");
   syncAuto();
   if (sessionStorage.getItem(AUTO) === "1") load(true);
 });
+// 탭으로 돌아오면 그동안 멈춰 있던 만큼이 아니라 **지금부터** 다시 센다 —
+// 돌아오자마자 한 번 읽고 카운터를 되감는 편이 "지금 값인가"에 바로 답한다.
 addEventListener("visibilitychange", () => {
-  if (!document.hidden && sessionStorage.getItem(AUTO) === "1") load(true);
+  if (document.hidden || sessionStorage.getItem(AUTO) !== "1") return;
+  autoLeft = AUTO_SEC;
+  autoLabel();
+  load(true);
 });
+syncAuto();
 
 $("days").addEventListener("change", load);
-syncAuto();
 load();   // 토큰 없이도 뜬다 — 막는 문이 아니라 여는 문이다
 </script>
 </div><!-- /.main -->
