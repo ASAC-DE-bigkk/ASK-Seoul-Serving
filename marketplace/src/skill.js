@@ -25,6 +25,8 @@ const PRODUCT_ID_RE = /^[a-z0-9_]+$/;
 const SQL_IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
+const MINUTE_MS = 60_000;
+const KST_OFFSET = "+09:00";
 
 export const isSkillProduct = (productId) => PRODUCT_IDS.has(productId);
 
@@ -50,6 +52,47 @@ function parseJsonObject(raw) {
 
 const nonEmpty = (value) => typeof value === "string" && value.trim().length > 0;
 const nonNegativeInteger = (value) => Number.isInteger(value) && value >= 0;
+
+function validDateParts(year, month, day = 1) {
+  if (month < 1 || month > 12 || day < 1) return false;
+  return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+export function freshnessAsOfMillis(value) {
+  if (!nonEmpty(value)) return null;
+  const raw = value.trim();
+  let candidate;
+  let match;
+
+  if ((match = /^(\d{4})$/.exec(raw))) {
+    candidate = `${raw}-01-01T00:00:00${KST_OFFSET}`;
+  } else if ((match = /^(\d{4})-(\d{2})$/.exec(raw))) {
+    if (!validDateParts(Number(match[1]), Number(match[2]))) return null;
+    candidate = `${raw}-01T00:00:00${KST_OFFSET}`;
+  } else if ((match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw))) {
+    if (!validDateParts(Number(match[1]), Number(match[2]), Number(match[3]))) return null;
+    candidate = `${raw}T00:00:00${KST_OFFSET}`;
+  } else if ((match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,6})?)?$/.exec(raw))) {
+    const [, year, month, day, hour, minute, second = "0"] = match;
+    if (!validDateParts(Number(year), Number(month), Number(day)) ||
+        Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59) return null;
+    candidate = `${raw.replace(" ", "T")}${KST_OFFSET}`;
+  } else if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)) {
+    candidate = raw.replace(" ", "T");
+  } else {
+    return null;
+  }
+
+  const parsed = Date.parse(candidate);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function freshnessState(freshnessAsOf, sloMinutes, nowMs = Date.now()) {
+  if (!Number.isInteger(sloMinutes) || sloMinutes < 1 || !Number.isFinite(nowMs)) return "incomplete";
+  const freshnessMs = freshnessAsOfMillis(freshnessAsOf);
+  if (freshnessMs === null) return "incomplete";
+  return nowMs - freshnessMs > sloMinutes * MINUTE_MS ? "stale" : "fresh";
+}
 
 function passingMeasuredCoverage(coverage) {
   return coverage?.status === "passed" && nonEmpty(coverage.field) &&
@@ -121,7 +164,7 @@ function notReady(product) {
 // _catalog은 제품의 현재 발행본이고, 보조 메타는 무변경 밴드 때문에 한 발행 전 상태일
 // 수 있다. 그 상태는 `meta_of: previous_publication`으로 *표시*한다. 보조 메타가
 // 비어 있거나 읽히지 않는 경우는 준비 불가 사유로 남기지만, 임의의 기본값을 만들지 않는다.
-async function loadSkillProduct(env, productId) {
+async function loadSkillProduct(env, productId, nowMs = Date.now()) {
   if (!PRODUCT_ID_RE.test(productId) || !isSkillProduct(productId)) return null;
 
   const catalog = await safeFirst(env.DB.prepare(
@@ -191,6 +234,11 @@ async function loadSkillProduct(env, productId) {
   if (!qualityRow) {
     blockers.push("quality_metadata_contract_unavailable");
   } else {
+    const currentFreshnessState = freshnessState(
+      qualityRow.freshness_as_of,
+      qualityRow.freshness_slo_minutes,
+      nowMs,
+    );
     if (qualityRow.publication_id !== catalog?.publication_id) blockers.push("quality_publication_mismatch");
     if (qualityRow.serving_status !== "published") blockers.push("quality_status_not_published");
     if (!nonNegativeInteger(qualityRow.source_row_count) || !nonNegativeInteger(qualityRow.d1_row_count) ||
@@ -201,9 +249,10 @@ async function loadSkillProduct(env, productId) {
     if (qualityRow.duplicate_primary_key_count !== 0 || qualityRow.null_primary_key_count !== 0) {
       blockers.push("quality_primary_key_violation");
     }
-    if (!nonEmpty(qualityRow.freshness_as_of) || !Number.isInteger(qualityRow.freshness_slo_minutes) ||
-        qualityRow.freshness_slo_minutes < 1 || !nonEmpty(qualityRow.measured_at)) {
+    if (currentFreshnessState === "incomplete" || !nonEmpty(qualityRow.measured_at)) {
       blockers.push("quality_freshness_evidence_incomplete");
+    } else if (currentFreshnessState === "stale") {
+      blockers.push("quality_freshness_stale");
     }
     if (!nonEmpty(qualityRow.projection_schema_version) || !nonEmpty(qualityRow.projection_schema_hash)) {
       blockers.push("public_projection_identity_missing");
@@ -275,7 +324,8 @@ async function loadSkillProduct(env, productId) {
 
 export async function handleSkillBundle(env, trace = {}) {
   trace.table = SKILL_BUNDLE_ID;
-  const products = await Promise.all(SKILL_PRODUCT_IDS.map((productId) => loadSkillProduct(env, productId)));
+  const nowMs = Date.now();
+  const products = await Promise.all(SKILL_PRODUCT_IDS.map((productId) => loadSkillProduct(env, productId, nowMs)));
   trace.rows = products.length;
   return json({
     bundle_id: SKILL_BUNDLE_ID,
@@ -293,7 +343,7 @@ export async function handleSkillProduct(env, productId, trace = {}) {
   // `/skill/v1` 은 계약상 경로 인자가 곧 공개 식별자다 — 해석을 기다릴 필요가 없다
   trace.table = productId;
   trace.productId = productId;
-  const product = await loadSkillProduct(env, productId);
+  const product = await loadSkillProduct(env, productId, Date.now());
   if (!product) return unknownProduct(productId);
   trace.publicationId = product.publication_id ?? null;
   trace.rows = product.metadata.columns.length;
@@ -303,7 +353,7 @@ export async function handleSkillProduct(env, productId, trace = {}) {
 export async function handleSkillData(env, productId, _searchParams, _keyRow, trace = {}) {
   trace.table = productId;
   trace.productId = productId;
-  const product = await loadSkillProduct(env, productId);
+  const product = await loadSkillProduct(env, productId, Date.now());
   if (!product) return unknownProduct(productId);
   trace.publicationId = product.publication_id ?? null;
 
