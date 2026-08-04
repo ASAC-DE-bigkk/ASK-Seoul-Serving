@@ -711,22 +711,28 @@ async function usageDetail(env, name, params) {
     .bind(name).first().catch(() => null);
   if (!product) return problem(404, "unknown api", "카탈로그에 없는 API 다");
 
+  // 목록과 같은 축으로 찾는다. 상세로 들어오는 값은 표명(`_catalog.name`)이지만 로그에는
+  // `product_id` 로만 남은 행이 있다(스킬·MCP) — 표명으로만 찾으면 상세에서만 사라져
+  // 목록과 숫자가 어긋난다. 카탈로그에서 방금 읽은 `product_id` 를 두 번째 열쇠로 쓴다.
+  const KEY_W = " AND (table_name = ? OR product_id = ?) ";
+  const K = [name, product.product_id || name];
+
   const [daily, filters, statuses, recent] = await Promise.all([
     safeRows(env, "SELECT substr(ts,1,10) AS day, COUNT(*) AS calls, " +
       "SUM(status >= 400) AS errors, ROUND(AVG(row_count),1) AS avg_rows " +
-      "FROM _gateway_request_log WHERE table_name = ? AND ts >= datetime('now', ?) GROUP BY day ORDER BY day",
-      name, since),
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + KEY_W + "GROUP BY day ORDER BY day",
+      since, ...K),
     // 필터 '축' — 컬럼명 조합이다. 값은 저장하지 않으므로 여기 나올 수 없다.
     safeRows(env, "SELECT COALESCE(filters, '') AS filters, COUNT(*) AS calls, " +
       "ROUND(AVG(row_count),1) AS avg_rows, SUM(status = 200 AND row_count = 0) AS empty_hits " +
-      "FROM _gateway_request_log WHERE table_name = ? AND ts >= datetime('now', ?) " +
-      "GROUP BY filters ORDER BY calls DESC LIMIT 20", name, since),
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + KEY_W +
+      "GROUP BY filters ORDER BY calls DESC LIMIT 20", since, ...K),
     safeRows(env, "SELECT status, route, COUNT(*) AS calls FROM _gateway_request_log " +
-      "WHERE table_name = ? AND ts >= datetime('now', ?) GROUP BY status, route ORDER BY calls DESC",
-      name, since),
+      "WHERE ts >= datetime('now', ?)" + KEY_W + "GROUP BY status, route ORDER BY calls DESC",
+      since, ...K),
     safeRows(env, "SELECT ts, route, status, COALESCE(filters,'') AS filters, row_count, ms, " +
       "request_id, substr(key_hash,1,8) AS key_id FROM _gateway_request_log " +
-      "WHERE table_name = ? AND ts >= datetime('now', ?) ORDER BY ts DESC LIMIT 50", name, since),
+      "WHERE ts >= datetime('now', ?)" + KEY_W + "ORDER BY ts DESC LIMIT 50", since, ...K),
   ]);
 
   return json({

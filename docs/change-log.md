@@ -69,6 +69,9 @@
   - `skill_data` 가 "실제 조회"에 잡힘 — 전환 배수가 1.0 → 1.8배로 정정됨
   - `meta.serve_routes=["data","skill_data"]` · `mcp_calls=16`(뺀 건수) · `axes_unfilled` 4종
   - JS 오류 0
+- **뒤늦게 하나 더**: 제품 **상세**도 `table_name` 으로 찾고 있었다. 목록만 `product_id` 로
+  옮기고 상세를 두면, `table_name` 이 비고 `product_id` 만 있는 행(스킬·MCP)이 상세에서만
+  사라져 **목록과 상세의 숫자가 어긋난다.** 두 이름을 다 받게 고쳤다.
 - **되짚을 것**: 같은 **TDZ 실수를 두 번** 했다 — 서버는 `fill` 구조분해 앞에서 `F` 를 썼고
   (`/api/summary` 전체가 500), 화면은 `apiName` 을 첫 사용처보다 뒤에 뒀다(render 전체 사망).
   **`node --check` 는 둘 다 통과시킨다.** 띄워서 실제로 눌러 보는 검증이 없으면 못 잡는다.
