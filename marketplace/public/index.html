@@ -413,7 +413,9 @@
 
 <div class="wrap">
   <div class="strip">
-    <div class="cell"><div class="lab">Products</div><div class="v sk" id="statProducts">0종</div><div class="k">제공 중인 데이터 제품</div></div>
+    <!-- 라벨은 한국어 — 히어로·카드·카탈로그가 전부 한국어인데 스트립만 영어면 어휘가
+         갈린다. 공간축·시간축은 히어로 문구("시간과 공간 두 축")를 그대로 받는 이름이다. -->
+    <div class="cell"><div class="lab ko">데이터 제품</div><div class="v sk" id="statProducts">0종</div><div class="k">제공 중인 데이터 제품</div></div>
     <!-- 여기에 "426개 행정동"을 커버리지로 적었었는데, 그건 culture 한 도메인의 커버리지다.
          citydata 는 실시간 관측 121곳, weather 는 KMA 격자 80칸이라 플랫폼 공통값이 아니다.
          공통인 것은 커버리지가 아니라 **조인 축**(행정동 코드, #48 합의)이라 그것만 적는다.
@@ -426,9 +428,9 @@
          여기 있던 Daily quota(1,000회/일)를 시간축으로 갈았다 — 한도는 키를 받은 뒤의
          이야기고, 처음 온 사람이 재는 건 "무엇으로 자를 수 있나"다. 한도는 /docs 와
          카탈로그에 그대로 있다. -->
-    <div class="cell"><div class="lab">Join axis</div><div class="v">행정동<span class="u"> 코드</span></div><div class="k">도메인을 붙이는 공통 키</div></div>
-    <div class="cell"><div class="lab">Time axis</div><div class="v sk num" id="statTimed">0종</div><div class="k">기간(from/to)으로 자를 수 있는 제품</div></div>
-    <div class="cell"><div class="lab">Freshness</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
+    <div class="cell"><div class="lab ko">공간축</div><div class="v">행정동</div><div class="k">다른 데이터끼리 동네 단위로 붙여 볼 수 있습니다</div></div>
+    <div class="cell"><div class="lab ko">시간축</div><div class="v sk num" id="statTimed">0종</div><div class="k">원하는 기간만 잘라 받을 수 있는 제품</div></div>
+    <div class="cell"><div class="lab ko">갱신</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
   </div>
 </div>
 
