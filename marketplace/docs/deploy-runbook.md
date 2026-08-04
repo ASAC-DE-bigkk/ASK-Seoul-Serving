@@ -1,80 +1,109 @@
 # marketplace 배포 런북 (통합 검증용 타겟)
 
-> **이 문서는 승인 후 실행 절차다.** `wrangler deploy` 는 공개 URL 신설이라 멘토 게이트
-> (ASAC-DAG#476 ①)이고, 승인 없이 실행하지 않는다. 결정 상태는 ASK-Seoul-Serving#20.
+> **이 문서는 승인 후 실행 절차다.** `wrangler deploy` 는 공개 URL 신설이라 팀 결정 사항
+> (agreement §8)이고, 승인 없이 실행하지 않는다. 결정 상태는 ASK-Seoul-Serving#20.
 >
 > 대상 범위는 **팀 통합 검증용 비공개 타겟 1개**다 — 외부 공지·문서 링크 없이 올리고,
 > 정식 공개는 별도 판단(#20)이다. 이유는 ASK-Seoul-Serving#4 가 V1 6개 제품 계약 검증에
 > 실제 게시본을 읽는 타겟을 요구하기 때문이다.
 
-## 0. 전제 확인
+## 0. 배포 전 검사 — **먼저 이것부터**
 
-> ### 🔴 먼저 이것부터 — 배포 전 검사
->
-> ```bash
-> cd marketplace
-> npm run preflight -- <D1이름> [--env production]      # 0 진행 · 1 중단 · 2 검사 실패
-> ```
->
-> 표가 **있는지**가 아니라 **모양(컬럼)이 같은지**를 본다. 기대 모양은 `migrations/*.sql` 을
-> 인메모리 sqlite 에 실제로 적용해 뽑으므로 드리프트가 없고, 원격·로컬 D1 을 건드리지 않는다.
-> `중단` 이면 **사람이 정한 뒤** `--ack "<결정과 근거>"` 로만 통과시킨다(판정은 그대로 남는다).
-> 실측(2026-08-04): prod `OK 진행 가능` · dev `!! 오염`(남의 표에 `request_id` 가 얹혀 있다).
->
-> **아래 §0 의 이름 충돌 검사는 이걸로 대체된다** — `_gateway_request_log` 개명(#53)으로
-> 충돌 자체가 없어졌고, 지금 필요한 질문은 "우리가 남의 표를 건드렸는가"다.
-> 적용 뒤 확인은 §1 의 `check-request-log-schema.sql` 이 같은 기준으로 한 번 더 본다.
+```bash
+cd marketplace
+npm run preflight -- <D1이름> [--env production]
+```
+
+**표가 있는지만이 아니라 모양(컬럼)까지 봅니다.** 이름은 같은데 컬럼이 다른 표가 실제로
+있었고(`_request_log`), 그걸 못 잡으면 `CREATE TABLE IF NOT EXISTS` 가 조용히 넘어가
+**요청 로그가 전량 버려집니다**. 조건 없는 `ALTER` 가 있으면 **남의 표에 컬럼이 얹힙니다** —
+dev D1 에서 실제로 일어난 일입니다(`0004` 가 남의 표에 `request_id` 를 붙였다).
+
+| 판정 | 뜻 | 배포 |
+|---|---|---|
+| `없음` | 표가 없다 — apply 가 만든다 | ✅ 진행 |
+| `일치` | 있고 모양이 같다 | ✅ 진행 |
+| `일치+` | 컬럼이 더 있다 — 증분 규약상 추가는 허용 | ✅ 진행 |
+| **`모양 다름`** | 있는데 컬럼이 다르다 | 🔴 **중단** |
+| `남의 표` | 우리 소유가 아니다 — 다른 게 정상 | ⚠️ 감시만 |
+| **`오염`** | **남의 표에 우리 컬럼이 얹혀 있다** | 🔴 **중단** |
+| **`인수됨`** | 남의 표가 통째로 우리 모양이 됐다 | 🔴 **중단** |
+
+종료 코드 `0` 진행 가능 · `1` **중단** · `2` 검사 실패(자격증명·네트워크).
+
+**기대 모양은 `migrations/*.sql` 에서 나옵니다** — 인메모리 sqlite 에 실제로 적용해 뽑으므로
+하드코딩 드리프트가 없습니다. 원격·로컬 D1 을 전혀 건드리지 않습니다.
+
+`오염` 판정은 남의 표마다 **기준 모양(`baseline`)** 을 함께 두고
+`우리 컬럼 ∩ 실제 − baseline` 으로 봅니다(#55). `ts` 는 우리 스키마에도 남의 표에도 있어서
+단순 교집합으로는 멀쩡한 prod 까지 잡힙니다 — baseline 이 있어야 `request_id` 만 골라냅니다.
+**남의 표가 자기 컬럼을 늘린 건 막지 않습니다** — 그건 그쪽 사정입니다.
+
+### 🔴 중단됐을 때
+
+**되돌리는 것보다 멈추는 게 쌉니다.** prod D1 은 62개 제품이 사는 파이프라인의 DB 이고,
+**D1 Time Travel 은 테이블 단위가 아니라 DB 전체를 덮어씁니다** — 제품 publish 하나를
+되돌리면 발급된 키·쿼터·요청 로그가 같이 과거로 갑니다(ASAC-DAG#476).
+
+1. 그 표가 누구 것인지 확인합니다 — [`../../docs/agreement.md` §5 소유 경계](../../docs/agreement.md)
+2. **이름을 비킬지 / 스키마를 맞출지 사람이 정합니다** (#52 에 적습니다)
+3. 정하고 나서 사유를 달아 다시 돌립니다:
+
+```bash
+npm run preflight -- <D1이름> --env production --ack "#52 합의: <결정과 근거>"
+```
+
+`--ack` 는 **판정을 바꾸지 않습니다.** 판정을 그대로 출력하고, 사유를 함께 찍고,
+종료 코드만 0 으로 바꿉니다 — 기록이 남아야 다음 사람이 "왜 통과시켰나"를 압니다.
+
+> `오염` 은 *"이대로 가면 생길 일"* 이 아니라 **이미 일어난 일**입니다. 재발은 장부 백필이
+> 막고 있고(PR #50), `DROP COLUMN` 은 쓰는 쪽 합의가 먼저입니다 — **그대로 두는 것도
+> 선택지**입니다(NULL 만 든 컬럼이라 남의 표 동작에는 영향이 없습니다).
+
+### 실측 (2026-08-04, 읽기만)
+
+```
+prod  _keys · _usage · _issuance_log · _burst · _gateway_request_log   없음 (apply 가 만든다)
+      _request_log                                                     남의 표  → 진행 가능
+
+dev   _keys · _usage · _issuance_log · _burst                          일치
+      _gateway_request_log                                             없음
+      _request_log   ts,path,query,token,request_id                    🔴 오염  → 중단
+```
+
+**dev 는 중단됩니다** — `0004` 가 남의 표에 얹은 `request_id` 를 문지기가 잡습니다.
+적용 뒤 확인은 §1 의 `check-request-log-schema.sql` 이 같은 기준으로 한 번 더 봅니다.
+
+> ⚠️ **자격증명이 필요합니다.** `marketplace/.env` 에 `CLOUDFLARE_API_TOKEN`·
+> `CLOUDFLARE_ACCOUNT_ID` 를 넣으십시오(`.env.example` 참고). 읽기 검사만 하면 `D1:Read`
+> 로 충분합니다. 실측 시점에 자격증명이 `ops-dashboard/.env` 에만 있어 이쪽은 비어 있었습니다.
+
+## 0-1. 전제 확인
 
 | 항목 | 확인 방법 | 기대 |
 |---|---|---|
-| 멘토 승인 | #476 ① 코멘트 | 있음 |
-| 대상 D1 | `wrangler.toml` `[env.production]` | `ask-seoul-prod-d1` — 파이프라인이 게시하는 prod D1(ASAC-DAG#668, 8/3 신설). 기본 환경의 dev D1 은 로컬 전용이다 |
+| **배포 승인** | [`../../docs/agreement.md` §8-3](../../docs/agreement.md) | ⚠️ **승인 주체 미정** — prod D1 은 파이프라인의 DB 다. #476 ① 은 팀 투표였고 이미 통과했으므로 이 자리의 근거가 아니다 |
+| **배포 전 검사** | 위 §0 `npm run preflight` | 🔴 **종료 코드 1 이면 배포 금지** |
+| 대상 D1 | `wrangler.toml` `[env.production]` | `ask-seoul-prod-d1` — 파이프라인이 게시하는 prod D1. 기본 환경의 dev D1 은 로컬 전용이다 |
 | Cloudflare 계정 | 팀 계정 로그인 | `npx wrangler whoami` — **publisher 와 같은 계정**이어야 바인딩이 같은 DB 로 풀린다(개인 계정 배포 금지) |
 | 코드 | 머지된 `dev` | 로컬 `npm test` · `npm run verify:log` 통과 |
-| **배포 전 검사** | 위 `npm run preflight` | ⚠️ **종료 코드 1 이면 배포 금지** |
 
 ### ~~`_request_log` 이름 충돌 검사~~ — 위 `npm run preflight` 로 **대체됨**
 
-> 아래는 개명(#53) 이전의 절차다. 기록으로 남긴다 — 왜 이 검사가 있었는지가 개명의 근거다.
-
-`migrations/0002_request_log.sql` 은 `CREATE TABLE IF NOT EXISTS` 라 **다른 주체가 같은 이름을
-선점하고 있으면 조용히 넘어간다.** 그 상태로 배포하면 게이트웨이가 없는 컬럼에 INSERT 하다
-실패하는데, `ctx.waitUntil` 안이라 **요청 로그가 전량 버려진다**(#23 에서 겪은 형태).
-
-```bash
-# 로컬은 --file 로 되지만, **원격은 --command 를 쓴다** — `--file` 은 원격에서 결과 대신
-# DB 통계를 돌려줘 verdict 가 안 보인다(실측).
-npx wrangler d1 execute <PROD_D1> --remote --env production --command \
-"SELECT CASE
-   WHEN NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_request_log')
-     THEN 'OK: 표가 없다'
-   WHEN (SELECT COUNT(*) FROM pragma_table_info('_request_log')
-         WHERE name IN ('route','table_name','status','key_hash','filters','row_count','ms')) = 7
-     THEN 'OK: 게이트웨이 스키마'
-   ELSE 'STOP: 다른 스키마가 이름을 선점' END AS verdict,
- (SELECT group_concat(name, ', ') FROM pragma_table_info('_request_log')) AS actual_columns"
-```
-
-실측(2026-08-04) 결과 — **운영에서 `STOP` 이 잡힌다:**
-
-```
-verdict        : STOP: 다른 스키마가 이름을 선점
-actual_columns : ts, path, query, token
-```
-
-**실측(2026-08-04): 운영·개발 D1 에 `(ts, path, query, token)` 4컬럼 표가 이미 있다.**
-389~401행이 7/21 부터 쌓이는 중이고 **만든 주체는 미상**이다 — 파이프라인·dbt·대시보드는
-전수 스캔으로 배제됐다(ASAC-DAG#681). 정본은 게이트웨이이므로 **이름 해소는 이쪽 자율**이다.
-`token` 컬럼에 무엇이 들어가는지 확인 전이라 값은 열지 않았다.
-
-지금 그대로 배포하면 요청 로그가 안 쌓인다. 배포 전에 **누가 쓰는지 찾고** → 개명·폐기·공존
-중 하나를 정한 뒤 진행한다.
+> 아래는 개명(#53) 이전의 절차다. **지우지 않고 기록으로 남긴다** — 왜 이 검사가 있었는지가
+> 개명의 근거이고, 지우면 같은 논의가 다시 열린다(`agreement.md` 갱신 규칙과 같은 취지).
+>
+> `migrations/0002_request_log.sql` 이 `CREATE TABLE IF NOT EXISTS` 라 **다른 주체가 같은
+> 이름을 선점하면 조용히 넘어가고**, 그 상태로 배포하면 게이트웨이 INSERT 가 `ctx.waitUntil`
+> 안에서 실패해 요청 로그가 전량 버려진다(#23 에서 겪은 형태). 실측(2026-08-04)에서 운영·개발
+> 양쪽에 `(ts, path, query, token)` 4컬럼 표가 있었고, **transit 워커 소유**로 확인돼
+> 게이트웨이가 `_gateway_request_log` 로 비켰다(#44 §2 · #53).
 
 **로컬에서 먼저 통과시킨다** — 배포본이 아니라 코드가 맞는지는 여기서 본다.
 
 ```bash
 cd marketplace
-npm test          # classifyClient 계약
+npm test            # 계약 테스트
 npm run verify:log  # 요청 로그 유실 검증(C-10)
 ```
 

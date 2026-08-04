@@ -8,7 +8,7 @@ Workers + Static Assets + D1 웹서비스. #476 게이트웨이 역할(키 검�
 ## ⚠️ 로컬 전용
 
 - 구동은 `wrangler dev`(로컬 Miniflare sqlite D1)뿐. **`wrangler deploy` 금지** —
-  공개 URL 신설은 멘토 게이트(#476 결정 ①·ASAC-DAG#521-(B)).
+  공개 URL 신설은 배포 결정(agreement §8).
 - 팀 D1 에는 아무것도 쓰지 않는다. `wrangler.toml` 기본 환경의 database_id 는 로컬 모드에서
   사용되지 않는다(시드는 전부 `.wrangler/` 로컬 상태). 배포는 `[env.production]` 을
   `--env production` 으로 **명시해야만** 선택된다 — 플래그가 없으면 언제나 로컬이다.
