@@ -1,14 +1,15 @@
 // marketplace — 라우터 + `/api/*` 프로토타입 (ASK-Seoul#58, 로컬 전용)
 // 게이트 순서: 키 검증 → 버스트 → 쿼터 → _catalog 게이트 → 조회 (#476 게이트웨이 실물 검증)
 //
-// 경로가 셋으로 갈린다(ASAC-DAG#642) — `/api/*`(이 파일, 프로토타입) ·
-// `/v1/*`(src/v1.js, 마켓플레이스 공용) · `/skill/v1/*`(K-Skill 전용, 별도 담당).
+// 문이 셋이다(agreement §1-2 — 기술 계층이 아니라 **누가 쓰는가**로 가른다):
+// `/api/v1/*`(이 파일, 사람·일반 소비자) · `/skill/v1/*`(K-Skill 전용, 별도 담당) ·
+// `/mcp`(MCP 클라이언트, src/mcp.js). 옛 `/v1/*` 는 폐기했다(decision/0004 D-2).
 // 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
 import {
   json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC,
   authenticate, checkBurst, burstProblem, countUsage, classifyClient,
 } from "./shared.js";
-import { handleProductBundle, handleGlossary } from "./v1.js";
+import { handleProductBundle } from "./v1.js";
 import { SKILL_BUNDLE_ID, handleSkillBundle, handleSkillData, handleSkillProduct } from "./skill.js";
 import { handleMcp } from "./mcp.js";
 
@@ -404,7 +405,7 @@ async function route(request, env, url, trace) {
   }
 
   // ── /skill/v1 — seoul-urban-analytics K-Skill 전용 API ──────────────────────
-  // 공용 `/v1/*`와 제품 선택·응답 계약은 분리하지만, 키·버스트·오류·로그 정책은
+  // 제품 선택·응답 계약은 `/api/v1` 과 분리하지만, 키·버스트·오류·로그 정책은
   // 공유한다. K-Skill 신규 경로는 전부 Bearer 인증이며 메타 조회는 쿼터를 소모하지 않는다.
   if (path.startsWith("/skill/v1/")) {
     const bundlePath = `/skill/v1/bundles/${SKILL_BUNDLE_ID}`;
@@ -428,32 +429,14 @@ async function route(request, env, url, trace) {
       : handleSkillProduct(env, productId, trace);
   }
 
-  // ── /v1 — 마켓플레이스 공용 API (ASAC-DAG#642) ────────────────────────────────
-  // #638 결정대로 **전 경로 인증**이다. `/api/*` 의 무인증 미리보기는 프로토타입의
-  // 제품 결정이라 유지하되, 신규 계약에서는 예외를 만들지 않는다.
-  // 메타 조회는 버스트만 적용하고 일일 쿼터를 소모하지 않는다 — 데이터가 아니라 판단
-  // 재료이고, 소비 순서상 데이터 호출 앞에 반드시 오는 단계라 여기서 깎으면 쓸 몫이 준다.
-  if (path.startsWith("/v1/")) {
-    const productMatch = path.match(/^\/v1\/products\/([^/]+)$/);
-    if (!productMatch && path !== "/v1/glossary")
-      return problem(404, "not found",
-        "GET /v1/products/<product_id> · /v1/glossary?vocabulary_id=<id>");
-
-    trace.route = productMatch ? "v1_product" : "v1_glossary";
-    const { keyRow, error } = await authenticate(env, request);
-    if (error) return error;
-    trace.keyHash = keyRow.key_hash;
-    const burst = await checkBurst(env, "k:" + keyRow.key_hash);
-    if (burst.exceeded) return burstProblem(burst.retryAfter);
-
-    return productMatch
-      ? handleProductBundle(env, decodeURIComponent(productMatch[1]), request, trace)
-      : handleGlossary(env, url.searchParams.get("vocabulary_id"), trace);
-  }
+  // `/v1/*` 는 폐기했다 — 소비자 전수 0 실측, ASAC-DAG#642 통지 후 제거(decision/0004 D-2).
+  // 그 문이 주려던 "제품 메타 한 번에"는 없어지지 않았다: K-Skill 은 `/skill/v1/products/<id>`,
+  // MCP 는 `describe_product` 가 각자 소비자에 맞는 모양으로 준다. 조립기(`handleProductBundle`)
+  // 는 그래서 살아 있고, `src/v1.js` 라는 파일 이름만 과거를 가리킨다.
 
   return problem(404, "not found",
     "GET /api/v1/catalog · /api/v1/preview/<table> · /api/v1/data/<table> · /api/v1/me, POST·DELETE /api/v1/keys · " +
-    "GET /v1/products/<product_id> · /v1/glossary · /skill/v1/bundles/seoul-urban-analytics — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
+    "GET /skill/v1/bundles/seoul-urban-analytics, POST /mcp — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
 }
 
 /**

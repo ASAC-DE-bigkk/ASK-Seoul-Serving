@@ -16,7 +16,7 @@
 
 ## seoul-urban-analytics K-Skill 전용 계약
 
-- 기계용 규격: `/skill-openapi.json`. 이 경로는 공용 `/v1/*`와 별도이며, K-Skill에는
+- 기계용 규격: `/skill-openapi.json`. 이 경로는 공용 `/api/v1`과 별도이며, K-Skill에는
   `GET /skill/v1/bundles/seoul-urban-analytics`, `GET /skill/v1/products/<product_id>`,
   `GET /skill/v1/products/<product_id>/data`만 사용한다.
 - 세 경로 모두 `Authorization: Bearer ask_…`가 필요하며, 발급된 키·버스트 제한·오류 형식은
@@ -24,7 +24,8 @@
   사용한다. 외부 Vault 제품은 선택 사항이며 필수 의존성이 아니다.
 - 번들은 weather·traffic·citydata·commerce·culture·transit의 정확히 여섯 제품만 표시한다.
   공용 키 자체가 아니라 `/skill/v1` 서버 allowlist가 이 범위를 강제한다. Marketplace에 공개된
-  다른 제품이라도 이 경로에서는 `404 unknown_product`이며 `/api/v1`·`/v1`·`/mcp`로 우회하지 않는다.
+  다른 제품이라도 이 경로에서는 `404 unknown_product`이며, **K-Skill은** 그 제품을
+  `/api/v1`·`/mcp`로 대신 받아 번들 분석에 쓰지 않는다(일반 소비자에게는 그 경로가 정상 경로다).
   `registration_ready=false` 또는 `blockers`가 있으면 그 제품을 분석 결과에 사용하지 않는다.
 - data 경로는 source URL·이용권리·출처표시·품질 실측·구조 메타가 **모두 현재
   `publication_id`에 결속**되고 coverage gate를 통과한 제품만 반환한다. `503
