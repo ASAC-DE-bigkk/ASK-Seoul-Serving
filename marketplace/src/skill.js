@@ -51,6 +51,21 @@ function parseJsonObject(raw) {
 const nonEmpty = (value) => typeof value === "string" && value.trim().length > 0;
 const nonNegativeInteger = (value) => Number.isInteger(value) && value >= 0;
 
+function passingMeasuredCoverage(coverage) {
+  return coverage?.status === "passed" && nonEmpty(coverage.field) &&
+    Number.isInteger(coverage.expected_distinct_count) &&
+    Number.isInteger(coverage.observed_distinct_count) &&
+    typeof coverage.minimum_ratio === "number" && typeof coverage.ratio === "number" &&
+    coverage.expected_distinct_count >= 1 && coverage.observed_distinct_count >= 0 &&
+    coverage.minimum_ratio > 0 && coverage.minimum_ratio <= 1 &&
+    coverage.ratio >= coverage.minimum_ratio;
+}
+
+function explicitNotApplicableCoverage(coverage) {
+  return coverage?.status === "not_applicable" && nonEmpty(coverage.reason) &&
+    Object.keys(coverage).every((key) => key === "status" || key === "reason");
+}
+
 function quoteIdentifier(value) {
   if (!SQL_IDENTIFIER_RE.test(value)) throw new Error(`unsafe identifier: ${value}`);
   return `"${value}"`;
@@ -193,12 +208,7 @@ async function loadSkillProduct(env, productId) {
     if (!nonEmpty(qualityRow.projection_schema_version) || !nonEmpty(qualityRow.projection_schema_hash)) {
       blockers.push("public_projection_identity_missing");
     }
-    if (!coverage || coverage.status !== "passed" || !nonEmpty(coverage.field) ||
-        !Number.isInteger(coverage.expected_distinct_count) || !Number.isInteger(coverage.observed_distinct_count) ||
-        typeof coverage.minimum_ratio !== "number" || typeof coverage.ratio !== "number" ||
-        coverage.expected_distinct_count < 1 || coverage.observed_distinct_count < 0 ||
-        !(coverage.minimum_ratio > 0 && coverage.minimum_ratio <= 1) ||
-        coverage.ratio < coverage.minimum_ratio) {
+    if (!passingMeasuredCoverage(coverage) && !explicitNotApplicableCoverage(coverage)) {
       blockers.push("quality_coverage_not_passing");
     }
   }
