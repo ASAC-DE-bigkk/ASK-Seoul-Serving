@@ -213,8 +213,6 @@
   .prow:hover { background:var(--panel-2); }
   .prow:last-child, .pdetail:last-child { border-bottom:0; }
   .prow .t { font-weight:600; font-size:13.5px; }
-  .prow .t small { display:block; font-family:var(--mono); font-size:11px; font-weight:400;
-                   color:var(--faint); margin-top:1px; }
   .prow .q { font-size:13px; color:var(--muted); }
   /* 설명은 2줄 클램프 — 전문은 펼침(스키마 설명·usage)에서 */
   .prow .desc { font-size:13px; color:var(--muted); line-height:1.5; display:-webkit-box;
@@ -621,7 +619,9 @@ function renderList() {
     row.className = "prow";
     const usage = USAGE[p.name] || [];
     row.innerHTML =
-      "<div class='t'>" + titleOf(p) + "<small>" + p.name + "</small></div>" +
+      // 기술명은 목록에 싣지 않는다(랜딩 카드와 같은 결정) — 상세의 엔드포인트 줄이
+      // /api/data/<기술명> 으로 이미 보여주고, 검색 표면에는 남아 있다.
+      "<div class='t' title='" + esc(p.name) + "'>" + titleOf(p) + "</div>" +
       // 목록 설명은 쉬운 한 줄 문장(display 사전 desc)을 우선한다 — 계약 description 은
       // 그레인 기호·내부 용어 중심이라 처음 보는 사용자에게 안 읽힌다(멘토 피드백).
       "<div class='desc'>" + esc(d.desc || p.description || p.product_question || "—") + "</div>" +
