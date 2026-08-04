@@ -318,7 +318,7 @@ const LOG_SWEEP_RATE = 0.02;  // 크론 없이, 로그 100건당 ~2회 낡은 �
 // 이 목록과 실제 스키마를 대조한다.
 export const LOG_COLUMNS = [
   "ts", "route", "table_name", "status", "key_hash", "filters", "row_count", "ms",
-  "request_id", "product_id", "env",
+  "request_id", "product_id", "env", "intent",
 ];
 
 export function logValues(trace, env) {
@@ -330,6 +330,9 @@ export function logValues(trace, env) {
     // 환경은 워커가 자기 설정에서 읽는다 — 값이 환경을 정하지, 키 이름이 정하지 않는다
     // (ASK-Seoul#78 `Z-7`). 미설정이면 NULL 로 남긴다 — "모른다"를 "local" 로 꾸미지 않는다.
     env.ASK_ENV ?? null,
+    // 질문 의도 슬러그(agreement §3-6) — 원문이 아니라 축만. MCP 는 인자로(src/mcp.js),
+    // 헤더 제어가 되는 클라이언트는 X-ASK-Intent 로 들어온다(헤더 배선은 별도).
+    trace.intent ?? null,
   ];
 }
 
