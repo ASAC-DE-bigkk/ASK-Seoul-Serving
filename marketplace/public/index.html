@@ -213,15 +213,7 @@
           box-shadow:var(--shadow-xs); display:flex; flex-direction:column; gap:8px;
           transition:border-color .12s, box-shadow .12s, transform .12s; }
   a.card:hover { border-color:var(--accent-line); box-shadow:var(--shadow-md); transform:translateY(-1px); }
-  .card .top { display:flex; align-items:flex-start; gap:10px; }
   .card .t { font-weight:700; font-size:14px; letter-spacing:-.01em; }
-  .card .t small { display:block; font-family:var(--mono); font-size:10.5px; font-weight:400;
-                   color:var(--faint); margin-top:2px; }
-  .card .badge { margin-left:auto; flex:none; font-family:var(--mono); font-size:10px; font-weight:600;
-                 padding:2px 8px; border-radius:4px; background:var(--accent-soft);
-                 color:var(--accent-deep); border:1px solid var(--accent-line); white-space:nowrap; }
-  .card .badge.dim { background:var(--panel); color:var(--muted); border-color:var(--line-strong);
-                     font-family:inherit; }
   .card .q { font-size:13.5px; color:var(--muted); flex:1; }
   .card .meta { display:flex; gap:12px; font-size:12px; color:var(--faint);
                 font-variant-numeric:tabular-nums; border-top:1px solid var(--line); padding-top:9px; }
@@ -836,10 +828,11 @@ async function bootCatalog() {
   if (!shown.length) { failState("cards", "아직 공개된 제품이 없습니다"); return; }
   $("cards").innerHTML = shown.map((p) => {
     const d = DISPLAY[p.product_id] || {};
+    // 기술명·시간축 컬럼명은 카드에 싣지 않는다 — 호출 직전 정보라 카탈로그 상세·docs 의
+    // 몫이고, 시간축 컬럼명은 제품마다 달라(18종) 랜딩 어휘가 흩어진다. "기간으로 자를 수
+    // 있다"는 그레인 줄(행정동 × 날짜 …)이 이미 사람 말로 전달한다.
     return "<a class='card' href='/catalog?q=" + encodeURIComponent(p.name) + "'>" +
-      "<span class='top'><span class='t'>" + esc(titleOf(p)) + "<small>" + esc(p.name) + "</small></span>" +
-      (p.time_axis ? "<span class='badge'>" + esc(p.time_axis) + "</span>"
-                   : "<span class='badge dim'>명부형</span>") + "</span>" +
+      "<span class='t'>" + esc(titleOf(p)) + "</span>" +
       "<span class='q'>" + esc(p.product_question || "—") + "</span>" +
       "<span class='meta'><span><b>" + nf.format(p.row_count || 0) + "</b> 행</span>" +
       (d.unit ? "<span>" + esc(d.unit) + "</span>" : "") +
