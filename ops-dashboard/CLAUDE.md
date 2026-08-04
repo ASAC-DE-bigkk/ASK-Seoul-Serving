@@ -30,29 +30,39 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 
 ## 3. 이 프로젝트의 실체
 
-**운영자용 통합 품질 콘솔** (ASK-Seoul#58). 한 화면에서 세 가지를 본다.
+**운영자용 통합 품질 콘솔** (ASK-Seoul#58). 한 화면에서 다섯 가지를 본다.
 
 | 탭 | 묻는 질문 | 원본 |
 |---|---|---|
-| 데이터 준비 상태 | 수집·변환이 제 몫을 했나 | **조회 DB 4종**(`_ops_run_event` 등, ASAC-DAG 소유) + `_ops_slo`(보조·합성) |
+| 데이터 준비 상태 | 수집·변환이 제 몫을 했나 | `_ops_slo` (보조·합성 스냅샷) |
+| 실행 기록 | 무엇이 돌았고, 무엇이 조용한가 | **조회 DB 4종** `_ops_run_event` 외 (ASK-Seoul#78, → [0009](docs/decision/0009-ops-records-consumption.md)) |
 | 응답 상태 | 외부에 잘 나가고 있나 | `_request_log` (게이트웨이가 쌓는다) |
+| 이용 행동 | 누가·무엇이·어떻게 쓰나 | `_request_log` + `_keys` + 행동 스펙 초안 #9 (→ [0010](docs/decision/0010-behavior-log-console-first.md)) |
 | API 사용량 | 무엇이 얼마나 쓰이나 | `_request_log` + `_catalog` |
 | 이용자 키 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_request_log` |
+
+탭 이름은 **화면 문구 규약(§5)** 을 따른다 — "파이프라인 품질"·"서빙 품질" 대신
+"데이터 준비 상태"·"응답 상태". 묻는 질문이 겹치는 두 탭을 갈라 둔 이유는
+'이용 행동'이 **누구**(사람·AI·여정), 'API 사용량'이 **무엇**(제품별 수요)이기 때문이다.
 
 구성은 이것이 전부다:
 
 ```text
-단일 Worker (src/index.js)          — GET /api/summary · /api/pipeline · /api/usage · /api/usage/<api>, GET·POST /api/keys
-+ Static Assets (public/index.html) — 탭 4개짜리 단일 페이지
+단일 Worker (src/index.js)          — GET /api/summary · /api/trace · /api/apis · /api/apis/<이름>, GET·POST /api/keys
++ Static Assets (public/index.html) — 탭 6개짜리 단일 페이지
 + 공유 로컬 D1                       — 게이트웨이(../marketplace)와 같은 상태 (--persist-to)
-+ 원격 dev D1 (npm run dev:remote)  — 파이프라인 실행 기록 4종은 여기에만 있다
-+ migrations/ + fixtures/           — _ops_slo·_ops_domain **만** 만든다(남의 표 금지)
-+ scripts/load_slo.py               — Trino 폴백, 정규 경로 아님 (0005 — 축 1 완료 시 폐기)
++ 원격 D1 (npm run dev:remote)      — 조회 DB 4종의 **실측**은 여기에만 있다
++ migrations/                       — 0001 _ops_slo·_ops_domain(정본) · 0002 조회 DB 4종(로컬 미러)
++ fixtures/                         — 합성 샘플 시드 (slo_sample · ops_records_sample)
 ```
 
-**파이프라인 실행 기록(4종)은 로컬 Miniflare 에 없다.** 팀 dev D1 에 있으므로
-`npm run dev:remote`(원격 바인딩)로 띄워야 보인다. `--remote` 는 읽기 전용 모드가 아니라
-그 상태의 키 조치가 팀 DB 에 적용된다 — **보기 위한 모드다**([0002](docs/decision/0002-local-only-mentor-gate.md)).
+**조회 DB 4종의 실측은 로컬 Miniflare 에 없다.** 팀 D1 에 있으므로 `npm run dev:remote`
+(원격 바인딩)로 띄워야 보인다. `--remote` 는 읽기 전용 모드가 아니라 그 상태의 키 조치가
+팀 DB 에 적용된다 — **보기 위한 모드다**([0002](docs/decision/0002-local-only-mentor-gate.md)).
+로컬의 `migrations/0002` 미러는 화면을 돌려보기 위한 **빈 껍데기**이지 정본이 아니다.
+
+이용 행동 탭의 스펙 종속 축(ua_class 등)은 **게이트웨이 반영 전까지 '수집 전'** 이다 —
+`_request_log` 에 ALTER 미러를 만들지 않는다(0010: 정본 마이그레이션과 duplicate column 충돌).
 
 Queues, R2, Durable Objects, Analytics Engine, Terraform, Cloudflare Access,
 TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호는
@@ -79,9 +89,12 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 - **비밀값(`OPS_TOKEN` 등)은 `.dev.vars`.** 커밋·출력 금지.
 - **환경은 `wrangler.toml` 한 파일 안에서 갈린다** — 기본 = 로컬, `[env.production]` = 배포.
   플래그 없으면 언제나 로컬이다. env 섹션은 상속되지 않으니 assets·`run_worker_first` 는
-  두 곳을 같이 고친다. → [../docs/environments.md](../docs/environments.md) · [0009](docs/decision/0009-per-env-config.md)
+  두 곳을 같이 고친다. → [../docs/environments.md](../docs/environments.md) · [0011](docs/decision/0011-per-env-config.md)
 - **샘플 데이터는 `is_sample=1`** 로 박고 화면에 배지를 띄운다. 실측인 척 조용히 섞이는 게
   최악이다. → [0005](docs/decision/0005-slo-snapshot-to-d1.md)
+- **거른 것은 걸렀다고 말한다.** 환경 스코프·감시 제외·미등록·미측정을 조용히 빼면 화면이
+  거짓말을 한다. 특히 **못 거른 범위**(집계표는 `environment` 컬럼이 없다)를 밝히지 않으면
+  섞인 값을 운영 수치로 읽는다. → [0012](docs/decision/0012-runs-tab-observation-boundaries.md)
 
 ## 5. 코드 규약
 
@@ -103,7 +116,7 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 - **화면 문구에 내부 용어를 쓰지 않는다.** SLO·route·status·preview·quota 같은 말은 화면에
   내보내지 않는다. 번역은 `public/index.html` 의 `ROUTE_KO`·`STATUS_KO` 한 곳에서 하고,
   `_ops_domain.note` 처럼 **DB 에 저장되는 사람이 읽을 문구**도 같은 기준으로 쓴다
-  (그건 화면에서 못 고친다 — 정본이 fixtures·load_slo.py 다).
+  (그건 화면에서 못 고친다 — 정본이 `fixtures/` 다).
 - **요청 값·응답 본문을 화면에 끌어오지 않는다.** `_request_log` 는 필터 **컬럼명**만 남긴다
   (게이트웨이 수집 원칙). API 사용량 상세는 축·건수·소요시간·request_id 까지이고,
   화면이 "값은 저장하지 않는다"를 직접 밝힌다.
@@ -114,28 +127,30 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 | 테이블 | 정본 | 이 프로젝트의 권한 |
 |---|---|---|
 | `_ops_slo`, `_ops_domain` | **여기** (`migrations/0001`) | 스키마·내용 모두 |
-| `_ops_run_event`, `_ops_daily_metric`, `_ops_pipeline_state`, `_ops_pipeline_expectation` | ASAC-DAG (`common/ops/d1_ops.py`) | **읽기 전용** — 파이프라인 산출물 |
+| `_ops_run_event`, `_ops_daily_metric`, `_ops_pipeline_state`, `_ops_pipeline_expectation` | ASAC-DAG (`common/ops/d1_ops.py`, ops-d1/v1) | **읽기 전용** — 파이프라인 산출물. 로컬 미러 `migrations/0002` 는 정본을 따라만 간다 |
 | `_catalog`, 제품 표 `d1_*` | 도메인 export (`meta.serving` 계약) | **읽기 전용** — dbt 산출물 |
 | `_keys` | 게이트웨이 | `status`·`daily_quota` 갱신, 삭제 — 정해진 조치만 |
 | `_usage`, `_burst` | 게이트웨이 | 키 삭제 시 연쇄 삭제만 |
 | `_request_log` | 게이트웨이 | 읽기 전용 |
 
 **남의 표를 만들거나 지우지 않는다 — 파이프라인·dbt 산출물은 결코 건드리지 않는다.**
-콘솔 `migrations/` 에 위 '읽기 전용' 표 이름이 등장하면 그 자체가 위반이다(생성·삭제·ALTER 전부).
-개발용 표본이 필요하면 `migrations/` 가 아니라 `fixtures/` 에 둔다.
+`migrations/0002` 는 이 규칙의 **유일한 예외**이고, 그래서 조건이 붙는다: `CREATE TABLE IF
+NOT EXISTS` 만, DROP·ALTER 없이, 팀 D1 에 이미 있으면 아무 일도 하지 않는 형태여야 한다
+(로컬 화면을 돌려보기 위한 껍데기 — [0009](docs/decision/0009-ops-records-consumption.md)).
+개발용 **표본 데이터**는 `migrations/` 가 아니라 `fixtures/` 에 둔다.
 
-`_ops_slo`·`_ops_domain` 스키마 변경은 **새 마이그레이션 파일에 ALTER 추가** — `0001` 은 더
-고치지 않고 **DROP 은 쓰지 않는다**(#78 D-6). 적용은 장부 추적
+마이그레이션은 **증분(추가만)** — DROP 금지, 변경은 ALTER 추가 파일로([0007](docs/decision/0007-schema-single-file-reset.md),
+#78 D-6). `0001` 은 더 고치지 않는다. 적용은 장부가 추적한다
 (`wrangler d1 migrations apply`, 장부 표는 `d1_migrations_ops_dashboard` — 게이트웨이와 분리).
-→ [0007](docs/decision/0007-schema-single-file-reset.md)
+내용 리프레시는 픽스처가 자기 범위를 DELETE 하고 다시 넣는다.
 
 ## 7. 검증
 
 배포 파이프라인이 없으므로 로컬에서 직접 확인한다.
 
 ```bash
-npm run seed   # _ops_* 리셋 + 합성 시드 → 공유 로컬 D1
-npm run dev    # :8788 — 게이트웨이(:8787)와 동시 구동 가능
+npm run seed   # _ops_* 증분 마이그레이션 + 합성 시드 → 공유 로컬 D1
+npm run dev    # :8788 — 게이트웨이(:8787)와 동시 구동 가능 (인스펙터 9230 고정 — 저쪽 기본 9229 와 안 겹친다)
 ```
 
 OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) — 게이트웨이 담당자와
@@ -146,7 +161,8 @@ OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) �
 - 쓰기 경로를 고쳤으면 **토큰 미설정(503)·토큰 없음(401)·잘못된 토큰(401)** 을 다 본다.
 - 게이트웨이 테이블이 없는 상태(마켓플레이스 미시드)에서도 콘솔이 뜨는지 본다
   (`meta.missing` 강등).
-- 화면을 고쳤으면 탭 3개와 배지(샘플·읽기 전용·탭 경고 점) 동작을 본다.
+- 화면을 고쳤으면 탭 6개와 배지(샘플·읽기 전용·수집 전·탭 경고 점) 동작을 본다.
+- 검증 명령 세트와 실행 기록 탭의 시나리오별 확인법은 [docs/runbook.md](docs/runbook.md).
 
 ## 8. 완료 기준
 
@@ -165,7 +181,8 @@ OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) �
 인증 방식 변경                     → 0004 개정 (Access/OAuth 승격 포함)
 게이트웨이 테이블 쓰기 확대        → 0003 개정
 저장소·인프라 추가(Queue·R2·DO·AE …) → 0008 의 도입 신호 확인 후 신규 결정
-_ops_* 증분 마이그레이션 전환      → 0007 개정
+마이그레이션에 DROP·이름 변경      → 금지 — 0007 규약(증분·추가만, #78 D-6)
+조회 DB 4종 스키마 변경            → 정본(ASAC-DAG)이 먼저 — 미러·화면은 0009 대로 추종
 키 상태 모델 확장                  → 0006 개정 (게이트웨이와 공동)
 ```
 

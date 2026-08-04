@@ -6,20 +6,64 @@
 
 | 탭 | 묻는 질문 | 출처 |
 |---|---|---|
-| 데이터 준비 상태 (`#pipeline`) | 수집·변환이 매일 제때 끝났나 | `_ops_slo` (gold_*_slo_daily 스냅샷) |
+| 데이터 준비 상태 (`#pipeline`) | 수집·변환이 매일 제때 끝났나 | `_ops_slo` (보조·합성 스냅샷) |
+| 실행 기록 (`#runs`) | 무엇이 돌았고, 무엇이 조용한가 | 조회 DB 4종 `_ops_run_event` 외 (ASK-Seoul#78) |
 | 응답 상태 (`#serving`) | 외부에 잘 나가고 있나 | `_request_log` (게이트웨이가 쌓는다) |
-| API 사용량 (`#usage`) | 무엇이 얼마나 쓰이나 — API별·분야별 | `_request_log` + `_catalog` |
+| 이용 행동 (`#usage`) | **누가** 쓰나 — 사람·AI·여정 | `_request_log` + `_keys` + 행동 스펙 초안(#9) |
+| API 사용량 (`#apis`) | **무엇이** 얼마나 쓰이나 — API별·분야별 | `_request_log` + `_catalog` |
 | 이용자 키 (`#keys`) | 누가 쓰고 있고, 손댈 것이 있나 | `_keys` + `_usage` + `_request_log` |
+
+'이용 행동'과 'API 사용량'은 같은 표를 읽지만 **묻는 질문이 다르다** — 앞은 주체(사람이냐
+에이전트냐, 발급 후 어디까지 갔나), 뒤는 대상(어느 API·어느 분야가 얼마나 쓰이나)이다.
 
 **화면 문구는 내부 용어를 쓰지 않는다.** SLO·route·status·preview 같은 말은 화면에 내보내지 않고
 "제때 갱신된 날"·"요청 종류"·"없는 데이터"·"미리보기"로 번역한다. 번역표는
 [public/index.html](public/index.html)의 `ROUTE_KO`·`STATUS_KO` 한 곳에 모아 뒀다 —
-화면 곳곳에 한글을 흩뿌리면 어디를 고쳐야 할지 알 수 없게 된다.
+화면 곳곳에 한글을 흩뿌리면 어디를 고쳐야 할지 알 수 없게 된다. 탭 이름도 같은 기준이라
+'파이프라인 품질'·'서빙 품질'은 쓰지 않는다.
 
 탭은 URL 해시에 실린다 — 새로고침·링크 공유에도 보던 자리가 유지된다.
 **탭 라벨의 점**은 그 탭이 아픈지를 전환 없이 알려준다(빨강 = 정기런 실패·계약 위반 /
-에러율 5% 이상·0행 발생). 탭으로 나누면 안 보는 쪽 문제를 놓치기 쉬운데, 그 대가를
-점이 상쇄한다.
+멈춤 후보·최종 실패·빈 실행·환경 섞임 / 에러율 5% 이상·0행 발생). 탭으로 나누면 안 보는
+쪽 문제를 놓치기 쉬운데, 그 대가를 점이 상쇄한다.
+
+문서 지도는 [docs/index.md](docs/index.md), 구동·검증·조치 절차는
+[docs/runbook.md](docs/runbook.md)에 있다.
+
+## 실행 기록 탭 — 파이프라인 관측의 소비 화면
+
+팀 규약(ASK-Seoul#78)이 표준화한 운영 기록이 조회 DB 4종(`_ops_run_event`·`_ops_daily_metric`·
+`_ops_pipeline_state`·`_ops_pipeline_expectation`)으로 모인다. 쓰는 쪽은 ASAC-DAG 의
+관문·적재기고, 이 콘솔은 **읽기 전용 소비자**다 — 정본 스키마도 그쪽(`common/ops/d1_ops.py`)이다
+([decision/0009](docs/decision/0009-ops-records-consumption.md)).
+
+요점은 성공률 하나로 뭉개지 않는 것이다. 각각 따로 세운다:
+
+- **재시도로 살림** — 성공률 100% 가 가리는 열화 (실측: 7일 내내 100% 인데 4일이 재발이던 사례)
+- **빈 실행** — 성공인데 실측 0행. 파이프라인 탭 '초록 위장'의 일반형
+- **모른다 ≠ 0** — 행수를 못 잰 기록은 0 이 아니라 미측정으로 센다 (#78 F-3)
+- **멈춤 후보 / 기록 없음** — 침묵 한도(`max_delay_minutes`) 초과, 감시 대상인데 무소식
+- **미확인 ≠ 정상** — 점검이 안 지난 구간은 제3의 상태로 표시 (#78 C-9)
+- **관측 공백** — 도메인×단계 매트릭스의 빈 칸: 그 단계는 기록 자체를 안 남긴다
+- **환경 섞임** — 한 조회 DB 에 dev 가 섞이면 운영 지표가 오염된다 (#78 Z-7, 실해 있음)
+
+로컬은 합성 샘플로 화면 계약을 검증하고(경고 배너가 뜬다), 팀 조회 DB 로 승격해도 표
+이름·컬럼이 같아 화면 코드는 그대로다. 시나리오별 확인 방법은
+[runbook §3](docs/runbook.md).
+
+## 이용 행동 탭 — 행동 로그 스펙 초안(#9)의 소비 화면
+
+"누가·무엇이·어떻게 쓰나"를 본다. 두 부류가 섞여 있다
+([decision/0010](docs/decision/0010-behavior-log-console-first.md)):
+
+- **지금 데이터로 즉시 동작** — 발급→첫 데이터 호출 여정(전환율·평균 소요), 익명 vs 인증
+  추이, **요청 추적**(`GET /api/trace?request_id=…` — 지원 문의에서 받은 `X-Request-Id` 로
+  그 요청 한 건을 특정).
+- **수집 반영 후 자동 점등** — 손님 구성(사람/AI 대행/AI 크롤러/CLI), AI 에이전트별 제품
+  수요, 페이지 접근. 축(`ua_class`·`agent_name`·`page_path` …)의 정의는 행동 로그 공통 스펙
+  초안(ASK-Seoul-Serving#9, [reference/behavior-log-spec-draft.md](docs/reference/behavior-log-spec-draft.md))이며
+  **게이트웨이 반영 전까지 '수집 전'으로 표시**된다 — 콘솔은 게이트웨이 스키마를 만들지도
+  미러하지도 않는다.
 
 ## API 사용량 탭 — "무엇이 쓰이나"
 
@@ -174,7 +218,7 @@ npm run dev:prod-readonly    # 운영 D1  → :8798 (포트를 갈라 두 화면
 
 | `pipeline_source` | 언제 | 화면 |
 |---|---|---|
-| `none` | 그 기간에 `_ops_slo` 행이 없다 | "기록이 없습니다" + `npm run seed` / `load_slo.py` 안내 |
+| `none` | 그 기간에 `_ops_slo` 행이 없다 | "기록이 없습니다" + `npm run seed` 안내 |
 | `sample` | `is_sample=1` 이 섞였다 | 합성 배너 + 실측으로 바꾸는 법 |
 | `live` | 전부 `is_sample=0` | 배너 없음 |
 
@@ -182,60 +226,36 @@ npm run dev:prod-readonly    # 운영 D1  → :8798 (포트를 갈라 두 화면
 때문이다. 파이프라인은 이미 실행 기록을 조회 DB 에 싣고 있는데(아래) **콘솔이 아직 그걸 읽지
 않아서**, 로컬에는 `npm run seed` 의 합성값만 남는다.
 
-### 정본 공급자는 Trino 가 아니라 조회 DB 4종이다
+### 정본 공급자는 조회 DB 4종이다
 
 팀 규약 **ASK-Seoul#78 D-2** — "기존 `_ops_slo`·`_ops_domain` 은 스키마를 바꾸지 않는다.
 화면이 이미 쓰는 계약이며, **위 4종에서 값을 채운다**"(`_ops_run_event`·`_ops_daily_metric`·
 `_ops_pipeline_state`·`_ops_pipeline_expectation`). 그 적재는 **이미 동작한다** —
 ASAC-DAG#647 병합 후 **#655**(2026-08-03)가 실제 조회 DB 에 표 4종 생성 · 52건 적재를 확인했다.
 
-남은 일은 **콘솔이 4종을 읽는 것**([direction.md 축 1](docs/direction.md)). 그 전에
-**#78 D-6 이 선행**이다 — 콘솔 마이그레이션이 `DROP TABLE IF EXISTS` 로 시작하므로
-([0007](docs/decision/0007-schema-single-file-reset.md)) 팀 DB 에 표를 만들기 전에 증분으로
-바꿔야 한다. 안 바꾸면 첫 스키마 수정이 팀 데이터를 지운다.
+콘솔은 이제 그 4종을 **직접 읽는다**(실행 기록 탭, [0009](docs/decision/0009-ops-records-consumption.md)).
+`_ops_slo` 는 그 옆에 남은 **보조 스냅샷**이고, 로컬에는 `npm run seed` 의 합성값
+(`is_sample=1`)만 들어간다 — 그래서 환경을 바꿔도 `pipeline_source` 는 안 바뀐다.
 
-**`scripts/load_slo.py`(Trino)는 그때까지의 로컬 폴백**이지 정규 경로가 아니다
-([0005 개정 주석](docs/decision/0005-slo-snapshot-to-d1.md)).
+선행 조건이던 **#78 D-6**(마이그레이션 DROP 금지)은 처리됐다 —
+[0007](docs/decision/0007-schema-single-file-reset.md) 개정으로 증분 규약이 됐다.
+
+**웨어하우스(Trino)를 콘솔이 직접 훑는 경로는 폐기했다.** 조회 DB 4종이 정본이 된
+이상 중간 복사 계층은 존재 이유가 없고, `http://trino:8080` 은 Docker 내부 주소라
+Cloudflare Worker 가 애초에 닿지도 못한다([0005](docs/decision/0005-slo-snapshot-to-d1.md)).
 
 지금 어느 환경의 무슨 DB 를 보고 있는지는 **화면 상단 배지**에 늘 떠 있다
 (`wrangler.toml` 의 `[vars] ENV_LABEL·ENV_D1`, 운영은 붉은색). 숫자만 보고 추측하게 두면
 로컬 값을 운영 실적으로 오해하는 사고가 난다.
 
-## 왜 SLO 를 복사하나
-
-Trino 는 `http://trino:8080` — **Docker 내부 주소라 Cloudflare Worker 가 닿지 못한다.**
-그래서 콘솔이 파이프라인 품질을 보려면 요약을 밀어 넣는 수밖에 없다. 다행히 SLO 마트는
-**날짜 1행**이라 도메인 6개 × 1년 = 2,200행 — 웨어하우스를 옮기는 게 아니라 요약 한 줌이다.
-
-## 실적재
+## `_ops_slo` 를 채우는 법
 
 ```bash
-# macOS / Linux
-python3 scripts/load_slo.py            # Trino 조회 → fixtures/slo_live.sql → 로컬 D1 적용
-python3 scripts/load_slo.py --dry-run  # SQL 만 생성
-TRINO_URL=http://127.0.0.1:30586 python3 scripts/load_slo.py   # 포트가 다르면
+npm run seed   # fixtures/slo_sample.sql — 모든 행에 is_sample=1, 화면에 경고 배너가 뜬다
 ```
 
-```powershell
-# Windows — VAR=값 접두 문법이 없다. $env: 로 미리 넣는다.
-python scripts\load_slo.py
-python scripts\load_slo.py --dry-run
-$env:TRINO_URL = 'http://127.0.0.1:30586'
-$env:TRINO_CATALOG = 'iceberg'         # 기본값은 iceberg_dev — 환경마다 다르다
-python scripts\load_slo.py
-```
-
-카탈로그 이름은 docker-compose 구성에 따라 다르다. `Catalog 'iceberg_dev' not found` 는
-**Trino 접속은 됐다는 뜻**이고 이름만 틀린 것이다 — `SHOW CATALOGS` 로 확인한다
-([setup.md §5](../docs/setup.md)).
-
-의존성 없이 Trino REST(`v1/statement`)를 직접 호출한다. 실측(2026-07-28):
-`iceberg_dev.culture.gold_culture_slo_daily` **29행 · 2026-06-30 ~ 07-28**.
-
-**이 스크립트는 임시다.** 정규 경로는 culture DAG 의 export task 여야 하고(팀 D1 쓰기 =
-멘토 게이트), 그때까지 콘솔을 실측으로 채우는 수단이자 **export task 가 무엇을 하면 되는지의
-실행 가능한 명세**다. `fixtures/slo_sample.sql` 은 Trino 가 없는 사람을 위한 폴백으로 남긴다
-(`npm run seed`) — 모든 행에 `is_sample=1` 이 박혀 화면에 경고 배너가 뜬다.
+실측을 넣는 정규 경로는 **culture DAG 의 export task**(팀 D1 쓰기 = 멘토 게이트)다.
+그전까지 이 탭의 숫자는 합성이고, 화면이 그걸 배너로 직접 밝힌다.
 
 ### 초록 위장을 놓치지 않는다
 
@@ -260,5 +280,9 @@ URL 에 싣지 않으며, 페이지는 `noindex` 다.
 ## 승격 경로
 
 - `_ops_slo` 실적재 — culture SLO export task(내 도메인) → 나머지 도메인은 각자 (팀 합의)
+- 운영 기록 — 합성 샘플 → 팀 조회 DB 소비. 표 4종은 이미 팀 D1 에 실존한다(ASAC-DAG 적재기,
+  2026-08-02 이후분) — 콘솔 승격 시 연결만 하면 된다
 - 인증 — 공유 토큰 → Cloudflare Access / org OAuth
 - 알림 — 지금은 조회 전용. 정기런 실패 시 푸시는 Airflow 콜백(DeadlineAlert) 쪽이 맞다
+
+전체 방향은 [docs/direction.md](docs/direction.md).

@@ -4,7 +4,7 @@
 #
 # 환경 규약은 게이트웨이와 같다 — 기본(위) = 로컬, 배포 = [env.production] 을
 # `--env production` 으로 **명시해야만** 선택된다. 플래그가 없으면 언제나 로컬이라
-# 실수의 방향이 안전한 쪽으로 기운다. 배치 근거: ../docs/environments.md · decision/0009.
+# 실수의 방향이 안전한 쪽으로 기운다. 배치 근거: ../docs/environments.md · decision/0011.
 #
 # ⚠️ 로컬 전용: wrangler dev 로만 구동. deploy 는 decision/0002(로컬 전용) 개정 +
 # 멘토 게이트(#476 ①) + Cloudflare Access 승격(#20 결정 B-1)이 전부 선행이다.
@@ -32,6 +32,9 @@ run_worker_first = ["/api/*"]
 [vars]
 ENV_LABEL = "로컬 개발"
 ENV_D1 = "ask-seoul-dev-d1"
+# 실행 기록을 어느 환경 것만 세느냐. 비우면 **거르지 않는다** — 개발 화면에서는 섞인 것도
+# 다 보이는 편이 낫기 때문이다. 운영 화면만 좁힌다([env.production.vars] 참고, #78 Z-7).
+ENV_SCOPE = ""
 
 # dev D1. 로컬(--local)은 이 값을 쓰지 않지만, database_id 가 로컬 상태의 키라서
 # 게이트웨이와 **같아야** 같은 로컬 DB 를 본다(decision/0003). prod 로 바꾸지 않는다.
@@ -66,6 +69,10 @@ run_worker_first = ["/api/*"]
 [env.production.vars]
 ENV_LABEL = "운영"
 ENV_D1 = "ask-seoul-prod-d1"
+# 🔴 운영 화면은 prod 기록만 센다. 실측(2026-08-04) 운영 D1 에 `environment='dev'` 17행이
+# 섞여 있다 — 도메인 쪽 환경 판정 결함은 고쳐졌지만 **과거 행은 남는다**(#78 Z-7, #36 지침 ②).
+# 거르지 않으면 개발 실행이 운영 지표에 들어간다. 무엇이 빠졌는지는 화면이 직접 밝힌다.
+ENV_SCOPE = "prod"
 
 # 운영 D1(8/3 신설, 게이트웨이 [env.production] 과 같은 값이어야 한다 — 갈리면 콘솔의
 # 서빙 품질·키 관리 탭이 통째로 빈다). _ops_slo·_ops_domain 은 여기 소유라 콘솔 공개 전에

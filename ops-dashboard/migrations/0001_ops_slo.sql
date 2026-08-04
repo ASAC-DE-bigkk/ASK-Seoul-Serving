@@ -6,15 +6,19 @@
 --    컬럼이 늘면 **새 마이그레이션 파일(0002…)에 ALTER 를 추가**한다. 이 파일은 안 고친다.
 --    적용 여부는 D1 안의 장부(d1_migrations)가 추적한다 — `wrangler d1 migrations apply`.
 --
--- ⚠️ **콘솔이 만드는 표는 아래 둘뿐이다.** 파이프라인·dbt 산출물(`_ops_run_event`·
---    `_ops_daily_metric`·`_ops_pipeline_state`·`_ops_pipeline_expectation`·`_catalog`·
---    제품 표 `d1_*`)은 **소유자가 따로 있고 콘솔은 읽기만 한다.** 그쪽 표를 만들거나
---    지우는 문장을 이 디렉토리에 두지 않는다 — 스키마 정본은 ASAC-DAG
---    `common/ops/d1_ops.py`(4종)와 `../marketplace/migrations/`(게이트웨이 표)다.
---
--- **is_sample**: 화면이 합성값을 실측인 척하면 안 되므로 행마다 표시한다. UI 가 그걸 읽어
--- 배너를 띄운다. 실측이 들어오면 is_sample=0 이라 배너는 저절로 사라진다.
+-- **is_sample**: 로컬 프로토타입에는 팀 D1 쓰기 권한이 없어 합성 데이터를 시드한다.
+-- 화면이 그걸 실측인 척하면 안 되므로 행마다 표시하고, UI 는 '샘플' 배지를 띄운다.
+-- 실적재가 붙으면 is_sample=0 이 들어오고 배지는 저절로 사라진다.
 
+-- ⚠️ DROP 금지 — 증분 규약 (ASK-Seoul#78 D-6, decision/0007 개정).
+-- 팀 조회 DB 에 _ops_* 가족이 실존하므로, 이 파일이 팀 D1 에 닿는 날 DROP 은 팀 데이터를
+-- 지운다. 스키마 변경은 ALTER 추가 파일(0003, 0004 …)로만. 내용물 리프레시는 픽스처·로더가
+-- 자기 범위를 DELETE 하고 다시 넣는다. 로컬 통리셋이 필요하면 .wrangler 상태를 지울 것.
+--
+-- ⚠️ **콘솔이 만드는 표는 아래 둘뿐이다.** 파이프라인 산출물(`_ops_run_event`·
+--    `_ops_daily_metric`·`_ops_pipeline_state`·`_ops_pipeline_expectation`)은 정본이
+--    ASAC-DAG `common/ops/d1_ops.py` 이고, 0002 는 로컬 개발용 **미러**다(decision/0009).
+--    `_catalog`·제품 표(`d1_*`)·게이트웨이 표도 소유자가 따로 있어 콘솔은 읽기만 한다.
 CREATE TABLE IF NOT EXISTS _ops_slo (
   domain               TEXT    NOT NULL,
   event_date           TEXT    NOT NULL,  -- KST 집계일
