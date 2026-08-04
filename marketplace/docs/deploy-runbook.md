@@ -9,15 +9,33 @@
 
 ## 0. 전제 확인
 
+> ### 🔴 먼저 이것부터 — 배포 전 검사
+>
+> ```bash
+> cd marketplace
+> npm run preflight -- <D1이름> [--env production]      # 0 진행 · 1 중단 · 2 검사 실패
+> ```
+>
+> 표가 **있는지**가 아니라 **모양(컬럼)이 같은지**를 본다. 기대 모양은 `migrations/*.sql` 을
+> 인메모리 sqlite 에 실제로 적용해 뽑으므로 드리프트가 없고, 원격·로컬 D1 을 건드리지 않는다.
+> `중단` 이면 **사람이 정한 뒤** `--ack "<결정과 근거>"` 로만 통과시킨다(판정은 그대로 남는다).
+> 실측(2026-08-04): prod `OK 진행 가능` · dev `!! 오염`(남의 표에 `request_id` 가 얹혀 있다).
+>
+> **아래 §0 의 이름 충돌 검사는 이걸로 대체된다** — `_gateway_request_log` 개명(#53)으로
+> 충돌 자체가 없어졌고, 지금 필요한 질문은 "우리가 남의 표를 건드렸는가"다.
+> 적용 뒤 확인은 §1 의 `check-request-log-schema.sql` 이 같은 기준으로 한 번 더 본다.
+
 | 항목 | 확인 방법 | 기대 |
 |---|---|---|
 | 멘토 승인 | #476 ① 코멘트 | 있음 |
 | 대상 D1 | `wrangler.toml` `[env.production]` | `ask-seoul-prod-d1` — 파이프라인이 게시하는 prod D1(ASAC-DAG#668, 8/3 신설). 기본 환경의 dev D1 은 로컬 전용이다 |
 | Cloudflare 계정 | 팀 계정 로그인 | `npx wrangler whoami` — **publisher 와 같은 계정**이어야 바인딩이 같은 DB 로 풀린다(개인 계정 배포 금지) |
 | 코드 | 머지된 `dev` | 로컬 `npm test` · `npm run verify:log` 통과 |
-| **`_request_log` 이름 충돌** | 아래 검사 | ⚠️ **`STOP` 이면 배포 금지** |
+| **배포 전 검사** | 위 `npm run preflight` | ⚠️ **종료 코드 1 이면 배포 금지** |
 
-### 🔴 `_request_log` 이름 충돌 검사 (배포 전 필수)
+### ~~`_request_log` 이름 충돌 검사~~ — 위 `npm run preflight` 로 **대체됨**
+
+> 아래는 개명(#53) 이전의 절차다. 기록으로 남긴다 — 왜 이 검사가 있었는지가 개명의 근거다.
 
 `migrations/0002_request_log.sql` 은 `CREATE TABLE IF NOT EXISTS` 라 **다른 주체가 같은 이름을
 선점하고 있으면 조용히 넘어간다.** 그 상태로 배포하면 게이트웨이가 없는 컬럼에 INSERT 하다
