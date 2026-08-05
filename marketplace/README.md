@@ -59,6 +59,15 @@ npm run dev
 | `GET /api/v1/catalog` | — | **공개 제품** 목록(계약 v1.1 `_catalog` 15컬럼) + `attribution` 문구 |
 | `GET /api/v1/data/<table>` | Bearer | 조회. `<col>=<val>` 등가 필터 · `from`/`to`(time_axis) · `limit`(≤5000) · `cursor`(아래 '페이지네이션'). 유효 요청만 쿼터 소모(400/404/409 무과금), 초과 시 429 |
 | `GET /api/v1/me` | Bearer | 오늘 사용량/쿼터 (쿼터 무소모) |
+| `GET /api/v1/preview/<table>` | — | 고정 5행 미리보기. 쿼터 무소모, IP 버스트만 |
+| `GET /api/v1/products/<product_id>` | Bearer | 제품 번들 — 컬럼 설명·grain·PK·시간축·질의 예시·출처. 쿼터 무소모 |
+| `GET /api/v1/glossary?vocabulary_id=` | Bearer | 코드값 사전(`code`→`label_ko`). 쿼터 무소모 |
+| `GET /skill/v1/…` | Bearer | K-Skill `seoul-urban-analytics` 전용 계약 — 별도 담당(`src/skill.js`) |
+| `POST /mcp` | `tools/call`부터 Bearer | MCP 서버(JSON-RPC, 툴 5종) — `src/mcp.js` |
+
+문은 **소비자 축**으로 갈린다(agreement §1-2) — 사람·일반 소비자(`/api/v1`) · K-Skill
+(`/skill/v1`) · MCP 클라이언트(`/mcp`). 옛 `/v1/*` 는 표면을 접고 기능을 `/api/v1` 로
+흡수했다(§10 · `decision/0004` D-2) — 위 표의 `products`·`glossary` 두 줄이 그것이다.
 
 ## 사용 계측 — 무엇이 실제로 쓰이나
 
@@ -160,11 +169,15 @@ append 제품은 계속 늘어난다. 그 사이 `offset` 은 같은 행을 두 
 - **카탈로그에 `join_keys`(제품별)·`join_axes`(전역)** — `admin_dong_code`·`gu_code`·
   `stat_region_cd` 가 도메인 공통 조인축이라는 사실을 기계도 알게 한다(UI 의 JOIN 배지와 동일
   정보). 크로스도메인 분석이 이 플랫폼의 셀링포인트인데 화면에만 있으면 에이전트는 추측해야 한다.
-- **`column_docs: "/column-docs.json"`** — 컬럼 의미 사전의 위치를 응답이 알려준다.
+- **카탈로그에 `columns[].description`·`usage_patterns[]`** — 컬럼 뜻과 검증된 질의 예시가
+  응답에 함께 실린다(정본은 게시본 `d1_catalog_columns`·`d1_usage_patterns`). 예전엔 정적
+  `column-docs.json`·`usage-patterns.json` 이 그 자리를 메웠는데, 사람이 갱신하는 사본이라
+  게시본과 어긋났다 — 없는 컬럼을 설명하고 27제품을 통째로 빠뜨리고 있었다. 지금은 화면만
+  알던 것을 **API 소비자·에이전트도 같이 받는다.**
 
 이미 에이전트 친화적이던 것들은 그대로다 — `product_question`(자연어 질문 = 시맨틱 라우팅),
 자기교정형 에러(잘못된 필터 → 사용 가능 컬럼 전체 목록), 매 응답의 쿼터 피드백, `Retry-After`,
-키리스 미리보기. 다음 단계 후보는 같은 Worker 의 MCP 동시 서빙(#476 부록 검토).
+키리스 미리보기. **같은 Worker 의 MCP 동시 서빙은 들어왔다** — `POST /mcp`(툴 5종, #26·#32).
 
 ## 공개 게이트 — 등록 ≠ 공개
 
