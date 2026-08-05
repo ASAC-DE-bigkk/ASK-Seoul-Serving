@@ -17,19 +17,50 @@
 
 // ── 게이트웨이 route 계약 ─────────────────────────────────────────────────────
 //
-// 게이트웨이가 내보내는 값 전수(`marketplace/src/index.js` 의 `trace.route` 대입 자리와 1:1):
-//   catalog · preview · data · me · keys · revoke · mcp
-//   skill_bundle · skill_data · skill_product · v1_product · v1_glossary
+// **정본은 [decision/0014](docs/decision/0014-console-route-contract.md).** 값을 늘리거나
+// 뜻을 바꿀 때는 그 문서를 먼저 고친다 — 여기만 고치면 화면 문구가 따라오지 않는다.
 //
+// 게이트웨이가 내보내는 값 전수 17종(`marketplace/src/index.js` 의 `trace.route` 대입 자리
+// 12종 + `mcp.js` 의 툴별 세분화 5종과 1:1):
+//   catalog · preview · data · me · keys · revoke · product · glossary
+//   skill_bundle · skill_data · skill_product
+//   mcp · mcp_list_products · mcp_describe_product · mcp_preview_product
+//       · mcp_query_product · mcp_check_quota
+//
+// ⚠️ `product`·`glossary` 는 한때 `v1_product`·`v1_glossary` 였다 — ea28bcc(#67)가 `/v1` 을
+// 삭제가 아니라 **흡수**로 바꾸면서 개명했다. 옛 이름으로 번역표를 채우면 화면에 슬러그가 샌다.
+
 // **데이터를 실제로 서빙한 호출은 문마다 이름이 다르다.** `route='data'` 만 세면 K-Skill 이
 // 붙는 순간 제품별 수요·키 활성화율이 조용히 낮아진다 — 그게 #63 이 잡은 사고다. 조건을
-// 네 곳에 흩어 둔 것이 원인이었으므로 **여기 한 줄로 모은다.** 새 문이 생기면 여기만 고친다.
-const SERVE = "route IN ('data', 'skill_data')";
+// 다섯 곳에 흩어 둔 것이 원인이었으므로 **여기 한 줄로 모은다.** 새 문이 생기면 여기만 고친다.
+//
+// **배열이 정본이고 SQL 은 거기서 만든다.** 화면에 알리는 `meta.serve_routes` 와 질의 조건을
+// 따로 적으면 언젠가 어긋나고, 그때 화면은 "이렇게 셌습니다"라고 **틀린 말**을 하게 된다.
+const SERVE_ROUTES = ["data", "skill_data", "mcp_query_product"];
+const SERVE = "route IN (" + SERVE_ROUTES.map((r) => "'" + r + "'").join(", ") + ")";
 
-// MCP 는 `route='mcp'` 한 값이라 `query_product`(데이터)와 `list_products`(목록)가 갈리지
-// 않는다 — #62 는 상태 기록만 고치고 route 는 그대로 뒀다. 넣으면 부풀고 빼면 모자라므로
-// **빼고, 뺀 건수를 화면이 말한다.** 추측해서 채우는 게 제일 나쁘다(agreement §4 모른다 ≠ 0).
-const MCP_ONLY = "route = 'mcp'";
+// ── MCP 를 어떻게 셀 것인가 (#63 결정 A) ──────────────────────────────────────
+//
+// 예전에는 `route='mcp'` 한 값이라 `query_product`(데이터)와 `list_products`(목록)가 갈리지
+// 않아 **통째로 뺐다.** 게이트웨이가 툴별로 가르면서(01106fb) 그 전제가 끝났다 — 이제
+// `mcp_query_product` 만 SERVE 에 들고, 나머지 툴은 각자 이름으로 남는다.
+//
+// 남은 맨 `mcp` 에는 **두 가지가 섞여 있고, 가르는 건 status 다**:
+//
+//   status < 400  — 프로토콜 단계(initialize · tools/list · notifications). 인증·데이터와
+//                   무관하니 빼는 게 맞다. **못 가른 게 아니라 셀 것이 아니다.**
+//   status >= 400 — 🔴 버스트로 거부된 tool 호출. `mcp.js` 가 route 를 `callTool` 진입에서
+//                   정하는데 그 자리가 버스트 **뒤**라(`mcp.js:212` 반환 → `:120` 미도달),
+//                   막힌 요청은 툴 이름을 못 남긴다. REST 는 라우터가 버스트 **앞**에서
+//                   정해 `data` 로 남으므로 **MCP 만 다르다.** 이건 진짜 관측 공백이라
+//                   추측해서 채우지 않고 **빼고, 뺐다고 화면이 말한다**(agreement §4).
+//
+// 게이트웨이가 그 한 줄을 버스트 앞으로 옮기면 `MCP_UNSPLIT` 이 저절로 0이 되고 안내도 꺼진다.
+//
+// **제품 축에서는 세지 않는다.** 막힌 요청은 핸들러에 못 가서 제품을 안 남기므로 제품별로는
+// 언제나 0이고, 그 0은 "이 제품은 괜찮다"는 틀린 안심이 된다 — 창 전체에서만 말한다.
+const MCP_SPLIT = "route LIKE 'mcp\\_%' ESCAPE '\\'";
+const MCP_UNSPLIT = "(route = 'mcp' AND status >= 400)";
 
 // 제품 축. `0005` 가 `product_id` 를 싣기 시작했지만 그 이전 행은 NULL 이라 표명으로만
 // 가리킬 수 있다. decision/0003 이 경고한 대로 `table_name` 은 물리명이어서 표명 통일이
@@ -212,7 +243,10 @@ async function summary(env, params, writable = false) {
     // 표명도 같이 싣는다 — 없으면 화면이 식별자를 그대로 보여준다.
     safeRows(env, "SELECT " + PRODUCT_KEY + " AS product_key, MAX(table_name) AS table_name, " +
       "MAX(product_id) AS product_id, SUM(route = 'preview') AS previews, " +
-      "SUM(" + SERVE + ") AS calls, SUM(" + MCP_ONLY + ") AS mcp_calls, " +
+      // 못 가른 MCP 는 여기서 셀 수 없다 — 버스트에 막힌 요청은 핸들러에 못 가서 제품을
+      // 안 남긴다. 제품별로 세면 언제나 0이라 "이 제품은 괜찮다"는 **틀린 안심**이 된다.
+      // 그래서 제품 축이 아니라 창 전체(meta.mcp)에서만 말한다.
+      "SUM(" + SERVE + ") AS calls, " +
       "ROUND(AVG(row_count),1) AS avg_rows FROM _gateway_request_log " +
       "WHERE " + PRODUCT_KEY + " IS NOT NULL AND ts >= datetime('now', ?) " +
       "GROUP BY product_key ORDER BY calls DESC, previews DESC LIMIT 12", since),
@@ -274,7 +308,14 @@ async function summary(env, params, writable = false) {
     safeRows(env, "SELECT COUNT(*) AS total, SUM(ua_class IS NOT NULL) AS ua_class, " +
       "SUM(agent_name IS NOT NULL) AS agent_name, SUM(page_path IS NOT NULL) AS page_path, " +
       "SUM(intent IS NOT NULL) AS intent, SUM(product_id IS NOT NULL) AS product_id, " +
-      "SUM(" + MCP_ONLY + ") AS mcp_calls " +
+      // MCP 를 얼마나 가를 수 있었나. 셋 다 **실측**이라 게이트웨이가 고쳐지면 저절로 꺼진다.
+      //   mcp_unsplit    — 거부돼서 툴 이름을 못 남긴 건수(진짜 공백)
+      //   mcp_split_from — 툴별로 갈리기 시작한 시각. 이 창에 갈린 행이 없으면 NULL
+      //   mcp_bare_first — 안 갈린 `mcp` 행 중 가장 이른 시각
+      // 뒤 둘을 견주면 **이 창에 '가르기 전' 기록이 섞였는지**를 날짜를 박지 않고 알 수 있다.
+      "SUM(" + MCP_UNSPLIT + ") AS mcp_unsplit, " +
+      "MIN(CASE WHEN " + MCP_SPLIT + " THEN ts END) AS mcp_split_from, " +
+      "MIN(CASE WHEN route = 'mcp' THEN ts END) AS mcp_bare_first " +
       "FROM _gateway_request_log WHERE ts >= datetime('now', ?)", since),
   ]);
   // 행동 축이 **아직 안 오는 것**인지 **와서 0인 것**인지. 컬럼이 있어도 게이트웨이가 안 실으면
@@ -311,12 +352,23 @@ async function summary(env, params, writable = false) {
       runs_ingest_cycle_min: 180,
       // 로그 테이블은 있는데 초안 컬럼만 없다 = 스펙 반영 전 (테이블 자체가 없으면 serving 누락으로 이미 표시)
       usage_spec_pending: routes.ok && !uclients.ok,
-      // ── #63 route 계약 ──────────────────────────────────────────────────
+      // ── #63 route 계약 (정본: decision/0014) ────────────────────────────
       // **데이터 서빙으로 센 문**과 **못 가른 것**을 화면이 그대로 말할 수 있게 싣는다.
-      // MCP 는 `route='mcp'` 한 값이라 데이터 질의와 목록 조회가 갈리지 않는다(#62) —
-      // 그래서 아래 집계에서 뺐고, 뺀 건수를 여기 적는다. 침묵하면 "MCP 는 안 쓰인다"로 읽힌다.
-      serve_routes: ["data", "skill_data"],
-      mcp_calls: F ? (F.mcp_calls || 0) : null,
+      // 침묵하면 "MCP 는 안 쓰인다"로 읽히고, 그건 관측 공백을 이상 없음으로 위장하는 것이다.
+      serve_routes: SERVE_ROUTES,
+      mcp: F
+        ? {
+            // 🔴 버스트로 거부돼 툴 이름이 안 남은 건수 — 데이터 서빙 집계에서 빠진 몫이다.
+            unsplit: F.mcp_unsplit || 0,
+            // 이 창에 **가르기 전 기록**이 섞였나. 갈린 행보다 이른 맨 `mcp` 행이 있으면 그렇다.
+            // 옛 행은 `query_product` 도 `mcp` 라 툴을 복원할 방법이 없다 — 폴백이 불가능하다.
+            pre_split:
+              Boolean(F.mcp_split_from && F.mcp_bare_first &&
+                      F.mcp_bare_first < F.mcp_split_from),
+            // 언제부터 갈렸나(실측). 이 창에 갈린 행이 아직 없으면 null.
+            split_from: F.mcp_split_from || null,
+          }
+        : null,
       // 창 안에서 그 축이 한 번이라도 채워졌나 — 카드가 "게이트웨이 미발행"을 말하는 근거다.
       axes_unfilled: F
         ? ["ua_class", "agent_name", "page_path", "intent", "product_id"].filter(unfilled)
@@ -659,7 +711,6 @@ async function usage(env, params) {
       "COUNT(r.rowid) AS calls, " +
       "COALESCE(SUM(r." + SERVE + "), 0) AS data_calls, " +
       "COALESCE(SUM(r.route = 'preview'), 0) AS previews, " +
-      "COALESCE(SUM(r." + MCP_ONLY + "), 0) AS mcp_calls, " +
       "COALESCE(SUM(r.status >= 400), 0) AS errors, " +
       "COALESCE(SUM(r.status = 200 AND r.row_count = 0), 0) AS empty_hits, " +
       "ROUND(AVG(r.ms), 1) AS avg_ms, MAX(r.ts) AS last_call " +
