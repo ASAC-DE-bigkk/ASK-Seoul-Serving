@@ -1,13 +1,12 @@
 {
   "name": "ask-seoul-ops-dashboard",
   "private": true,
-  "description": "운영자용 통합 품질 콘솔 — 파이프라인 + 서빙 (ASK-Seoul#58, dev-ops.ask-seoul.kr)",
+  "description": "운영자용 통합 품질 콘솔 — 파이프라인 + 서빙 (ASK-Seoul#58, ops.ask-seoul.kr)",
   "scripts": {
-    "seed": "wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state --file=scripts/backfill-migrations-ledger.sql && wrangler d1 migrations apply ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state",
-    "dev": "wrangler dev --inspector-port 9230 --persist-to ../marketplace/.wrangler/state",
-    "dev:remote": "wrangler dev --remote --inspector-port 9230",
-    "dev:prod-readonly": "wrangler dev --remote --env production --port 8798 --inspector-port 9231",
-    "deploy:dev": "wrangler deploy --env dev",
+    "dev": "wrangler dev --inspector-port 9230",
+    "migrate": "wrangler d1 execute ask-seoul-prod-d1 --remote --file=scripts/backfill-migrations-ledger.sql && wrangler d1 migrations apply ask-seoul-prod-d1 --remote",
+    "migrate:list": "wrangler d1 migrations list ask-seoul-prod-d1 --remote",
+    "d1": "node scripts/d1-query.mjs",
     "deploy:prod": "wrangler deploy --env production"
   },
   "devDependencies": {

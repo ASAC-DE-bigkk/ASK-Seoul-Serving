@@ -14,6 +14,15 @@ cd marketplace
 npm run preflight -- <D1이름> [--env production]
 ```
 
+위 기본 검사는 **마이그레이션 전 안전성**을 본다. 우리 표가 `없음`이면 apply 가 만들 수 있으므로
+통과한다. route 배포 직전에는 아래 배포 모드로, 필수 Gateway 표가 실제로 존재하는지까지 본다:
+
+```bash
+npm run preflight -- ask-seoul-dev-d1 --env dev --require-applied
+```
+
+`--require-applied` 에서는 우리 표의 `없음`도 중단이며 `--ack` 로 우회할 수 없다.
+
 **표가 있는지만이 아니라 모양(컬럼)까지 봅니다.** 이름은 같은데 컬럼이 다른 표가 실제로
 있었고(`_request_log`), 그걸 못 잡으면 `CREATE TABLE IF NOT EXISTS` 가 조용히 넘어가
 **요청 로그가 전량 버려집니다**. 조건 없는 `ALTER` 가 있으면 **남의 표에 컬럼이 얹힙니다** —
@@ -60,7 +69,7 @@ npm run preflight -- <D1이름> --env production --ack "#52 합의: <결정과 �
 > 막고 있고(PR #50), `DROP COLUMN` 은 쓰는 쪽 합의가 먼저입니다 — **그대로 두는 것도
 > 선택지**입니다(NULL 만 든 컬럼이라 남의 표 동작에는 영향이 없습니다).
 
-### 실측 (2026-08-04, 읽기만)
+### 실측 (2026-08-05)
 
 ```
 prod  _keys · _usage · _issuance_log · _burst · _gateway_request_log   없음 (apply 가 만든다)
@@ -68,11 +77,12 @@ prod  _keys · _usage · _issuance_log · _burst · _gateway_request_log   없�
 
 dev   _keys · _usage · _issuance_log · _burst                          일치
       _gateway_request_log                                             없음
-      _request_log   ts,path,query,token,request_id                    🔴 오염  → 중단
+      _request_log   ts,path,query,token                               남의 표  → 진행 가능
 ```
 
-**dev 는 중단됩니다** — `0004` 가 남의 표에 얹은 `request_id` 를 문지기가 잡습니다.
-적용 뒤 확인은 §1 의 `check-request-log-schema.sql` 이 같은 기준으로 한 번 더 봅니다.
+`request_id` 오염은 작성자가 제거해 dev 도 기본 preflight exit 0 이다(#52). 다만
+`_gateway_request_log` 가 아직 없으므로 `--require-applied` 배포 검사는 migrations apply 전까지
+중단한다. 적용 뒤 확인은 §1 의 `check-request-log-schema.sql` 이 같은 기준으로 한 번 더 봅니다.
 
 > ⚠️ **자격증명이 필요합니다.** `marketplace/.env` 에 `CLOUDFLARE_API_TOKEN`·
 > `CLOUDFLARE_ACCOUNT_ID` 를 넣으십시오(`.env.example` 참고). 읽기 검사만 하면 `D1:Read`
@@ -176,7 +186,7 @@ npx wrangler d1 execute ask-seoul-prod-d1 --remote --env production \
   --file=scripts/check-request-log-schema.sql
 ```
 
-기대: `cols` 가 prod 4 · dev 5 그대로.
+기대: `cols` 가 prod·dev 모두 4 그대로.
 
 ## 2. 시크릿 넣기 (최초 1회)
 
@@ -203,8 +213,9 @@ npm run deploy:prod   # 운영 — test·preflight 통과 후 wrangler deploy --
 
 **dev 는 자동 배포된다** — dev 브랜치에 머지되면 GitHub Actions
 (`.github/workflows/deploy-dev.yml`)가 테스트 후 두 워커를 `--env dev` 로 배포한다.
-자동화는 **코드만** 배포한다 — 원격 D1 마이그레이션(§1)은 여전히 사람이 직접 실행한다.
-production 은 자동화 대상이 아니다.
+자동화는 원격 D1 마이그레이션을 실행하지 않고 `--require-applied` 읽기 검사만 한다. 필수
+Gateway 표가 없으면 Gateway·콘솔 두 배포 모두 시작하지 않는다. 원격 D1 마이그레이션(§1)은
+여전히 사람이 직접 실행한다. production 은 자동화 대상이 아니다.
 
 env 플래그 없는 맨 `wrangler deploy` 는 금지다 — 기본 환경은 로컬 전용이고(wrangler.toml
 [vars] 주석), 라우트 없는 워커가 하나 더 생긴다. 각 환경의 `routes`(`custom_domain = true`)가
@@ -217,14 +228,12 @@ DNS·TLS 를 자동 생성하고, `workers_dev = false` 라 workers.dev 주소�
 `ask-seoul-gateway` 의 커스텀 도메인을 먼저 떼고 배포한다. 배포 후 §2 시크릿 재설정 →
 §4 스모크 → 구 워커 삭제 순서.
 
-**⚠️ 현재 dev D1 은 preflight 가 `오염` 판정으로 중단된다**(§0 실측 — `0004` 가 남의 표에
-얹은 `request_id`, NULL 만 든 컬럼이라 그대로 두는 것도 선택지). `deploy:dev` 체인 중간에
-`--ack` 를 끼울 방법이 없으므로, 오염을 정리(#52 조율)하기 전까지는 **수동 경로**로 배포한다
-— 각 단계를 직접 실행하고, ack 사유는 결정 기록을 가리켜야 한다:
+dev D1 오염은 2026-08-05 제거됐다(#52). 이제 배포 전에는 ack 가 아니라 마이그레이션 완료를
+증명한다:
 
 ```bash
 npm test
-npm run preflight -- ask-seoul-dev-d1 --env dev --ack "#52: 오염 컬럼은 NULL 뿐 — 유지 결정"
+npm run preflight -- ask-seoul-dev-d1 --env dev --require-applied
 npx wrangler deploy --env dev
 ```
 

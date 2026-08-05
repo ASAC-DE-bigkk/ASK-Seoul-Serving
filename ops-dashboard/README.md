@@ -136,39 +136,51 @@
 - **읽기를 열었다고 노출해도 되는 화면이 된 건 아니다.** 파이프라인 SLO·요청 로그·키 사용량은
   여전히 내부 운영 정보이고, 이메일 도메인은 마스킹 뒤에도 남는다.
 
-## ⚠️ 배포는 스크립트로만
+## 🔴 띄우면 운영이다
 
-로컬 구동은 `wrangler dev`. 배포는 `npm run deploy:dev`(→ `dev-ops.ask-seoul.kr`,
-2026-08-04 시행) / `npm run deploy:prod`(→ `ops.ask-seoul.kr` — **Cloudflare Access 승격이
-선행이라 라우트가 주석 상태**, #20 결정 B-1). env 없는 맨 `wrangler deploy` 는 금지다.
-읽기 경로가 무인증인 채 dev 공개 URL 에 떠 있으므로(decision/0004) Access 권한 확보가
-최우선 과제다 — decision/0002 개정 이력 참조.
+**D1 은 운영 하나뿐이다**([0015](docs/decision/0015-single-production-d1.md), 2026-08-05).
+dev D1 은 폐기했고 로컬 Miniflare 사본도 없다 — 바인딩에 `remote = true` 가 걸려 있어
+`npm run dev` 는 **띄우는 순간 실제 운영 DB 에 붙는다.**
+
+**연습할 곳이 없다.** 화면의 '삭제' 두 번 클릭은 실제 고객의 키·이메일·사용량을 지운다
+(불가역). 예전에는 플래그를 빠뜨리면 로컬로 떨어졌지만 **이제 기본값이 운영이다.**
+
+살아남은 경계는 하나다 — **남의 표 스키마는 못 바꾼다.** DDL 은 `npm run d1` 이 전부 막고,
+스키마 변경은 `migrations/` 추가 파일 + `npm run migrate` 로만 한다.
+
+배포는 `npm run deploy:prod`(→ `ops.ask-seoul.kr`). **`dev` 브랜치 머지가 곧 운영 배포다**
+(CD `.github/workflows/deploy-prod.yml`) — 브랜치 이름과 배포 환경이 다르다.
+⚠️ 읽기 경로는 여전히 무인증이라(decision/0004) Access 승격(#20 B-1)이 미완인 채 공개된다.
 
 ## 실행
 
-D1 은 게이트웨이와 **같은 로컬 상태를 공유**한다(`--persist-to`). 서빙 품질 원본인
-`_gateway_request_log` 가 저쪽에 쌓이기 때문이다 — 그래서 **`../marketplace` 를 먼저 시드**해야 한다.
-
 사전 준비(Node 20+)·OS별 차이·증상별 해결은 **[../docs/setup.md](../docs/setup.md)**,
-환경별 설정 배치(로컬/운영 도메인·D1·시크릿)는 **[../docs/environments.md](../docs/environments.md)**
-가 정본이다. 둘 다 게이트웨이와 공유하는 문서라 실행 규약을 바꾸면 저쪽 담당자와 같이 고친다.
+환경 배치는 **[../docs/environments.md](../docs/environments.md)** 가 정본이다. 둘 다
+게이트웨이와 공유하는 문서라 실행 규약을 바꾸면 저쪽 담당자와 같이 고친다.
 
 ```bash
 # macOS / Linux
 cd ops-dashboard
 npm install
-npm run seed         # _ops_slo/_ops_domain + 합성 SLO 14일 → 공유 D1
+cp .env.example .env  # CLOUDFLARE_API_TOKEN — 원격 바인딩이라 자격증명 없이는 안 뜬다
 node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" > .dev.vars
-npm run dev          # http://localhost:8788
+npm run dev           # http://localhost:8788 — 🔴 운영 D1
 ```
 
 ```powershell
 # Windows (PowerShell) — openssl 은 없다. && 도 없다.
 cd ops-dashboard
 npm install
-npm run seed
+Copy-Item .env.example .env
 node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" | Set-Content .dev.vars -Encoding ascii
-npm run dev          # http://localhost:8788
+npm run dev           # http://localhost:8788 — 🔴 운영 D1
+```
+
+스키마를 적용해야 하면(콘솔 소유 `_ops_slo`·`_ops_domain`):
+
+```bash
+npm run migrate:list  # 무엇이 적용됐나 먼저 본다
+npm run migrate       # CREATE IF NOT EXISTS 뿐 — 있는 표는 안 건드린다
 ```
 
 `.dev.vars` 는 `.gitignore` 대상이다(커밋 금지). 변수의 의미는
@@ -191,22 +203,16 @@ wrangler 가 토큰을 못 읽는데, 기동 로그에는 `Using secrets defined
 | `_ops_pipeline_state` | 작업(DAG)별 마지막 결과 + 점검 상태 |
 | `_ops_pipeline_expectation` | 얼마나 자주 돌아야 하는지(감시 대상 여부) |
 
-**이 표들은 로컬 Miniflare 에 없다** — 팀 dev D1 에 있다. 그래서 보려면 원격 바인딩으로 띄운다.
+이 표들의 **실측이 운영 D1 에만 있었다**는 것이 dev D1 을 폐기한 직접적인 이유다
+(실측 2026-08-04: dev `_ops_run_event` **0행** vs 운영 **19,832행**). 이제 `npm run dev`
+하나로 보인다 — 두 환경을 오갈 일이 없다([0015](docs/decision/0015-single-production-d1.md)).
 
-```bash
-cp .env.example .env         # CLOUDFLARE_API_TOKEN (D1:Read 면 충분)
-npm run dev:remote           # 개발 D1  → :8788
-npm run dev:prod-readonly    # 운영 D1  → :8798 (포트를 갈라 두 화면을 같이 띄운다)
-```
+지금 어느 DB 를 보고 있는지는 **상단 배지**가 늘 말한다. 이제 언제나 운영이라 배지는 늘
+붉은색이고, 옆에 마지막으로 읽은 시각이 붙는다. 재적재·정기런을 지켜볼 때는 **자동
+새로고침**(상단 버튼, 30초)을 켠다 — 화면이 멈춘 건지 값이 안 변한 건지 구분된다.
 
-지금 어느 DB 를 보고 있는지는 **상단 배지**가 늘 말한다 — 운영은 붉은색이고, 옆에 마지막으로
-읽은 시각이 붙는다. 재적재·정기런을 지켜볼 때는 **자동 새로고침**(상단 버튼, 30초)을 켠다.
-켜 두면 화면이 멈춘 건지 값이 안 변한 건지를 시각으로 구분할 수 있다.
-
-⚠️ `--remote` 는 읽기 전용 모드가 아니다 — 그 상태에서 키 차단·삭제를 누르면 그 D1 에
-그대로 적용된다([0002](docs/decision/0002-local-only-mentor-gate.md) 불변 경계).
-**보기 위한 모드다.** 스크립트 이름에 `readonly` 를 붙인 건 그 약속을 상기시키려는 것이지
-도구가 강제하는 게 아니다.
+⚠️ **배지가 "운영"이라고 말하는 것이 정상이다.** 예전에는 그 배지가 경고였지만 이제는
+상태 표시일 뿐이라, 눈에 익어 안 읽히기 쉽다. 조치 버튼을 누르기 전에 한 번 더 본다.
 
 ### 모른다 ≠ 0
 
@@ -228,9 +234,10 @@ npm run dev:prod-readonly    # 운영 D1  → :8798 (포트를 갈라 두 화면
 | `sample` | `is_sample=1` 이 섞였다 | 합성 배너 + 실측으로 바꾸는 법 |
 | `live` | 전부 `is_sample=0` | 배너 없음 |
 
-**환경을 바꿔도 이 값은 안 바뀐다.** 어느 D1 이든 `_ops_slo` 에는 **우리가 넣은 것만** 들어 있기
-때문이다. 파이프라인은 이미 실행 기록을 조회 DB 에 싣고 있는데(아래) **콘솔이 아직 그걸 읽지
-않아서**, 로컬에는 `npm run seed` 의 합성값만 남는다.
+**D1 이 운영 하나뿐이라 이 값은 환경으로 갈리지 않는다**(0015). `_ops_slo` 에는 **우리가 넣은
+것만** 들어 있고, 지금 운영 D1 의 그 표는 **비어 있다** — 실측을 넣는 정규 경로(culture DAG
+export)가 아직 안 붙었기 때문이다. 파이프라인의 실측은 조회 DB 4종에 있고 콘솔은 그걸
+**직접 읽는다**(아래 · 실행 기록 탭).
 
 ### 정본 공급자는 조회 DB 4종이다
 
@@ -240,8 +247,8 @@ npm run dev:prod-readonly    # 운영 D1  → :8798 (포트를 갈라 두 화면
 ASAC-DAG#647 병합 후 **#655**(2026-08-03)가 실제 조회 DB 에 표 4종 생성 · 52건 적재를 확인했다.
 
 콘솔은 이제 그 4종을 **직접 읽는다**(실행 기록 탭, [0009](docs/decision/0009-ops-records-consumption.md)).
-`_ops_slo` 는 그 옆에 남은 **보조 스냅샷**이고, 로컬에는 `npm run seed` 의 합성값
-(`is_sample=1`)만 들어간다 — 그래서 환경을 바꿔도 `pipeline_source` 는 안 바뀐다.
+`_ops_slo` 는 그 옆에 남은 **보조 스냅샷**이고 지금은 비어 있다 — 화면은 그걸 '기록이
+없습니다'로 말한다.
 
 선행 조건이던 **#78 D-6**(마이그레이션 DROP 금지)은 처리됐다 —
 [0007](docs/decision/0007-schema-single-file-reset.md) 개정으로 증분 규약이 됐다.
@@ -256,12 +263,13 @@ Cloudflare Worker 가 애초에 닿지도 못한다([0005](docs/decision/0005-sl
 
 ## `_ops_slo` 를 채우는 법
 
-```bash
-npm run seed   # fixtures/slo_sample.sql — 모든 행에 is_sample=1, 화면에 경고 배너가 뜬다
-```
+**지금은 채우지 않는다.** 표만 있고 비어 있다(`npm run migrate` 가 만든다).
 
-실측을 넣는 정규 경로는 **culture DAG 의 export task**(팀 D1 쓰기 = 승인 주체 미정(agreement §8-3))다.
-그전까지 이 탭의 숫자는 합성이고, 화면이 그걸 배너로 직접 밝힌다.
+합성 픽스처(`fixtures/slo_sample.sql`)는 **시드 체인에서 뺐고**, D1 이 운영 하나뿐이 된
+지금은 더더욱 넣지 않는다 — 합성값을 운영 DB 에 넣으면 그게 곧 오염이다(4절 🔴).
+
+실측을 넣는 정규 경로는 **culture DAG 의 export task** 다. 그게 붙기 전까지 이 탭은
+'기록이 없습니다'로 비어 있는 것이 정상이고, 화면이 그 사실을 직접 말한다.
 
 ### 초록 위장을 놓치지 않는다
 
