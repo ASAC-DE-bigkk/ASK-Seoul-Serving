@@ -40,6 +40,24 @@
 
 ## 2026-08-04
 
+### CI/CD — dev 머지가 곧 dev 배포가 되게
+
+- **작업자**: @codingpoppy94 (+ Claude Code)
+- **의도 · 목표**: agreement §8-4 의 "CI 신설 — 지금 가능" 이행. dev 브랜치와 dev
+  배포본이 어긋난 채 몇 주 가던 상태(구 코드 배포본이 로그를 전량 유실하던 실측)를
+  구조적으로 없앤다 — 머지되면 반영되는 게 기본값이어야 어긋남이 쌓이지 않는다.
+- **조치**:
+  - `.github/workflows/ci.yml` — dev 향 PR 마다 게이트웨이 `npm test`(98종 + partials 정합)
+  - `.github/workflows/deploy-dev.yml` — dev 푸시마다 두 워커를 `--env dev` 로 배포.
+    **코드만** 배포한다 — preflight 는 마이그레이션 게이트라 체인에서 뺐고(오염 #52 로
+    현재 exit 1 이기도 하다), 원격 D1 마이그레이션은 런북 §1 수동 절차로 남는다.
+    production 은 자동화 대상 아님(§8-3 선행)
+  - 배포 겹침 방지 concurrency 그룹, 직푸시가 테스트를 우회하지 못하게 배포 잡에도 테스트
+- **결과**: 워크플로 2개 추가. **첫 실행은 두 가지가 선행돼야 초록불이다** —
+  ① GitHub Secrets(`CLOUDFLARE_API_TOKEN` Workers Scripts:Edit · `CLOUDFLARE_ACCOUNT_ID`)
+  등록, ② 워커 개명 첫 배포(런북 §0-1 — 구 워커가 도메인을 물고 있어 자동 배포가
+  충돌한다)는 수동 선행. 둘 다 되기 전까지 deploy-dev 워크플로는 실패가 정상이다.
+
 ### 검토 후속 — 배포 시행 사실과 문서의 정합
 
 - **작업자**: @codingpoppy94 (+ Claude Code)

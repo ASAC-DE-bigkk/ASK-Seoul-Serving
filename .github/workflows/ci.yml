@@ -1,0 +1,24 @@
+# CI — PR 검증 (agreement §8-4 "CI 신설" 이행)
+# dev 로 향하는 PR 마다 게이트웨이 테스트(계약 98종 + partials 정합 --check)를 돌린다.
+# ops-dashboard 는 테스트 스위트가 아직 없어 잡을 두지 않는다 — 생기면 여기 추가.
+name: CI
+
+on:
+  pull_request:
+    branches: [dev]
+
+jobs:
+  test-marketplace:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: marketplace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: marketplace/package-lock.json
+      - run: npm ci
+      - run: npm test

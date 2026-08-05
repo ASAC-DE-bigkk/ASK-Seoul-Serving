@@ -201,6 +201,11 @@ npm run deploy:dev    # 개발 — test·preflight 통과 후 wrangler deploy --
 npm run deploy:prod   # 운영 — test·preflight 통과 후 wrangler deploy --env production
 ```
 
+**dev 는 자동 배포된다** — dev 브랜치에 머지되면 GitHub Actions
+(`.github/workflows/deploy-dev.yml`)가 테스트 후 두 워커를 `--env dev` 로 배포한다.
+자동화는 **코드만** 배포한다 — 원격 D1 마이그레이션(§1)은 여전히 사람이 직접 실행한다.
+production 은 자동화 대상이 아니다.
+
 env 플래그 없는 맨 `wrangler deploy` 는 금지다 — 기본 환경은 로컬 전용이고(wrangler.toml
 [vars] 주석), 라우트 없는 워커가 하나 더 생긴다. 각 환경의 `routes`(`custom_domain = true`)가
 DNS·TLS 를 자동 생성하고, `workers_dev = false` 라 workers.dev 주소는 만들지 않는다.
