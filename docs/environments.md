@@ -2,9 +2,7 @@
 
 > **이 문서는 API 담당자와 대시보드 담당자가 함께 관리한다.**
 > 두 프로젝트가 **같은 구조**를 쓴다 — 한쪽만 바꾸면 규약이 아니라 예외가 된다.
-> 여기는 **구조와 배분**이다. 실제 절차는 환경마다 한 장씩 갈라 뒀다 —
-> [로컬](run-local.md) · [팀 dev D1](run-remote-dev.md) · [운영 D1](run-prod.md),
-> OS별 설치는 [setup.md](setup.md). 전체 지도는 [index.md](index.md).
+> 실제 실행 절차(OS별 설치·명령)는 [setup.md](setup.md), 여기는 **구조와 배분**이다.
 
 ## 1. 한 줄 요약
 
@@ -68,30 +66,14 @@ wrangler 는 같은 디렉토리의 `.env` 를 자동으로 읽는다(플래그 
 ```bash
 cd ops-dashboard
 cp .env.example .env      # CLOUDFLARE_API_TOKEN 채우기
-npm run dev:dev-d1        # 팀 dev D1  — :8798, 보기 전용
-npm run dev:prod-d1       # 운영 D1    — :8799, 보기 전용
+npm run dev:remote        # wrangler dev --remote — 실제 dev D1 바인딩
 ```
 
-절차는 [run-remote-dev.md](run-remote-dev.md) · [run-prod.md](run-prod.md).
-
-⚠️ **`--remote` 는 그 자체로는 읽기 전용이 아니다.** 화면의 키 차단·삭제가 그대로 팀 D1 에
+⚠️ **`--remote` 는 읽기만 하는 모드가 아니다.** 화면의 키 차단·삭제가 그대로 팀 dev D1 에
 적용되고, `seed` 를 `--remote` 로 돌리면 `_ops_*` 도 팀 DB 에 쓴다 — 불변 경계
 "팀(원격) D1 에 쓰지 않는다"([decision/0002](../ops-dashboard/docs/decision/0002-local-only-mentor-gate.md))와
-정면으로 부딪힌다.
-
-**그래서 2026-08-05 부터 빗장을 코드로 내렸다**([decision/0013](../ops-dashboard/docs/decision/0013-remote-readonly-attach.md)).
-위 두 스크립트가 `--var ENV_READONLY:1` 을 같이 넘기고, 콘솔은 그 값이 있으면 `canWrite()`
-가 무조건 false, `requireWrite()` 가 503 이다. 예전에 여기 적혀 있던 "그 상태에서 조치
-버튼을 누르지 않는다 / 안전장치는 미정"은 **닫혔다** — 경고문이 실수를 막지 못한다는 게
-그 결정의 근거다.
-
-**안전한 것은 `--remote` 가 아니라 `npm run dev:dev-d1` 이라는 경로다.** wrangler 를 직접
-쳐서 붙으면(`npx wrangler dev --remote`) 빗장이 없다. 빗장을 `wrangler.toml` 이 아니라
-명령줄에 둔 이유는 **언젠가 그 섹션으로 배포할 때 따라가면 안 되기 때문**이다(배포된
-콘솔은 조치가 되어야 한다).
-
-SQL 로 직접 볼 때는 `npm run d1:local` · `d1:dev` · `d1:prod` 를 쓴다 — 읽기 문장만
-통과하는 화이트리스트가 걸려 있다.
+정면으로 부딪힌다. **`npm run dev:remote` 는 보기 위한 것이고, 그 상태에서 조치 버튼을 누르지 않는다.**
+안전장치를 코드로 넣을지는 미정 — 결정되면 여기에 적는다.
 
 **두 D1 은 별개다.** prod D1 은 2026-08-03 신설이고 파이프라인이 62개 제품 게시를 시작했다
 (ASAC-DAG#668). 단 게이트웨이 운영 테이블(`_keys` 등)과 콘솔 `_ops_*` 는 아직 없다 —
@@ -103,14 +85,12 @@ SQL 로 직접 볼 때는 `npm run d1:local` · `d1:dev` · `d1:prod` 를 쓴다
 배포·롤백은 따로다 — 그게 분리의 목적이다
 ([decision/0001](../ops-dashboard/docs/decision/0001-separate-worker-from-marketplace.md)).
 
-> **`[env.dev]` 는 콘솔에만 있다**(2026-08-05 신설). 팀 dev D1 을 **볼 때** 화면 배지가
-> "로컬 개발"이라고 거짓말하지 않게 하려고 판 환경이라, 배포 대상이 아니다.
-> 게이트웨이는 아직 없다 — 필요해지면 같은 자리에 같은 모양으로 추가한다.
+> **dev 환경은 아직 없다.** 값이 정해지면 `[env.dev]` 섹션으로 같은 자리에 추가한다.
+> 기본 환경이 dev D1 을 이미 가리키고 있으므로, 그때 옮길 값은 명확하다.
 
 ## 3. 실행 파라미터 — 무엇이 어디로 갔나
 
-**차이는 전부 `wrangler.toml` 이 흡수한다** — 사람이 고르는 것은 **환경 이름 하나**이고,
-플래그 조합은 `package.json` 의 스크립트가 들고 있다.
+**사람이 치는 명령은 환경별로 달라지지 않는다.** 차이는 전부 `wrangler.toml` 이 흡수한다.
 
 | 값 | 어디에 있나 | 왜 거기인가 |
 |---|---|---|
@@ -124,25 +104,11 @@ SQL 로 직접 볼 때는 `npm run d1:local` · `d1:dev` · `d1:prod` 를 쓴다
 
 ```bash
 npm install
-npm run seed     # 로컬만 — 원격 시드는 없다(불변 경계: 팀 D1 에 쓰지 않는다)
-npm run dev      # 로컬 — 포트는 [dev] port 가 정한다 (--port 불필요)
+npm run seed     # 로컬만
+npm run dev      # 로컬만 — 포트는 [dev] port 가 정한다 (--port 불필요)
 ```
 
-**콘솔은 여기에 환경 옵션이 붙는다**(2026-08-05, [decision/0013](../ops-dashboard/docs/decision/0013-remote-readonly-attach.md)).
-게이트웨이는 아직 로컬뿐이다.
-
-| 명령 | 환경 | 포트 | 쓰기 |
-|---|---|---|---|
-| `npm run dev` | 로컬 Miniflare | 8788 | ✅ |
-| `npm run dev:dev-d1` | 팀 dev D1 (`--remote --env dev`) | 8798 | 🔒 |
-| `npm run dev:prod-d1` | 운영 D1 (`--remote --env production`) | 8799 | 🔒 |
-| `npm run d1:local` · `d1:dev` · `d1:prod` | 같은 셋을 SQL 로 | — | 읽기 문장만 |
-
-포트를 갈라 둔 것은 **세 환경을 동시에 띄워 놓고 비교할 수 있게** 하기 위해서다.
-어느 화면이 어느 DB 인지는 상단 배지가 말한다.
-
 배포는 npm script 가 **없다.** 사람이 런북을 보고 직접 친다(배포 결정 — 5절 · agreement §8).
-위 원격 스크립트는 **배포가 아니다** — 워커는 로컬에서 돌고 D1 만 원격에 붙는다.
 
 ```bash
 npx wrangler deploy --env production
@@ -186,28 +152,20 @@ D1 안의 장부(`d1_migrations`)에 기록되고 **안 된 파일만 실행**�
 - 추적 전환 이전에 만든 로컬 상태는 시드가 장부를 자동 백필한다
   (`marketplace/scripts/backfill-migrations-ledger.sql` — 파일이 만든 객체가 실존할 때만 기록).
 
-**콘솔도 같다** — 예전에는 `_ops_*` 를 단일 파일 DROP+CREATE 로 리셋했지만, 팀 조회 DB 에
-`_ops_*` 가족이 실존하는 것이 확인되면서 **증분+장부로 전환했다**(#78 D-6,
-[decision/0007](../ops-dashboard/docs/decision/0007-schema-single-file-reset.md) 개정).
-DROP 은 금지이고, 변경은 ALTER 추가 파일로만 한다.
-
-⚠️ 단 **장부 표는 갈라 둔다** — 콘솔은 `d1_migrations_ops_dashboard`, 게이트웨이는
-기본값 `d1_migrations`. 같은 D1 을 공유하므로 한 표를 쓰면 양쪽 기록이 섞이고,
-파일명이 겹치는 순간(둘 다 `0002_*.sql` 을 만들 수 있다) 한쪽이 "이미 적용됨"으로
-조용히 건너뛴다.
+**콘솔은 예외다** — `_ops_*` 는 잃을 상태가 없는 동안 단일 파일 DROP+CREATE 리셋 규약이라
+([decision/0007](../ops-dashboard/docs/decision/0007-schema-single-file-reset.md)) 추적기를 쓰지
+않는다. 콘솔이 팀 D1 로 승격되면 그때 증분+추적으로 전환한다.
 
 ## 6. 아직 열려 있는 것
 
 - **운영 D1 에 운영 테이블 만들기** — 게이트웨이(런북 1번)와 콘솔(`migrations/0001` 을
   `--remote` 로) 둘 다, **사람이 직접 실행하는 팀 D1 쓰기**다.
-- **도메인 zone 등록 확인** — 확인되면 두 `wrangler.toml` 의 `routes` 를 활성화한다.
-  콘솔 쪽은 그 전에 Cloudflare Access 를 `ops.` 호스트로 **한정해서** 거는 게 선행이다
-  (#20 결정 B-1 — zone 전체나 `*.ask-seoul.kr` 로 걸면 공개 API 까지 잠긴다).
-- **배포는 아직 허용되지 않았다.** `[env.production]` 이 있다는 것과 배포해도 된다는 것은
-  다르다 — 배포 결정(agreement §8). 그래서 **두 `package.json` 다 deploy 스크립트를 두지 않는다.**
-  `dev:prod-d1` 은 deploy 가 아니다 — 워커는 로컬에서 돌고 D1 만 원격에 붙는다.
-- **게이트웨이의 원격 확인 경로** — 콘솔은 보기 전용 빗장으로 열었지만
-  ([decision/0013](../ops-dashboard/docs/decision/0013-remote-readonly-attach.md)), 게이트웨이는
-  `_burst`·`_usage`·`_gateway_request_log` 때문에 **모든 요청이 D1 에 쓴다.** GET 하나에도
-  버스트·로그가 쌓이므로 같은 빗장으로는 "보기 전용"이 성립하지 않는다 — 계량 경로를
-  어떻게 할지가 먼저이고, **그 판단은 게이트웨이 담당자 몫이다.**
+- **도메인 zone 은 확인됐다(2026-08-04)** — `ask-seoul.kr` Active. 호스트 4종:
+  `ask-seoul.kr`(서비스 운영) · `dev.`(서비스 개발) · `ops.`(콘솔 운영) · `dev-ops.`(콘솔 개발).
+  dev 2종의 `routes` 는 활성, 콘솔 운영(`ops.`) 라우트는 **주석 상태다** — Cloudflare Access 를
+  이 호스트로 **한정해서** 거는 게 선행이라서다(#20 결정 B-1 — zone 전체나 `*.ask-seoul.kr`
+  로 걸면 공개 API 까지 잠긴다. Access 는 토큰 권한 미확보로 보류 중).
+- **배포는 환경을 명시한 스크립트로만 한다(2026-08-04 개정).** `npm run deploy:dev` 는
+  시행 중이고, `deploy:prod` 는 agreement §8-3(prod D1 조율)·Access 승격이 선행이다.
+  스크립트 이름이 env 를 고정하므로 "플래그를 빼먹은 배포"가 성립하지 않는다 —
+  env 없는 맨 `wrangler deploy` 는 여전히 금지다(기본 환경 = 로컬 전용).

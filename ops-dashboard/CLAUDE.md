@@ -46,7 +46,7 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 
 | 탭 | 묻는 질문 | 원본 |
 |---|---|---|
-| 데이터 준비 상태 | 수집·변환이 제 몫을 했나 | `_ops_slo` (보조 스냅샷 — 로컬은 비어 있다) |
+| 데이터 준비 상태 | 수집·변환이 제 몫을 했나 | `_ops_slo` (보조·합성 스냅샷) |
 | 실행 기록 | 무엇이 돌았고, 무엇이 조용한가 | **조회 DB 4종** `_ops_run_event` 외 (ASK-Seoul#78, → [0009](docs/decision/0009-ops-records-consumption.md)) |
 | 응답 상태 | 외부에 잘 나가고 있나 | `_gateway_request_log` (게이트웨이가 쌓는다) |
 | 이용 행동 | 누가·무엇이·어떻게 쓰나 | `_gateway_request_log` + `_keys` + 행동 스펙 초안 #9 (→ [0010](docs/decision/0010-behavior-log-console-first.md)) |
@@ -63,20 +63,15 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 단일 Worker (src/index.js)          — GET /api/summary · /api/trace · /api/apis · /api/apis/<이름>, GET·POST /api/keys
 + Static Assets (public/index.html) — 탭 6개짜리 단일 페이지
 + 공유 로컬 D1                       — 게이트웨이(../marketplace)와 같은 상태 (--persist-to)
-+ 원격 D1 (dev:dev-d1·dev:prod-d1) — 조회 DB 4종의 **실측**은 여기에만 있다. **보기 전용**(0013)
++ 원격 D1 (npm run dev:remote)      — 조회 DB 4종의 **실측**은 여기에만 있다
 + migrations/                       — 0001 _ops_slo·_ops_domain(정본) · 0002 조회 DB 4종(로컬 미러)
-+ fixtures/                         — 합성 픽스처 (slo_sample · ops_records_sample) — **시드가 실행하지 않는다**
++ fixtures/                         — 합성 샘플 시드 (slo_sample · ops_records_sample)
 ```
 
-**조회 DB 4종의 실측은 로컬 Miniflare 에 없다.** 팀 D1 에 있으므로 원격 바인딩으로 띄워야
-보인다 — `npm run dev:dev-d1`(팀 dev, :8798) · `npm run dev:prod-d1`(운영, :8799).
+**조회 DB 4종의 실측은 로컬 Miniflare 에 없다.** 팀 D1 에 있으므로 `npm run dev:remote`
+(원격 바인딩)로 띄워야 보인다. `--remote` 는 읽기 전용 모드가 아니라 그 상태의 키 조치가
+팀 DB 에 적용된다 — **보기 위한 모드다**([0002](docs/decision/0002-local-only-mentor-gate.md)).
 로컬의 `migrations/0002` 미러는 화면을 돌려보기 위한 **빈 껍데기**이지 정본이 아니다.
-
-`--remote` 는 그 자체로는 읽기 전용이 아니다 — 그 상태의 키 조치가 팀 DB 에 그대로
-적용된다. 그래서 두 스크립트가 `--var ENV_READONLY:1` 을 넘겨 **코드로 잠근다**
-([0013](docs/decision/0013-remote-readonly-attach.md)). **안전한 것은 `--remote` 가 아니라
-그 스크립트 경로다** — wrangler 를 직접 치면 빗장이 없다. 절차는
-[../docs/run-remote-dev.md](../docs/run-remote-dev.md) · [../docs/run-prod.md](../docs/run-prod.md).
 
 이용 행동 탭의 스펙 종속 축(ua_class 등)은 **게이트웨이 반영 전까지 '수집 전'** 이다 —
 `_gateway_request_log` 에 ALTER 미러를 만들지 않는다(0010: 정본 마이그레이션과 duplicate column 충돌).
@@ -89,15 +84,15 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 
 어기는 순간 사고가 되는 것들. 완화하려면 해당 결정 문서 개정이 먼저다.
 
-- **`wrangler deploy` 금지.** 로컬 전용(`wrangler dev`)이다. 공개 URL 신설은 팀 결정 사항
-  (agreement §8). package.json 에 deploy 스크립트를 만들지 않는다. `dev:prod-d1` 은
-  배포가 아니다 — 워커는 로컬에서 돌고 D1 만 원격에 붙는다.
-  → [0002](docs/decision/0002-local-only-mentor-gate.md)
-- **팀(원격) D1 에 쓰지 않는다.** 모든 시드·로더는 로컬 상태(`--persist-to`)만 만진다.
-  원격에 붙는 경로(`dev:dev-d1`·`dev:prod-d1`·`d1:dev`·`d1:prod`)는 **전부 보기 전용**이고,
-  그 빗장은 문서가 아니라 코드에 있다. **새 원격 경로를 만들 때 빗장을 같이 달지 않으면
-  경계가 뚫린다** — 빗장은 `--var ENV_READONLY:1`(워커) / 읽기 화이트리스트(SQL).
-  → [0002](docs/decision/0002-local-only-mentor-gate.md) · [0013](docs/decision/0013-remote-readonly-attach.md)
+- **배포는 환경을 지정한 스크립트로만.** `npm run deploy:dev`(→ dev-ops.ask-seoul.kr) /
+  `npm run deploy:prod`(→ ops.ask-seoul.kr, **Cloudflare Access 승격 #20 결정 B-1 이 선행 —
+  현재 보류 상태고 production 라우트도 주석이다**). env 없는 맨 `wrangler deploy` 금지 —
+  기본 환경은 로컬 전용이다. 배포본 D1 은 게이트웨이의 같은 환경과 반드시 일치시킨다.
+  → [0002 개정](docs/decision/0002-local-only-mentor-gate.md)
+- **팀(원격) D1 쓰기는 `_ops_*` 마이그레이션 적용(콘솔 장부 `d1_migrations_ops_dashboard`)에
+  한정한다.** 로컬 시드·로더는 로컬 상태(`--persist-to`)만 만진다. 게이트웨이 소유
+  테이블에 대한 원격 임의 실행 금지.
+  → [0002 개정](docs/decision/0002-local-only-mentor-gate.md)
 - **게이트웨이 소유 테이블의 스키마를 여기서 바꾸지 않는다.** `_keys`·`_usage`·`_burst`·
   `_gateway_request_log` 의 정본은 `../marketplace/migrations/`. 여기서는 읽기와 정해진 키 조치만.
   → [0003](docs/decision/0003-single-shared-local-d1.md)
@@ -174,17 +169,9 @@ NOT EXISTS` 만, DROP·ALTER 없이, 팀 D1 에 이미 있으면 아무 일도 �
 배포 파이프라인이 없으므로 로컬에서 직접 확인한다.
 
 ```bash
-npm run seed   # _ops_* 증분 마이그레이션 → 공유 로컬 D1. **표만 만든다 — 데이터 0건**
+npm run seed   # _ops_* 증분 마이그레이션 + 합성 시드 → 공유 로컬 D1
 npm run dev    # :8788 — 게이트웨이(:8787)와 동시 구동 가능 (인스펙터 9230 고정 — 저쪽 기본 9229 와 안 겹친다)
-
-# 원격 D1 을 볼 때 (배포 아님 — 워커는 로컬, D1 만 원격). 셋 다 동시 구동 가능.
-npm run dev:dev-d1    # 팀 dev D1  → :8798  🔒 보기 전용
-npm run dev:prod-d1   # 운영 D1    → :8799  🔒 보기 전용
-npm run d1:local -- "SELECT ..."   # d1:dev · d1:prod — 읽기 문장만 통과
 ```
-
-시드는 `fixtures/` 를 실행하지 않는다(4절 🔴). **시드 직후 화면이 비어 있는 것이 정상**이고,
-그걸 "덜 됐다"고 읽어 픽스처를 시드 체인에 도로 넣지 않는다.
 
 OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) — 게이트웨이 담당자와
 함께 관리하는 문서다(같은 로컬 D1을 공유하므로 실행 절차가 하나다). 실행·시드·포트·비밀값
@@ -192,40 +179,10 @@ OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) �
 
 - API 는 curl 로: `/api/summary?days=14`, `/api/keys` (GET 무인증 / POST 는 Bearer).
 - 쓰기 경로를 고쳤으면 **토큰 미설정(503)·토큰 없음(401)·잘못된 토큰(401)** 을 다 본다.
-  그리고 **보기 전용(503 `read-only mode`)** — 올바른 토큰을 들고 와도 막혀야 한다([0013](docs/decision/0013-remote-readonly-attach.md)).
 - 게이트웨이 테이블이 없는 상태(마켓플레이스 미시드)에서도 콘솔이 뜨는지 본다
   (`meta.missing` 강등).
-- 화면을 고쳤으면 탭 6개와 배지(읽기 전용·수집 전·탭 경고 점) 동작을 본다 — '샘플' 배지는
-  없다(4절 🔴 에서 폐기).
+- 화면을 고쳤으면 탭 6개와 배지(샘플·읽기 전용·수집 전·탭 경고 점) 동작을 본다.
 - 검증 명령 세트와 실행 기록 탭의 시나리오별 확인법은 [docs/runbook.md](docs/runbook.md).
-
-### 7-1. 문서 동기화 — 무엇을 고치면 어디를 같이 고치나
-
-"문서와 코드가 어긋나면 같이 고친다"(10절)는 **이미 있던 규칙인데 지켜지지 않았다.** 2026-08-04
-에 시드에서 픽스처를 뺐는데 README·runbook·이 문서가 4개월 뒤까지 "시드가 합성값을 넣는다"고
-말하고 있었다. 규칙이 약해서가 아니라 **어느 문장이 그 코드를 비추고 있는지 몰라서**다.
-그래서 대응표를 못 박는다 — 왼쪽을 건드리면 오른쪽을 **같은 커밋에서** 연다.
-
-| 고친 것 | 같이 여는 문서 |
-|---|---|
-| `package.json` 의 `scripts` (seed·dev·포트) | [README](README.md) 실행 절차 · [runbook §1](docs/runbook.md) · 이 문서 7절 · [../docs/index.md](../docs/index.md) 의 **해당 환경 매뉴얼** · [../docs/environments.md](../docs/environments.md) §3 명령표 |
-| **스크립트 이름 변경** | 위 전부 + `grep -rn "<옛 이름>"` — 이름은 여러 문서에 흩어져 있다 |
-| `migrations/` · `fixtures/` 실행 여부 | [runbook §1·§3·§4](docs/runbook.md) · README 해당 절 · 이 문서 6절 · [../docs/run-local.md](../docs/run-local.md) |
-| 화면 배지·배너의 신설/폐기 | README 해당 절 · [runbook §6 증상표](docs/runbook.md) · 이 문서 7절 검증 항목 · 원격 관련이면 [run-remote-dev](../docs/run-remote-dev.md)·[run-prod](../docs/run-prod.md) 의 "확인한다" 절 |
-| `meta.*` 응답 필드 | [runbook §2](docs/runbook.md) 의 `jq` 예시 (없는 필드를 파면 `null` 이 조용히 나온다) · 환경 매뉴얼의 `curl` 예시 |
-| `wrangler.toml` 환경·바인딩 | [../docs/environments.md](../docs/environments.md) · README · [0011](docs/decision/0011-per-env-config.md) · **환경을 늘렸으면 매뉴얼 한 장을 새로 쓰고 [../docs/index.md](../docs/index.md) 에 매핑** |
-| **원격에 붙는 경로**(스크립트·플래그) | [0013](docs/decision/0013-remote-readonly-attach.md) 먼저 — 빗장 없는 원격 경로를 만들지 않았는지 확인 |
-| 불변 경계(4절)에 해당하는 동작 | 해당 `decision/` 문서 **먼저**, 그다음 위 전부 |
-
-**끝내기 전 확인** — 고친 코드에서 사라진 낱말(예: 배지 이름, 스크립트가 더 안 읽는 파일명)을
-문서에서 되짚는다. 남아 있으면 그게 낡은 서술이다.
-
-```bash
-# 예: 픽스처를 시드에서 뺐다면 — 문서가 아직 시드가 넣는다고 말하는지
-grep -rn "slo_sample\|ops_records_sample\|npm run seed" --include=*.md . ../docs
-```
-
-이 표 자체도 대상이다 — 새 문서를 만들거나 코드 표면을 늘리면 **행을 추가한다.**
 
 ## 8. 완료 기준
 
@@ -233,7 +190,7 @@ grep -rn "slo_sample\|ops_records_sample\|npm run seed" --include=*.md . ../docs
 - 오류 응답이 problem+json 으로 일관됨
 - 응답·로그에 이메일 원문과 토큰이 없음
 - 불변 경계(4절)를 건드리지 않음 — 건드렸다면 결정 문서 개정이 먼저 있었음
-- README·docs 가 실체와 어긋나지 않게 같이 갱신됨 — **7-1 대응표의 해당 행을 전부 열었음**
+- README·docs 가 실체와 어긋나지 않게 같이 갱신됨
 
 ## 9. 구조 검토가 필요한 변경
 
@@ -247,8 +204,6 @@ grep -rn "slo_sample\|ops_records_sample\|npm run seed" --include=*.md . ../docs
 마이그레이션에 DROP·이름 변경      → 금지 — 0007 규약(증분·추가만, #78 D-6)
 조회 DB 4종 스키마 변경            → 정본(ASAC-DAG)이 먼저 — 미러·화면은 0009 대로 추종
 키 상태 모델 확장                  → 0006 개정 (게이트웨이와 공동)
-원격에서 조치 허용(빗장 해제)      → 0013 + 0002 개정 — "누가 했나"가 남는 인증(0004)이 선행
-새 원격 접속 경로 추가             → 0013 대로 빗장을 같이 단다. 빗장 없는 경로는 만들지 않는다
 ```
 
 ## 10. Claude 작업 규칙
@@ -257,8 +212,5 @@ grep -rn "slo_sample\|ops_records_sample\|npm run seed" --include=*.md . ../docs
 - 요구사항과 무관한 리팩터링·프레임워크 도입을 하지 않는다.
 - 보안·비용에 영향을 주는 변경은 그 영향을 명시한다.
 - 구현 후 변경 파일과 검증 결과를 요약하고, 실패·미검증 사항을 숨기지 않는다.
-- 문서(docs/·README)와 코드가 어긋나는 변경이면 같은 커밋에서 문서를 고친다 —
-  **어디를 고칠지는 추측하지 말고 7-1 대응표를 따르고**, 표에 없는 표면을 건드렸으면 행을 더한다.
-- 코드에서 무엇을 **없앴을 때**가 특히 위험하다. 없앤 낱말로 `grep` 을 돌려 문서에 남은
-  서술을 걷어낸다 — 추가는 눈에 띄지만 삭제는 문서에 흔적으로 남는다.
+- 문서(docs/·README)와 코드가 어긋나는 변경이면 같은 커밋에서 문서를 고친다.
 - 비밀값·API Token·실제 API Key 를 출력하거나 커밋하지 않는다.

@@ -66,13 +66,14 @@
 
 어기는 순간 사고가 되는 것들. 완화하려면 결정 문서 개정이 먼저다.
 
-- **`wrangler deploy` 금지.** 로컬 전용(`wrangler dev --local`)이다. 공개 URL 신설은
-  배포 결정(agreement §8). package.json 에 deploy 스크립트를 만들지 않는다.
-  게이트 통과 후의 배포는 `--env production`(prod D1 `ask-seoul-prod-d1` 바인딩) 만 쓴다
-  — 절차는 docs/deploy-runbook.md.
-- **팀(원격) D1 에 쓰지 않는다.** wrangler.toml 의 database_id 는 로컬 모드에서 쓰이지
-  않으며, 시드·검증은 전부 Miniflare 로컬 상태만 만진다. 기본 환경의 dev D1 바인딩은
-  콘솔과 로컬 상태를 공유하는 키(database_id)라 **prod 로 바꾸지 않는다**(wrangler.toml 주석).
+- **배포는 환경을 지정한 스크립트로만.** `npm run deploy:dev`(→ dev.ask-seoul.kr) /
+  `npm run deploy:prod`(→ ask-seoul.kr, **agreement §8-3 조율 후에만** — prod D1 은
+  파이프라인의 DB 다). env 없는 맨 `wrangler deploy` 는 금지 — 기본 환경은 로컬 전용이고
+  라우트 없는 워커가 하나 더 생긴다. 절차 정본은 [docs/deploy-runbook.md](docs/deploy-runbook.md).
+- **팀(원격) D1 쓰기는 배포 절차(런북 §0·§1: preflight → 장부 백필 → apply)를 통해서만.**
+  로컬 시드·검증은 전부 `--local`(Miniflare) 상태만 만진다 — 원격 D1 을 향한 임의 파일
+  직실행 금지(0004 가 남의 표를 오염시킨 실사고). 기본 환경의 dev D1 바인딩은 콘솔과
+  로컬 상태를 공유하는 키(database_id)라 **prod 로 바꾸지 않는다**(wrangler.toml 주석).
 - **키 원문은 어디에도 저장하지 않는다.** SHA-256 해시 + 표시용 접두 8자만. 발급 응답에서
   한 번 보여주는 게 전부다.
 - **`_gateway_request_log` 에 값을 남기지 않는다** — 필터는 컬럼명만, 식별자는 key_hash 만,
@@ -157,7 +158,8 @@ npm run dev    # :8787 — 콘솔(:8788)과 동시 구동 가능
 바로 구현하지 않는다. 결정 문서(신규 또는 개정)로 사유·비용·단순 대안·롤백을 먼저 적는다.
 
 ```text
-공개 배포(어떤 형태든)              → 배포 결정(agreement §8) — wrangler.toml 주석이 정본
+production 배포(ask-seoul.kr 공개)  → 배포 결정(agreement §8, 특히 §8-3 prod D1 조율)
+                                      — dev 는 deploy:dev 로 상시 가능
 키 상태 모델 확장(2값 초과)          → 콘솔 0006 과 공동 개정
 _gateway_request_log 컬럼 추가       → 새 ALTER 파일 + 시드 체인 + 콘솔 통지, 전부 nullable
 공유 계약(오류·KST·key_hash …) 변경  → decision/0001 개정 + 콘솔 담당 리뷰
