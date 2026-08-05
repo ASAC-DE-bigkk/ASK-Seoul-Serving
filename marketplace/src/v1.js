@@ -1,15 +1,18 @@
-// `/v1/*` — 마켓플레이스 공용 API (ASAC-DAG#642 안 B).
+// 제품 메타 조립기 + 용어 사전 — `/api/v1` 로 **흡수된** 두 핸들러.
+//
+// **파일 이름만 과거를 가리킨다.** 원래 `/v1/*`(ASAC-DAG#642 안 B) 전용이었는데, 그 표면은
+// 접고 기능은 `/api/v1` 아래로 옮겼다 — agreement §10 이 처분을 *"소비자 전수 0 실측.
+// `/api/v1` 로 흡수"* 로 기록했고 그게 정본이다(decision/0004 D-2 초안이 "삭제"로 적었다가
+// 정정됐다). 파일 이름은 소비자가 생긴 뒤 옮긴다.
 //
 // 소비 순서는 ① 제품 고르기(`/api/v1/catalog`) → ② 그 제품 메타 전부 → ③ 질의 이고,
 // 여기는 ②를 한 번에 준다. 조립 쿼리 4개는 #642 §1 그대로다.
 //
-// 식별자가 테이블명이 아니라 **product_id** 인 게 `/api/*` 와의 결정적 차이다 —
-// 테이블명은 물리 이름이라 바뀔 수 있고, product_id 는 계약(meta.serving)이 보증한다.
+// 식별자가 테이블명이 아니라 **product_id** 인 게 결정적이다 — 테이블명은 물리 이름이라
+// 바뀔 수 있고, product_id 는 계약(meta.serving)이 보증한다(decision/0003).
 //
-// 인증: #638 결정대로 **전 경로 인증키**. 다만 메타 조회는 일일 쿼터를 소모하지 않는다
-// (버스트만 적용) — 데이터가 아니라 판단 재료이고, 소비 순서상 데이터 호출 앞에 반드시
-// 오는 단계라 여기서 쿼터를 깎으면 정작 쓸 몫이 준다. #642 의 "경로 등급이 아니라 키
-// 정책으로" 를 이렇게 해석했다.
+// 메타 조회는 일일 쿼터를 소모하지 않는다(버스트만 적용) — 데이터가 아니라 판단 재료이고,
+// 소비 순서상 데이터 호출 앞에 반드시 오는 단계라 여기서 깎으면 정작 쓸 몫이 준다.
 import { json, problem, safeRows, parseJsonArray, PUBLIC } from "./shared.js";
 
 const ID_RE = /^[a-z0-9_]+$/;
@@ -109,7 +112,7 @@ export async function handleGlossary(env, vocabularyId, trace = {}) {
   trace.table = "d1_catalog_glossary";
   if (!vocabularyId)
     return problem(400, "missing vocabulary_id",
-      "vocabulary_id 쿼리 파라미터가 필요하다 — 예: /v1/glossary?vocabulary_id=commerce:major");
+      "vocabulary_id 쿼리 파라미터가 필요하다 — 예: /api/v1/glossary?vocabulary_id=commerce:major");
 
   const rows = await safeRows(env.DB.prepare(
     "SELECT code, label_ko, origin, source_type FROM d1_catalog_glossary " +

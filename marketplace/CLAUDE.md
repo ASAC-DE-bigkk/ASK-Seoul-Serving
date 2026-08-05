@@ -34,16 +34,19 @@
 | `GET /api/v1/preview/<t>` | 고정 5행 미리보기, 무과금 | 무인증 + IP 버스트 |
 | `GET /api/v1/data/<t>` | 필터·기간·키셋 커서 조회 | Bearer + 버스트 + 일일 쿼터 |
 | `GET /api/v1/me` | 내 사용량 (이메일 원문은 여기만 — 본인 응답) | Bearer |
-| `GET /v1/products/<id>` | 제품 번들 — 구조·컬럼 설명·질의 예시 (ASAC-DAG#642) | Bearer |
-| `GET /v1/glossary` | 용어 사전 (`?vocabulary_id=`) | Bearer |
-| 정적 | `/docs` `/legal` `/llms.txt` `/openapi.json` `/column-docs.json` | Assets 서빙 |
+| `GET /api/v1/products/<id>` | 제품 번들 — 구조·컬럼 설명·질의 예시 (옛 `/v1` 에서 흡수) | Bearer, 무과금 |
+| `GET /api/v1/glossary` | 용어 사전 (`?vocabulary_id=`) — `d1_catalog_glossary` 를 읽는 유일한 문 | Bearer, 무과금 |
+| `GET /skill/v1/…` | K-Skill 전용 계약(번들·제품·데이터) — src/skill.js | Bearer |
+| `POST /mcp` | MCP 서버(JSON-RPC, 툴 5종) — src/mcp.js | `tools/call` 부터 Bearer |
+| 정적 | `/docs` `/legal` `/llms.txt` `/openapi.json` `/skill-openapi.json` | Assets 서빙 |
 
 구성은 이것이 전부다:
 
 ```text
-단일 Worker, 파일 셋      — src/index.js(라우터 + /api) · src/v1.js · src/shared.js
+단일 Worker, 파일 다섯    — src/index.js(라우터 + /api/v1) · src/skill.js · src/mcp.js
+                             · src/v1.js(제품 메타 조립기 — 이름만 옛 경로) · src/shared.js
                              게이트 순서: 키 검증 → 버스트 → 쿼터 → external 게이트 → 조회
-+ Static Assets (public/)   — run_worker_first = ["/api/*", "/v1/*"], 없는 경로는 404 화면
++ Static Assets (public/)   — run_worker_first = ["/api/v1/*", "/skill/v1/*", "/mcp"], 없는 경로는 404 화면
                               site.css(문서형 공유 뼈대) · theme.js(다크/라이트 토글 배선)
 + partials/                 — nav.html · footer.html. 머리·바닥의 **정본**이다
 + 로컬 D1 (Miniflare)       — wrangler dev --local. 콘솔(../ops-dashboard)이 같은 상태를 읽는다

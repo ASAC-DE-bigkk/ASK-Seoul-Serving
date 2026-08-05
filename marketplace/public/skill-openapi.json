@@ -4,7 +4,7 @@
     "title": "seoul-urban-analytics K-Skill API",
     "version": "1.0.0-draft",
     "summary": "K-Skill 등록 심사용 서울 도시 분석 데이터 제품 계약",
-    "description": "seoul-urban-analytics K-Skill만을 위한 읽기 전용 API다. 공용 Marketplace /v1 API와 제품 범위·응답 계약은 분리하지만, 같은 API Key·버스트 제한·오류·요청 추적 정책을 사용한다. /skill/v1 서버 allowlist는 정확한 6개 제품만 허용하며 Marketplace에 공개된 다른 제품도 404로 거부한다. 데이터는 source/right·quality·구조 메타데이터가 현재 publication_id와 모두 일치하고 품질 게이트를 통과한 제품에만 반환한다."
+    "description": "seoul-urban-analytics K-Skill만을 위한 읽기 전용 API다. 공용 Marketplace /api/v1 API와 제품 범위·응답 계약은 분리하지만, 같은 API Key·버스트 제한·오류·요청 추적 정책을 사용한다. /skill/v1 서버 allowlist는 정확한 6개 제품만 허용하며 Marketplace에 공개된 다른 제품도 404로 거부한다. 데이터는 source/right·quality·구조 메타데이터가 현재 publication_id와 모두 일치하고 품질 게이트를 통과한 제품에만 반환한다."
   },
   "servers": [{ "url": "/", "description": "이 서비스가 서빙 중인 호스트" }],
   "security": [{ "bearerAuth": [] }],
