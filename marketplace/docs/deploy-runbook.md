@@ -7,6 +7,138 @@
 > 정식 공개는 별도 판단(#20)이다. 이유는 ASK-Seoul-Serving#4 가 V1 6개 제품 계약 검증에
 > 실제 게시본을 읽는 타겟을 요구하기 때문이다.
 
+## 타겟이 둘이다 — 먼저 어느 쪽인지 정한다
+
+| 타겟 | 환경 | Worker | D1 | `ASK_ENV` | 절차 |
+|---|---|---|---|---|---|
+| **공용 개발**(shared-dev) | `--env dev` | `ask-seoul-gateway-dev` | `ask-seoul-dev-d1` | `dev` | **아래 §D** |
+| 통합 검증 | `--env production` | `ask-seoul-gateway` | `ask-seoul-prod-d1` | `prod` | §0 ~ §6 |
+
+**플래그 없는 `wrangler deploy` 는 어느 쪽도 아니다** — base env 가 나가면서 dev D1 을 쓰는데
+`ASK_ENV=local` 로 기록된다. 그 배포본의 요청 로그는 누군가의 로컬 실행과 구분되지 않는다.
+
+---
+
+# D. 공용 개발 타겟 (shared-dev)
+
+> K-Skill 통합 검증(#4)이 **게시본을 실제로 읽는 타겟**을 요구해서 만든 자리다.
+> 대상은 `dev.ask-seoul.kr` 이고 D1 은 콘솔·로컬과 **같은 dev D1** 이다.
+> prod 타겟(§0~§6)과 Worker 가 갈리므로 서로 덮어쓰지 않는다.
+
+## D-0. 지금 붙어 있는 것부터 확인 — 표면이 통째로 바뀐다
+
+**이건 최신화가 아니라 표면 교체다.** 실측(2026-08-05 03:51 KST, `dev.ask-seoul.kr`):
+
+| 경로 | 현 배포본 | 재배포 후 |
+|---|---|---|
+| `GET /api/catalog` | **200** · 57제품 | 🔴 **404** |
+| `GET /v1/glossary` | **401**(살아 있음) | 🔴 **404** — `/api/v1/glossary` 로 흡수 |
+| `GET /api/v1/catalog` | 404 | ✅ 200 · 62제품 |
+| `GET /skill/v1/…` | 404 | ✅ 활성 |
+| `POST /mcp` | 405 | ✅ 활성 |
+
+현 배포본은 `/api/v1` 개명 **이전**이다(응답에 `column_docs` 포인터가 남아 있고
+`usage_patterns` 가 없다). **`/api/*`·`/v1/*` 에 붙은 소비자는 전부 끊긴다** —
+배포 전에 ASAC-DAG#642 후속으로 통지하고, 회신 없는 소비자가 있으면 배포를 미룬다.
+
+## D-1. Worker 신설과 라우트 이전 (최초 1회)
+
+`--env dev` 는 **새 Worker**(`ask-seoul-gateway-dev`)를 만든다. 이름을 가른 이유는
+wrangler.toml 주석에 있다 — 같은 이름이면 `--env` 하나 빠뜨린 배포가 상대를 밀어낸다.
+
+그래서 최초 1회는 **라우트를 옮겨야 한다.** 지금 `dev.ask-seoul.kr` 은 이전 Worker 에
+붙어 있다(파일에 `routes` 선언이 없으므로 대시보드 수동 설정이다 — 실체가 코드에 없다).
+
+1. `--env dev` 로 한 번 배포해 Worker 를 만든다(§D-5)
+2. Cloudflare 대시보드에서 `dev.ask-seoul.kr` 커스텀 도메인을 **새 Worker 로 옮긴다**
+3. 옮긴 뒤 이전 Worker 는 **바로 지우지 않는다** — 되돌릴 자리로 하루쯤 남긴다
+
+> 라우트를 옮기지 않기로 하면 대안은 하나뿐이다: `[env.dev]` 의 `name` 을 현 Worker 이름으로
+> 두고 **`[env.production]` 의 `name` 을 대신 바꾸는 것**. prod 는 아직 한 번도 배포된 적이
+> 없으므로(§0 실측: prod D1 에 `_keys` 없음) 개명 비용이 0 이다. **둘 중 하나는 해야 한다** —
+> 같은 이름을 유지하는 선택지는 없다.
+
+## D-2. 배포 전 검사
+
+```bash
+cd marketplace
+npm run preflight -- ask-seoul-dev-d1 --env dev
+```
+
+**dev 는 🔴 중단으로 나온다** — `0004` 가 남의 표(`_request_log`, transit 소유)에 얹은
+`request_id` 를 문지기가 잡는다(§0 실측). 이건 *이미 일어난 일*이라 배포로 악화되지 않지만,
+**통과시키려면 사람의 결정이 먼저다**:
+
+```bash
+npm run preflight -- ask-seoul-dev-d1 --env dev --ack "#52 합의: <결정과 근거>"
+```
+
+`--ack` 는 판정을 바꾸지 않는다 — 판정을 그대로 찍고 사유를 함께 남기며 종료 코드만 0 으로
+바꾼다. **그러니 사유란에 적을 #52 합의가 실제로 있어야 한다.** 없이 ack 하면 다음 사람이
+"왜 통과시켰나"에 답할 수 없다.
+
+## D-3. dev D1 에 운영 테이블 만들기 (최초 1회)
+
+**§0 실측 기준 dev D1 에 `_gateway_request_log` 가 없다.** 이 상태로 배포하면 INSERT 가
+`ctx.waitUntil` 안에서 실패하고 — **응답은 멀쩡하다.** 스모크는 전부 PASS 로 나오면서
+요청 로그만 전량 유실된다. 몇 주간 겪은 그 형태다.
+
+> ⚠️ 팀(원격) D1 쓰기다. **직접 실행한다** — 에이전트가 대신 돌리지 않는다.
+
+**장부 백필이 먼저다.** 순서를 뒤집으면 apply 가 `0001` 부터 재실행하면서 `0004` 가
+남의 표에 컬럼을 다시 얹는다. 백필은 이름이 아니라 `route` 컬럼 유무로 우리 표인지를 가린다.
+
+```bash
+cd marketplace
+npx wrangler d1 execute ask-seoul-dev-d1 --remote --env dev \
+  --file=scripts/backfill-migrations-ledger.sql
+npx wrangler d1 migrations apply ask-seoul-dev-d1 --remote --env dev
+npx wrangler d1 execute ask-seoul-dev-d1 --remote --env dev \
+  --file=scripts/check-request-log-schema.sql     # 기대: dev `cols` 5 그대로
+```
+
+## D-4. 시크릿 (최초 1회)
+
+**시크릿은 환경마다 따로다.** `[env.dev]` 는 새 환경이라 비어 있고, 없으면 발급이
+503 으로 닫힌다(무염 해시 방지 — 의도된 fail-closed). 그러면 인증 스모크를 시작조차 못 한다.
+
+```bash
+openssl rand -hex 32                          # 출력은 어디에도 남기지 말 것
+npx wrangler secret put ISSUANCE_SALT --env dev
+```
+
+## D-5. 배포
+
+```bash
+npx wrangler deploy --env dev
+```
+
+## D-6. 스모크
+
+```bash
+npm run smoke -- https://dev.ask-seoul.kr
+```
+
+13항목 중 무인증 12개가 자동으로 돈다(MCP `initialize`·`tools/list` 포함). 인증까지 보려면
+키를 하나 발급해 `SMOKE_KEY=ask_… npm run smoke -- …`. 실패 신호는 §4 표와 같다.
+
+**스모크 통과만으로는 관측을 확인할 수 없다** — 응답이 200 이어도 로그는 버려질 수 있다.
+한 바퀴 돌린 뒤 행이 실제로 늘었는지 본다:
+
+```bash
+npx wrangler d1 execute ask-seoul-dev-d1 --remote --env dev \
+  --command "SELECT env, COUNT(*) n FROM _gateway_request_log GROUP BY env"
+```
+
+기대: `dev` 행이 늘어난다. **`local` 로 찍히면 base env 가 나간 것이다** — 즉시 중단하고
+`--env dev` 로 다시 배포한다.
+
+---
+
+# 통합 검증 타겟 (`--env production`)
+
+아래 §0 ~ §6 은 **prod 타겟** 절차다. shared-dev 는 위 §D 를 본다.
+
 ## 0. 배포 전 검사 — **먼저 이것부터**
 
 ```bash

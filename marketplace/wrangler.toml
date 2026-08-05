@@ -28,9 +28,43 @@ database_id = "9db0e851-558e-489f-9e76-f131d25aa267"
 # 막는 게 목적이다 — 실측으로 운영 D1 에 `dev` 17건, 개발 D1 에 `prod` 63건이 이미 있다.
 #
 # ⚠️ **base env 는 로컬 전용이다 — 배포하지 않는다.** 여기서 배포하면 dev D1 을 쓰면서
-#    `local` 로 기록돼 값이 실제 배포면을 못 덮는다. 배포는 `--env production` 만 쓴다.
+#    `local` 로 기록돼 값이 실제 배포면을 못 덮는다. 배포는 `--env dev`(공용 개발 타겟) 또는
+#    `--env production` 만 쓴다 — 플래그 없는 `wrangler deploy` 가 곧 이 사고다.
 [vars]
 ASK_ENV = "local"
+
+# ── 공용 개발 타겟 (2026-08-05, #4) ─────────────────────────────────────────
+# K-Skill 통합 검증이 "게시본을 실제로 읽는 타겟"을 요구한다(#4). 그런데 그 조건은
+# **dev D1 + 배포면**이고, 위 두 환경 중 어느 쪽도 그게 아니다 — base 는 dev D1 이지만
+# 로컬이고, production 은 배포면이지만 prod D1 이다. 없는 조합을 base 로 대신하면
+# `ASK_ENV=local` 이 배포본에 실려 검증 트래픽과 누군가의 로컬 실행을 구분할 수 없게 된다
+# (#78 `Z-7` — 지표가 조용히 섞이는 것을 막는 게 이 값의 존재 이유다). 그래서 환경을 만든다.
+#
+# ⚠️ **Worker 이름을 production 과 다르게 둔다.** 환경이 갈려도 이름이 같으면 `--env` 만 다른
+# 배포가 **같은 Worker 를 서로 덮어쓴다** — dev 검증 배포가 prod 를 밀어내고 그 반대도 된다.
+# 그건 플래그를 하나 빠뜨리는 것만으로 일어나고, 되돌리려면 어느 쪽이 마지막이었는지를
+# 사람이 기억해야 한다. 이름이 갈리면 그 사고 자체가 성립하지 않는다.
+# 그래서 `dev.ask-seoul.kr` 라우트도 **이 Worker 로 옮겨야** 한다 — 절차는 deploy-runbook §D.
+[env.dev]
+name = "ask-seoul-gateway-dev"
+
+# env 섹션은 상속되지 않는다 — assets 블록을 통째로 다시 쓴다. `run_worker_first` 가 빠지면
+# `/skill/v1/*` 과 `/mcp` 가 워커에 닿지 못하고 정적 404·405 로 떨어진다. 실측(2026-08-05)의
+# 구형 배포본이 정확히 그 모양이었다: `POST /mcp` → 405(Assets 가 거절).
+[env.dev.assets]
+directory = "public"
+run_worker_first = ["/api/v1/*", "/skill/v1/*", "/mcp"]
+not_found_handling = "404-page"
+
+# base 와 **같은 dev D1** 이다(database_id 까지 같아야 한다) — 콘솔·로컬이 보는 그 DB 를
+# 배포본도 그대로 본다. prod 로 바꾸지 않는다: 그 순간 이건 production 의 사본이 된다.
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "ask-seoul-dev-d1"
+database_id = "9db0e851-558e-489f-9e76-f131d25aa267"
+
+[env.dev.vars]
+ASK_ENV = "dev"
 
 # ── 배포 전용 환경 (2026-08-03, ASAC-DAG#668) ────────────────────────────────
 # 파이프라인이 prod D1(ask-seoul-prod-d1)을 신설해 62개 제품 게시를 시작했다.

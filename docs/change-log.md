@@ -38,6 +38,41 @@
 
 ---
 
+## 2026-08-05
+
+### 공용 개발 타겟(shared-dev)에 환경을 만든다 — 없는 조합을 base 로 대신하지 않기 위해
+
+- **작업자**: @yooseongjin527
+- **의도 · 목표**: #4 가 `dev.ask-seoul.kr` 재배포를 조율 요청하며 **"dev D1 + `ASK_ENV=dev`"**
+  를 지목했는데, `wrangler.toml` 에 **그 조합이 없었다.** 있는 건 둘뿐이다 — base(dev D1 +
+  `local`, 로컬 전용)와 `[env.production]`(prod D1 + `prod`). 없는 조합을 base 로 대신하면
+  배포본이 `ASK_ENV=local` 로 기록돼 **검증 트래픽과 누군가의 로컬 실행을 구분할 수 없다**
+  (#78 `Z-7` — 그 값의 존재 이유가 지표 섞임을 막는 것이다). 그 자리를 만드는 게 목표다.
+- **조치**:
+  - `[env.dev]` 신설 — dev D1(base 와 **같은 `database_id`**) + `ASK_ENV="dev"`.
+    env 는 상속되지 않으므로 `assets`·`run_worker_first`·`not_found_handling` 을 다시 선언했다.
+  - **Worker 이름을 갈랐다**(`ask-seoul-gateway-dev`). 이름이 같으면 `--env` 하나를 빠뜨린
+    배포가 상대 환경을 덮어쓴다 — 플래그 실수 하나로 일어나고, 되돌리려면 어느 쪽이
+    마지막이었는지를 사람이 기억해야 한다. 이름이 갈리면 그 사고가 성립하지 않는다.
+  - `deploy-runbook.md` 에 **§D(공용 개발 타겟)** 를 신설하고 서두에 타겟 2종 표를 얹었다.
+    기존 §0~§6 은 prod 절차임을 명시.
+- **결과**: 배포 전 실측(2026-08-05 03:51 KST, 읽기만)으로 **현 배포본이 `/api/v1` 개명
+  이전**임을 확인했다 — `/api/catalog` 200(57제품, 응답에 퇴역한 `column_docs` 포인터가
+  남아 있고 `usage_patterns` 없음) · `/v1/glossary` 401(살아 있음) · `/api/v1/catalog` 404 ·
+  `/skill/v1/*` 404 · `POST /mcp` 405. **재배포는 최신화가 아니라 표면 교체다** —
+  `/api/*`·`/v1/*` 소비자가 전부 끊긴다. 통지가 선행이다(ASAC-DAG#642 후속).
+  - 남은 것 ①: **라우트 이전**. `wrangler.toml` 에 `routes` 선언이 없고 `dev.ask-seoul.kr`
+    이 대시보드 수동 설정으로 이전 Worker 에 붙어 있다 — 실체가 코드에 없다.
+  - 남은 것 ②: **dev D1 에 `_gateway_request_log` 가 없다**(8/4 실측). 배포만 하면
+    INSERT 가 `ctx.waitUntil` 안에서 실패하고 **응답은 멀쩡하다** — 스모크가 전부 PASS 인 채
+    로그만 유실된다. 장부 백필 → `migrations apply --remote` 가 선행(§D-3).
+  - 남은 것 ③: dev preflight 는 `_request_log` **오염**으로 🔴 중단 상태다. `--ack` 로
+    통과시키려면 **#52 합의가 먼저** 있어야 한다(ack 는 판정을 바꾸지 않는다).
+  - 남은 것 ④: `ISSUANCE_SALT` 는 환경마다 따로다 — `[env.dev]` 에 다시 넣어야 발급이 열린다.
+  - **미검증**: 실제 배포는 하지 않았다. `--env dev` 는 설정만 추가된 상태다.
+
+---
+
 ## 2026-08-04
 
 ### 빈 화면이 "왜 비었나"를 말하게 — 표가 어디에 사는지
