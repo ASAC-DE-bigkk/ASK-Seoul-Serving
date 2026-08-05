@@ -6,6 +6,15 @@
 > 한쪽 절차만 고치면 다른 쪽이 조용히 깨진다. 실행·시드·포트·비밀값 규약을 바꾸는 변경은
 > 같은 커밋에서 이 문서를 고치고, 상대 담당자에게 알린다.
 
+> 🔴 **2026-08-05 — 콘솔은 더 이상 로컬 D1 을 공유하지 않는다.**
+> dev D1 폐기 결정으로 콘솔의 D1 바인딩에 `remote = true` 가 걸려 `npm run dev` 가 **운영 D1 에
+> 직접 붙는다**([ops-dashboard/docs/decision/0015](../ops-dashboard/docs/decision/0015-single-production-d1.md)).
+> **콘솔에는 `npm run seed` 도 `--persist-to` 도 없다** — 아래 대시보드 절차는 낡았다.
+> 현행 절차는 [ops-dashboard/docs/runbook.md §1](../ops-dashboard/docs/runbook.md) 이 정본이다.
+>
+> 게이트웨이 쪽 전환은 **그쪽 담당자 몫**이라 이 문서의 API 절차는 그대로 유효하다(**#85**).
+> 두 쪽이 다시 한 절차로 합쳐지면 이 배너를 걷는다.
+
 | 담당 | 프로젝트 | 로컬 포트 | 이 문서에서의 위치 |
 |---|---|---|---|
 | API | [marketplace/](../marketplace/) | `:8787` | **먼저 시드해야 하는 쪽** — 로컬 D1 상태의 주인 |

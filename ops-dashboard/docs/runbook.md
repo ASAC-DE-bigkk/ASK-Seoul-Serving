@@ -8,29 +8,37 @@
 
 ## 1. 처음 여는 사람 — 구동까지
 
-콘솔은 게이트웨이([../../marketplace/](../../marketplace/))와 **같은 로컬 D1 상태**를 읽는다
-(`--persist-to`). 서빙 품질(`_gateway_request_log`)·키(`_keys`)는 저쪽이 만들기 때문에, 게이트웨이도
-한 번은 시드해 두는 게 화면이 온전하다.
+> 🔴 **띄우면 운영이다.** D1 은 `ask-seoul-prod-d1` 하나뿐이고 `npm run dev` 는
+> 바인딩에 `remote = true` 가 걸려 있다([0015](decision/0015-single-production-d1.md)). 로컬
+> 사본이 없으므로 **연습 삼아 눌러 볼 곳이 없다.** 조치(폐기·복구·쿼터·삭제)는 실제 고객 키에 간다.
 
 ```bash
-# (선택이지만 권장) 게이트웨이 먼저 — _catalog·_keys·_gateway_request_log 가 생긴다
-cd marketplace && npm install && npm run seed
-
-# 콘솔
-cd ../ops-dashboard
+cd ops-dashboard
 npm install
-npm run seed          # _ops_slo/_ops_domain + 조회 DB 4종 미러 + 합성 샘플 → 공유 로컬 D1
+cp .env.example .env   # CLOUDFLARE_API_TOKEN — 원격 바인딩이라 자격증명 없이는 안 뜬다
 echo "OPS_TOKEN=$(openssl rand -hex 16)" > .dev.vars    # 조치(쓰기) 잠금 해제용 — .gitignore 대상
-npm run dev           # http://localhost:8788  (게이트웨이 :8787 과 동시 구동 가능)
+npm run dev            # http://localhost:8788  🔴 운영 D1
 ```
 
 - 토큰 없이도 화면은 뜬다 — 잠기는 건 **조치**(폐기·복구·쿼터·삭제)뿐이다.
-- 시드는 몇 번을 다시 돌려도 안전하다 — 마이그레이션은 `CREATE IF NOT EXISTS` 뿐이고
-  (DROP 금지, [0007](decision/0007-schema-single-file-reset.md)), 픽스처는 **자기 샘플 범위만**
-  지우고 다시 넣는다.
-- **동시 구동 순서**: 게이트웨이를 먼저 띄우고 콘솔을 나중에 띄운다(공유 sqlite 의 WAL
-  복구 잠금 충돌 예방). 인스펙터 포트는 콘솔이 9230 으로 고정돼 있어 게이트웨이의
-  기본값(9229)과 겹치지 않는다.
+- 게이트웨이를 따로 시드할 필요가 없다. `_gateway_request_log`·`_keys` 는 운영 D1 에 있고
+  콘솔이 거기서 직접 읽는다. **게이트웨이 로컬 구동은 아직 dev D1 을 본다** — 그쪽 전환은
+  담당자 몫이라(#85) 그때까지 두 프로젝트의 로컬이 서로 다른 DB 를 본다.
+- 인스펙터 포트는 콘솔이 9230 으로 고정돼 있어 게이트웨이 기본값(9229)과 겹치지 않는다.
+
+### 1-1. 스키마 적용 — 코드 배포와 분리돼 있다
+
+```bash
+npm run migrate:list   # 무엇이 적용됐나 먼저 본다
+npm run migrate        # 장부 백필 → migrations apply (운영 D1, 원격)
+```
+
+CD 는 **코드만** 배포한다. 마이그레이션이 자동으로 돌면 운영 스키마가 머지 타이밍에
+바뀌는데, D1 이 하나뿐인 지금 그건 되돌릴 창이 없다는 뜻이다.
+
+`migrations/` 는 전부 `CREATE TABLE IF NOT EXISTS` 이고 DROP·ALTER 가 없다
+([0007](decision/0007-schema-single-file-reset.md)) — **있는 표는 건드리지 않는다.**
+0002 가 만드는 조회 DB 4종은 운영에 이미 있으므로 그대로 no-op 이다.
 
 ## 2. 맞게 떴는지 — API 검증 세트
 
@@ -148,16 +156,25 @@ npx wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wr
 
 ```bash
 # 새 컬럼 → 새 파일로 추가만 (예: migrations/0003_add_x.sql 에 ALTER TABLE ... ADD COLUMN ...)
-npx wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state \
-  --file=migrations/0003_add_x.sql
-# package.json 의 seed 체인에도 같은 파일을 추가한다
-
-# 로컬을 통째로 리셋하고 싶을 때 — 마이그레이션이 아니라 상태를 지운다 (게이트웨이 데이터도 지워진다!)
-rm -rf ../marketplace/.wrangler/state && (cd ../marketplace && npm run seed) && npm run seed
+npm run migrate:list          # 현재 적용 상태
+npm run migrate               # 새 파일까지 적용 (운영 D1)
 ```
 
-조회 DB 4종의 정본은 ASAC-DAG `common/ops/d1_ops.py` 다 — 정본이 바뀌면 미러
-(`migrations/0002`)를 따라 고치고, 임의로 컬럼을 더하지 않는다.
+🔴 **되돌릴 로컬이 없다.** 예전에는 `rm -rf .wrangler/state` 로 로컬을 통째로 리셋할 수
+있었지만 D1 이 운영 하나뿐이라 그 경로가 사라졌다([0015](decision/0015-single-production-d1.md)).
+**적용 전에 파일을 두 번 읽는다.**
+
+🔴 **콘솔 소유 표에만 쓴다** — `_ops_slo`·`_ops_domain`. 그 밖의 표는 정본이 남에게 있다:
+
+| 표 | 정본 |
+|---|---|
+| `_keys`·`_usage`·`_burst`·`_gateway_request_log` | `../../marketplace/migrations/` |
+| `_ops_run_event` 외 3종 | ASAC-DAG `common/ops/d1_ops.py` |
+| `_catalog`·`_publication_ledger` | 도메인 export(dbt) |
+
+정본이 바뀌면 미러(`migrations/0002`)를 **따라** 고치고, 임의로 컬럼을 더하지 않는다.
+손으로 치는 DDL 은 `npm run d1` 이 막는다 — 장부를 안 거친 스키마 변경은 다음 사람의
+`migrate` 를 어긋나게 하기 때문이다.
 
 ## 6. 운영 조치 시나리오
 
@@ -190,14 +207,20 @@ curl -s -X POST "$BASE/api/keys" -H "authorization: Bearer $TOKEN" \
 
 | 증상 | 원인 | 조치 |
 |---|---|---|
-| '합성 샘플' 배너 | 픽스처 데이터로 동작 중 | §4 실적재. 배너는 실측이 들어오면 사라진다 |
-| '조회 DB 표가 없습니다' | `npm run seed` 전 | `npm run seed` |
-| '서빙 로그를 찾지 못했습니다' | 게이트웨이 미시드 / `--persist-to` 불일치 | `cd ../marketplace && npm run seed`, 경로 확인 |
-| 조치 버튼이 안 보인다 | 읽기 전용 모드 | 상단 잠금 해제 (`.dev.vars` 의 `OPS_TOKEN`) |
+| 아예 안 뜬다 / D1 바인딩 오류 | 원격 바인딩인데 `.env` 의 `CLOUDFLARE_API_TOKEN` 없음·만료 | `.env` 확인 — 로컬 사본이 없어 자격증명 없이는 못 뜬다 |
+| '조회 DB 표가 없습니다' | 운영 D1 에 `_ops_slo`·`_ops_domain` 미적용 | `npm run migrate` |
+| 배지가 "운영"이라고 뜬다 | **정상이다** | 이제 언제나 운영이다([0015](decision/0015-single-production-d1.md)) |
+| 조치 버튼이 안 보인다 | 토큰 미입력 | 상단 잠금 해제 (`.dev.vars` 의 `OPS_TOKEN`) |
 | 조치가 503 | `OPS_TOKEN` 미설정 | `.dev.vars` 작성 후 `npm run dev` 재시작 |
+| `npm run d1` 이 DDL 을 거부 | 의도된 동작 | 스키마는 `migrations/` + `npm run migrate`. 남의 표면 소유자에게 |
 | :8788 충돌 | 다른 프로세스 | `lsof -i :8788` 로 확인 후 정리 |
 
 ## 7. 하지 말 것 (요약)
 
-`wrangler deploy` · 팀(원격) D1 쓰기 · 게이트웨이 소유 테이블 스키마 변경 · 마이그레이션에
-DROP · 이메일 원문 응답 · 토큰 커밋. 전문은 [../CLAUDE.md](../CLAUDE.md) 4절.
+**남의 표 스키마 변경**(마켓플레이스·ASAC-DAG·dbt 소유) · 마이그레이션에 DROP ·
+env 없는 맨 `wrangler deploy` · 이메일 원문 응답 · 토큰 커밋.
+전문은 [../CLAUDE.md](../CLAUDE.md) 4절.
+
+> ⚠️ 예전 목록에 있던 **"팀(원격) D1 쓰기 금지"** 는 [0015](decision/0015-single-production-d1.md)
+> 로 **폐기**됐다. 이제 쓰기는 열려 있다 — 대신 **되돌릴 수 없다**는 사실이 그 자리를
+> 대신한다. 특히 키 삭제는 `_usage`·`_burst`·`_keys` 연쇄 삭제라 복구 경로가 없다.
