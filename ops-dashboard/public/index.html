@@ -6,7 +6,12 @@
 <meta name="robots" content="noindex, nofollow">
 <title>품질 콘솔 — ASK: SEOUL 운영</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a534e'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='14' font-weight='700' fill='%23fff' text-anchor='middle'%3EOPS%3C/text%3E%3C/svg%3E">
+<!-- 반응형 UI 킷 — 토큰·레이아웃·컴포넌트·툴팁이 여기 있다(프로젝트 독립, 다른 앱에 그대로 이식 가능).
+     예전에는 이 자리에 인라인 <style> 400줄이 있었는데, 재사용도 안 되고 캐시도 안 됐다. -->
+<link rel="stylesheet" href="/ui.css">
 <style>
+  /* 이 블록은 **이 콘솔에서만 쓰는** 몇 가지 미세 조정이다 — 재사용 킷(ui.css)에 넣기엔
+     너무 이 화면 전용이라 여기 남긴다. 색·간격 규칙은 전부 ui.css 가 정한다. */
   /* 팔레트·서체는 **마켓플레이스와 같은 값**이다(`../marketplace/public/site.css`).
      값이 갈리면 같은 팀 서비스가 둘로 보인다 — 콘솔이라고 다른 색을 쓸 이유가 없다.
      저쪽 토큰을 고칠 일이 생기면 여기도 같이 고친다.
@@ -14,410 +19,7 @@
      액센트는 단청 청록을 낮춘 딥 그린 하나이고 **면을 칠하지 않는다**(링크·버튼·상태만).
      예전 콘솔은 테라코타(#b8492a)를 썼는데, 그건 마켓플레이스가 팔레트를 통일하기 전의
      잔재였다. 운영 도구라는 신호는 색이 아니라 **왼쪽 레일과 환경 배지**가 준다. */
-  :root {
-    --bg:#f7f8f8; --panel:#ffffff; --panel-2:#f1f3f2;
-    --ink:#0f1b1a; --muted:#55655f; --faint:#64716d;
-    --line:#e5e9e7; --line-strong:#d3dad7;
-    --accent:#0b6e60; --accent-hover:#0a5c50; --accent-deep:#0b6e60; --accent-ink:#ffffff;
-    --accent-soft:rgba(11,110,96,.06); --accent-line:rgba(11,110,96,.22);
-    --teal:#0b6e60; --teal-deep:#0b6e60;
-    --teal-soft:rgba(11,110,96,.06); --teal-line:rgba(11,110,96,.22);
-    --ok:#15803d; --ok-soft:rgba(21,128,61,.08); --ok-line:rgba(21,128,61,.25);
-    --amber-ink:#b45309; --amber-soft:rgba(180,83,9,.08); --amber-line:rgba(180,83,9,.25);
-    --red-ink:#b91c1c; --red-soft:rgba(185,28,28,.07); --red-line:rgba(185,28,28,.25);
-    /* 왼쪽 레일 — 마켓플레이스 catalog.html 과 같은 토큰 */
-    --sidebar:#fbfcfc; --sidebar-hi:#eef2f0;
-    --sidebar-ink:#55655f; --sidebar-dim:#64716d; --sidebar-line:#e5e9e7;
-    --shadow-xs:none;
-    --shadow-sm:0 1px 2px rgba(15,27,26,.05);
-    /* mono 는 라틴 식별자 전용 — Consolas 에 한글 글리프가 없어 한글이 섞이면 글자 단위로
-       굴림 계열에 대체돼 뭉개진다. 한글 라벨은 --sans 로 되돌린다 */
-    --mono:ui-monospace,'Cascadia Code',Consolas,'SF Mono','Malgun Gothic',monospace;
-    --sans:Pretendard,'Pretendard Variable','Apple SD Gothic Neo','Malgun Gothic',
-           system-ui,-apple-system,'Noto Sans KR',sans-serif;
-    /* 마우스를 올렸을 때 **눈에 보이는** 변화. 글자색만 바꾸면 흰 배경에서 티가 안 난다. */
-    --hover:#eef2f0; --chip:#f1f3f2;
-  }
-
-  /* 다크 — 어두운 바탕에서는 액센트가 밝아져야 읽힌다(라이트와 방향이 반대다) */
-  :root[data-theme="dark"] {
-    --bg:#0d1211; --panel:#141a19; --panel-2:#1a2220;
-    --ink:#e9eeec; --muted:#9aa8a4; --faint:#7d8b86;
-    --line:rgba(233,238,236,.08); --line-strong:rgba(233,238,236,.15);
-    --accent:#35a892; --accent-hover:#4cc4ac; --accent-deep:#5fceb6; --accent-ink:#04211b;
-    --accent-soft:rgba(53,168,146,.12); --accent-line:rgba(53,168,146,.30);
-    --teal:#35a892; --teal-deep:#5fceb6;
-    --teal-soft:rgba(53,168,146,.12); --teal-line:rgba(53,168,146,.30);
-    --ok:#4ade80; --ok-soft:rgba(74,222,128,.10); --ok-line:rgba(74,222,128,.30);
-    --amber-ink:#fbbf24; --amber-soft:rgba(251,191,36,.12); --amber-line:rgba(251,191,36,.30);
-    --red-ink:#f87171; --red-soft:rgba(248,113,113,.10); --red-line:rgba(248,113,113,.30);
-    --sidebar:#0a0f0e; --sidebar-hi:#1a2220;
-    --sidebar-ink:#9aa8a4; --sidebar-dim:#7d8b86; --sidebar-line:rgba(233,238,236,.08);
-    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
-    --hover:#1a2220; --chip:#1a2220;
-  }
-  * { box-sizing:border-box; margin:0; }
-  html { scroll-behavior:smooth; }
-  body { font-family:var(--sans);
-         background:var(--bg); color:var(--ink); font-size:14.5px; line-height:1.65; word-break:keep-all;
-         -webkit-font-smoothing:antialiased; }
-  a { color:inherit; }
-  .lab { font-family:var(--mono); font-size:10.5px; font-weight:600; letter-spacing:.12em;
-         text-transform:uppercase; color:var(--faint); }
-
-  /* ── 셸 — 마켓플레이스 카탈로그와 같은 구조(좌측 레일 248px + 본문) ──────────
-     예전에는 어두운 상단 바에 탭을 가로로 늘어놨는데, 탭이 여섯이 되면서 라벨이 좁아지고
-     마켓플레이스와 다른 서비스처럼 보였다. 레일로 옮기면 탭마다 **한 줄을 온전히** 쓸 수
-     있어 부제와 상태 점이 같이 들어가고, 저쪽 카탈로그와 눈에 익은 자리가 같아진다. */
-  .shell { display:grid; grid-template-columns:248px 1fr; min-height:100vh; }
-  .side { background:var(--sidebar); color:var(--sidebar-ink); padding:16px 0 0;
-          position:sticky; top:0; height:100vh; overflow-y:auto;
-          display:flex; flex-direction:column; border-right:1px solid var(--sidebar-line); }
-  .side .brand { display:flex; align-items:center; gap:10px; padding:6px 18px 16px;
-                 border-bottom:1px solid var(--sidebar-line); margin-bottom:4px; }
-  .side .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
-                       background:var(--accent); display:flex; align-items:center;
-                       justify-content:center; font-weight:700; font-size:12.5px;
-                       color:var(--accent-ink); letter-spacing:.02em; font-family:var(--mono); }
-  .side .brand .nm { font-weight:700; font-size:14px; color:var(--ink);
-                     letter-spacing:-.01em; line-height:1.2; }
-  .side .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
-                      color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
-  .side .group { padding:14px 18px 6px; font-size:10.5px; font-weight:700; letter-spacing:.1em;
-                 color:var(--sidebar-dim); }
-  .side .foot { margin-top:auto; padding:14px 18px 16px; font-size:11px;
-                color:var(--sidebar-dim); line-height:1.9;
-                border-top:1px solid var(--sidebar-line); }
-  .side .foot b { color:var(--sidebar-ink); font-weight:600; }
-  .side .foot a { color:var(--sidebar-ink); }
-  .side .foot a:hover { color:var(--accent-deep); text-decoration:underline; text-underline-offset:2px; }
-
-  /* 탭 = 레일 항목. **라벨의 점**이 "안 보는 쪽이 아픈지"를 전환 없이 알려준다 —
-     탭으로 가리면 문제를 놓치기 쉬운데 그 대가를 점이 상쇄한다. */
-  .tabs { list-style:none; padding:0 8px; margin:0; display:block; border:0; }
-  .tabs button { width:100%; font:inherit; font-family:var(--sans); font-size:13.5px;
-                 font-weight:500; color:var(--sidebar-ink); background:none; border:0;
-                 border-radius:6px; padding:8px 12px; margin-bottom:1px; cursor:pointer;
-                 display:grid; grid-template-columns:auto 1fr; gap:2px 9px; text-align:left;
-                 align-items:center; }
-  .tabs button:hover { background:var(--sidebar-hi); color:var(--ink); }
-  .tabs button[aria-selected="true"] { background:var(--sidebar-hi); color:var(--ink);
-                 font-weight:600; box-shadow:inset 2px 0 0 var(--accent); }
-  .tabs button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
-  .tabs button .dot { width:6px; height:6px; border-radius:50%; background:var(--line-strong);
-                      flex:none; grid-row:1; }
-  .tabs button .dot.ok { background:var(--ok); }
-  .tabs button .dot.bad { background:var(--red-ink); }
-  /* 부제는 점 아래가 아니라 라벨 아래에 붙는다 — 레일이 좁아 점 열을 비워 두는 게 낫다 */
-  .tabs button .sub { grid-column:2; font-weight:400; font-size:11px; color:var(--sidebar-dim);
-                      line-height:1.35; }
-  .tabs button[aria-selected="true"] .sub { color:var(--muted); }
-
-  /* 본문 머리 — 카탈로그의 .topbar 와 같은 높이·규칙 */
-  .main { min-width:0; }
-  .topbar { background:var(--panel); border-bottom:1px solid var(--line); padding:0 26px;
-            height:52px; display:flex; align-items:center; gap:12px;
-            position:sticky; top:0; z-index:9; }
-  .topbar h1 { font-size:14px; font-weight:600; letter-spacing:-.01em; padding-right:14px;
-               border-right:1px solid var(--line); white-space:nowrap; }
-  .topbar .sp { flex:1; }
-  .topbar .lab { font-size:12px; color:var(--faint); white-space:nowrap; }
-  .topbar select { font:inherit; font-size:12.5px; background:var(--panel); color:var(--ink);
-                   border:1px solid var(--line-strong); border-radius:6px; padding:4px 8px;
-                   cursor:pointer; }
-  .topbar select:hover { background:var(--hover); border-color:var(--accent-line); }
-  .topbar a { font-size:12.5px; color:var(--muted); text-decoration:none;
-              border-radius:5px; padding:4px 7px; white-space:nowrap; }
-  .topbar a:hover { color:var(--accent-deep); background:var(--hover); }
-  .topbar select:focus-visible, .topbar a:focus-visible,
-  .topbar .mode:focus-visible, .topbar .theme-btn:focus-visible {
-              outline:2px solid var(--accent); outline-offset:1px; }
-  /* 읽기 전용 ↔ 운영자 모드 — 지금 무엇을 할 수 있는 상태인지가 늘 보인다 */
-  .topbar .mode { font:inherit; font-family:var(--sans); font-size:12px; font-weight:600;
-                  cursor:pointer; background:var(--panel); color:var(--muted);
-                  border:1px solid var(--line-strong); border-radius:6px; padding:5px 11px;
-                  white-space:nowrap; }
-  .topbar .mode:hover { color:var(--accent-deep); background:var(--accent-soft);
-                        border-color:var(--accent-line); }
-  .topbar .mode.on { background:var(--ok-soft); color:var(--ok); border-color:var(--ok-line); }
-  .topbar .mode.on:hover { background:var(--ok-soft); color:var(--ok); }
-  /* 환경 표시 — 운영은 색으로 즉시 구분된다. 로컬과 운영을 헷갈리는 게 제일 나쁜 사고다 */
-  .topbar .envtag { font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:5px;
-                    background:var(--panel-2); color:var(--muted);
-                    border:1px solid var(--line); white-space:nowrap; }
-  .topbar .envtag.prod { background:var(--red-soft); color:var(--red-ink);
-                         border-color:var(--red-line); }
-  .topbar .envtag small { font-family:var(--mono); font-size:10px; opacity:.8; margin-left:5px; }
-  /* 테마 토글 — 마켓플레이스와 같은 자리·같은 아이콘 규칙 */
-  .theme-btn { background:none; border:1px solid var(--line-strong); border-radius:6px;
-               width:30px; height:28px; display:flex; align-items:center; justify-content:center;
-               cursor:pointer; color:var(--muted); flex:none; }
-  .theme-btn:hover { color:var(--accent-deep); border-color:var(--accent-line);
-                     background:var(--accent-soft); }
-  .theme-btn .sun { display:none; }
-  :root[data-theme="dark"] .theme-btn .sun { display:block; }
-  :root[data-theme="dark"] .theme-btn .moon { display:none; }
-
-  /* 좁은 화면 — 레일을 접고 탭을 가로 스크롤 줄로 되돌린다 */
-  @media (max-width:900px) {
-    .shell { grid-template-columns:1fr; }
-    .side { position:static; height:auto; border-right:0;
-            border-bottom:1px solid var(--sidebar-line); }
-    .side .brand { margin-bottom:0; }
-    .side .group, .side .foot { display:none; }
-    .tabs { display:flex; overflow-x:auto; gap:4px; padding:8px; }
-    .tabs button { width:auto; white-space:nowrap; }
-    .tabs button .sub { display:none; }
-    .topbar { padding:0 16px; gap:8px; }
-    .topbar h1 { display:none; }
-  }
-
-  .wrap { max-width:1180px; padding:20px 26px 64px; }
-  /* ── 알림 줄 ──────────────────────────────────────────────────────────────────
-     예전에는 사유를 한 문단씩 쌓아 배너 대여섯 개가 화면 위를 덮었다. 길게 쓴다고
-     읽히는 게 아니라 **전부 안 읽히고** 진짜 신호가 묻힌다. x/LinkedIn 이 상태를
-     칩 한 줄로 접어 두고 필요할 때만 펴는 이유다.
-     규칙: 한 줄 = 아이콘 + 짧은 말. 사유는 눌러야 나온다. 조치가 필요한 것만 테두리로 세운다. */
-  .notes { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:16px; }
-  /* ⚠️ display 를 주는 순간 `hidden` 속성이 안 먹는다 — [hidden] 의 기본 display:none 보다
-     클래스 선택자가 세다. 이걸 빠뜨려서 **모든 탭의 칩이 한꺼번에 보였다.** */
-  .note[hidden], .why[hidden] { display:none; }
-  .note { display:inline-flex; align-items:center; gap:6px; font-size:12px; line-height:1;
-          border-radius:999px; padding:6px 12px 6px 9px; border:1px solid transparent;
-          background:var(--chip); color:var(--muted); cursor:default; }
-  .note .ic { font-size:11px; line-height:1; }
-  .note b { font-weight:650; color:var(--ink); }
-  /* 정보 = 배경만. 조치가 필요한 것(경고·차단)만 테두리로 세워 눈이 거기 먼저 가게 한다 */
-  .note.warn { background:var(--amber-soft); border-color:#fedf89; color:#93370d; }
-  .note.warn b { color:#7a2e0e; }
-  .note.stop { background:var(--red-soft); border-color:#fda29b; color:var(--red-ink); }
-  .note.stop b { color:#912018; }
-  /* 사유가 있는 칩은 눌러서 편다 — 접힌 상태가 기본이고, 편 상태가 예외다 */
-  .note.has-why { cursor:pointer; }
-  .note.has-why:hover { background:var(--hover); }
-  .note.warn.has-why:hover { background:#fef0c7; }
-  .note.stop.has-why:hover { background:#fee4e2; }
-  .note.has-why::after { content:"⌄"; font-size:12px; opacity:.55; margin-left:1px; }
-  .note.has-why.open::after { content:"⌃"; }
-  .note:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-  .why { flex-basis:100%; font-size:12px; line-height:1.65; color:var(--muted);
-         background:var(--chip); border-left:2px solid var(--line-strong);
-         border-radius:0 6px 6px 0; padding:9px 13px; margin:-1px 0 3px; }
-  .why code { font-family:var(--mono); font-size:11px; background:var(--panel);
-              border:1px solid var(--line); border-radius:3px; padding:0 4px; }
-  .why a { color:var(--accent-deep); }
-
-  .gate { max-width:420px; margin:60px auto; background:var(--panel); border:1px solid var(--line);
-          border-radius:10px; padding:24px; box-shadow:var(--shadow-xs); }
-  .gate h2 { font-size:16px; font-weight:700; }
-  .gate p { font-size:12.5px; color:var(--muted); margin-top:6px; }
-  .gate .row { display:flex; gap:8px; margin-top:16px; }
-  .gate input { flex:1; font:inherit; font-size:13.5px; padding:9px 12px; border-radius:7px;
-                border:1px solid var(--line-strong); outline:none; }
-  .gate input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
-  .gate button { font:inherit; font-size:13.5px; font-weight:600; color:#fff; background:var(--accent);
-                 border:0; border-radius:7px; padding:0 18px; cursor:pointer; }
-  .gate .err { color:var(--red-ink); font-size:12.5px; margin-top:10px; min-height:1.2em; }
-
-  .pane[hidden] { display:none; }
-
-  h2.sec { font-size:15px; font-weight:700; margin:0 0 4px; display:flex; align-items:baseline; gap:10px; }
-  h2.sec span { font-size:12px; font-weight:400; color:var(--faint); }
-
-  .kpis { display:grid; grid-template-columns:repeat(4,1fr); background:var(--panel);
-          border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow-xs); margin:10px 0 16px; }
-  @media (max-width:760px){ .kpis { grid-template-columns:repeat(2,1fr); } }
-  .kpi { padding:13px 18px; border-left:1px solid var(--line); }
-  .kpi:first-child { border-left:0; }
-  .kpi .v { font-size:22px; font-weight:800; letter-spacing:-.02em; margin-top:3px;
-            font-variant-numeric:tabular-nums; }
-  .kpi .v.bad { color:var(--red-ink); } .kpi .v.good { color:var(--ok); }
-  .kpi .k { font-size:11.5px; color:var(--muted); }
-
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  @media (max-width:960px){ .grid { grid-template-columns:1fr; } }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px;
-          box-shadow:var(--shadow-xs); overflow:hidden; }
-  .card.wide { grid-column:1/-1; }
-  .card .hd { padding:13px 18px 0; }
-  .card .hd h3 { font-size:13.5px; font-weight:700; }
-  .card .hd p { font-size:11.5px; color:var(--faint); margin-top:1px; }
-  .card .bd { padding:10px 18px 16px; overflow-x:auto; }
-
-  table { width:100%; border-collapse:collapse; font-size:12.5px; }
-  th { text-align:left; font-family:var(--mono); font-size:9.5px; font-weight:600; letter-spacing:.06em;
-       text-transform:uppercase; color:var(--faint); padding:6px 10px 6px 0; white-space:nowrap;
-       border-bottom:1px solid var(--line); }
-  td { padding:7px 10px 7px 0; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums;
-       white-space:nowrap; }
-  tr:last-child td { border-bottom:0; }
-  /* break-all 은 좁은 칸에서 한 글자씩 세로로 쪼갠다(`commerce_collect_raw` 가 세로로
-     늘어지던 실사례). 밑줄로 끊고, 그래도 좁으면 가로 스크롤에 맡긴다. */
-  td.name { font-family:var(--mono); font-size:11.5px; white-space:nowrap;
-            overflow-wrap:anywhere; word-break:normal; }
-  /* 식별자 칸은 최소 너비를 줘서 표가 이름부터 찌그러지지 않게 한다 */
-  td.name, th.name { min-width:180px; }
-  td.r, th.r { text-align:right; }
-  .pill { font-family:var(--mono); font-size:10px; font-weight:600; padding:1px 7px; border-radius:4px; }
-  .pill.bad { background:var(--red-soft); color:var(--red-ink); }
-  .pill.warn { background:var(--amber-soft); color:var(--amber-ink); }
-  .pill.ok { background:var(--ok-soft); color:var(--ok); }
-  .pill.dim { background:var(--bg); color:var(--faint); border:1px solid var(--line); }
-  /* 줄 강조 — 긴 표에서 지금 어느 줄을 보는지 놓치지 않게. 없으면 눈이 미끄러진다. */
-  tbody tr { transition:background .08s linear; }
-  tbody tr:hover { background:var(--hover); }
-  tbody tr:hover td.name { color:var(--ink); }
-
-  /* 빈 칸은 **짧게**. 사유를 문단으로 쓰면 표보다 설명이 길어져 화면이 안내문이 된다.
-     아이콘 + 두세 단어. 사유가 꼭 필요하면 title 로 달고, 조치가 필요하면 테두리를 준다. */
-  .empty { padding:22px 0; font-size:12.5px; color:var(--faint); text-align:center; }
-  .empty .ic { display:block; font-size:15px; opacity:.5; margin-bottom:5px; }
-  .empty b { display:block; font-weight:600; color:var(--muted); font-size:13px; }
-  .empty .sub { font-size:11.5px; color:var(--faint); margin-top:3px; }
-  /* 결정이 필요한 빈 칸(이슈에서 정해야 하는 것)만 테두리로 세운다 — 나머지는 조용히. */
-  .empty.todo { border:1px dashed var(--line-strong); border-radius:8px; background:var(--chip); }
-  .empty.todo .ic { opacity:.8; }
-  /* 키 관리 — 조치 버튼은 작고 조용하게. 파괴적인 것(폐기·삭제)만 색으로 구분한다 */
-  .kbtn { font:inherit; font-size:11px; font-weight:600; color:var(--muted); background:var(--panel);
-          border:1px solid var(--line-strong); border-radius:5px; padding:3px 8px; cursor:pointer; }
-  .kbtn:hover { border-color:var(--accent-line); color:var(--accent-deep); background:var(--accent-soft); }
-  .kbtn.danger:hover { border-color:#f0b4ae; color:var(--red-ink); background:var(--red-soft); }
-  .kbtn:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
-  /* 줄에 마우스를 올리면 그 줄의 버튼이 먼저 보이게 — 어느 줄의 버튼인지 헷갈리지 않는다 */
-  tbody tr:hover .kbtn { border-color:var(--line-strong); }
-  .kbtn.armed { background:var(--red-ink); border-color:var(--red-ink); color:#fff; }
-  .kbtn:disabled { opacity:.45; cursor:default; }
-  .kacts { display:flex; gap:5px; justify-content:flex-end; flex-wrap:wrap; }
-  .keyMsg { font-size:12px; margin-top:10px; min-height:1.2em; color:var(--muted); }
-  .keyMsg.done { color:var(--ok); } .keyMsg.err { color:var(--red-ink); }
-  .qcell { display:flex; gap:5px; align-items:center; justify-content:flex-end; }
-  .qcell input { width:64px; font:inherit; font-size:11.5px; text-align:right; padding:2px 5px;
-                 border:1px solid var(--line-strong); border-radius:5px; font-variant-numeric:tabular-nums; }
-  .qcell input:focus { border-color:var(--accent); outline:none; }
-
-  /* SLO 캘린더 — 하루 = 칸 하나. 초록/노랑/빨강이 곧 "그날 파이프라인이 어땠나" */
-  .cal { display:flex; gap:4px; flex-wrap:wrap; margin-top:8px; }
-  .cal .d { width:34px; height:34px; border-radius:6px; display:flex; align-items:center;
-            justify-content:center; font-family:var(--mono); font-size:10.5px; font-weight:600;
-            border:1px solid transparent; }
-  .cal .d.pass { background:var(--ok-soft); color:var(--ok); border-color:#b7e4cb; }
-  .cal .d.partial { background:var(--amber-soft); color:var(--amber-ink); border-color:#fedf89; }
-  .cal .d.fail { background:var(--red-soft); color:var(--red-ink); border-color:#fecdc9; }
-  /* 초록 위장 — 통과로 계산된 날이라 초록이지만, 실제로는 빈 run 이다.
-     초록 그대로 두면 함정을 그대로 재현하게 되므로 붉은 테두리로 표시한다. */
-  .cal .d.disguise { background:var(--ok-soft); color:var(--red-ink); border-color:var(--red-ink);
-                     border-width:1.5px; }
-  .cal-legend { display:flex; gap:14px; margin-top:10px; font-size:11.5px; color:var(--muted); }
-
-  .bars { display:flex; align-items:flex-end; gap:4px; height:70px; margin-top:6px; }
-  .bars .b { flex:1; min-width:6px; background:var(--teal-soft); border-radius:3px 3px 0 0; }
-  .bars .b > i { display:block; width:100%; background:var(--teal); border-radius:3px 3px 0 0; }
-  /* 기록이 없는 날 — 0 회가 아니라 **관측이 없는 날**이다. 막대를 안 그리고 바닥 선만 남긴다 */
-  .bars .b.none { opacity:.45; }
-  .bars .b.none::after { content:""; display:block; height:2px; background:var(--line-strong);
-                         border-radius:1px; }
-  .bars-axis { display:flex; justify-content:space-between; margin-top:6px;
-               font-family:var(--mono); font-size:10px; color:var(--faint); }
-
-  /* 표가 길어지면 카드 안에서만 스크롤한다 — 페이지 전체가 늘어나면 위쪽 지표가 밀려
-     "숫자 보고 표 보기"가 스크롤 왕복이 된다. 헤더는 붙여 둔다(스크롤해도 무슨 열인지 안다). */
-  .scroll { max-height:360px; overflow-y:auto; }
-  .scroll.tall { max-height:460px; }
-  .scroll thead th { position:sticky; top:0; background:var(--panel); z-index:1; }
-  .scroll::-webkit-scrollbar { width:10px; }
-  .scroll::-webkit-scrollbar-thumb { background:var(--line-strong); border-radius:5px;
-                                     border:3px solid var(--panel); }
-
-  /* 도메인 점유 막대 — 파이 대신 가로 막대다. 6개뿐이라 순위·비율을 한 줄로 읽는 게 빠르다 */
-  .share { display:flex; flex-direction:column; gap:9px; margin-top:4px; }
-  .share .row { display:grid; grid-template-columns:110px 1fr 92px; align-items:center; gap:10px; }
-  .share .nm { font-size:12.5px; font-weight:600; }
-  .share .nm small { display:block; font-weight:400; font-size:10.5px; color:var(--faint); }
-  .share .track { background:var(--bg); border-radius:5px; height:16px; overflow:hidden; }
-  .share .fill { height:100%; background:var(--teal); border-radius:5px; }
-  .share .fill.dim { background:var(--line-strong); }
-  .share .num { text-align:right; font-size:12px; font-variant-numeric:tabular-nums; }
-  .share .num b { font-weight:700; } .share .num small { color:var(--faint); }
-
-  /* 필터 줄 — 도메인 드롭다운 + 설명 검색. 목록이 62개라 이게 없으면 눈으로 찾게 된다 */
-  .filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:0 18px 10px; }
-  .filters select, .filters input[type="search"] { font:inherit; font-size:12.5px; padding:5px 9px;
-        border:1px solid var(--line-strong); border-radius:6px; background:var(--panel); color:var(--ink); }
-  /* 검색칸만 늘린다 — input 전체를 늘리면 체크박스까지 flex 를 받아 200px 로 벌어진다 */
-  .filters input[type="search"] { flex:1; min-width:200px; }
-  .filters input:focus, .filters select:focus { outline:none; border-color:var(--accent);
-        box-shadow:0 0 0 3px var(--accent-soft); }
-  .filters label { display:flex; align-items:center; gap:5px; font-size:12.5px; color:var(--muted);
-        white-space:nowrap; }
-  .filters .hint { font-size:11.5px; color:var(--faint); margin-left:auto; }
-  .filters select, .filters input { cursor:pointer; }
-  /* 구간·필터 줄 — 값이 기본과 다르면 눈에 띄어야 "왜 이 숫자지"를 안 묻는다 */
-  .filters input[type=date] { font:inherit; font-size:12.5px; padding:5px 8px;
-        border:1px solid var(--line-strong); border-radius:6px; background:var(--panel);
-        color:var(--ink); }
-  .filters .chips { display:inline-flex; gap:5px; flex-wrap:wrap; }
-  .filters .chip { font:inherit; font-size:11.5px; font-weight:600; cursor:pointer;
-        padding:4px 10px; border-radius:999px; border:1px solid var(--line-strong);
-        background:var(--panel); color:var(--muted); }
-  .filters .chip:hover { border-color:var(--accent-line); color:var(--accent-deep);
-        background:var(--accent-soft); }
-  .filters .chip.on { background:var(--accent); border-color:var(--accent);
-        color:var(--accent-ink); }
-  .filters .chip .n { font-variant-numeric:tabular-nums; opacity:.75; margin-left:4px; }
-  .filters select:hover, .filters input:hover { border-color:var(--line-strong); background:var(--hover); }
-  .filters input { cursor:text; }
-
-  /* 표 밑에 붙는 각주 — 표가 왜 그 모양인지(빠진 것·판정 못 한 것)를 표 바로 옆에서 밝힌다.
-     배너로 올리면 다른 탭 경고에 묻히고, 안 쓰면 운영자가 숫자를 오독한다. */
-  p.hint { font-size:11.5px; color:var(--faint); line-height:1.55; }
-  p.hint b { color:var(--muted); }
-  .bad-t { color:var(--red-ink); }
-  .mono { font-family:var(--mono); font-size:11px; }
-
-  /* 안정성 추이 히트맵 — 하루가 한 칸. 색이 곧 판정이고, 숫자는 그날의 문제 건수다.
-     칸을 누르면 그날 무슨 작업이 문제였는지 아래에 풀린다. */
-  .hm { border-collapse:collapse; }
-  .hm th, .hm td { padding:2px; }
-  .hm .cell { display:block; min-width:26px; height:20px; border-radius:4px; background:var(--bg);
-              border:1px solid var(--line); font-family:var(--mono); font-size:10px;
-              line-height:18px; text-align:center; color:transparent; }
-  .hm .cell.ok   { background:var(--ok-soft); border-color:transparent; }
-  .hm .cell.warn { background:var(--amber-soft); border-color:#fedf89; color:var(--amber-ink); }
-  .hm .cell.bad  { background:var(--red-soft); border-color:#fda29b; color:var(--red-ink); font-weight:700; }
-  .hm .cell.click { cursor:pointer; }
-  .hm .cell.click:hover { box-shadow:0 0 0 2px var(--accent-soft); border-color:var(--accent-line); }
-  .hm .cell.sel { box-shadow:0 0 0 2px var(--accent); }
-  /* 드릴다운 패널 — 튀는 칸 하나를 펼친 것. 자동 새로고침이 히트맵을 다시 그려도 유지된다 */
-  .drill { border:1px solid var(--line-strong); border-radius:8px; background:var(--chip); padding:12px 14px; }
-  .drill-hd { display:flex; align-items:center; gap:8px; }
-  .drill-hd .sub { font-size:11.5px; color:var(--faint); }
-  .drill h4 { font-size:12.5px; font-weight:700; margin:12px 0 4px; }
-
-  td.desc { white-space:normal; color:var(--muted); font-size:11.5px; max-width:330px; }
-  .zero { color:var(--faint); }
-
-  /* 상세 보기 — 모달 대신 접히는 패널. 목록에서 위치를 잃지 않고, 뒤로가기 취급도 필요 없다 */
-  .detail { border-top:2px solid var(--accent); background:var(--accent-soft); padding:14px 18px 16px; }
-  .detail[hidden] { display:none; }
-  .detail .dhd { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
-  .detail .dhd h4 { font-size:13.5px; font-weight:700; font-family:var(--mono); }
-  .detail .dhd .close { margin-left:auto; }
-  .detail .dsc { font-size:12px; color:var(--muted); margin:4px 0 12px; }
-  .detail .dgrid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  @media (max-width:860px){ .detail .dgrid { grid-template-columns:1fr; } }
-  .detail .box { background:var(--panel); border:1px solid var(--accent-line); border-radius:8px;
-                 padding:10px 13px 12px; }
-  .detail .box.wide { grid-column:1/-1; }
-  .detail .box h5 { font-size:11.5px; font-weight:700; margin-bottom:2px; }
-  .detail .box p.note { font-size:11px; color:var(--faint); margin-bottom:6px; }
-  .detail .box .scroll { max-height:230px; }
-  .detail .box .scroll thead th { background:var(--panel); }
-
-  /* 요청 추적 — 한 줄 입력 + 결과. 입력값은 request_id 하나뿐이라 폼이 아니라 검색창이다 */
-  .trace-row { display:flex; gap:8px; margin:4px 0 10px; }
-  .trace-row input { flex:1; max-width:340px; font-family:var(--mono); font-size:12.5px;
-                     padding:7px 10px; border:1px solid var(--line-strong); border-radius:6px; outline:none; }
-  .trace-row input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  /* (현재 이 콘솔 전용 규칙 없음 — 필요해지면 여기 추가하고, 재사용 가능한 것은 ui.css 로 승격한다) */
 </style>
 <!-- 테마는 **페인트 전에** 정해야 한다. 이 6줄을 theme.js 로 합치면 <head> 동기 로드가
      되어 첫 페인트가 왕복 하나만큼 밀린다 — 인라인이 그 값보다 싸다(마켓플레이스와 같은 규칙).
@@ -534,6 +136,15 @@
   </div>
 
   <div id="app" hidden>
+    <!-- 도메인 스코프 — 기본은 전체 통합, 하나를 고르면 파이프라인·실행·응답·사용량 탭이
+         그 분야만 보이도록 **같은 탭 안에서** 좁혀진다(주소 #<tab>?dom=commerce 에 실린다).
+         키 탭은 분야 축이 없어 스코프가 안 걸린다(그 사실을 아래에서 안내한다). -->
+    <div class="scopebar" id="scopeBar" hidden>
+      <span>보는 분야</span>
+      <select id="domScope" aria-label="분야 스코프"></select>
+      <span class="now" id="scopeNow"></span>
+      <button class="clear" id="scopeClear" hidden>전체로 되돌리기</button>
+    </div>
     <div class="notes" id="banners"></div>
 
     <section class="pane" id="pane-pipeline" role="tabpanel" aria-labelledby="tab-pipeline" tabindex="0">
@@ -728,8 +339,8 @@
       <div class="card">
         <div class="hd"><h3>선택한 분야의 API별 요청</h3><p id="domPickNote">분야를 고르면 그 안의 API 순위를 봅니다</p></div>
         <div class="bd">
-          <div style="margin-bottom:8px">
-            <select id="domPick" aria-label="분야 선택" style="font:inherit;font-size:12.5px;padding:5px 9px;border:1px solid var(--line-strong);border-radius:6px"></select>
+          <div class="filters" style="padding:0 0 8px">
+            <select id="domPick" aria-label="분야 선택"></select>
           </div>
           <div class="scroll" id="domApis"></div>
         </div>
@@ -828,11 +439,77 @@ const ROUTE_KO = {
 };
 // 무엇을 '데이터 서빙'으로 셌는지 화면도 알아야 한다 — 서버가 meta.serve_routes 로 알려준다.
 const routeKo = (r) => ROUTE_KO[r] || String(r == null ? "—" : r);
+
+// ── 상태값 도움말 (#4) ──────────────────────────────────────────────────────────
+// 상태 배지를 보면 "무엇을 기준으로 이 값인가"가 안 보인다. 눌러서(모바일)·올려서(데스크톱)
+// 그 판정 근거를 툴팁으로 연다 — 닫힘은 호버 해제/재클릭/Esc(ui.js 가 처리).
+// 여기 없는 상태는 툴팁 없이 그냥 배지만 뜬다(지어내지 않는다).
+const STATE_HELP = {
+  // 파이프라인 발행
+  "성공": "제품이 D1 에 온전히 올라갔습니다.",
+  "열화": "올라가긴 했지만 온전하지 않습니다 — 행이 빠졌거나 검증을 일부 통과하지 못했습니다. 실패가 아니라 성공률에는 안 잡힙니다.",
+  "실패": "제품을 D1 에 올리지 못했습니다. 이전 버전이 유지됩니다.",
+  "건너뜀(기존 유지)": "새로 올릴 것이 없어 기존 발행분을 그대로 둔 것입니다 — 문제가 아닙니다.",
+  // SLO 캘린더
+  "정상 갱신": "그날 예정된 수집·가공이 제때 끝났고 데이터도 받았습니다.",
+  "나중에 되살림": "한 번 실패했지만 같은 날 재시도로 되살렸습니다 — 성공률만 보면 안 보이는 열화입니다.",
+  "그날 데이터를 못 받음": "예정된 갱신이 그날 안에 성공하지 못했습니다.",
+  // 실행 기록 판정
+  "멈춤 후보": "마지막 기록 이후 침묵 시간이 그 DAG 의 한도(max_delay_minutes)를 넘었습니다 — 멈췄을 가능성이 있어 확인이 필요합니다.",
+  "한도 안": "마지막 기록 이후 침묵 시간이 아직 한도 안입니다 — 조용한 게 정상인 구간입니다.",
+  "기록 없음": "감시 대상인데 조회 DB 에 이 DAG 의 상태 기록이 아예 없습니다 — 그 자체가 경보입니다.",
+  "감시 제외": "수동으로만 도는 DAG 입니다 — 안 도는 게 정상이라 멈춤 판정을 하지 않습니다.",
+  "미등록": "기대 주기가 아직 등록되지 않았습니다 — 판정할 근거가 없다는 뜻이지 '이상 없음'이 아닙니다.",
+  "점검 완료": "이 구간까지 실측과 대조가 끝났습니다.",
+  "부분": "일부 구간만 대조됐습니다.",
+  "미확인": "아직 점검이 지나지 않은 구간입니다 — 정상이라는 뜻이 아닙니다.",
+  // 실행 시도
+  "최종 실패": "마지막 시도까지 실패한, 진짜 실패입니다.",
+  "재시도 중": "실패했지만 아직 재시도가 남아 있습니다 — 최종 실패로 셀지 이르다는 뜻입니다.",
+  "정보 없음": "이 실행이 최종 시도였는지 기록에 없습니다.",
+  // 서빙 상태(HTTP)
+  "정상": "요청이 제대로 처리돼 답이 나갔습니다.",
+  "요청 형식 오류": "요청 형식이 약속과 달라 거절했습니다(HTTP 400).",
+  "인증 실패": "키가 없거나 유효하지 않습니다(HTTP 401).",
+  "차단된 키": "차단된 키의 요청입니다(HTTP 403).",
+  "없는 데이터": "찾는 데이터가 없습니다(HTTP 404).",
+  "한도 초과": "짧은 시간에 너무 많이 불러 잠시 막았습니다(HTTP 429).",
+  "서버 오류": "우리 쪽에서 처리 중 오류가 났습니다(HTTP 500).",
+};
+// 상태 배지 — STATE_HELP 에 설명이 있으면 도움말(점선 밑줄 + 툴팁)로 만든다.
+// pill 은 css 클래스(ok/warn/bad/dim), label 은 화면 문구.
+//
+// data-tip 값은 **HTML 속성**이라 안에 든 따옴표·꺾쇠가 속성 파싱을 깨뜨린다. 그런데
+// ui.js 는 data-tip 을 innerHTML 로 넣으므로 <b>·<br> 같은 서식 태그는 살아 있어야 한다.
+// 그래서: 서식 태그는 우리가 직접 쓰고(고정), 값(label·help)만 속성-안전하게 이스케이프한다.
+// 속성값은 큰따옴표로 감싸므로 값 안의 " 를 &quot; 로 바꾸면 충분하다(< > & 도 함께).
+const attrEsc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+function statePill(pill, label) {
+  const help = STATE_HELP[label];
+  if (!help) return "<span class='pill " + pill + "'>" + esc(label) + "</span>";
+  const tip = "<b>" + attrEsc(label) + "</b><br>" + attrEsc(help);   // 태그는 살고 값만 이스케이프
+  return "<span class='pill " + pill + " help' data-tip=\"" + tip + "\">" + esc(label) + "</span>";
+}
 const STATUS_KO = { 400:"요청 형식 오류", 401:"인증 실패", 403:"차단된 키", 404:"없는 데이터",
                     409:"만료된 이어보기", 429:"한도 초과", 500:"서버 오류", 503:"기능 꺼짐" };
 // 분야 이름은 서버(_ops_domain)가 정본이라 받아서 채운다. 아직 못 받았을 때만 이 값을 쓴다.
 let DOM_LABEL = {};
 const domLabel = (d) => DOM_LABEL[d] || d;
+
+// ── 도메인 스코프 (#3) ──────────────────────────────────────────────────────────
+// 기본은 전체 통합("") 이고, 하나를 고르면 여러 탭이 그 분야만 보이도록 좁혀진다.
+// **서버를 안 건드린다** — 서버는 이미 도메인 축이 실린 행을 주므로, 화면에서 거르면 된다.
+// 그래서 이 값은 순수하게 대시보드 화면 상태다(주소에만 실리고 어디에도 적재되지 않는다).
+let DOMSCOPE = "";
+// 제품 식별자(product_id·table_name)의 앞부분이 도메인이다(commerce_age_band → commerce).
+// 서버 DOMAIN_EXPR 과 같은 규약 — 파이프라인이 그렇게 발행한다.
+const domOf = (v) => (v ? String(v).split("_")[0] : "");
+// 배열에서 현재 스코프에 해당하는 행만 남긴다. keyFn 은 그 행의 도메인을 뽑는 함수.
+// 스코프가 비면(전체) 원본을 그대로 돌려준다 — 필터를 거는 비용조차 없다.
+const scoped = (rows, keyFn) => (!DOMSCOPE || !Array.isArray(rows))
+  ? rows : rows.filter((r) => keyFn(r) === DOMSCOPE);
+const byDomain = (rows) => scoped(rows, (r) => r.domain);
+const byProduct = (rows) => scoped(rows, (r) => domOf(r.product_id || r.table_name || r.product_key));
 
 // ── 빈 칸 표기 ────────────────────────────────────────────────────────────────
 // **짧게 쓴다.** 사유를 문단으로 적으면 표보다 설명이 길어져 화면이 안내문이 되고,
@@ -863,6 +540,10 @@ function table(cols, rows, empty) {
 }
 // 시각은 초·밀리초까지 필요 없다 — "언제쯤"이면 충분하고, 짧을수록 표가 읽힌다
 const fmtTs = (s) => (s ? String(s).slice(0, 16).replace("T", " ") : null);
+// 응답 시간 — DB 가 `17.717784881591797` 같은 부동소수를 그대로 준다. 소수 15자리는
+// 사람이 못 읽고 표를 넓힌다. 1ms 미만은 소수 한 자리, 그 이상은 정수로 접는다.
+const fmtMs = (v) => v == null ? "—"
+  : (v < 1 ? v.toFixed(1) : Math.round(v).toLocaleString("ko-KR")) + " ms";
 const kpis = (el, items) => {
   $(el).innerHTML = items.map(([lab, v, k, cls]) =>
     "<div class='kpi'><div class='lab'>" + lab + "</div><div class='v" + (cls ? " " + cls : "") + "'>" +
@@ -916,10 +597,10 @@ function fillDays(rows, days, keyOf, zero) {
 }
 
 // ── 발행·단계·소요 표기 — 요약(render)과 드릴다운이 같은 번역을 쓴다 ────────────────
-const pubPill = (o) => o === "published" ? "<span class='pill ok'>성공</span>"
-  : o === "degraded" ? "<span class='pill warn'>열화</span>"
-  : o === "failed" ? "<span class='pill bad'>실패</span>"
-  : o === "skipped_retained" ? "<span class='pill dim'>건너뜀(기존 유지)</span>"
+const pubPill = (o) => o === "published" ? statePill("ok", "성공")
+  : o === "degraded" ? statePill("warn", "열화")
+  : o === "failed" ? statePill("bad", "실패")
+  : o === "skipped_retained" ? statePill("dim", "건너뜀(기존 유지)")
   : "<span class='pill dim'>" + esc(o || "—") + "</span>";
 // 단계는 내부 값이라 사람 말로 옮긴다(화면 문구 규약). 모르는 값은 원문 그대로 둔다 —
 // 지어내는 것보다 낫고, 새 단계가 생기면 여기 추가하라는 신호가 된다.
@@ -947,6 +628,28 @@ const parseHash = () => {
     ? { pane: path, api: null, q }
     : { pane: path.slice(0, at), api: path.slice(at + 1), q };
 };
+// 도메인 스코프 UI 를 전체 분야 목록으로 채운다(#3). 값·라벨은 서버 _ops_domain 이 정본.
+// 스코프가 안 걸리는 탭(키·API 사용량 상세)에서는 스코프바를 숨긴다 — 있으면 "여기서도
+// 좁혀지겠지" 오해한다.
+const SCOPED_PANES = ["pipeline", "runs", "serving", "usage"];
+function syncScopeBar(domains) {
+  const sel = $("domScope");
+  if (sel.dataset.filled !== String((domains || []).length)) {
+    sel.innerHTML = "<option value=''>전체 통합</option>" +
+      (domains || []).map((x) => "<option value='" + esc(x.domain) + "'>" +
+        esc(x.label || x.domain) + "</option>").join("");
+    sel.dataset.filled = String((domains || []).length);
+  }
+  sel.value = DOMSCOPE;
+  $("scopeNow").textContent = DOMSCOPE ? domLabel(DOMSCOPE) : "모든 분야";
+  $("scopeClear").hidden = !DOMSCOPE;
+  updateScopeVisible();
+}
+function updateScopeVisible() {
+  const pane = ($("tab-pipeline") && parseHash().pane) || "pipeline";
+  $("scopeBar").hidden = !SCOPED_PANES.includes(pane);
+}
+
 function showTab(name) {
   if (!PANES.includes(name)) name = PANES[0];
   // 이미 그 탭이면 손대지 않는다 — 자동 새로고침이 30초마다 부르는 경로라, 여기서
@@ -965,13 +668,16 @@ function showTab(name) {
     if (!same) { el.classList.remove("open"); el.setAttribute("aria-expanded", "false"); }
   }
   if (!same) for (const el of document.querySelectorAll("#banners .why")) el.hidden = true;
+  updateScopeVisible();   // 탭마다 스코프바 표시 여부가 다르다(#3)
   // 상세·조건이 열려 있으면 그 주소를 지키고, 다른 탭으로 가면 탭 이름만 남긴다.
   // 키 탭은 자기 조건을 syncKeyHash() 가 관리하므로 여기서 덮어쓰지 않는다 —
   // 덮어쓰면 필터를 걸고 넘어온 링크가 그 즉시 '전체'로 되돌아간다.
   if (name === "keys") return;
-  const want = name === "apis" && DETAIL_OPEN ? name + "/" + DETAIL_OPEN : name;
+  // 스코프가 걸려 있고 그 탭이 스코프 대상이면 주소에 실어 링크 공유·새로고침에 유지한다.
+  const domQ = DOMSCOPE && SCOPED_PANES.includes(name) ? "?dom=" + encodeURIComponent(DOMSCOPE) : "";
+  const want = (name === "apis" && DETAIL_OPEN ? name + "/" + DETAIL_OPEN : name) + domQ;
   if (decodeURIComponent(location.hash.slice(1)) !== want)
-    history.replaceState(null, "", "#" + encodeURI(want));
+    history.replaceState(null, "", "#" + encodeURI(want).replace("%3F", "?").replace("%3D", "="));
 }
 for (const p of PANES) {
   $("tab-" + p).addEventListener("click", () => showTab(p));
@@ -984,10 +690,24 @@ for (const p of PANES) {
 }
 addEventListener("hashchange", () => {
   const h = parseHash();
+  // 주소의 도메인 스코프를 상태에 반영한다(#3) — 달라졌으면 다시 그린다.
+  const wantDom = h.q.get("dom") || "";
+  if (wantDom !== DOMSCOPE && SCOPED_PANES.includes(h.pane)) { DOMSCOPE = wantDom; render(LAST_DATA); }
   showTab(h.pane);
   if (h.pane === "apis" && h.api && h.api !== DETAIL_OPEN) openDetail(h.api, true);
   if (h.pane === "keys") applyKeyHash(h.q);
 });
+
+// 스코프 배선 — 드롭다운을 바꾸면 마지막 데이터를 그 분야로 다시 그린다(재요청 없음).
+// LAST_DATA 는 마지막 summary 응답. 스코프는 화면 필터라 서버를 다시 부르지 않는다.
+let LAST_DATA = null;
+function setScope(dom) {
+  if (dom === DOMSCOPE) return;
+  DOMSCOPE = dom;
+  if (LAST_DATA) render(LAST_DATA);   // render 가 끝에서 showTab → 주소까지 갱신한다
+}
+$("domScope").addEventListener("change", (e) => setScope(e.target.value));
+$("scopeClear").addEventListener("click", () => setScope(""));
 
 // 주소의 키 조건을 상태에 반영하고, 달라졌으면 다시 읽는다.
 function applyKeyHash(q) {
@@ -1003,6 +723,7 @@ function applyKeyHash(q) {
 let DRILL = null;
 
 function render(d) {
+  LAST_DATA = d;   // 스코프 전환이 재요청 없이 다시 그릴 수 있게 마지막 응답을 붙든다(#3)
   // ── 지금 보고 있는 데이터의 출처(환경 + D1). wrangler.toml 의 [vars] 에서 온다.
   const ev = (d.meta && d.meta.env) || null;
   if (ev) {
@@ -1016,9 +737,17 @@ function render(d) {
               + "마지막으로 읽은 시각: " + at;
   }
 
-  // 실행 기록 묶음 — 배너(환경 섞임)가 먼저 필요해서 위에서 만든다
-  const R = d.runs || { daily:[], expectations:[], failures:[], empty_runs:[], environments:[], slowest:[], load:null };
-  const envMix = (R.environments || []).length > 1;
+  // 실행 기록 묶음 — 배너(환경 섞임)가 먼저 필요해서 위에서 만든다.
+  // 도메인 스코프(#3)를 여기서 건다. environments·load 는 분야 축이 없어 전체를 유지한다
+  // (환경 섞임은 분야와 무관한 관측이라 스코프 중에도 그대로 보여야 한다).
+  const R0 = d.runs || { daily:[], expectations:[], failures:[], empty_runs:[], environments:[], slowest:[], load:null };
+  const R = {
+    ...R0,
+    daily: byDomain(R0.daily), expectations: byDomain(R0.expectations),
+    failures: byDomain(R0.failures), empty_runs: byDomain(R0.empty_runs),
+    slowest: byDomain(R0.slowest),
+  };
+  const envMix = (R0.environments || []).length > 1;
 
   // ── 알림 줄 — 칩 한 줄. 사유는 눌러야 나온다 ────────────────────────────────
   //
@@ -1031,7 +760,14 @@ function render(d) {
   // note(kind, label, why) — kind: "info"(배경만) / "warn"(테두리) / "stop"(붉은 테두리)
   // 발행 점검 합계를 **알림 칩보다 먼저** 낸다 — 칩이 이 값을 쓴다.
   // 전체 합계는 분야별 행을 화면에서 SUM 한다. 같은 것을 서버에 두 번 묻지 않는다.
-  const P = d.publication || { by_domain: [], by_stage: [], worst: [], row_mismatch: [], recent_published: [] };
+  const P0 = d.publication || { by_domain: [], by_stage: [], worst: [], row_mismatch: [], recent_published: [], by_day: [] };
+  // 도메인 스코프를 발행 대장에도 적용한다(#3). by_stage 는 도메인 축이 없어 그대로 둔다 —
+  // 그 카드는 "어느 단계에서 깨지나"라 분야와 무관하다(스코프 중에는 카드 머리에 표시한다).
+  const P = {
+    ...P0,
+    by_domain: byDomain(P0.by_domain), worst: byProduct(P0.worst),
+    row_mismatch: byProduct(P0.row_mismatch), by_day: byDomain(P0.by_day || []),
+  };
   const pTot = P.by_domain.reduce((a, r) => ({
     attempts: a.attempts + (r.attempts || 0), published: a.published + (r.published || 0),
     degraded: a.degraded + (r.degraded || 0), failed: a.failed + (r.failed || 0),
@@ -1083,6 +819,18 @@ function render(d) {
 
   if (!CAN_WRITE)
     N.keys.push(note("info", "보기 전용", "차단·해제·한도 변경·삭제는 오른쪽 위 <b>잠금 해제</b> 뒤에 할 수 있습니다."));
+
+  // 도메인 스코프가 걸려 있으면, **분야 축이 없어 못 좁힌 화면**은 그 사실을 밝힌다(#3).
+  // 조용히 전체를 보여주면 "이 분야 것만 보는 줄" 알고 오독한다.
+  if (DOMSCOPE) {
+    const dl = "<b>" + esc(domLabel(DOMSCOPE)) + "</b>";
+    N.serving.push(note("info", dl + " 분야만",
+      "제품·실패·0건 응답은 이 분야로 좁혔습니다. 다만 <b>요청 종류·날짜별 요청·이용자 재방문</b>은 " +
+      "분야 축이 없는 지표라 전체 그대로입니다."));
+    N.usage.push(note("info", dl + " 분야만", "AI 수요는 이 분야로 좁혔습니다. 여정·손님 구성·추적은 분야 축이 없어 전체입니다."));
+    N.apis.push(note("info", dl + " 분야만", "이 탭은 아래 '분야별 비중'과 목록 필터로 이미 분야를 고를 수 있어, 스코프와 별개로 봅니다."));
+    N.keys.push(note("info", "분야 스코프 없음", "이용자 키는 분야 축이 없습니다 — 스코프와 무관하게 전체 키를 보여줍니다."));
+  }
 
   // ── 왜 비었나 — 표가 없는 것 / 표는 있는데 0행인 것을 가른다 ──────────────
   //
@@ -1205,8 +953,12 @@ function render(d) {
   }
 
   // ── 파이프라인
-  const slo = d.pipeline.slo, doms = d.pipeline.domains;
-  for (const x of doms) DOM_LABEL[x.domain] = x.label;   // 분야 한글명 — API 사용량 탭도 쓴다
+  // 분야 한글명은 **스코프 전 전체 목록**에서 채운다 — 스코프를 걸어도 드롭다운·라벨이
+  // 전 분야를 알아야 하기 때문이다. 그 다음 표시용 slo·doms 에만 스코프를 건다.
+  for (const x of d.pipeline.domains) DOM_LABEL[x.domain] = x.label;
+  syncScopeBar(d.pipeline.domains);   // 도메인 드롭다운을 전체 분야로 채운다(#3)
+  const slo = byDomain(d.pipeline.slo);
+  const doms = byDomain(d.pipeline.domains);
   const withSlo = doms.filter((x) => x.has_slo).length;
   const passed = slo.filter((r) => r.scheduled_slo_passed).length;
   const viol = slo.reduce((a, r) => a + (r.violation_count || 0), 0);
@@ -1232,7 +984,7 @@ function render(d) {
         const cls = (r.green_disguise_runs || 0) > 0 ? "disguise"
           : r.scheduled_slo_passed ? "pass" : (r.eod_slo_passed ? "partial" : "fail");
         return "<div class='d " + cls + "' title='" + esc(r.event_date) + " · 커버리지 " +
-          (r.best_coverage_pct ?? "—") + "% · 실패 데이터셋 " + (r.failed_dataset_count ?? 0) +
+          (r.best_coverage_pct == null ? "—" : Math.round(r.best_coverage_pct)) + "% · 실패 데이터셋 " + (r.failed_dataset_count ?? 0) +
           ((r.green_disguise_runs || 0) > 0 ? " · 초록 위장 " + r.green_disguise_runs : "") + "'>" +
           esc(md(r.event_date)) + "</div>";
       }).join("") + "</div>" +
@@ -1255,7 +1007,7 @@ function render(d) {
         ? "<span class='pill bad'>성공했지만 0건 " + r.green_disguise_runs + "회</span>"
         : (r.eod_slo_passed ? "<span class='pill warn'>나중에 되살림</span>"
                             : "<span class='pill bad'>갱신 실패</span>") },
-    { t:"수집률", r:true, get:(r) => (r.best_coverage_pct ?? "—") + "%" },
+    { t:"수집률", r:true, get:(r) => (r.best_coverage_pct == null ? "—" : Math.round(r.best_coverage_pct) + "%") },
     { t:"실패한 데이터", r:true, get:(r) => r.failed_dataset_count },
     { t:"규칙 위반", r:true, get:(r) => r.violation_count },
   ], badDays, "확인이 필요한 날이 없습니다");
@@ -1444,9 +1196,10 @@ function render(d) {
   // 매트릭스 — 셀이 비어 있으면(—) 그 도메인·단계는 기록을 안 남긴다는 뜻. 공백도 관측이다.
   const rDomains = [...new Set([...R.daily.map((r) => r.domain), ...R.expectations.map((r) => r.domain)])].sort();
   $("runsMatrix").innerHTML = rDomains.length
-    ? "<table><thead><tr><th>domain</th>" + LAYERS.map(([k, lab]) =>
-        "<th class='r'>" + lab + " " + k + "</th>").join("") + "</tr></thead><tbody>" +
-      rDomains.map((dom) => "<tr><td class='name'>" + esc(dom) + "</td>" + LAYERS.map(([k]) => {
+    ? "<table><thead><tr><th class='name'>분야</th>" + LAYERS.map(([k, lab]) =>
+        "<th class='r help' data-tip='단계 코드 <b>" + k + "</b>'>" + lab + "</th>").join("") + "</tr></thead><tbody>" +
+      rDomains.map((dom) => "<tr><td class='name'>" + esc(domLabel(dom)) +
+        " <span class='pill dim'>" + esc(dom) + "</span></td>" + LAYERS.map(([k]) => {
         const a = agg[dom + "|" + k];
         if (!a) return "<td class='r'><span class='pill dim'>—</span></td>";
         // 열화(degraded)가 색 규칙에 빠져 있었다 — 실패는 아니지만 온전하지도 않은 상태다
@@ -1457,7 +1210,7 @@ function render(d) {
           "\n소요 " + hrs(a.dur) + " · 적재 " + nf.format(a.rows) + "행" +
           (a.api ? " · API " + nf.format(a.api) + "회" : "") + "'>" + a.ok + "/" + a.ev + "</span></td>";
       }).join("") + "</tr>").join("") + "</tbody></table>" +
-      "<div class='cal-legend'><span><span class='pill ok'>n/m</span> 성공/기록</span>" +
+      "<div class='cal-legend'><span><span class='pill ok'>성공/전체</span> 그 칸의 성공 수 / 기록 수</span>" +
       "<span><span class='pill warn'>노랑</span> 빈 실행·열화 포함</span>" +
       "<span><span class='pill bad'>빨강</span> 실패 포함</span>" +
       "<span><span class='pill dim'>—</span> 기록 없음 = 관측 공백</span></div>" +
@@ -1495,9 +1248,9 @@ function render(d) {
   // 멈춤 후보만 경보로 센다 — 미등록은 '아직 모른다'이고 감시 제외는 정상이다.
   const stallN = stalls.filter((x) => x.cls === "bad").length;
   const unregN = stalls.filter((x) => x.watch === "unregistered").length;
-  const obsPill = (s) => s === "complete" ? "<span class='pill ok'>점검 완료</span>"
-    : s === "partial" ? "<span class='pill warn'>부분</span>"
-    : s === "unverified" ? "<span class='pill dim' title='아직 점검이 안 지난 구간 — 정상이라는 뜻이 아니다'>미확인</span>"
+  const obsPill = (s) => s === "complete" ? statePill("ok", "점검 완료")
+    : s === "partial" ? statePill("warn", "부분")
+    : s === "unverified" ? statePill("dim", "미확인")
     : "<span class='pill dim'>—</span>";
   $("runsStalls").innerHTML = table([
     { t:"dag", name:true, get:(r) => esc(r.dag_id) + " <span class='pill dim'>" + esc(r.domain) + "</span>" },
@@ -1506,10 +1259,7 @@ function render(d) {
               : (r.expected_interval || r.trigger_type)) },
     { t:"침묵 한도", r:true, get:(r) => fmtAge(r.max_delay_minutes) },
     { t:"마지막 기록", r:true, get:(r) => r.ageMin == null ? "—" : fmtAge(r.ageMin) + " 전" },
-    { t:"판정", get:(r) => "<span class='pill " + r.cls + "' title='" +
-        (r.watch === "unmonitored" ? "수동 전용 DAG — 안 도는 것이 정상이라 판정하지 않는다"
-         : r.watch === "unregistered" ? "기대 주기가 아직 등록되지 않았다 — 판정 근거가 없다는 뜻이지 이상 없음이 아니다"
-         : "기대 주기 대비 침묵 시간으로 판정한다") + "'>" + r.state + "</span>" },
+    { t:"판정", get:(r) => statePill(r.cls, r.state) },
     { t:"점검", get:(r) => obsPill(r.observation_state) },
     { t:"owner", get:(r) => esc(r.owner || "—") },
   ], stalls, ["데이터 없음", "기대 주기가 등록되지 않았습니다"]) +
@@ -1520,9 +1270,9 @@ function render(d) {
     { t:"date", get:(r) => esc(md(r.observed_date_kst)) },
     { t:"dag · task", name:true, get:(r) => esc((r.dag_id || "—") + " · " + (r.task_id || "—")) },
     { t:"layer", get:(r) => r.layer ? esc(r.layer) : "<span class='pill dim'>없음</span>" },
-    { t:"시도", get:(r) => r.is_final_try === 1 ? "<span class='pill bad'>최종 실패</span>"
-        : r.is_final_try === 0 ? "<span class='pill warn'>재시도 중</span>"
-        : "<span class='pill dim'>정보 없음</span>" },
+    { t:"시도", get:(r) => r.is_final_try === 1 ? statePill("bad", "최종 실패")
+        : r.is_final_try === 0 ? statePill("warn", "재시도 중")
+        : statePill("dim", "정보 없음") },
     { t:"근거", name:true, get:(r) => esc(r.error_ref || "—") },
     { t:"로그", name:true, get:(r) => bundleCell(r.log_bundle_key) },
   ], R.failures, "데이터 없음") + bundleNote(R.load);
@@ -1578,7 +1328,11 @@ function render(d) {
   ], R.environments, "데이터 없음");
 
   // ── 서빙
-  const s = d.serving;
+  // 도메인 축이 있는 것(제품·실패·0건)만 스코프를 건다(#3). routes·daily·keys 는 분야
+  // 무관(요청 종류·날짜·이용자)이라 전체를 유지한다 — 그 사실을 스코프 배너가 밝힌다.
+  const s0 = d.serving;
+  const s = { ...s0, products: byProduct(s0.products),
+              failures: byProduct(s0.failures), empty: byProduct(s0.empty) };
   const calls = s.routes.reduce((a, r) => a + r.calls, 0);
   const errs = s.routes.reduce((a, r) => a + (r.errors || 0), 0);
   const emptyN = s.empty.reduce((a, r) => a + r.empty_responses, 0);
@@ -1610,8 +1364,7 @@ function render(d) {
   // 이름을 먼저 보이고, 없으면 식별자를 그대로 쓴다 — 빈칸으로 두면 무엇인지 알 수 없다.
   const apiName = (r) => esc(r.table_name || r.product_id || r.product_key || "—");
   $("failures").innerHTML = table([
-    { t:"이유", get:(r) => "<span class='pill " + (r.status >= 500 ? "bad" : "warn") + "'>" +
-        (STATUS_KO[r.status] || r.status) + "</span>" },
+    { t:"이유", get:(r) => statePill(r.status >= 500 ? "bad" : "warn", STATUS_KO[r.status] || String(r.status)) },
     { t:"요청 종류", get:(r) => ROUTE_KO[r.route] || esc(r.route) },
     { t:"대상 API", get:(r) => esc(r.table_name || "—"), name:true },
     { t:"건수", r:true, get:(r) => nf.format(r.hits) },
@@ -1637,7 +1390,7 @@ function render(d) {
     { t:"요청 종류", get:(r) => ROUTE_KO[r.route] || esc(r.route) },
     { t:"요청 수", r:true, get:(r) => nf.format(r.calls) },
     { t:"실패", r:true, get:(r) => r.errors ? "<span class='pill bad'>" + r.errors + "</span>" : num(0) },
-    { t:"평균 응답시간", r:true, get:(r) => r.avg_ms != null ? r.avg_ms + " ms" : "—" },
+    { t:"평균 응답시간", r:true, get:(r) => fmtMs(r.avg_ms) },
   ], s.routes, "요청이 없습니다");
 
   $("keys").innerHTML = table([
@@ -2045,7 +1798,7 @@ async function openDetail(name, silent) {
             "'>" + (r.status < 400 ? "정상" : (STATUS_KO[r.status] || r.status)) + "</span>" },
         { t:"조건 항목", get:(r) => r.filters ? esc(r.filters) : "<span class='zero'>없음</span>" },
         { t:"응답 건수", r:true, get:(r) => r.row_count ?? "—" },
-        { t:"소요", r:true, get:(r) => r.ms != null ? r.ms + " ms" : "—" },
+        { t:"소요", r:true, get:(r) => fmtMs(r.ms) },
         { t:"이용자", get:(r) => r.key_id ? esc(r.key_id) : "<span class='zero'>비로그인</span>", name:true },
         { t:"요청 번호", get:(r) => esc(r.request_id || "—"), name:true },
       ], d.recent, "이 기간에 요청이 없습니다") + "</div></div>" +
@@ -2281,21 +2034,21 @@ async function traceLookup() {
   if (!res.ok) { out.innerHTML = emptyBox(["읽지 못함", esc(body.detail || ("HTTP " + res.status))]); return; }
   out.innerHTML = body.found
     ? table([
-        { t:"ts", get:(r) => esc(fmtTs(r.ts)) },
-        // 여기도 번역표를 쓴다 — 이 표만 슬러그를 그대로 보이고 있었다(0014 §1 위반).
+        { t:"시각", get:(r) => esc(fmtTs(r.ts)) },
+        // 번역표를 쓴다 — 이 표만 슬러그를 그대로 보이고 있었다(0014 §1 위반).
         { t:"요청 종류", get:(r) => ROUTE_KO[r.route] || esc(r.route) },
         // 🔴 추적만은 환경으로 거르지 않는다(#64) — 다른 환경 요청이어도 "그 환경 것이다"라고
         // 답하는 편이 "없다"보다 낫다. 그래서 **어느 환경인지를 반드시 같이 보여준다.**
-        // 이 칸이 없으면 운영 화면에서 로컬 요청을 운영 것으로 읽는다.
         { t:"환경", get:(r) => r.env
             ? "<code>" + esc(r.env) + "</code>"
             : "<span class='zero'>미상</span>" },
         { t:"대상 API", name:true, get:(r) => esc(r.table_name || r.product_id || "—") },
-        { t:"status", get:(r) => "<span class='pill " + (r.status >= 500 ? "bad" : r.status >= 400 ? "warn" : "ok") + "'>" + r.status + "</span>" },
-        { t:"key", get:(r) => r.key_id ? "<code>" + esc(r.key_id) + "…</code>" : "익명" },
-        { t:"filters", get:(r) => esc(r.filters || "—") },
-        { t:"rows", r:true, get:(r) => r.row_count ?? "—" },
-        { t:"ms", r:true, get:(r) => r.ms },
+        { t:"결과", get:(r) => "<span class='pill " + (r.status >= 500 ? "bad" : r.status >= 400 ? "warn" : "ok") + "'>" +
+            (r.status < 400 ? "정상" : (STATUS_KO[r.status] || r.status)) + "</span>" },
+        { t:"이용자", get:(r) => r.key_id ? "<code>" + esc(r.key_id) + "…</code>" : "익명" },
+        { t:"조건 항목", get:(r) => esc(r.filters || "—") },
+        { t:"응답 건수", r:true, get:(r) => r.row_count ?? "—" },
+        { t:"소요", r:true, get:(r) => fmtMs(r.ms) },
       ], body.rows, "")
     : emptyBox(["데이터 없음", "30일 보존 창을 지났거나 로그가 유실된 요청입니다"]);
 }
@@ -2359,6 +2112,12 @@ async function load(quiet) {
       KEYQ = { from: h.q.get("from") || "", to: h.q.get("to") || "",
                filter: h.q.get("filter") || "all" };
     }
+  }
+  // 첫 진입이 #<탭>?dom=… 이면 그 스코프로 시작한다(#3 · 링크 공유 유지).
+  // render 안에서 읽으면 scoped 데이터가 필요하므로, 여기서 미리 세우고 한 번 더 그린다.
+  {
+    const wantDom = parseHash().q.get("dom") || "";
+    if (wantDom !== DOMSCOPE) { DOMSCOPE = wantDom; render(data); }
   }
   await Promise.all([loadKeys(), loadApis()]);
   restore();
@@ -2444,6 +2203,8 @@ load();   // 토큰 없이도 뜬다 — 막는 문이 아니라 여는 문이�
 </div><!-- /.main -->
 </div><!-- /.shell -->
 
+<!-- 툴팁 킷 — data-tip 요소에 클릭/호버 툴팁을 단다(프로젝트 독립). defer 로 페인트를 안 막는다. -->
+<script src="/ui.js" defer></script>
 <!-- 토글 배선. 적용은 <head> 인라인이 페인트 전에 끝낸다(마켓플레이스와 같은 한 벌). -->
 <script src="/theme.js"></script>
 </body>
