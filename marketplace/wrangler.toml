@@ -1,6 +1,8 @@
 # marketplace — V1 마켓플레이스 게이트웨이 (ASK-Seoul#58)
-# 로컬 구동은 `wrangler dev --local` — 아래 database_id 를 쓰지 않고 Miniflare 로컬
-# sqlite 를 만든다. 시드는 `npm run seed` (migrations + fixtures 를 --local 로 적용).
+# 🔴 로컬 구동은 `npm run dev`(플래그 없는 `wrangler dev`) — **운영 D1 에 실제로 붙는다.**
+# dev D1 폐기(#85)로 로컬이 볼 실물이 운영뿐이고, 서빙 메타(권리·컬럼 설명·활용 예시)가
+# 운영에만 있어 로컬 픽스처로는 권리 게이트·카탈로그 응답을 검증할 수 없다.
+# 대가와 안전장치는 아래 [[d1_databases]] 주석에 있다 — **읽고 나서 쓴다.**
 #
 # 배포는 환경을 반드시 지정한다 — `npm run deploy:dev` / `npm run deploy:prod`.
 # env 없이 `wrangler deploy` 를 실행하지 않는다: base 는 로컬 전용이고(아래 [vars] 주석),
@@ -25,11 +27,29 @@ run_worker_first = ["/api/v1/*", "/skill/v1/*", "/mcp"]
 # 오타 URL 로 들어온 사람이 JSON 덩어리를 보게 되던 원인이었다(/api/* 는 그대로 JSON 이 맞다).
 not_found_handling = "404-page"
 
-# 로컬(wrangler dev --local)용 바인딩 — 로컬 모드는 id 를 무시하고 이름만 쓴다.
+# 🔴 운영 D1. **로컬 구동도 이 값을 쓴다**(#85 — dev D1 폐기, 콘솔 decision/0015 와 같은 방향).
+# 예전엔 "로컬 모드는 id 를 무시하고 이름만 쓴다"였는데, dev D1 이 폐기되면서 로컬이 볼
+# 실물이 운영뿐이다. 서빙 메타(권리·컬럼 설명·활용 예시)가 운영에만 있어서, 로컬 픽스처로는
+# 권리 게이트(#88)·카탈로그 응답을 **검증할 수 없다** — 실제로 #88 검증 때 표를 손으로
+# 만들어야 했다.
+#
+# ⚠️ 대가를 알고 쓴다: 로컬 구동이 운영 `_keys`·`_usage`·`_burst` 를 **실제로 건드린다.**
+#    - 테스트 키는 운영 `_keys` 에 남는다 → 쓰고 나면 `DELETE /api/v1/keys?purge=true` 로 지운다
+#    - 요청 로그는 `ASK_ENV="local"` 로 찍혀 콘솔이 환경 스코프로 걸러낸다(#64) — 섞이지 않는다
+#    - 쿼터·버스트는 그 키의 것만 소모한다
 [[d1_databases]]
 binding = "DB"
-database_name = "ask-seoul-dev-d1"
-database_id = "9db0e851-558e-489f-9e76-f131d25aa267"
+database_name = "ask-seoul-prod-d1"
+database_id = "59a8409e-3be6-467b-8214-7938c59c8729"
+# 🔴 `--remote` **플래그를 쓰지 않는다.** 콘솔이 그 함정을 먼저 밟았다(#85 §함정①):
+#   맨 `wrangler dev --remote` → 바인딩 이름·배지는 운영이라고 나오는데 **질의만 빈 결과**.
+#   강등 로직이 그걸 "표가 없습니다"로 표시해서 **화면만 보면 운영에 데이터가 없는 것처럼 보인다.**
+#   바인딩에 `remote` 를 켜고 **플래그 없이** `wrangler dev` 를 쓰는 것이 정상 경로다.
+# ⚠️ `experimental_remote` 는 이 버전(4.115)에 **없는 필드**라 경고만 찍고 local 로 조용히
+#    떨어진다 — 오타 하나가 "운영을 본다고 믿으며 빈 로컬을 보는" 상태를 만든다.
+remote = true
+# 프리뷰 경로로 새지 않도록 database_id 와 **같은 값**으로 못 박는다.
+preview_database_id = "59a8409e-3be6-467b-8214-7938c59c8729"
 
 # 환경을 아는 값은 여기 둔다 — 요청 로그의 `env` 컬럼이 이 값을 그대로 싣는다.
 # 키 이름이 아니라 **값**이 환경을 정한다(ASK-Seoul#78 `Z-7`). 지표가 조용히 섞이는 것을
@@ -62,16 +82,21 @@ directory = "public"
 run_worker_first = ["/api/v1/*", "/skill/v1/*", "/mcp"]
 not_found_handling = "404-page"
 
+# 🔴 dev 배포도 **운영 D1** 을 본다(#85). dev D1 이 폐기돼 가리킬 DB 가 없다 —
+# 이름만 dev 로 두면 배포는 성공하는데 질의가 전부 비어, "떴는데 데이터가 없는" 상태가 된다.
+# 환경 구분은 D1 이 아니라 `ASK_ENV="dev"` 가 한다(요청 로그의 `env` 컬럼 · #64 스코프).
+#
+# ⚠️ **dev 배포면(dev.ask-seoul.kr) 자체를 유지할지는 아직 미결**이다 — #85 가 연 질문이고,
+#    #4 의 K-Skill 검증이 이 주소를 쓰기로 돼 있어 혼자 정하지 않는다. 접기로 하면
+#    이 블록과 `deploy:dev` 를 함께 지운다.
 [[env.dev.d1_databases]]
 binding = "DB"
-database_name = "ask-seoul-dev-d1"
-database_id = "9db0e851-558e-489f-9e76-f131d25aa267"
+database_name = "ask-seoul-prod-d1"
+database_id = "59a8409e-3be6-467b-8214-7938c59c8729"
 
 # ── 배포 전용 환경 (2026-08-03, ASAC-DAG#668) — https://ask-seoul.kr ─────────
-# 파이프라인이 prod D1(ask-seoul-prod-d1)을 신설해 62개 제품 게시를 시작했다.
-# 기본(위) 바인딩은 dev D1 을 유지한다 — 로컬 Miniflare 상태가 database_id 로
-# 키잉되어 콘솔(../ops-dashboard)과 같은 로컬 DB 를 공유하기 때문(decision/0003).
-# 여길 바꾸면 로컬 협업 상태가 갈라진다.
+# 파이프라인이 prod D1(ask-seoul-prod-d1)에 68개 제품을 게시한다. 세 환경(로컬·dev·prod)이
+# 이제 **같은 D1** 을 보고, 갈리는 것은 `ASK_ENV` 값과 배포 주소뿐이다(#85).
 # ⚠️ production 배포 전 선행: prod D1 마이그레이션은 파이프라인 쪽과 조율 후에만
 # (agreement §8-3 — 승인 주체 미정), ISSUANCE_SALT 를 `--env production` 으로 설정.
 [env.production]

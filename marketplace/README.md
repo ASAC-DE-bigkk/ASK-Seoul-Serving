@@ -28,8 +28,7 @@ Workers + Static Assets + D1 웹서비스. #476 게이트웨이 역할(키 검�
 cd marketplace
 cp .dev.vars.example .dev.vars   # ISSUANCE_SALT
 npm install          # wrangler
-npm run seed         # migrations(장부 추적) + fixtures/seed.sql → 로컬 D1
-npm run dev          # http://localhost:8787
+npm run dev          # http://localhost:8787 — 🔴 운영 D1 에 붙는다(#85)
 npm run usage        # 사용 리포트 (아래 '사용 계측' 참고)
 ```
 
@@ -38,15 +37,14 @@ npm run usage        # 사용 리포트 (아래 '사용 계측' 참고)
 cd marketplace
 Copy-Item .dev.vars.example .dev.vars
 npm install
-npm run seed
 npm run dev
 ```
 
-`package.json` 안의 `&&`는 npm이 `cmd.exe`로 실행하므로 Windows에서도 그대로 동작한다
-(`npm run seed`를 손댈 필요 없다). `npm config get script-shell`이 `null`이 아니면
-그때만 문제가 된다.
+🔴 **시드 단계가 없어졌다.** dev D1 폐기(#85)로 로컬이 운영 D1 을 그대로 보므로 픽스처를
+넣을 자리가 없다 — `fixtures/` 는 스키마 참고용으로만 남는다. 대신 **검증이 운영 데이터를
+만든다**: 발급한 테스트 키는 `DELETE /api/v1/keys?purge=true` 로 지운다.
 
-시드의 마이그레이션 단계는 `wrangler d1 migrations apply` 다 — 적용 여부를 D1 안의
+스키마를 원격에 적용하는 것은 `npm run migrate` 다(장부 백필 → `wrangler d1 migrations apply`) — 적용 여부를 D1 안의
 장부(`d1_migrations`)가 추적하므로, **새 마이그레이션 파일은 `migrations/` 에 추가하면 끝**이고
 시드 체인을 손대지 않는다(체인 갱신을 사람이 기억하다 0004 누락으로 요청 로그가 전량
 유실됐던 실사고의 재발 방지). 전환 이전에 만든 로컬 상태는 시드가 장부를 자동
