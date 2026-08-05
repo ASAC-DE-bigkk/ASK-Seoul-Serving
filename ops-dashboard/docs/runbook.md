@@ -94,7 +94,8 @@ curl -s "$BASE/api/summary" | jq '.meta.missing'   # ["serving"] 등 — 500 이
 
 ## 3. 실행 기록 탭 — 샘플에 박힌 검증 시나리오
 
-`npm run seed` 의 합성 데이터에는 화면 경로가 하나씩 박혀 있다. 탭(`#runs`)에서 눈으로 확인한다.
+아래는 **화면이 무엇을 드러내야 하는지**의 목록이다. 운영 D1 의 실측에서 해당 상황을 만나면
+탭(`#runs`)이 이렇게 보여야 한다 — 예전에는 합성 시드로 재현했지만 그 시드는 없어졌다(0015).
 
 | 시나리오 | 어디서 보이나 |
 |---|---|
@@ -114,11 +115,10 @@ curl -s "$BASE/api/summary" | jq '.meta.missing'   # ["serving"] 등 — 500 이
 
 ### 4-1. 파이프라인 SLO (`_ops_slo`)
 
-```bash
-npm run seed   # fixtures/slo_sample.sql — 전 행 is_sample=1
-```
+**표는 있고 비어 있다** — `npm run migrate` 가 만들고, 채우는 것은 아직 없다.
+합성 픽스처는 **넣지 않는다**(운영 D1 이므로 그게 곧 오염이다).
 
-**이 탭은 아직 합성값만 본다.** 실측을 넣는 정규 경로는 culture DAG 의 export task 이고
+**이 탭은 비어 있는 것이 정상이다.** 실측을 넣는 정규 경로는 culture DAG 의 export task 이고
 (팀 D1 쓰기 = 승인 주체 미정(agreement §8-3)), 그게 붙어 `is_sample=0` 행이 들어오면 '합성 샘플' 배너가
 저절로 사라진다. 웨어하우스를 콘솔이 직접 훑던 임시 로더는 폐기했다
 ([0005](decision/0005-slo-snapshot-to-d1.md)) — 실측 파이프라인 상태는 **실행 기록 탭**이

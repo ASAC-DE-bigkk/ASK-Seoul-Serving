@@ -45,7 +45,7 @@
 설정 배치, 로컬/운영 도메인·D1 값, env 섹션 비상속 함정. 이 문서는 그 구조 위에서
 **OS별로 어떻게 실행하는가**만 다룬다.
 
-원격 배포는 환경을 명시한 스크립트(`npm run deploy:dev`/`deploy:prod`)로만 한다 —
+원격 배포는 환경을 명시한 스크립트로만 한다(콘솔은 `deploy:prod` 하나뿐 — 2026-08-05) —
 절차는 [marketplace/docs/deploy-runbook.md](../marketplace/docs/deploy-runbook.md).
 아래는 전부 `wrangler dev` 로컬 구동이다.
 
@@ -261,7 +261,7 @@ curl -s -X POST -H "X-Trino-User: ops" -H "Content-Type: text/plain" \
 | 조치만 `503 ops write disabled` | `.dev.vars`가 UTF-16LE | `-Encoding ascii`로 다시 쓰기 (3절) |
 | 조치만 `503` + 기동 로그에 `Using secrets...` 줄이 **아예 없음** | `.dev.vars`가 프로젝트 루트에 없음 | `wrangler.toml` 옆(루트)으로 옮긴다 (3절) |
 | 조치가 `401` | 토큰 불일치 | 화면 우상단 `잠금 해제`에 `.dev.vars` 값 그대로 입력 |
-| '데이터 소스 상태'에 `_keys`·`_gateway_request_log` 가 `없음` | marketplace 미시드 **또는** 콘솔 `--persist-to` 누락 | marketplace `npm run seed` 먼저 (0절) / [environments.md §4-③](environments.md) |
+| 콘솔에서 `_keys`·`_gateway_request_log` 가 `없음` | ⚠️ **2026-08-05 이후 정상** — 콘솔은 운영 D1 을 보는데 거기 그 표가 아직 없다 | 게이트웨이 전환(#85) 대기. 게이트웨이 로컬 확인은 marketplace `npm run seed` |
 | dev 가 `:8789` 등 엉뚱한 포트로 뜸 | 8787/8788 을 이전 프로세스가 쥐고 있음 | 아래 포트 항목 — 포트는 `[dev] port` 로 고정돼 있으나 점유 시 밀린다 |
 | `npm run seed`가 `&&`에서 멈춤 | npm의 script-shell이 PowerShell로 잡힘 | `npm config delete script-shell` |
 | `Address already in use :8787/:8788` | 이전 dev가 살아 있음 | `Get-Process workerd \| Stop-Process -Force` (전부 정리) |

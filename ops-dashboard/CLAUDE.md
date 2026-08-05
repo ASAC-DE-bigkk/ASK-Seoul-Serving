@@ -192,13 +192,42 @@ OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) �
 - **화면 스크립트는 띄워서 실제로 눌러 본다** — `node --check` 는 TDZ 를 통과시킨다(실사례 2건).
 - 검증 명령 세트와 실행 기록 탭의 시나리오별 확인법은 [docs/runbook.md](docs/runbook.md).
 
+### 7-1. 문서 동기화 — 무엇을 고치면 어디를 같이 고치나
+
+"문서와 코드가 어긋나면 같이 고친다"(10절)는 **이미 있던 규칙인데 지켜지지 않았다.** 2026-08-04
+에 시드에서 픽스처를 뺐는데 README·runbook·이 문서가 그 다음 날까지 "시드가 합성값을 넣는다"고
+말하고 있었다. 규칙이 약해서가 아니라 **어느 문장이 그 코드를 비추고 있는지 몰라서**다.
+그래서 대응표를 못 박는다 — 왼쪽을 건드리면 오른쪽을 **같은 커밋에서** 연다.
+
+| 고친 것 | 같이 여는 문서 |
+|---|---|
+| `package.json` 의 `scripts` (dev·migrate·d1·포트) | [README](README.md) 실행 절차 · [runbook §1](docs/runbook.md) · 이 문서 7절 · [../docs/index.md](../docs/index.md) 의 **해당 환경 매뉴얼** · [../docs/environments.md](../docs/environments.md) §3 명령표 |
+| **스크립트 이름 변경** | 위 전부 + `grep -rn "<옛 이름>"` — 이름은 여러 문서에 흩어져 있다 |
+| `migrations/` 실행 여부·대상 | [runbook §1-1·§5](docs/runbook.md) · README 해당 절 · 이 문서 6절 · [../docs/run-prod.md](../docs/run-prod.md) |
+| 화면 배지·배너의 신설/폐기 | README 해당 절 · [runbook §6 증상표](docs/runbook.md) · 이 문서 7절 검증 항목 · [run-prod](../docs/run-prod.md) 의 "확인한다" 절 |
+| `meta.*` 응답 필드 | [runbook §2](docs/runbook.md) 의 `jq` 예시 (없는 필드를 파면 `null` 이 조용히 나온다) · 환경 매뉴얼의 `curl` 예시 |
+| `wrangler.toml` 환경·바인딩 | [../docs/environments.md](../docs/environments.md) · README · [0011](docs/decision/0011-per-env-config.md) · **환경을 늘렸으면 매뉴얼 한 장을 새로 쓰고 [../docs/index.md](../docs/index.md) 에 매핑** |
+| 🔴 **D1 에 붙는 경로**(바인딩·`remote`·스크립트) | [0015](docs/decision/0015-single-production-d1.md) 먼저 — **운영에 직접 붙는다**는 전제가 유지되는지, 그리고 연결이 조용히 로컬로 떨어지지 않는지(0015 §대가의 실측표) |
+| **남의 표를 건드리는 SQL·마이그레이션** | [0015 §안전장치](docs/decision/0015-single-production-d1.md) · [0007](docs/decision/0007-schema-single-file-reset.md) · 6절 소유권 표 — 정본 소유자가 먼저다 |
+| 불변 경계(4절)에 해당하는 동작 | 해당 `decision/` 문서 **먼저**, 그다음 위 전부 |
+
+**끝내기 전 확인** — 고친 코드에서 사라진 낱말(예: 배지 이름, 스크립트가 더 안 읽는 파일명)을
+문서에서 되짚는다. 남아 있으면 그게 낡은 서술이다.
+
+```bash
+# 예: 스크립트를 없앴다면 — 문서가 아직 그 이름을 부르는지
+grep -rn "npm run seed\|dev:remote\|dev:prod-readonly\|deploy:dev" --include=*.md . ../docs
+```
+
+이 표 자체도 대상이다 — 새 문서를 만들거나 코드 표면을 늘리면 **행을 추가한다.**
+
 ## 8. 완료 기준
 
-- 요구사항이 코드에 반영되고 로컬에서 확인됨
+- 요구사항이 코드에 반영되고 **운영 D1 에서 확인됨**(연습용 DB 가 없다 — 7절)
 - 오류 응답이 problem+json 으로 일관됨
 - 응답·로그에 이메일 원문과 토큰이 없음
 - 불변 경계(4절)를 건드리지 않음 — 건드렸다면 결정 문서 개정이 먼저 있었음
-- README·docs 가 실체와 어긋나지 않게 같이 갱신됨
+- README·docs 가 실체와 어긋나지 않게 같이 갱신됨 — **7-1 대응표의 해당 행을 전부 열었음**
 
 ## 9. 구조 검토가 필요한 변경
 
@@ -221,5 +250,8 @@ OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) �
 - 요구사항과 무관한 리팩터링·프레임워크 도입을 하지 않는다.
 - 보안·비용에 영향을 주는 변경은 그 영향을 명시한다.
 - 구현 후 변경 파일과 검증 결과를 요약하고, 실패·미검증 사항을 숨기지 않는다.
-- 문서(docs/·README)와 코드가 어긋나는 변경이면 같은 커밋에서 문서를 고친다.
+- 문서(docs/·README)와 코드가 어긋나는 변경이면 같은 커밋에서 문서를 고친다 —
+  **어디를 고칠지는 추측하지 말고 7-1 대응표를 따르고**, 표에 없는 표면을 건드렸으면 행을 더한다.
+- 코드에서 무엇을 **없앴을 때**가 특히 위험하다. 없앤 낱말로 `grep` 을 돌려 문서에 남은
+  서술을 걷어낸다 — 추가는 눈에 띄지만 삭제는 문서에 흔적으로 남는다.
 - 비밀값·API Token·실제 API Key 를 출력하거나 커밋하지 않는다.

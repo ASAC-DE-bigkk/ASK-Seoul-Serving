@@ -981,12 +981,8 @@ function render(d) {
     tag.className = "envtag" + (ev.label === "운영" ? " prod" : "");
     // 언제 읽은 값인지를 붙인다 — 자동 새로고침 중이면 "멈춘 화면"과 구분이 되어야 한다
     const at = new Date(d.generated_at).toLocaleTimeString("ko-KR", { hour12: false });
-    // 원격 D1 을 보는 중이면 배지가 그 사실을 **먼저** 말한다. 화면이 로컬일 때와 똑같이
-    // 생겨서, 어느 DB 를 보고 있는지를 사람이 기억에 의존하게 두면 그게 사고 경로다.
-    const ro = ev.readonly ? " · 보기 전용" : "";
-    tag.innerHTML = esc(ev.label) + "<small>" + esc(ev.d1) + esc(ro) + " · " + esc(at) + "</small>";
+    tag.innerHTML = esc(ev.label) + "<small>" + esc(ev.d1) + " · " + esc(at) + "</small>";
     tag.title = "이 화면은 " + ev.label + " 환경의 " + ev.d1 + " 데이터를 읽고 있습니다\n"
-              + (ev.readonly ? "보기 전용 — 원격 D1 이라 조치가 잠겨 있습니다\n" : "")
               + "마지막으로 읽은 시각: " + at;
   }
 
@@ -2010,10 +2006,6 @@ let KEYCOUNTS = null;
 // 조치 가능 여부는 **서버가 알려준 값**을 그대로 쓴다. 화면에서 이걸 켠다고 뚫리지 않는다 —
 // 실제 차단은 POST 쪽 requireWrite 가 한다. 여기서 하는 일은 못 할 일을 버튼으로 내밀지 않는 것뿐이다.
 let CAN_WRITE = false;
-// 원격 D1 을 보는 중인가(meta.env.readonly). CAN_WRITE 와 나눠 두는 이유는 **원인이 다르기
-// 때문**이다 — 토큰이 없어 못 하는 것과, 대상 DB 가 팀 것이라 아예 잠긴 것. 한 깃발로 합치면
-// 화면이 "토큰이 맞지 않습니다"라고 거짓말을 한다(decision/0013).
-let READONLY = false;
 const authHeaders = () => (token() ? { authorization: "Bearer " + token() } : {});
 
 async function keyAction(hash, action, extra) {
@@ -2210,17 +2202,6 @@ $("traceIn").addEventListener("keydown", (e) => { if (e.key === "Enter") traceLo
 // "왜 버튼이 없지?"로 헤매게 된다.
 function syncMode() {
   const b = $("modeBtn");
-  // 보기 전용은 "잠겨 있다"가 아니라 **잠금이 없는 상태**다. 잠금 해제 버튼을 남겨 두면
-  // 토큰을 넣어 보다가 "내 토큰이 틀렸나"로 헤맨다 — 원인이 토큰이 아니라 대상 DB 다.
-  if (READONLY) {
-    b.textContent = "보기 전용 · 원격 D1";
-    b.disabled = true;
-    b.title = "원격 D1 에 붙어 있어 조치가 잠겨 있습니다. 조치는 로컬(npm run dev)에서 합니다.";
-    b.classList.remove("on");
-    return;
-  }
-  b.disabled = false;
-  b.title = "";
   b.textContent = CAN_WRITE ? "운영자 모드 · 잠그기" : "읽기 전용 · 잠금 해제";
   b.classList.toggle("on", CAN_WRITE);
 }
@@ -2239,11 +2220,8 @@ async function load(quiet) {
   }
   const data = await res.json();
   CAN_WRITE = Boolean(data.meta && data.meta.can_write);   // 배너·버튼보다 먼저 확정한다
-  READONLY = Boolean(data.meta && data.meta.env && data.meta.env.readonly);
-  // 저장해 둔 토큰이 더는 맞지 않는다 — 읽기는 그대로 되니 화면을 막지 않고 알리기만 한다.
-  // 단 보기 전용일 때는 can_write 가 **토큰과 무관하게** false 다. 여기서 토큰을 지우면
-  // 멀쩡한 토큰을 날리고 "맞지 않습니다"라는 거짓말을 하게 된다 — 그래서 제외한다.
-  if (token() && !CAN_WRITE && !READONLY) {
+  // 저장해 둔 토큰이 더는 맞지 않는다 — 읽기는 그대로 되니 화면을 막지 않고 알리기만 한다
+  if (token() && !CAN_WRITE) {
     sessionStorage.removeItem(TK);
     $("gateErr").textContent = "토큰이 맞지 않습니다";
     $("gate").hidden = false;

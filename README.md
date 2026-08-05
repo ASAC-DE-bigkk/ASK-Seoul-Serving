@@ -62,34 +62,36 @@ dbt manifest·Airflow 메타DB를 직접 읽는 경로는 존재하지 않는다
 | [docs/setup.md](docs/setup.md) | 사전 준비(Node 20+)·OS별 설치·증상별 해결 |
 | [docs/environments.md](docs/environments.md) | 환경 **구조** — 설정 배치, local/prod 도메인·D1, 실행 파라미터 배분 |
 
-**환경별 실행 매뉴얼** — 셋의 차이는 플래그가 아니라 **쓰기가 되느냐**다.
+**환경별 실행 매뉴얼** — 🔴 **2026-08-05 로 두 프로젝트가 갈라져 있다**
+(dev D1 폐기, 콘솔만 전환 — [decision/0015](ops-dashboard/docs/decision/0015-single-production-d1.md) · #85).
 
-| 매뉴얼 | D1 | 쓰기 | 언제 |
+| 매뉴얼 | 누구 | D1 | 쓰기 |
 |---|---|---|---|
-| [docs/run-local.md](docs/run-local.md) | 로컬 sqlite (공유) | ✅ 가능 | 평소 개발·조치 |
-| [docs/run-remote-dev.md](docs/run-remote-dev.md) | 팀 `ask-seoul-dev-d1` | 🔒 잠김 | 운영 기록 4종 **실측**을 볼 때 |
-| [docs/run-prod.md](docs/run-prod.md) | `ask-seoul-prod-d1` | 🔒 잠김 | 운영 데이터를 눈으로 확인할 때 |
+| [docs/run-prod.md](docs/run-prod.md) | **콘솔** | **운영** `ask-seoul-prod-d1` | ✅ **열려 있다** |
+| [docs/run-local.md](docs/run-local.md) | **게이트웨이** | 로컬 sqlite | 로컬만 |
 
-플래그가 없으면 언제나 로컬이다. 원격 둘은 **배포가 아니라** 내 노트북의 워커가 팀 D1 에
-붙는 것이고, 잠금은 경고문이 아니라 코드다
-([ops-dashboard decision/0013](ops-dashboard/docs/decision/0013-remote-readonly-attach.md)).
+🔴 **콘솔은 띄우면 운영이다.** 바인딩에 `remote = true` 가 박혀 있어 **기본값이 운영**이고,
+화면의 조치 한 번이 실제 고객 키에 간다. 예전의 *"플래그가 없으면 언제나 로컬"* 은
+게이트웨이에만 남았다. 남아 있는 잠금은 **스키마 하나**뿐이다 — 남의 표 DDL 은 코드가 막는다.
 
 ```bash
 # macOS / Linux
-cd marketplace   && npm install && npm run seed && npm run dev   # :8787
-cd ops-dashboard && npm install && npm run seed && npm run dev   # :8788
+cd marketplace   && npm install && npm run seed && npm run dev   # :8787  로컬 sqlite
+cd ops-dashboard && npm install && npm run dev                   # :8788  🔴 운영 D1
 ```
 
 ```powershell
 # Windows (PowerShell) — && 는 파서 오류다. 한 줄씩 실행한다.
-cd marketplace   ; npm install ; npm run seed ; npm run dev      # :8787
-cd ops-dashboard ; npm install ; npm run seed ; npm run dev      # :8788
+cd marketplace   ; npm install ; npm run seed ; npm run dev      # :8787  로컬 sqlite
+cd ops-dashboard ; npm install ; npm run dev                     # :8788  🔴 운영 D1
 ```
 
-`ops-dashboard`는 `marketplace`의 로컬 D1 상태를 공유하므로 **marketplace를 먼저 시드**할 것.
+콘솔에는 `npm run seed` 가 **없다**(스키마 적용은 `npm run migrate`, 대상은 운영 D1).
+`.env` 의 `CLOUDFLARE_API_TOKEN` 이 없으면 콘솔은 **아예 뜨지 않는다** — 로컬 사본이 없다.
 각 디렉토리 README에 설계 근거(공개 게이트·키셋 커서·2층 제한·폐기와 삭제의 구분 등)가 있다.
 
 ## 상태
 
-프로토타입이다. 원격 배포·팀 D1 `_keys` 생성·GitHub OAuth 승격은 배포 결정(docs/agreement.md §8)으로 남아 있다
-(ASAC-DAG#476).
+콘솔은 `ops.ask-seoul.kr` 로 배포된다 — **`dev` 브랜치 머지가 곧 운영 배포다**
+(브랜치 이름과 배포 환경이 다르다). 읽기 경로는 아직 무인증이고 Cloudflare Access 승격
+(#20 B-1)이 남아 있다. 게이트웨이의 운영 D1 전환은 담당자 판단 대기(#85).

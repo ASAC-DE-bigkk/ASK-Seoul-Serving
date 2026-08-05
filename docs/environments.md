@@ -177,7 +177,8 @@ D1 안의 장부(`d1_migrations`)에 기록되고 **안 된 파일만 실행**�
   dev 2종의 `routes` 는 활성, 콘솔 운영(`ops.`) 라우트는 **주석 상태다** — Cloudflare Access 를
   이 호스트로 **한정해서** 거는 게 선행이라서다(#20 결정 B-1 — zone 전체나 `*.ask-seoul.kr`
   로 걸면 공개 API 까지 잠긴다. Access 는 토큰 권한 미확보로 보류 중).
-- **배포는 환경을 명시한 스크립트로만 한다(2026-08-04 개정).** `npm run deploy:dev` 는
-  시행 중이고, `deploy:prod` 는 agreement §8-3(prod D1 조율)·Access 승격이 선행이다.
+- **배포는 환경을 명시한 스크립트로만 한다.** ⚠️ **콘솔은 2026-08-05 로 바뀌었다** —
+  `deploy:dev` 가 없어지고 `deploy:prod`(ops.ask-seoul.kr)만 남았으며, `dev` 브랜치 머지가
+  곧 운영 배포다(0015). 게이트웨이는 아래 서술 그대로다.
   스크립트 이름이 env 를 고정하므로 "플래그를 빼먹은 배포"가 성립하지 않는다 —
   env 없는 맨 `wrangler deploy` 는 여전히 금지다(기본 환경 = 로컬 전용).

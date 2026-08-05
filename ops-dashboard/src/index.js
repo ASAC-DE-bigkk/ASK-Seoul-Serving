@@ -47,22 +47,7 @@ function timingSafeEqual(a, b) {
 //
 // 원래는 토큰이 없으면 503 으로 화면 전체를 껐다. 그 취지("인증 없는 운영 화면이 실수로
 // 열리는 것보다 낫다")는 버린 게 아니라 **쓰기 쪽으로 옮긴** 것이다.
-// 원격 바인딩(`--remote`)으로 팀 D1 을 **볼 때** 켜는 빗장. wrangler 의 `--remote` 는
-// 읽기 전용 모드가 **아니라서**, 그 상태의 조치 버튼 한 번이 그대로 팀 DB 에 적용된다 —
-// 불변 경계 "팀(원격) D1 에 쓰지 않는다"(decision/0002)와 정면으로 부딪힌다.
-//
-// 예전에는 그 경계를 **문서의 경고문**으로만 지켰다("그 상태에서 조치 버튼을 누르지 않는다").
-// 경고문은 실수를 못 막는다 — 화면은 로컬일 때와 똑같이 생겼고, 누르는 사람은 자기가 어느
-// DB 를 보고 있는지 그 순간에 기억해야 했다. 그래서 빗장을 코드로 내린다(decision/0013).
-//
-// 값은 `package.json` 의 원격 스크립트가 `--var ENV_READONLY:1` 로 넘긴다. 즉 **원격으로
-// 붙는 경로에는 빗장이 딸려 오고**, 사람이 기억할 것이 없다.
-const isReadonly = (env) => String(env.ENV_READONLY || "").trim() === "1";
-
 function canWrite(env, request) {
-  // 읽기 전용이면 화면의 조치 버튼부터 나오지 않는다. 서버가 어차피 거절하지만, 누를 수
-  // 있는 버튼을 보여 주고 눌린 뒤에 막는 건 "왜 안 되지"를 만든다.
-  if (isReadonly(env)) return false;
   const token = String(env.OPS_TOKEN || "").trim();
   if (!token) return false;
   const got = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
@@ -70,13 +55,6 @@ function canWrite(env, request) {
 }
 
 function requireWrite(env, request) {
-  // 토큰 검사보다 **먼저** 본다. 올바른 토큰을 들고 와도 원격에서는 못 쓴다 —
-  // 여기가 인증 문제가 아니라 대상 DB 의 문제라는 걸 응답이 그대로 말해야 한다.
-  if (isReadonly(env)) {
-    return problem(503, "read-only mode",
-      `${env.ENV_LABEL || "원격"} 환경(${env.ENV_D1 || "알 수 없는 D1"})에 ` +
-      "보기 전용으로 붙어 있어 조치가 잠겨 있다. 조치는 로컬(npm run dev)에서 한다.");
-  }
   const token = String(env.OPS_TOKEN || "").trim();
   if (!token) return problem(503, "ops write disabled", "OPS_TOKEN 미설정 — 조치하려면 .dev.vars 에 설정할 것");
   if (!canWrite(env, request)) return problem(401, "unauthorized", "조치에는 운영자 토큰이 필요하다");
@@ -266,12 +244,8 @@ async function summary(env, params, writable = false) {
       can_write: writable,
       // 이 콘솔이 지금 어느 환경의 무슨 DB 를 보고 있나. 숫자만 보고 추측하게 두면
       // 로컬 샘플을 운영 실적으로 오해하는 사고가 난다(wrangler.toml [vars]).
-      // readonly 는 "토큰이 없다"와 다르다 — 토큰이 있어도 원격에서는 잠긴다(decision/0013).
-      // 화면이 그 둘을 같은 문구로 말하면 운영자가 `.dev.vars` 를 뒤지며 시간을 버린다.
-      env: { label: env.ENV_LABEL || "알 수 없음", d1: env.ENV_D1 || "알 수 없음",
-             readonly: isReadonly(env) },
-      // 행이 있나 없나(live/none) 두 상태뿐이다. 합성은 질의에서 이미 빠졌으므로 '섞였다'를
-      // 알리는 배지가 존재할 이유가 없다 — 화면은 비었을 때 "기록이 없습니다"만 말한다.
+      env: { label: env.ENV_LABEL || "알 수 없음", d1: env.ENV_D1 || "알 수 없음" },
+      // 샘플이 한 행이라도 섞여 있으면 화면 전체에 배지를 띄운다 — 조용히 섞이는 게 제일 나쁘다
       pipeline_source: pipelineSource,
       // 실행 기록을 어느 환경 것만 셌나 + 그래서 몇 건이 빠졌나. 걸러 놓고 말을 안 하면
       // "숫자가 왜 이렇지"가 되고, 그건 필터를 안 건 것만큼 나쁘다(#78 Z-7).
