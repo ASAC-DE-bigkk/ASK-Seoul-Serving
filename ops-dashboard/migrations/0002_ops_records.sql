@@ -1,4 +1,10 @@
--- 운영 기록 조회 DB 표 4종 — **로컬 개발용 미러** (decision/0009, ASK-Seoul#78 §8)
+-- 운영 기록 조회 DB 표 4종 — **표가 없는 D1 을 위한 미러** (decision/0009, ASK-Seoul#78 §8)
+--
+-- 🔴 **운영 D1 에서는 실행되지 않는다** (2026-08-05, decision/0015). 거기엔 ASAC-DAG 적재기가
+--    만든 진짜 표가 실측 수만 행과 함께 이미 있고, 이 파일을 돌리면 `CREATE TABLE IF NOT
+--    EXISTS` 는 넘어가도 **아래 `CREATE INDEX` 3개가 남의 운영 표에 실제로 만들어진다.**
+--    스키마 판단은 정본 소유자 몫이므로(CLAUDE.md §6), 표가 이미 있으면
+--    `scripts/backfill-migrations-ledger.sql` 이 **실행 없이 장부에만 적어** 건너뛰게 한다.
 --
 -- 정본은 ASAC-DAG `common/ops/d1_ops.py`(ops-d1/v1)다. 팀 D1 에는 그쪽 적재기가 이 표를
 -- 만들고 채운다 — 이 파일은 팀 조회 DB 를 읽을 수 없는 로컬(0002 로컬 전용)에서 같은 모양의
