@@ -233,3 +233,12 @@ test("route 세분화(#63 A) — tools/call 은 mcp_<툴명>, 프로토콜 단�
   await handleMcp(rpc("tools/call", { name: "bogus_tool", arguments: {} }), {}, t4, mkDeps());
   assert.equal(t4.route, "mcp");                       // 모르는 이름이 값 집합을 오염시키지 않는다
 });
+
+test("버스트로 거부돼도 route 는 mcp_<툴명> — 거부분이 SERVE 집계에서 빠지지 않는다", async () => {
+  const trace = {};
+  const deps = mkDeps({ checkBurst: async () => ({ exceeded: true, retryAfter: 30 }) });
+  const res = await handleMcp(
+    rpc("tools/call", { name: "query_product", arguments: { product_id: "p" } }), {}, trace, deps);
+  assert.equal(res.status, 429);                       // #61: HTTP 429 + Retry-After
+  assert.equal(trace.route, "mcp_query_product");      // #63 A: REST 와 같이 거부도 제 이름으로
+});
