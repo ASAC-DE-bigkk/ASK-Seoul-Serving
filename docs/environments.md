@@ -160,8 +160,12 @@ D1 안의 장부(`d1_migrations`)에 기록되고 **안 된 파일만 실행**�
 
 - **운영 D1 에 운영 테이블 만들기** — 게이트웨이(런북 1번)와 콘솔(`migrations/0001` 을
   `--remote` 로) 둘 다, **사람이 직접 실행하는 팀 D1 쓰기**다.
-- **도메인 zone 등록 확인** — 확인되면 두 `wrangler.toml` 의 `routes` 를 활성화한다.
-  콘솔 쪽은 그 전에 Cloudflare Access 를 `ops.` 호스트로 **한정해서** 거는 게 선행이다
-  (#20 결정 B-1 — zone 전체나 `*.ask-seoul.kr` 로 걸면 공개 API 까지 잠긴다).
-- **배포는 아직 허용되지 않았다.** `[env.production]` 이 있다는 것과 배포해도 된다는 것은
-  다르다 — 배포 결정(agreement §8). 그래서 **두 `package.json` 다 deploy 스크립트를 두지 않는다.**
+- **도메인 zone 은 확인됐다(2026-08-04)** — `ask-seoul.kr` Active. 호스트 4종:
+  `ask-seoul.kr`(서비스 운영) · `dev.`(서비스 개발) · `ops.`(콘솔 운영) · `dev-ops.`(콘솔 개발).
+  dev 2종의 `routes` 는 활성, 콘솔 운영(`ops.`) 라우트는 **주석 상태다** — Cloudflare Access 를
+  이 호스트로 **한정해서** 거는 게 선행이라서다(#20 결정 B-1 — zone 전체나 `*.ask-seoul.kr`
+  로 걸면 공개 API 까지 잠긴다. Access 는 토큰 권한 미확보로 보류 중).
+- **배포는 환경을 명시한 스크립트로만 한다(2026-08-04 개정).** `npm run deploy:dev` 는
+  시행 중이고, `deploy:prod` 는 agreement §8-3(prod D1 조율)·Access 승격이 선행이다.
+  스크립트 이름이 env 를 고정하므로 "플래그를 빼먹은 배포"가 성립하지 않는다 —
+  env 없는 맨 `wrangler deploy` 는 여전히 금지다(기본 환경 = 로컬 전용).

@@ -36,7 +36,8 @@
 설정 배치, 로컬/운영 도메인·D1 값, env 섹션 비상속 함정. 이 문서는 그 구조 위에서
 **OS별로 어떻게 실행하는가**만 다룬다.
 
-원격 배포는 아직 하지 않는다(`wrangler deploy` 금지 — 배포 결정(agreement §8)).
+원격 배포는 환경을 명시한 스크립트(`npm run deploy:dev`/`deploy:prod`)로만 한다 —
+절차는 [marketplace/docs/deploy-runbook.md](../marketplace/docs/deploy-runbook.md).
 아래는 전부 `wrangler dev` 로컬 구동이다.
 
 ## 0. 순서가 정해져 있다

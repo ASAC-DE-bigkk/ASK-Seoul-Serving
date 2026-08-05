@@ -1,7 +1,7 @@
 {
   "name": "ask-seoul-ops-dashboard",
   "private": true,
-  "description": "운영자용 통합 품질 콘솔 — 파이프라인 + 서빙 (ASK-Seoul#58, 로컬 전용)",
+  "description": "운영자용 통합 품질 콘솔 — 파이프라인 + 서빙 (ASK-Seoul#58, dev-ops.ask-seoul.kr)",
   "scripts": {
     "seed": "wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state --file=scripts/backfill-migrations-ledger.sql && wrangler d1 migrations apply ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state",
     "dev": "wrangler dev --inspector-port 9230 --persist-to ../marketplace/.wrangler/state",

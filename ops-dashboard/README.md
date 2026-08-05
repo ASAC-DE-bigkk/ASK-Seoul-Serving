@@ -134,9 +134,13 @@
 - **읽기를 열었다고 노출해도 되는 화면이 된 건 아니다.** 파이프라인 SLO·요청 로그·키 사용량은
   여전히 내부 운영 정보이고, 이메일 도메인은 마스킹 뒤에도 남는다.
 
-## ⚠️ 로컬 전용
+## ⚠️ 배포는 스크립트로만
 
-`wrangler dev` 로만 구동. **`wrangler deploy` 금지** — 공개 URL 신설은 배포 결정(agreement §8).
+로컬 구동은 `wrangler dev`. 배포는 `npm run deploy:dev`(→ `dev-ops.ask-seoul.kr`,
+2026-08-04 시행) / `npm run deploy:prod`(→ `ops.ask-seoul.kr` — **Cloudflare Access 승격이
+선행이라 라우트가 주석 상태**, #20 결정 B-1). env 없는 맨 `wrangler deploy` 는 금지다.
+읽기 경로가 무인증인 채 dev 공개 URL 에 떠 있으므로(decision/0004) Access 권한 확보가
+최우선 과제다 — decision/0002 개정 이력 참조.
 
 ## 실행
 
