@@ -73,7 +73,13 @@
     (제품 62종 · 테이블당 50행, README §표본 에 상한이 명시돼 있다)이고 게이트웨이 운영 표
     (`_keys`·`_usage`·`_burst`·`_gateway_request_log`)는 **건드리지 않는다**(확인: 63개 DROP 이
     전부 `_catalog`·제품 표 `d1_*`). 조작된 값이 아니므로 `ops-dashboard` 의 배제 결정과
-    충돌하지 않는다 — **양쪽 seed 를 같은 것으로 읽지 않도록** 여기 적어 둔다.
+    충돌하지 않는다.
+  - ⚠️ **두 `npm run seed` 는 이름만 같고 하는 일이 다르다.** D1 은 하나를 공유하는 게 맞지만
+    (`--persist-to`, [0003](../ops-dashboard/docs/decision/0003-single-shared-local-d1.md)),
+    각자 **자기 소유 표만** 채운다 — 콘솔은 `_ops_slo`·`_ops_domain`(+4종 미러)에 **표만**,
+    게이트웨이는 `_catalog`·제품 표 `d1_*` 에 **데이터까지**. 그래서 "콘솔 시드를 돌렸는데
+    화면이 비었다"와 "게이트웨이 시드를 돌렸더니 데이터가 있다"가 **둘 다 정상**이다.
+    한쪽을 보고 다른 쪽 동작을 넘겨짚으면 "시드가 덜 됐다"는 오진이 나온다.
   - 남은 것: `handoff_meta_sample.sql` 이 심는 `publication_id='local-fixture'` 표본을
     marketplace 화면이 **걸러내지 않는다**(코드에 `local-fixture` 문자열이 없다). 로컬 전용
     이라 지금 사고는 아니지만, 그 화면이 공개로 승격될 때 검토가 필요하다.
