@@ -1,10 +1,17 @@
-# marketplace — V1 마켓플레이스 프로토타입 (ASK-Seoul#58)
-# ⚠️ 로컬 전용: wrangler dev --local 로만 구동한다. deploy 는 배포 결정(agreement §8).
-# 로컬 모드는 아래 database_id 를 쓰지 않고 Miniflare 로컬 sqlite 를 만든다 —
-# 시드는 `npm run seed` (migrations + fixtures 를 --local 로 적용).
+# marketplace — V1 마켓플레이스 게이트웨이 (ASK-Seoul#58)
+# 로컬 구동은 `wrangler dev --local` — 아래 database_id 를 쓰지 않고 Miniflare 로컬
+# sqlite 를 만든다. 시드는 `npm run seed` (migrations + fixtures 를 --local 로 적용).
+#
+# 배포는 환경을 반드시 지정한다 — `npm run deploy:dev` / `npm run deploy:prod`.
+# env 없이 `wrangler deploy` 를 실행하지 않는다: base 는 로컬 전용이고(아래 [vars] 주석),
+# 라우트 없는 워커가 하나 더 생긴다. 절차 정본은 docs/deploy-runbook.md,
+# 남은 배포 결정 상태는 ../docs/agreement.md §8.
 name = "ask-seoul-gateway"
 main = "src/index.js"
 compatibility_date = "2026-07-01"
+# workers.dev 주소는 어느 환경에서도 만들지 않는다 — 진입점이 둘이면 소비자가 붙은 뒤
+# 하나를 못 끈다(#476 ② URL 변경 = 파손). 진입점은 환경별 커스텀 도메인 하나씩이다.
+workers_dev = false
 
 [assets]
 directory = "public"
@@ -18,6 +25,7 @@ run_worker_first = ["/api/v1/*", "/skill/v1/*", "/mcp"]
 # 오타 URL 로 들어온 사람이 JSON 덩어리를 보게 되던 원인이었다(/api/* 는 그대로 JSON 이 맞다).
 not_found_handling = "404-page"
 
+# 로컬(wrangler dev --local)용 바인딩 — 로컬 모드는 id 를 무시하고 이름만 쓴다.
 [[d1_databases]]
 binding = "DB"
 database_name = "ask-seoul-dev-d1"
@@ -28,18 +36,50 @@ database_id = "9db0e851-558e-489f-9e76-f131d25aa267"
 # 막는 게 목적이다 — 실측으로 운영 D1 에 `dev` 17건, 개발 D1 에 `prod` 63건이 이미 있다.
 #
 # ⚠️ **base env 는 로컬 전용이다 — 배포하지 않는다.** 여기서 배포하면 dev D1 을 쓰면서
-#    `local` 로 기록돼 값이 실제 배포면을 못 덮는다. 배포는 `--env production` 만 쓴다.
+#    `local` 로 기록돼 값이 실제 배포면을 못 덮는다. 배포는 `--env dev`/`--env production` 만 쓴다.
 [vars]
 ASK_ENV = "local"
 
-# ── 배포 전용 환경 (2026-08-03, ASAC-DAG#668) ────────────────────────────────
+# ── 개발 환경 — https://dev.ask-seoul.kr (2026-08-04 배포 시행) ──────────────
+# 바인딩·assets·vars 는 env 에 상속되지 않으므로(wrangler 규칙) 환경마다 다시 선언한다 —
+# 값은 반드시 위 기본(로컬) 블록과 동일하게 유지한다.
+# ⚠️ 워커 이름 개명(2026-08-04): env 도입 전 최초 배포가 `ask-seoul-gateway` 라는 이름으로
+# dev 에 나갔으나, 그 이름은 production 몫이다. dev 는 `-dev` 접미사로 비킨다 —
+# 다음 deploy:dev 때 새 워커가 생기므로 커스텀 도메인 이전과 ISSUANCE_SALT 재설정이
+# 한 번 필요하다(런북 §3 참조).
+[env.dev]
+name = "ask-seoul-gateway-dev"
+workers_dev = false
+routes = [
+  { pattern = "dev.ask-seoul.kr", custom_domain = true }
+]
+
+[env.dev.vars]
+ASK_ENV = "dev"
+
+[env.dev.assets]
+directory = "public"
+run_worker_first = ["/api/v1/*", "/skill/v1/*", "/mcp"]
+not_found_handling = "404-page"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "ask-seoul-dev-d1"
+database_id = "9db0e851-558e-489f-9e76-f131d25aa267"
+
+# ── 배포 전용 환경 (2026-08-03, ASAC-DAG#668) — https://ask-seoul.kr ─────────
 # 파이프라인이 prod D1(ask-seoul-prod-d1)을 신설해 62개 제품 게시를 시작했다.
 # 기본(위) 바인딩은 dev D1 을 유지한다 — 로컬 Miniflare 상태가 database_id 로
 # 키잉되어 콘솔(../ops-dashboard)과 같은 로컬 DB 를 공유하기 때문(decision/0003).
-# 여길 바꾸면 로컬 협업 상태가 갈라진다. 배포는 `wrangler deploy --env production`
-# 만 쓴다 — 여전히 배포 결정(agreement §8) 이후의 일이다(docs/deploy-runbook.md).
+# 여길 바꾸면 로컬 협업 상태가 갈라진다.
+# ⚠️ production 배포 전 선행: prod D1 마이그레이션은 파이프라인 쪽과 조율 후에만
+# (agreement §8-3 — 승인 주체 미정), ISSUANCE_SALT 를 `--env production` 으로 설정.
 [env.production]
 name = "ask-seoul-gateway"
+workers_dev = false
+routes = [
+  { pattern = "ask-seoul.kr", custom_domain = true }
+]
 
 [env.production.assets]
 directory = "public"

@@ -80,12 +80,26 @@ dev   _keys · _usage · _issuance_log · _burst                          일치
 
 ## 0-1. 전제 확인
 
+배포는 **환경을 반드시 지정한다** — 명령마다 `--env dev` 또는 `--env production`.
+env 없이 실행하면 라우트 없는 워커가 하나 더 생긴다. 두 환경은 `wrangler.toml` 이 정본이다:
+
+| 환경 | 워커 | 주소 | D1 |
+|---|---|---|---|
+| `dev` | `ask-seoul-gateway-dev` | `https://dev.ask-seoul.kr` | `ask-seoul-dev-d1` |
+| `production` | `ask-seoul-gateway` | `https://ask-seoul.kr` | `ask-seoul-prod-d1` |
+
+> ⚠️ **워커 개명(2026-08-04).** env 도입 전 최초 dev 배포가 `ask-seoul-gateway` 이름으로
+> 나갔으나 그 이름은 production 몫이라 dev 가 `-dev` 로 비켰다. 다음 `deploy:dev` 는
+> **새 워커를 만든다** — 구 워커에서 커스텀 도메인을 떼고(§3), `ISSUANCE_SALT` 를
+> 새 워커에 다시 넣은 뒤(§2), 구 워커를 삭제한다.
+
 | 항목 | 확인 방법 | 기대 |
 |---|---|---|
-| **배포 승인** | [`../../docs/agreement.md` §8-3](../../docs/agreement.md) | ⚠️ **승인 주체 미정** — prod D1 은 파이프라인의 DB 다. #476 ① 은 팀 투표였고 이미 통과했으므로 이 자리의 근거가 아니다 |
+| **배포 승인** | [`../../docs/agreement.md` §8-3](../../docs/agreement.md) | ⚠️ production 은 **승인 주체 미정** — prod D1 은 파이프라인의 DB 다. #476 ① 은 팀 투표였고 이미 통과했으므로 이 자리의 근거가 아니다. dev 는 통과된 ① 로 충분 |
 | **배포 전 검사** | 위 §0 `npm run preflight` | 🔴 **종료 코드 1 이면 배포 금지** |
-| 대상 D1 | `wrangler.toml` `[env.production]` | `ask-seoul-prod-d1` — 파이프라인이 게시하는 prod D1. 기본 환경의 dev D1 은 로컬 전용이다 |
+| 대상 D1 | `wrangler.toml` 해당 env 의 `d1_databases` | 위 환경 표와 일치 — 기본 환경의 dev D1 바인딩은 로컬 전용이다 |
 | Cloudflare 계정 | 팀 계정 로그인 | `npx wrangler whoami` — **publisher 와 같은 계정**이어야 바인딩이 같은 DB 로 풀린다(개인 계정 배포 금지) |
+| 도메인 | zone `ask-seoul.kr` 이 Active | 해당 env 의 `routes` 가 이 zone 을 가리킨다 (2026-08-04 확인) |
 | 코드 | 머지된 `dev` | 로컬 `npm test` · `npm run verify:log` 통과 |
 
 ### ~~`_request_log` 이름 충돌 검사~~ — 위 `npm run preflight` 로 **대체됨**
@@ -109,17 +123,22 @@ npm run verify:log  # 요청 로그 유실 검증(C-10)
 
 ## 1. 팀 D1 에 운영 테이블 만들기 (최초 1회)
 
-게이트웨이가 쓰는 `_keys`·`_usage`·`_burst`·`_issuance_log`·`_gateway_request_log` 는 지금까지
-`--local` 로만 적용해서 **prod D1 에는 없다.** 이걸 안 하면 배포해도 키 발급·인증이 전부 죽는다.
+게이트웨이가 쓰는 `_keys`·`_usage`·`_burst`·`_issuance_log`·`_gateway_request_log` 는
+**원격 D1 에 환경마다 최초 1회 만들어야 한다.** 안 하면 배포해도 키 발급·인증이 전부 죽는다.
+실측(2026-08-04): dev D1 은 `0001~0004` 가 파일 직실행으로 적용된 상태(`0005` 미적용,
+그 과정의 `0004` 오염이 §0 실측의 그것이다) / prod D1 은 우리 표가 하나도 없다.
 
 > ⚠️ **팀(원격) D1 쓰기다.** 스키마 생성만 하고 기존 표(`_catalog`·제품 테이블)는 건드리지
-> 않지만, 실행 전에 팀에 알린다. 이 명령은 **직접 실행한다** — 에이전트가 대신 돌리지 않는다.
+> 않지만, 실행 전에 팀에 알린다.
 
 ### 🔴 0단계 — 장부 백필이 **먼저다** (건너뛰면 남의 표가 오염된다)
 
 ```bash
 cd marketplace
 npx wrangler d1 execute ask-seoul-prod-d1 --remote --env production \
+  --file=scripts/backfill-migrations-ledger.sql
+# dev 도 동일 — 장부 없이 apply 하면 0001~0004 가 재실행돼 남의 표가 또 오염된다:
+npx wrangler d1 execute ask-seoul-dev-d1 --remote --env dev \
   --file=scripts/backfill-migrations-ledger.sql
 ```
 
@@ -132,7 +151,8 @@ npx wrangler d1 execute ask-seoul-prod-d1 --remote --env production \
 ### 1단계 — 적용
 
 ```bash
-npx wrangler d1 migrations apply ask-seoul-prod-d1 --remote --env production
+npx wrangler d1 migrations apply ask-seoul-prod-d1 --remote --env production   # 운영
+npx wrangler d1 migrations apply ask-seoul-dev-d1 --remote --env dev           # 개발
 ```
 
 파일을 나열하지 않는다 — 적용 여부는 D1 안의 장부가 추적하고, **안 된 파일만** 실행된다.
@@ -161,25 +181,35 @@ npx wrangler d1 execute ask-seoul-prod-d1 --remote --env production \
 
 `ISSUANCE_SALT` 가 없으면 **발급이 503 으로 닫힌다**(무염 해시 방지 — 의도된 fail-closed).
 
+시크릿은 워커별이다 — 환경마다 따로 넣고, 값도 환경마다 다르게 생성한다.
+(2026-08-04 에 dev 에 설정했지만 **구 워커에 들어갔다** — §0-1 개명 후 첫 배포 때
+새 워커에 다시 넣어야 한다.)
+
 ```bash
 cd marketplace
-openssl rand -hex 32          # 값 생성 — 출력은 어디에도 남기지 말 것
-npx wrangler secret put ISSUANCE_SALT --env production   # 프롬프트에 위 값을 붙여넣는다
+openssl rand -hex 32 | npx wrangler secret put ISSUANCE_SALT --env dev
+openssl rand -hex 32 | npx wrangler secret put ISSUANCE_SALT --env production
+# 파이프로 바로 넣는다 — 값이 화면·히스토리에 남지 않는다
 ```
 
 ## 3. 배포
 
 ```bash
 cd marketplace
-npx wrangler deploy --env production
+npm run deploy:dev    # 개발 — test·preflight 통과 후 wrangler deploy --env dev
+npm run deploy:prod   # 운영 — test·preflight 통과 후 wrangler deploy --env production
 ```
 
-`--env production` 이 prod D1(`ask-seoul-prod-d1`) 바인딩을 선택한다 — 플래그 없이 돌리면
-기본 환경(dev D1)이 배포되므로 **반드시 플래그를 붙인다.**
-
-출력에 나오는 `https://<name>.<subdomain>.workers.dev` 가 타겟 주소다.
-**이 주소는 한 번 정해지면 사실상 못 바꾼다**(소비자가 붙으면 변경 = 파손) — #476 ② 결정과
+env 플래그 없는 맨 `wrangler deploy` 는 금지다 — 기본 환경은 로컬 전용이고(wrangler.toml
+[vars] 주석), 라우트 없는 워커가 하나 더 생긴다. 각 환경의 `routes`(`custom_domain = true`)가
+DNS·TLS 를 자동 생성하고, `workers_dev = false` 라 workers.dev 주소는 만들지 않는다.
+**주소는 한 번 정해지면 사실상 못 바꾼다**(소비자가 붙으면 변경 = 파손) — #476 ② 결정과
 어긋나지 않는지 배포 전에 다시 확인한다.
+
+**개명 후 첫 `deploy:dev` 절차** (§0-1 참조): 새 워커가 라우트를 잡으려 할 때 구 워커가
+`dev.ask-seoul.kr` 을 물고 있으면 충돌한다 — 대시보드(또는 API)에서 구 워커
+`ask-seoul-gateway` 의 커스텀 도메인을 먼저 떼고 배포한다. 배포 후 §2 시크릿 재설정 →
+§4 스모크 → 구 워커 삭제 순서.
 
 ## 4. 스모크 (배포 직후 필수)
 
@@ -211,8 +241,8 @@ SMOKE_KEY=ask_… npm run smoke -- https://<배포주소>
 ## 5. 되돌리기
 
 ```bash
-npx wrangler deployments list --env production   # 이전 배포 확인
-npx wrangler rollback --env production --message "<사유>"   # 직전 배포로
+npx wrangler deployments list --env dev                # 이전 배포 확인
+npx wrangler rollback --env dev --message "<사유>"      # 직전 배포로 (운영은 --env production)
 ```
 
 데이터는 롤백되지 않는다 — 1번에서 만든 표는 그대로 남는다(비어 있어도 무해하다).
@@ -220,11 +250,39 @@ npx wrangler rollback --env production --message "<사유>"   # 직전 배포로
 **완전히 내리려면** Cloudflare 대시보드에서 Worker 를 삭제한다. 그러면 그 URL 은
 다시 쓰지 않는 게 좋다(캐시·북마크가 남는다).
 
-## 6. 배포 후 알아둘 것
+## 6. 도메인·환경 구조 (2026-08-04 적용 — 기록)
 
-- **운영 콘솔은 이 배포에 포함되지 않는다.** ops-dashboard 는 로컬 전용이라
-  (decision/0002) 배포된 게이트웨이의 요청 로그·키를 화면으로 볼 수 없다. 조회가 필요하면
-  `wrangler d1 execute --remote` 로 직접 질의한다. 콘솔 공개는 #20 결정 B.
-- **키·이메일이 prod D1 에 쌓인다.** 파이프라인 게시본과 같은 DB 다 — 운영 표(`_keys` 등)는
-  게이트웨이 스키마 정본(0001 §스키마)이지만, 이 D1 을 리셋하면 발급된 키가 같이 사라진다.
+도메인 `ask-seoul.kr` 은 팀 계정 zone 으로 등록·활성화됐다(네임서버
+rita/sam.ns.cloudflare.com, 공개 DNS 반영 확인). 주소 체계는 4종으로 고정:
+`ask-seoul.kr`(서비스 운영) · `dev.`(서비스 개발) · `ops.`(콘솔 운영) ·
+`dev-ops.`(콘솔 개발). 이 절은 무엇이 왜 그렇게 돼 있는지의 기록이다.
+
+- **환경은 `wrangler.toml` 의 `[env.dev]`·`[env.production]` 으로 분리한다** —
+  워커·주소·D1·`ASK_ENV` 를 환경마다 따로 갖는다(§0-1 표). 호스트를 코드·설정에 한 벌만
+  박아 두면 운영 배포 때 전부 다시 손대야 하기 때문이다. 바인딩·vars 는 env 에 상속되지
+  않으므로 환경마다 재선언돼 있다.
+- `custom_domain = true` 는 DNS 레코드·TLS 인증서를 Cloudflare 가 자동 생성한다 —
+  DNS 를 손으로 만들지 않는다.
+- `workers_dev = false` (전 환경). 첫 배포 전에 정했으므로 workers.dev 주소는
+  아예 없다. 진입점이 둘이면 소비자가 붙은 뒤 하나를 못 끈다(#476 ② — URL 변경 = 파손).
+- **정적 산출물은 상대 경로를 유지한다** — `openapi.json` 의 `servers`(`"/"`),
+  `sitemap.xml` 의 `<loc>`, `robots.txt` 의 `Sitemap:`. 같은 파일이 dev·production
+  양쪽에 배포되므로 환경별 절대 URL 을 박으면 다른 환경이 오염된다. sitemap 스펙은
+  절대 URL 을 요구하므로, 정식 공개로 색인이 실제로 중요해지면 이 두 파일을 워커
+  런타임 생성(요청 origin 기준)으로 전환한다.
+- 서브도메인 `dev.` 는 개발 환경 표식이다. `api.ask-seoul.kr` 같은 기능 분리는
+  하지 않았다 — 사이트와 API 가 한 워커라 호스트 하나면 충분하다.
+- 내부용 3종(dev·dev-ops·ops)의 Cloudflare Access 적용은 팀 결정(agreement §8-2 B)이나
+  **보류 중** — API 토큰의 Access 편집 권한을 확보하지 못했다(콘솔 decision/0002 참조).
+
+## 7. 배포 후 알아둘 것
+
+- **운영 콘솔은 별도 워커로 따로 배포된다** — dev 는 `dev-ops.ask-seoul.kr`
+  (`../ops-dashboard` 에서 `npm run deploy:dev`). 같은 환경의 D1 을 읽으므로 게이트웨이와
+  D1 이 어긋나면 남의 데이터를 보게 된다. 2026-08-04 배포본은 구 코드(`_request_log` 조회)라
+  서빙·키 탭이 강등 상태였다 — **개명(`_gateway_request_log`) 반영 코드로 재배포 + `0005`
+  적용이면 해소된다.**
+- **키·이메일이 팀 D1 에 쌓인다.** 통합 검증 단계라 팀원 테스트 키뿐이지만, 누군가 그 D1 을
+  리셋하면 발급된 키가 같이 사라진다. 정식 공개 전에 prod D1 로 옮기면서 해소한다(#20 결정 A).
+  production 은 파이프라인 게시본과 같은 DB 라 리셋 반경이 더 크다(agreement §8-3).
 - **요청 로그는 30일 후 자동 삭제**된다(로그 100건당 약 2회 sweep). 발급 IP 해시는 24시간.

@@ -40,6 +40,35 @@
 
 ## 2026-08-04
 
+### dev 환경 공개 배포 — 4-호스트 체계와 환경 분리
+
+- **작업자**: @codingpoppy94 (+ Claude Code)
+- **의도 · 목표**: 통합 검증을 로컬 시연이 아니라 **실제 URL** 로 한다(#476 ① 만장일치
+  통과분의 실행). 운영/개발을 처음부터 갈라, 호스트를 한 벌만 박아 두면 운영 배포 때
+  전부 다시 손대야 하는 상태를 만들지 않는다.
+- **조치**:
+  - zone `ask-seoul.kr` 등록·Active 확인(네임서버 rita/sam). 호스트 4종 확정:
+    `ask-seoul.kr`(서비스 운영) · `dev.`(서비스 개발) · `ops.`(콘솔 운영) · `dev-ops.`(콘솔 개발)
+  - 두 프로젝트 `wrangler.toml` 을 `[env.dev]`/`[env.production]` 으로 분리 — 라우트
+    (`custom_domain`)·D1·`ASK_ENV`/`ENV_LABEL` 을 환경별로, `workers_dev = false` 전 환경
+  - `deploy:dev`/`deploy:prod` 스크립트 신설 — 게이트웨이는 `npm test`·`npm run preflight`
+    통과가 배포 선행 조건
+  - 게이트웨이(dev.ask-seoul.kr)·콘솔(dev-ops.ask-seoul.kr) dev 배포 + 스모크
+  - 정적 산출물(openapi `servers`·sitemap·robots)은 **상대 경로 유지** — 같은 파일이
+    두 환경에 배포되므로 환경별 절대 URL 은 다른 환경을 오염시킨다
+  - 내부 3종(dev·dev-ops·ops) Cloudflare Access 는 팀 결정(agreement §8-2 B)이나
+    **API 토큰 권한 미확보로 보류** (콘솔 decision/0002 개정 이력)
+- **결과**:
+  - 게이트웨이 스모크 10/10 PASS(배포 시점 코드 기준) · 콘솔 페이지/summary 200 ·
+    콘솔 쓰기 503 fail-closed(OPS_TOKEN 미설정)
+  - 실측 사고 2건 — ① `0004` 원격 직실행이 transit 소유 `_request_log` 에 `request_id`
+    를 오염(preflight `오염` 판정의 그 실측) ② 배포본 요청 로그 전량 유실(개명 전 코드,
+    요청 3건 → 로그 +0). 둘 다 #53 개명(`_gateway_request_log`) 체계로 해소 경로 확정 —
+    **개명 코드 재배포 + 장부 백필 + apply 가 남았다**
+  - 워커 이름이 production 몫(무접미사)을 선점한 상태 — 다음 `deploy:dev` 에서 `-dev` 로
+    개명(커스텀 도메인 이전·시크릿 재설정 필요, 런북 §0-1)
+  - 콘솔 읽기 경로는 무인증 공개 상태 유지 중 — Access 권한 확보 후 잠근다
+
 ### 빈 화면이 "왜 비었나"를 말하게 — 표가 어디에 사는지
 
 - **작업자**: @Exisign

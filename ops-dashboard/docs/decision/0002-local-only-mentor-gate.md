@@ -7,8 +7,30 @@
 > [`../../../docs/agreement.md` §8](../../../docs/agreement.md) 이 정본이다.
 > 이 문서의 결론(**로컬 전용 · `wrangler deploy` 금지**)은 그대로 유효하다 — 근거만 바뀐다.
 
-- 상태: **채택** (2026-07)
+- 상태: **부분 개정** (2026-08-04) — 아래 개정 이력 참조. 원 결정은 2026-07 채택.
 - 관련: 팀 결정 #476 ①, ASAC-DAG#521-(B)
+
+## 개정 이력 (2026-08-04)
+
+프로젝트 오너 지시로 **개발 환경(dev)의 공개 배포를 시행**했다. 주소 체계는 4종으로
+고정: `ask-seoul.kr`(서비스 운영) · `dev.ask-seoul.kr`(서비스 개발) ·
+`ops.ask-seoul.kr`(콘솔 운영) · `dev-ops.ask-seoul.kr`(콘솔 개발).
+
+- 이 콘솔은 `npm run deploy:dev` 로 dev-ops.ask-seoul.kr 에 배포된다.
+  **production(ops.ask-seoul.kr)은 Cloudflare Access 승격(#20 결정 B-1)이 선행**이라
+  wrangler.toml 의 production 라우트는 주석 상태다.
+- 내부용 3종(dev·dev-ops·ops)의 Cloudflare Access 적용은 팀 결정(agreement §8-2 B)이나
+  **보류 상태**다 — API 토큰에 Access 편집 권한을 확보하지 못했다(계정 멤버 역할 제한).
+  권한 확보 후 재개한다. [0004](0004-read-open-write-token.md)의 "공개 배포 시 인증 교체"
+  재검토 조건은 유효하며, 그때까지 콘솔 읽기 경로는 무인증 공개 상태다(쓰기는 OPS_TOKEN
+  미설정으로 503 fail-closed).
+- 원격 D1 쓰기는 `_ops_*` 마이그레이션 적용에 한정하며, 콘솔 전용 장부
+  (`d1_migrations_ops_dashboard`)로 게이트웨이와 분리해 센다 — 증분 전환은 2026-08 에
+  이미 선행 처리됐다(아래 재검토 조건의 각주 참조).
+- 2026-08-04 dev 배포 검증에서 공유 dev D1 의 `_request_log` 를 transit-api 가 다른
+  스키마로 선점한 것이 실측됐고, 서빙·키 탭이 강등됐다. 게이트웨이가
+  `_gateway_request_log` 로 비키는 개명(#53)으로 해소 경로가 확정됐다 — 개명 반영
+  코드로 재배포하면 정상화된다.
 
 ## 맥락
 
