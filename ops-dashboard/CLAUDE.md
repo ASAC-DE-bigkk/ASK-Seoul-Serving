@@ -206,6 +206,8 @@ OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) �
 | `migrations/` 실행 여부·대상 | [runbook §1-1·§5](docs/runbook.md) · README 해당 절 · 이 문서 6절 · [../docs/run-prod.md](../docs/run-prod.md) |
 | 화면 배지·배너의 신설/폐기 | README 해당 절 · [runbook §6 증상표](docs/runbook.md) · 이 문서 7절 검증 항목 · [run-prod](../docs/run-prod.md) 의 "확인한다" 절 |
 | `meta.*` 응답 필드 | [runbook §2](docs/runbook.md) 의 `jq` 예시 (없는 필드를 파면 `null` 이 조용히 나온다) · 환경 매뉴얼의 `curl` 예시 |
+| **게이트웨이 route 값**(추가·개명·삭제) | [0014 §1 값 표](docs/decision/0014-console-route-contract.md) + `public/index.html` 의 `ROUTE_KO` 를 **같은 커밋에서**. 빠지면 화면에 내부 슬러그가 샌다. ⚠️ **퇴역한 값도 남긴다** — 로그는 개명보다 오래 산다(0014 §1-1) |
+| **무엇을 '데이터 서빙'으로 세나** | [0014 §2](docs/decision/0014-console-route-contract.md) 의 `SERVE_ROUTES` **한 곳만** — 배열이 정본이고 SQL·`meta.serve_routes` 가 거기서 나온다. 다섯 곳에 흩어 뒀던 것이 #63 사고의 원인이다 |
 | `wrangler.toml` 환경·바인딩 | [../docs/environments.md](../docs/environments.md) · README · [0011](docs/decision/0011-per-env-config.md) · **환경을 늘렸으면 매뉴얼 한 장을 새로 쓰고 [../docs/index.md](../docs/index.md) 에 매핑** |
 | 🔴 **D1 에 붙는 경로**(바인딩·`remote`·스크립트) | [0015](docs/decision/0015-single-production-d1.md) 먼저 — **운영에 직접 붙는다**는 전제가 유지되는지, 그리고 연결이 조용히 로컬로 떨어지지 않는지(0015 §대가의 실측표) |
 | **남의 표를 건드리는 SQL·마이그레이션** | [0015 §안전장치](docs/decision/0015-single-production-d1.md) · [0007](docs/decision/0007-schema-single-file-reset.md) · 6절 소유권 표 — 정본 소유자가 먼저다 |

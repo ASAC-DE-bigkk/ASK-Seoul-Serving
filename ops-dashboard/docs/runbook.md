@@ -68,6 +68,17 @@ curl -s "$BASE/api/summary?days=14" | jq '{spec_pending: .meta.usage_spec_pendin
 # ⑤ 요청 추적 — 게이트웨이 응답 헤더 X-Request-Id 값으로 그 요청 한 건을 특정
 RID=$(curl -si http://localhost:8787/api/catalog | tr -d '\r' | awk -F': ' '/^x-request-id/{print $2}')
 curl -s "$BASE/api/trace?request_id=$RID" | jq '{found, rows}'
+
+# ⑥ route 계약 — 무엇을 '데이터 서빙'으로 셌고, 무엇을 못 셌나 (decision/0014)
+curl -s "$BASE/api/summary?days=14" | jq '{serve: .meta.serve_routes, mcp: .meta.mcp}'
+#   serve = ["data","skill_data","mcp_query_product"]  ← 질의 조건과 같은 배열에서 나온다
+#   mcp.unsplit    > 0 이면 화면에 "거부된 AI 호출은 못 가름" 안내가 뜬다
+#   mcp.pre_split  = true 면 창 앞부분이 '가르기 전' 기록이다(기간을 좁히면 사라진다)
+
+# ⑥-a 화면에 내부 슬러그가 새는지 — 번역표에 없는 route 값을 골라낸다 (리포 루트에서, 통과 기준: 0줄)
+curl -s "$BASE/api/summary?days=14" | jq -r '.serving.routes[].route' | sort -u | while read r; do
+  grep -q "\b$r:" ops-dashboard/public/index.html || echo "MISSING in ROUTE_KO: $r"
+done
 ```
 
 **쓰기 문 3종 세트** — 쓰기 경로를 고쳤다면 반드시 셋 다 본다

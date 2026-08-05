@@ -15,6 +15,63 @@
 // 공유 토큰은 "누가 했나"가 남지 않는 약한 인증이라, 공개 배포 시 Cloudflare Access /
 // org OAuth 로 교체해야 한다(멘토 게이트). 조치 쪽은 토큰 미설정이면 503 으로 닫힌다.
 
+// ── 게이트웨이 route 계약 ─────────────────────────────────────────────────────
+//
+// **정본은 [decision/0014](docs/decision/0014-console-route-contract.md).** 값을 늘리거나
+// 뜻을 바꿀 때는 그 문서를 먼저 고친다 — 여기만 고치면 화면 문구가 따라오지 않는다.
+//
+// 게이트웨이가 내보내는 값 전수 17종(`marketplace/src/index.js` 의 `trace.route` 대입 자리
+// 12종 + `mcp.js` 의 툴별 세분화 5종과 1:1):
+//   catalog · preview · data · me · keys · revoke · product · glossary
+//   skill_bundle · skill_data · skill_product
+//   mcp · mcp_list_products · mcp_describe_product · mcp_preview_product
+//       · mcp_query_product · mcp_check_quota
+//
+// ⚠️ `product`·`glossary` 는 한때 `v1_product`·`v1_glossary` 였다 — ea28bcc(#67)가 `/v1` 을
+// 삭제가 아니라 **흡수**로 바꾸면서 개명했다. 옛 이름으로 번역표를 채우면 화면에 슬러그가 샌다.
+
+// **데이터를 실제로 서빙한 호출은 문마다 이름이 다르다.** `route='data'` 만 세면 K-Skill 이
+// 붙는 순간 제품별 수요·키 활성화율이 조용히 낮아진다 — 그게 #63 이 잡은 사고다. 조건을
+// 다섯 곳에 흩어 둔 것이 원인이었으므로 **여기 한 줄로 모은다.** 새 문이 생기면 여기만 고친다.
+//
+// **배열이 정본이고 SQL 은 거기서 만든다.** 화면에 알리는 `meta.serve_routes` 와 질의 조건을
+// 따로 적으면 언젠가 어긋나고, 그때 화면은 "이렇게 셌습니다"라고 **틀린 말**을 하게 된다.
+const SERVE_ROUTES = ["data", "skill_data", "mcp_query_product"];
+const SERVE = "route IN (" + SERVE_ROUTES.map((r) => "'" + r + "'").join(", ") + ")";
+
+// ── MCP 를 어떻게 셀 것인가 (#63 결정 A) ──────────────────────────────────────
+//
+// 예전에는 `route='mcp'` 한 값이라 `query_product`(데이터)와 `list_products`(목록)가 갈리지
+// 않아 **통째로 뺐다.** 게이트웨이가 툴별로 가르면서(01106fb) 그 전제가 끝났다 — 이제
+// `mcp_query_product` 만 SERVE 에 들고, 나머지 툴은 각자 이름으로 남는다.
+//
+// 남은 맨 `mcp` 에는 **두 가지가 섞여 있고, 가르는 건 status 다**:
+//
+//   status < 400  — 프로토콜 단계(initialize · tools/list · notifications). 인증·데이터와
+//                   무관하니 빼는 게 맞다. **못 가른 게 아니라 셀 것이 아니다.**
+//   status >= 400 — 🔴 버스트로 거부된 tool 호출. `mcp.js` 가 route 를 `callTool` 진입에서
+//                   정하는데 그 자리가 버스트 **뒤**라(`mcp.js:212` 반환 → `:120` 미도달),
+//                   막힌 요청은 툴 이름을 못 남긴다. REST 는 라우터가 버스트 **앞**에서
+//                   정해 `data` 로 남으므로 **MCP 만 다르다.** 이건 진짜 관측 공백이라
+//                   추측해서 채우지 않고 **빼고, 뺐다고 화면이 말한다**(agreement §4).
+//
+// 게이트웨이가 그 한 줄을 버스트 앞으로 옮기면 `MCP_UNSPLIT` 이 저절로 0이 되고 안내도 꺼진다.
+//
+// **제품 축에서는 세지 않는다.** 막힌 요청은 핸들러에 못 가서 제품을 안 남기므로 제품별로는
+// 언제나 0이고, 그 0은 "이 제품은 괜찮다"는 틀린 안심이 된다 — 창 전체에서만 말한다.
+const MCP_SPLIT = "route LIKE 'mcp\\_%' ESCAPE '\\'";
+const MCP_UNSPLIT = "(route = 'mcp' AND status >= 400)";
+
+// 제품 축. `0005` 가 `product_id` 를 싣기 시작했지만 그 이전 행은 NULL 이라 표명으로만
+// 가리킬 수 있다. decision/0003 이 경고한 대로 `table_name` 은 물리명이어서 표명 통일이
+// 오면 과거 로그가 아무것도 못 가리킨다 — **정본은 product_id, 표명은 폴백**이다.
+const PRODUCT_KEY = "COALESCE(product_id, table_name)";
+const PRODUCT_KEY_R = "COALESCE(r.product_id, r.table_name)";
+// _catalog 와 이을 때도 같은 우선순위로 본다. 둘을 OR 로 묶으면 한 행이 두 제품에 붙는다.
+const CATALOG_JOIN =
+  "(CASE WHEN r.product_id IS NOT NULL THEN r.product_id = c.product_id " +
+  "      ELSE r.table_name = c.name END)";
+
 const DEFAULT_DAYS = 14;
 const MAX_DAYS = 90;
 
@@ -182,16 +239,24 @@ async function summary(env, params, writable = false) {
   const [daily, products, failures, empty, keys] = await Promise.all([
     safeRows(env, "SELECT substr(ts,1,10) AS day, COUNT(*) AS calls, COUNT(DISTINCT key_hash) AS keys_used " +
       "FROM _gateway_request_log WHERE ts >= datetime('now', ?) GROUP BY day ORDER BY day", since),
-    safeRows(env, "SELECT table_name, SUM(route='preview') AS previews, SUM(route='data') AS calls, " +
+    // 축은 product_id 가 정본, 표명은 폴백. 화면에는 사람이 아는 이름을 내보내야 하므로
+    // 표명도 같이 싣는다 — 없으면 화면이 식별자를 그대로 보여준다.
+    safeRows(env, "SELECT " + PRODUCT_KEY + " AS product_key, MAX(table_name) AS table_name, " +
+      "MAX(product_id) AS product_id, SUM(route = 'preview') AS previews, " +
+      // 못 가른 MCP 는 여기서 셀 수 없다 — 버스트에 막힌 요청은 핸들러에 못 가서 제품을
+      // 안 남긴다. 제품별로 세면 언제나 0이라 "이 제품은 괜찮다"는 **틀린 안심**이 된다.
+      // 그래서 제품 축이 아니라 창 전체(meta.mcp)에서만 말한다.
+      "SUM(" + SERVE + ") AS calls, " +
       "ROUND(AVG(row_count),1) AS avg_rows FROM _gateway_request_log " +
-      "WHERE table_name IS NOT NULL AND ts >= datetime('now', ?) " +
-      "GROUP BY table_name ORDER BY calls DESC, previews DESC LIMIT 12", since),
+      "WHERE " + PRODUCT_KEY + " IS NOT NULL AND ts >= datetime('now', ?) " +
+      "GROUP BY product_key ORDER BY calls DESC, previews DESC LIMIT 12", since),
     safeRows(env, "SELECT status, route, table_name, COUNT(*) AS hits FROM _gateway_request_log " +
       "WHERE status >= 400 AND ts >= datetime('now', ?) GROUP BY status, route, table_name " +
       "ORDER BY hits DESC LIMIT 10", since),
-    safeRows(env, "SELECT table_name, filters, COUNT(*) AS empty_responses FROM _gateway_request_log " +
+    safeRows(env, "SELECT " + PRODUCT_KEY + " AS product_key, MAX(table_name) AS table_name, " +
+      "filters, COUNT(*) AS empty_responses FROM _gateway_request_log " +
       "WHERE status = 200 AND row_count = 0 AND ts >= datetime('now', ?) " +
-      "GROUP BY table_name, filters ORDER BY empty_responses DESC LIMIT 10", since),
+      "GROUP BY product_key, filters ORDER BY empty_responses DESC LIMIT 10", since),
     safeRows(env, "SELECT substr(key_hash,1,8) AS key_id, COUNT(*) AS calls, " +
       "COUNT(DISTINCT substr(ts,1,10)) AS active_days FROM _gateway_request_log " +
       "WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?) GROUP BY key_hash " +
@@ -207,32 +272,57 @@ async function summary(env, params, writable = false) {
   // 읽힌다.** 지금은 질의에서 아예 빼므로 이 상태가 존재할 수 없다.
   const pipelineSource = slo.rows.length ? "live" : "none";
 
+
   // ── 이용 행동 (행동 로그 스펙 초안 #9 — 콘솔 선반영, decision/0010)
   // 지금 데이터로 답이 되는 것(여정·익명 비중)과 수집 후 점등되는 것(ua_class 등)을 나눈다.
   // 초안 컬럼이 아직 없으면 safeRows 가 실패를 삼키고 그 카드는 '수집 전'으로 남는다 —
   // 콘솔은 게이트웨이 스키마를 만들지도 미러하지도 않는다(0010: ALTER 미러는 정본
   // 마이그레이션과 duplicate column 으로 충돌해 저쪽 시드를 깨뜨린다).
-  const [src, pub, funnel, udaily, uclients, uagents, upages] = await Promise.all([
+  const [src, pub, funnel, udaily, uclients, uagents, upages, fill] = await Promise.all([
     sources(env),
     publication(env, days),
     safeRows(env,
       "SELECT COUNT(*) AS issued, SUM(first_call IS NOT NULL) AS activated, " +
       "ROUND(AVG(CASE WHEN first_call IS NOT NULL THEN (julianday(first_call) - julianday(created_at)) * 24 END), 1) AS avg_hours_to_first " +
       "FROM (SELECT k.created_at, (SELECT MIN(r.ts) FROM _gateway_request_log r " +
-      "WHERE r.key_hash = k.key_hash AND r.route = 'data') AS first_call FROM _keys k)"),
+      "WHERE r.key_hash = k.key_hash AND r." + SERVE + ") AS first_call FROM _keys k)"),
     safeRows(env, "SELECT substr(ts,1,10) AS day, SUM(key_hash IS NOT NULL) AS keyed, " +
       "SUM(key_hash IS NULL) AS anon FROM _gateway_request_log WHERE ts >= datetime('now', ?) " +
       "GROUP BY day ORDER BY day", since),
     safeRows(env, "SELECT ua_class, COUNT(*) AS calls FROM _gateway_request_log " +
       "WHERE ts >= datetime('now', ?) AND ua_class IS NOT NULL GROUP BY ua_class ORDER BY calls DESC", since),
-    safeRows(env, "SELECT agent_name, agent_mode, COUNT(*) AS calls, SUM(route='data') AS data_calls, " +
-      "COUNT(DISTINCT table_name) AS products FROM _gateway_request_log " +
+    safeRows(env, "SELECT agent_name, agent_mode, COUNT(*) AS calls, SUM(" + SERVE + ") AS data_calls, " +
+      "COUNT(DISTINCT " + PRODUCT_KEY + ") AS products FROM _gateway_request_log " +
       "WHERE ts >= datetime('now', ?) AND agent_name IS NOT NULL " +
       "GROUP BY agent_name, agent_mode ORDER BY calls DESC LIMIT 10", since),
+    // ⚠️ 예전에는 `route = 'page'` 로 걸렀는데 **게이트웨이 라우터에 그런 값이 없다** —
+    // 조건이 아니라 오타에 가까웠고, 그래서 이 카드는 구조적으로 영원히 비었다(#63 ④).
+    // 지금은 컬럼만 본다. `page_path` 는 `0005` 에 있지만 게이트웨이 `LOG_COLUMNS` 에 아직
+    // 없어 채워지지 않는다 — 그 사실은 아래 `fill` 이 실측으로 말한다.
     safeRows(env, "SELECT page_path, COUNT(*) AS hits FROM _gateway_request_log " +
-      "WHERE route = 'page' AND ts >= datetime('now', ?) AND page_path IS NOT NULL " +
+      "WHERE ts >= datetime('now', ?) AND page_path IS NOT NULL " +
       "GROUP BY page_path ORDER BY hits DESC LIMIT 12", since),
+    // 행동 축이 '아직 안 온 것'인지 '와서 0인 것'인지는 컬럼 존재만으로 못 가른다. 창 안에서
+    // 실제로 채워진 행 수를 세어, 화면이 "게이트웨이가 아직 안 싣는다"를 근거 있게 말하게
+    // 한다(agreement §4 모른다 ≠ 0). 게이트웨이가 싣기 시작하면 이 안내는 저절로 꺼진다.
+    safeRows(env, "SELECT COUNT(*) AS total, SUM(ua_class IS NOT NULL) AS ua_class, " +
+      "SUM(agent_name IS NOT NULL) AS agent_name, SUM(page_path IS NOT NULL) AS page_path, " +
+      "SUM(intent IS NOT NULL) AS intent, SUM(product_id IS NOT NULL) AS product_id, " +
+      // MCP 를 얼마나 가를 수 있었나. 셋 다 **실측**이라 게이트웨이가 고쳐지면 저절로 꺼진다.
+      //   mcp_unsplit    — 거부돼서 툴 이름을 못 남긴 건수(진짜 공백)
+      //   mcp_split_from — 툴별로 갈리기 시작한 시각. 이 창에 갈린 행이 없으면 NULL
+      //   mcp_bare_first — 안 갈린 `mcp` 행 중 가장 이른 시각
+      // 뒤 둘을 견주면 **이 창에 '가르기 전' 기록이 섞였는지**를 날짜를 박지 않고 알 수 있다.
+      "SUM(" + MCP_UNSPLIT + ") AS mcp_unsplit, " +
+      "MIN(CASE WHEN " + MCP_SPLIT + " THEN ts END) AS mcp_split_from, " +
+      "MIN(CASE WHEN route = 'mcp' THEN ts END) AS mcp_bare_first " +
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)", since),
   ]);
+  // 행동 축이 **아직 안 오는 것**인지 **와서 0인 것**인지. 컬럼이 있어도 게이트웨이가 안 실으면
+  // 질의는 성공하고 0행이 나와, 화면은 "데이터 없음"이라 말한다 — 그건 틀린 말이다.
+  // 실측 건수로 판정하므로 게이트웨이가 싣기 시작하면 이 안내가 저절로 꺼진다.
+  const F = fill.ok ? (fill.rows[0] || {}) : null;
+  const unfilled = (col) => (F ? (F.total > 0 && !F[col]) : false);
 
   return json({
     window_days: days,
@@ -262,6 +352,27 @@ async function summary(env, params, writable = false) {
       runs_ingest_cycle_min: 180,
       // 로그 테이블은 있는데 초안 컬럼만 없다 = 스펙 반영 전 (테이블 자체가 없으면 serving 누락으로 이미 표시)
       usage_spec_pending: routes.ok && !uclients.ok,
+      // ── #63 route 계약 (정본: decision/0014) ────────────────────────────
+      // **데이터 서빙으로 센 문**과 **못 가른 것**을 화면이 그대로 말할 수 있게 싣는다.
+      // 침묵하면 "MCP 는 안 쓰인다"로 읽히고, 그건 관측 공백을 이상 없음으로 위장하는 것이다.
+      serve_routes: SERVE_ROUTES,
+      mcp: F
+        ? {
+            // 🔴 버스트로 거부돼 툴 이름이 안 남은 건수 — 데이터 서빙 집계에서 빠진 몫이다.
+            unsplit: F.mcp_unsplit || 0,
+            // 이 창에 **가르기 전 기록**이 섞였나. 갈린 행보다 이른 맨 `mcp` 행이 있으면 그렇다.
+            // 옛 행은 `query_product` 도 `mcp` 라 툴을 복원할 방법이 없다 — 폴백이 불가능하다.
+            pre_split:
+              Boolean(F.mcp_split_from && F.mcp_bare_first &&
+                      F.mcp_bare_first < F.mcp_split_from),
+            // 언제부터 갈렸나(실측). 이 창에 갈린 행이 아직 없으면 null.
+            split_from: F.mcp_split_from || null,
+          }
+        : null,
+      // 창 안에서 그 축이 한 번이라도 채워졌나 — 카드가 "게이트웨이 미발행"을 말하는 근거다.
+      axes_unfilled: F
+        ? ["ua_class", "agent_name", "page_path", "intent", "product_id"].filter(unfilled)
+        : [],
     },
     pipeline: { domains: domains.rows, slo: slo.rows },
     runs: { daily: rdaily.rows, expectations: rexp.rows, failures: rfail.rows,
@@ -270,9 +381,11 @@ async function summary(env, params, writable = false) {
     serving: { routes: routes.rows, daily: daily.rows, products: products.rows,
                failures: failures.rows, empty: empty.rows, keys: keys.rows },
     usage: { funnel: funnel.ok ? funnel.rows[0] : null, daily: udaily.rows,
-             clients: { pending: !uclients.ok, rows: uclients.rows },
-             agents: { pending: !uagents.ok, rows: uagents.rows },
-             pages: { pending: !upages.ok, rows: upages.rows } },
+             // pending — 컬럼 자체가 없다(질의 실패). unfilled — 컬럼은 있는데 게이트웨이가
+             // 아직 안 싣는다. 둘을 뭉치면 "곧 온다"와 "안 온다"가 구분되지 않는다.
+             clients: { pending: !uclients.ok, unfilled: unfilled("ua_class"), rows: uclients.rows },
+             agents: { pending: !uagents.ok, unfilled: unfilled("agent_name"), rows: uagents.rows },
+             pages: { pending: !upages.ok, unfilled: unfilled("page_path"), rows: upages.rows } },
     // 발행 점검 — #78 D-7 이 요구한 지표. 여기가 비면 "발행이 다 성공한 것처럼" 보인다.
     publication: pub,
     // 화면의 숫자가 왜 그 모양인지는 **표를 읽었는지**에서 갈린다. meta.missing 한 줄로는
@@ -479,7 +592,7 @@ async function keys(env, params, writable) {
     "LEFT JOIN (SELECT key_hash, count AS used_today FROM _usage " +
     "           WHERE day = date('now','+9 hours')) u ON u.key_hash = k.key_hash " +
     "LEFT JOIN (SELECT key_hash, COUNT(*) AS calls, MAX(ts) AS last_call, " +
-    "                  MIN(CASE WHEN route = 'data' THEN ts END) AS first_data_call " +
+    "                  MIN(CASE WHEN " + SERVE + " THEN ts END) AS first_data_call " +
     "           FROM _gateway_request_log " +
     "           WHERE date(ts, '+9 hours') BETWEEN ? AND ? GROUP BY key_hash) r " +
     "       ON r.key_hash = k.key_hash " +
@@ -596,28 +709,28 @@ async function usage(env, params) {
     safeRows(env,
       "SELECT c.name, c.product_id, " + DOMAIN_EXPR + " AS domain, c.description, c.row_count AS rows_total, " +
       "COUNT(r.rowid) AS calls, " +
-      "COALESCE(SUM(r.route = 'data'), 0) AS data_calls, " +
+      "COALESCE(SUM(r." + SERVE + "), 0) AS data_calls, " +
       "COALESCE(SUM(r.route = 'preview'), 0) AS previews, " +
       "COALESCE(SUM(r.status >= 400), 0) AS errors, " +
       "COALESCE(SUM(r.status = 200 AND r.row_count = 0), 0) AS empty_hits, " +
       "ROUND(AVG(r.ms), 1) AS avg_ms, MAX(r.ts) AS last_call " +
       "FROM _catalog c LEFT JOIN _gateway_request_log r " +
-      "  ON r.table_name = c.name AND r.ts >= datetime('now', ?) " +
+      "  ON " + CATALOG_JOIN + " AND r.ts >= datetime('now', ?) " +
       "GROUP BY c.name ORDER BY calls DESC, c.name", since),
     // 도메인 비율 — 분모는 '카탈로그에 잡히는 호출'이다. catalog·me 처럼 제품이 없는 라우트는
     // 도메인에 귀속되지 않으므로 여기서 빠진다(화면에 그 사실을 적는다).
     safeRows(env,
       "SELECT " + DOMAIN_EXPR + " AS domain, COUNT(DISTINCT c.name) AS api_count, " +
-      "COUNT(r.rowid) AS calls, COUNT(DISTINCT r.table_name) AS apis_used, " +
+      "COUNT(r.rowid) AS calls, COUNT(DISTINCT " + PRODUCT_KEY_R + ") AS apis_used, " +
       "COALESCE(SUM(r.status >= 400), 0) AS errors " +
       "FROM _catalog c LEFT JOIN _gateway_request_log r " +
-      "  ON r.table_name = c.name AND r.ts >= datetime('now', ?) " +
+      "  ON " + CATALOG_JOIN + " AND r.ts >= datetime('now', ?) " +
       "GROUP BY domain ORDER BY calls DESC, domain", since),
     // 월별 — _gateway_request_log 는 30일 보존이라 실제로 잡히는 건 최대 두 달 조각이다.
     // 그래도 내보내는 이유는 "지금 보이는 게 전부"라는 사실을 화면이 말해줄 수 있어서다.
     safeRows(env,
       "SELECT substr(r.ts,1,7) AS month, " + DOMAIN_EXPR + " AS domain, COUNT(*) AS calls " +
-      "FROM _gateway_request_log r JOIN _catalog c ON c.name = r.table_name " +
+      "FROM _gateway_request_log r JOIN _catalog c ON " + CATALOG_JOIN + " " +
       "WHERE r.ts >= datetime('now', ?) GROUP BY month, domain ORDER BY month, calls DESC", since),
   ]);
 
