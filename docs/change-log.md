@@ -40,6 +40,53 @@
 
 ## 2026-08-04
 
+### 검토 후속 — 배포 시행 사실과 문서의 정합
+
+- **작업자**: @codingpoppy94 (+ Claude Code)
+- **의도 · 목표**: 직전 커밋(dev 배포 시행)을 에이전트 교차 검토에 붙였더니, 커밋 자체는
+  정합했지만 **커밋이 만든 새 현실과 모순되는 문서가 리포에 남아 있었다** — 배포가
+  시행됐는데 여러 문서가 여전히 "배포 금지·호스트 미결"이라 말하는 상태를 없앤다.
+- **조치**:
+  - 런북 §1 의 원격 D1 쓰기 가드레일("직접 실행한다 — 에이전트가 대신 돌리지 않는다")
+    **복원** — 배포 과정에서 삭제된 채 병합까지 이어졌던 것. `0004` 오염이 정확히
+    에이전트 대리 실행에서 나온 사고라 문장에 근거를 달았다
+  - dev D1 오염이 정리되기 전의 배포는 **수동 `--ack` 경로**로 한다는 순서 의존을
+    런북 §3 에 명시 (`deploy:dev` 체인은 `--ack` 를 끼울 수 없다)
+  - 구식 문서 일괄 갱신: agreement §8-2 C(호스트 확정), environments.md(deploy 스크립트
+    규약), 양쪽 README·setup.md("배포 금지" 절), decision/0002 본문(원 결정에 개정 표시),
+    콘솔 푸터("로컬 전용"→"내부용"), package.json description 2건
+- **결과**: 검토가 짚은 (c)판정 1건·정확성 문제 2건·누락 6건 전부 해소.
+  agreement §8-2 C 의 citydata 워커 정리 과제는 그대로 남긴다(미해결 사실이므로).
+
+### dev 환경 공개 배포 — 4-호스트 체계와 환경 분리
+
+- **작업자**: @codingpoppy94 (+ Claude Code)
+- **의도 · 목표**: 통합 검증을 로컬 시연이 아니라 **실제 URL** 로 한다(#476 ① 만장일치
+  통과분의 실행). 운영/개발을 처음부터 갈라, 호스트를 한 벌만 박아 두면 운영 배포 때
+  전부 다시 손대야 하는 상태를 만들지 않는다.
+- **조치**:
+  - zone `ask-seoul.kr` 등록·Active 확인(네임서버 rita/sam). 호스트 4종 확정:
+    `ask-seoul.kr`(서비스 운영) · `dev.`(서비스 개발) · `ops.`(콘솔 운영) · `dev-ops.`(콘솔 개발)
+  - 두 프로젝트 `wrangler.toml` 을 `[env.dev]`/`[env.production]` 으로 분리 — 라우트
+    (`custom_domain`)·D1·`ASK_ENV`/`ENV_LABEL` 을 환경별로, `workers_dev = false` 전 환경
+  - `deploy:dev`/`deploy:prod` 스크립트 신설 — 게이트웨이는 `npm test`·`npm run preflight`
+    통과가 배포 선행 조건
+  - 게이트웨이(dev.ask-seoul.kr)·콘솔(dev-ops.ask-seoul.kr) dev 배포 + 스모크
+  - 정적 산출물(openapi `servers`·sitemap·robots)은 **상대 경로 유지** — 같은 파일이
+    두 환경에 배포되므로 환경별 절대 URL 은 다른 환경을 오염시킨다
+  - 내부 3종(dev·dev-ops·ops) Cloudflare Access 는 팀 결정(agreement §8-2 B)이나
+    **API 토큰 권한 미확보로 보류** (콘솔 decision/0002 개정 이력)
+- **결과**:
+  - 게이트웨이 스모크 10/10 PASS(배포 시점 코드 기준) · 콘솔 페이지/summary 200 ·
+    콘솔 쓰기 503 fail-closed(OPS_TOKEN 미설정)
+  - 실측 사고 2건 — ① `0004` 원격 직실행이 transit 소유 `_request_log` 에 `request_id`
+    를 오염(preflight `오염` 판정의 그 실측) ② 배포본 요청 로그 전량 유실(개명 전 코드,
+    요청 3건 → 로그 +0). 둘 다 #53 개명(`_gateway_request_log`) 체계로 해소 경로 확정 —
+    **개명 코드 재배포 + 장부 백필 + apply 가 남았다**
+  - 워커 이름이 production 몫(무접미사)을 선점한 상태 — 다음 `deploy:dev` 에서 `-dev` 로
+    개명(커스텀 도메인 이전·시크릿 재설정 필요, 런북 §0-1)
+  - 콘솔 읽기 경로는 무인증 공개 상태 유지 중 — Access 권한 확보 후 잠근다
+
 ### 빈 화면이 "왜 비었나"를 말하게 — 표가 어디에 사는지
 
 - **작업자**: @Exisign

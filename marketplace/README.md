@@ -5,13 +5,15 @@
 Workers + Static Assets + D1 웹서비스. #476 게이트웨이 역할(키 검증·rate limit·통합
 카탈로그)의 로컬 실물 검증이자, #55 "프로토타입 검증 → 팀 이관" 경로의 산출물.
 
-## ⚠️ 로컬 전용
+## ⚠️ 배포는 스크립트로만
 
-- 구동은 `wrangler dev`(로컬 Miniflare sqlite D1)뿐. **`wrangler deploy` 금지** —
-  공개 URL 신설은 배포 결정(agreement §8).
-- 팀 D1 에는 아무것도 쓰지 않는다. `wrangler.toml` 기본 환경의 database_id 는 로컬 모드에서
-  사용되지 않는다(시드는 전부 `.wrangler/` 로컬 상태). 배포는 `[env.production]` 을
-  `--env production` 으로 **명시해야만** 선택된다 — 플래그가 없으면 언제나 로컬이다.
+- 로컬 구동은 `wrangler dev`(로컬 Miniflare sqlite D1). 배포는 `npm run deploy:dev`
+  (→ `dev.ask-seoul.kr`, 2026-08-04 시행) / `npm run deploy:prod`(→ `ask-seoul.kr`,
+  agreement §8-3 조율 선행) — env 없는 맨 `wrangler deploy` 는 금지, 절차 정본은
+  [docs/deploy-runbook.md](docs/deploy-runbook.md).
+- 팀(원격) D1 쓰기는 런북 절차(preflight → 장부 → apply)를 통해서만. `wrangler.toml`
+  기본 환경의 database_id 는 로컬 모드에서 사용되지 않는다(시드는 전부 `.wrangler/`
+  로컬 상태) — 플래그 없는 명령은 언제나 로컬이다.
 
 ## 실행
 

@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- 공개 문서 페이지만 싣는다. /api/* 는 크롤 대상이 아니고, /status 는 열 때마다
-     API 를 호출하므로 색인시키지 않는다(robots.txt 와 같은 판단). 경로는 상대이며
-     호스트가 정해지면 절대 URL 로 바꾼다. -->
+     API 를 호출하므로 색인시키지 않는다(robots.txt 와 같은 판단).
+     경로는 상대를 유지한다 — 정적 파일은 dev·production 양쪽에 같은 내용으로
+     배포되므로 환경별 절대 URL 을 박으면 다른 환경이 오염된다. 정식 공개 시
+     절대 URL 이 필요해지면 워커 런타임 생성으로 전환한다(런북 §6). -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
   <url><loc>/catalog</loc><changefreq>daily</changefreq><priority>0.9</priority></url>

@@ -5,20 +5,48 @@
 > "멘토"라는 말은 #476 ③(과금)에 한 번 나오고 실명은 어디에도 없다.
 > **파일명은 링크 보존을 위해 그대로 둔다.** 배포 승인의 실제 상태는
 > [`../../../docs/agreement.md` §8](../../../docs/agreement.md) 이 정본이다.
-> 이 문서의 결론(**로컬 전용 · `wrangler deploy` 금지**)은 그대로 유효하다 — 근거만 바뀐다.
+> 이 문서의 원 결론(**로컬 전용 · `wrangler deploy` 금지**)은 **2026-08-04 부분 개정으로
+> dev 환경에 한해 해제됐다**(아래 개정 이력) — production(ops.ask-seoul.kr)은 Access 승격
+> 전까지 여전히 잠겨 있다.
 
-- 상태: **채택** (2026-07)
+- 상태: **부분 개정** (2026-08-04) — 아래 개정 이력 참조. 원 결정은 2026-07 채택.
 - 관련: 팀 결정 #476 ①, ASAC-DAG#521-(B)
+
+## 개정 이력 (2026-08-04)
+
+프로젝트 오너 지시로 **개발 환경(dev)의 공개 배포를 시행**했다. 주소 체계는 4종으로
+고정: `ask-seoul.kr`(서비스 운영) · `dev.ask-seoul.kr`(서비스 개발) ·
+`ops.ask-seoul.kr`(콘솔 운영) · `dev-ops.ask-seoul.kr`(콘솔 개발).
+
+- 이 콘솔은 `npm run deploy:dev` 로 dev-ops.ask-seoul.kr 에 배포된다.
+  **production(ops.ask-seoul.kr)은 Cloudflare Access 승격(#20 결정 B-1)이 선행**이라
+  wrangler.toml 의 production 라우트는 주석 상태다.
+- 내부용 3종(dev·dev-ops·ops)의 Cloudflare Access 적용은 팀 결정(agreement §8-2 B)이나
+  **보류 상태**다 — API 토큰에 Access 편집 권한을 확보하지 못했다(계정 멤버 역할 제한).
+  권한 확보 후 재개한다. [0004](0004-read-open-write-token.md)의 "공개 배포 시 인증 교체"
+  재검토 조건은 유효하며, 그때까지 콘솔 읽기 경로는 무인증 공개 상태다(쓰기는 OPS_TOKEN
+  미설정으로 503 fail-closed).
+- 원격 D1 쓰기는 `_ops_*` 마이그레이션 적용에 한정하며, 콘솔 전용 장부
+  (`d1_migrations_ops_dashboard`)로 게이트웨이와 분리해 센다 — 증분 전환은 2026-08 에
+  이미 선행 처리됐다(아래 재검토 조건의 각주 참조).
+- 2026-08-04 dev 배포 검증에서 공유 dev D1 의 `_request_log` 를 transit-api 가 다른
+  스키마로 선점한 것이 실측됐고, 서빙·키 탭이 강등됐다. 게이트웨이가
+  `_gateway_request_log` 로 비키는 개명(#53)으로 해소 경로가 확정됐다 — 개명 반영
+  코드로 재배포하면 정상화된다.
 
 ## 맥락
 
 `wrangler deploy` 한 번이면 공개 URL 이 생긴다. 팀 결정(#476 ①)은 **공개 URL 신설을
 **배포 결정**으로 묶었다. 또 로컬 프로토타입에는 팀 D1 쓰기 권한이 없다.
 
-## 결정
+## 결정 (원문 2026-07 — 첫 두 항목은 2026-08-04 개정으로 dev 에 한해 해제)
 
-- 구동은 `wrangler dev` (로컬 Miniflare sqlite D1)뿐. **`wrangler deploy` 금지.**
-- package.json 에 deploy 스크립트를 두지 않는다 — 실수로 누를 버튼 자체를 없앤다.
+- ~~구동은 `wrangler dev` (로컬 Miniflare sqlite D1)뿐. **`wrangler deploy` 금지.**~~
+  → 개정: 배포는 `npm run deploy:dev`(dev-ops.ask-seoul.kr) 로 시행 중.
+  production 은 Access 승격 전까지 라우트 주석(잠김).
+- ~~package.json 에 deploy 스크립트를 두지 않는다 — 실수로 누를 버튼 자체를 없앤다.~~
+  → 개정: 스크립트 이름이 env 를 고정하는 `deploy:dev`/`deploy:prod` 만 둔다.
+  env 없는 맨 `wrangler deploy` 금지는 유지(기본 환경 = 로컬 전용).
 - 시드(`npm run seed`)는 **로컬 상태만** 만진다.
   `wrangler.toml` 기본 환경의 `database_id` 는 로컬 모드에서 사용되지 않는다.
 - **남의 표를 만들거나 지우지 않는다.** 파이프라인·dbt 산출물과 게이트웨이 표는 콘솔이
@@ -26,8 +54,10 @@
 
 ## 대가
 
-- 팀원과 화면 공유가 어렵다 → 로컬 시연·스크린샷으로 대체한다.
-- "실제로 돌아가는 공개 서비스"라는 증명은 미룬다.
+- ~~팀원과 화면 공유가 어렵다 → 로컬 시연·스크린샷으로 대체한다.~~
+  → 2026-08-04 해소: dev-ops.ask-seoul.kr 로 공유 가능. 대신 **읽기 무인증 공개**라는
+  새 대가가 생겼다 — Access 잠금 전까지의 한시적 감수(개정 이력 참조).
+- "실제로 돌아가는 공개 서비스"라는 증명은 미룬다. → dev 환경으로 부분 달성.
 
 ## 재검토 조건
 

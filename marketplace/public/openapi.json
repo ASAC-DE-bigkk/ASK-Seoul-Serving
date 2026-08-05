@@ -10,7 +10,7 @@
     "license": { "name": "원천별 이용조건을 따름 — /legal#attribution 참조", "url": "/legal#attribution" }
   },
   "externalDocs": { "description": "사람용 API 문서", "url": "/docs" },
-  "servers": [{ "url": "/", "description": "이 서비스가 서빙 중인 호스트" }],
+  "servers": [{ "url": "/", "description": "이 문서를 서빙 중인 호스트 — dev·production 어느 환경에서도 그 환경 자신을 가리키도록 상대 경로를 유지한다" }],
   "tags": [
     { "name": "catalog", "description": "제품 목록과 스키마 — 인증 불필요" },
     { "name": "data", "description": "데이터 조회 — 인증 필요" },

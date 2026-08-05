@@ -84,11 +84,15 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 
 어기는 순간 사고가 되는 것들. 완화하려면 해당 결정 문서 개정이 먼저다.
 
-- **`wrangler deploy` 금지.** 로컬 전용(`wrangler dev`)이다. 공개 URL 신설은 팀 결정 사항
-  (agreement §8). package.json 에 deploy 스크립트를 만들지 않는다.
-  → [0002](docs/decision/0002-local-only-mentor-gate.md)
-- **팀(원격) D1 에 쓰지 않는다.** 모든 시드·로더는 로컬 상태(`--persist-to`)만 만진다.
-  → [0002](docs/decision/0002-local-only-mentor-gate.md)
+- **배포는 환경을 지정한 스크립트로만.** `npm run deploy:dev`(→ dev-ops.ask-seoul.kr) /
+  `npm run deploy:prod`(→ ops.ask-seoul.kr, **Cloudflare Access 승격 #20 결정 B-1 이 선행 —
+  현재 보류 상태고 production 라우트도 주석이다**). env 없는 맨 `wrangler deploy` 금지 —
+  기본 환경은 로컬 전용이다. 배포본 D1 은 게이트웨이의 같은 환경과 반드시 일치시킨다.
+  → [0002 개정](docs/decision/0002-local-only-mentor-gate.md)
+- **팀(원격) D1 쓰기는 `_ops_*` 마이그레이션 적용(콘솔 장부 `d1_migrations_ops_dashboard`)에
+  한정한다.** 로컬 시드·로더는 로컬 상태(`--persist-to`)만 만진다. 게이트웨이 소유
+  테이블에 대한 원격 임의 실행 금지.
+  → [0002 개정](docs/decision/0002-local-only-mentor-gate.md)
 - **게이트웨이 소유 테이블의 스키마를 여기서 바꾸지 않는다.** `_keys`·`_usage`·`_burst`·
   `_gateway_request_log` 의 정본은 `../marketplace/migrations/`. 여기서는 읽기와 정해진 키 조치만.
   → [0003](docs/decision/0003-single-shared-local-d1.md)
