@@ -213,6 +213,7 @@ OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) �
 | 🔴 **D1 에 붙는 경로**(바인딩·`remote`·스크립트) | [0015](docs/decision/0015-single-production-d1.md) 먼저 — **운영에 직접 붙는다**는 전제가 유지되는지, 그리고 연결이 조용히 로컬로 떨어지지 않는지(0015 §대가의 실측표) |
 | **남의 표를 건드리는 SQL·마이그레이션** | [0015 §안전장치](docs/decision/0015-single-production-d1.md) · [0007](docs/decision/0007-schema-single-file-reset.md) · 6절 소유권 표 — 정본 소유자가 먼저다 |
 | 🔴 **인증·접근 제어**(게이트·토큰·라우트) | [0004](docs/decision/0004-read-open-write-token.md) **먼저** · [../docs/access-control.md](../../docs/access-control.md) 의 해당 레이어 절 · 새 `/api` 경로를 더했으면 **게이트가 그걸 덮는지** 확인(라우터 맨 앞 한 곳) |
+| **사람이 직접 쳐야 하는 작업**(시크릿·마이그레이션·인프라) | [../docs/manual-steps.md](../../docs/manual-steps.md) 에 **먼저 적는다** — PR 본문에만 적으면 머지된 뒤 아무도 안 본다(실사례: `dev-ops` 도메인이 "폐기"로 적힌 채 살아 있었다) |
 | 불변 경계(4절)에 해당하는 동작 | 해당 `decision/` 문서 **먼저**, 그다음 위 전부 |
 
 **끝내기 전 확인** — 고친 코드에서 사라진 낱말(예: 배지 이름, 스크립트가 더 안 읽는 파일명)을
