@@ -30,6 +30,26 @@ test("빈 DB — 전부 '없음'이고 진행 가능하다 (apply 가 새로 만
   assert.equal(find(fs, "_keys").verdict, "없음");
 });
 
+test("🔴 배포 모드는 우리 표가 없으면 중단한다 — route 전에 migrations apply 가 필요하다", () => {
+  const expected = new Map([
+    ["_keys", cols("key_hash", "email")],
+    ["_gateway_request_log", cols("ts", "route", "status")],
+  ]);
+  const fs = judge(expected, new Map(), { requireApplied: true });
+  assert.equal(fs.filter((f) => f.blocking).length, 2);
+  assert.equal(find(fs, "_keys").verdict, "없음");
+  assert.equal(find(fs, "_keys").requiredForDeploy, true);
+  assert.match(find(fs, "_gateway_request_log").note, /migrations apply/);
+});
+
+test("배포 모드도 남의 표가 없거나 원래 모양이면 막지 않는다 — Gateway 의존성이 아니다", () => {
+  const expected = new Map([["_request_log", cols("ts", "route", "status", "request_id")]]);
+  const missing = judge(expected, new Map(), { requireApplied: true });
+  const present = judge(expected, new Map([["_request_log", FOREIGN_PROD]]), { requireApplied: true });
+  assert.equal(find(missing, "_request_log").blocking, false);
+  assert.equal(find(present, "_request_log").blocking, false);
+});
+
 test("모양이 같으면 '일치' — 재적용해도 안전하다", () => {
   const expected = new Map([["_keys", cols("key_hash", "email", "status")]]);
   const remote = new Map([["_keys", cols("key_hash", "email", "status")]]);
