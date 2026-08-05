@@ -114,6 +114,10 @@ async function toToolResult(res, trace = {}) {
 async function callTool(name, args, ctx) {
   const { env, request, keyRow, trace, deps } = ctx;
   args = args || {};
+  // 관측 route 세분화(#63 결정 A) — 발견/확인/서빙 퍼널을 로그에서 가르기 위한 것으로,
+  // 툴 이름·응답 계약(클라이언트가 보는 것)은 무변경. 프로토콜 단계(initialize 등)는
+  // "mcp" 그대로고, 모르는 툴 이름은 값 집합을 오염시키지 않게 세분화하지 않는다.
+  if (TOOLS.some((t) => t.name === name)) trace.route = `mcp_${name}`;
   if (name === "list_products") {
     const res = await deps.handleCatalog(env);
     if (res.status >= 400) return toToolResult(res, trace);
