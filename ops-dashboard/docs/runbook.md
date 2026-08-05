@@ -19,15 +19,17 @@ cd marketplace && npm install && npm run seed
 # 콘솔
 cd ../ops-dashboard
 npm install
-npm run seed          # _ops_slo/_ops_domain + 조회 DB 4종 미러 + 합성 샘플 → 공유 로컬 D1
+npm run seed          # _ops_slo/_ops_domain + 조회 DB 4종 미러 → 공유 로컬 D1 (표만, 데이터 0건)
 echo "OPS_TOKEN=$(openssl rand -hex 16)" > .dev.vars    # 조치(쓰기) 잠금 해제용 — .gitignore 대상
 npm run dev           # http://localhost:8788  (게이트웨이 :8787 과 동시 구동 가능)
 ```
 
 - 토큰 없이도 화면은 뜬다 — 잠기는 건 **조치**(폐기·복구·쿼터·삭제)뿐이다.
-- 시드는 몇 번을 다시 돌려도 안전하다 — 마이그레이션은 `CREATE IF NOT EXISTS` 뿐이고
-  (DROP 금지, [0007](decision/0007-schema-single-file-reset.md)), 픽스처는 **자기 샘플 범위만**
-  지우고 다시 넣는다.
+- **시드는 빈 스키마만 만든다.** 장부 백필 + `migrations/` 적용이 전부이고 `fixtures/` 는
+  실행하지 않는다 — 합성 행이 화면에 오르지 않게 시드 체인에서 뺐다(§3).
+  그래서 시드 직후의 화면은 **정상적으로 비어 있다.**
+- 시드는 몇 번을 다시 돌려도 안전하다 — 마이그레이션은 `CREATE IF NOT EXISTS` 뿐이다
+  (DROP 금지, [0007](decision/0007-schema-single-file-reset.md)).
 - **동시 구동 순서**: 게이트웨이를 먼저 띄우고 콘솔을 나중에 띄운다(공유 sqlite 의 WAL
   복구 잠금 충돌 예방). 인스펙터 포트는 콘솔이 9230 으로 고정돼 있어 게이트웨이의
   기본값(9229)과 겹치지 않는다.
@@ -39,9 +41,10 @@ npm run dev           # http://localhost:8788  (게이트웨이 :8787 과 동시
 ```bash
 BASE=http://localhost:8788
 
-# ① 요약 — 네 섹션이 다 있는지, 뭐가 비었는지(meta.missing), 샘플인지
+# ① 요약 — 네 섹션이 다 있는지, 뭐가 비었는지(meta.missing), 무엇을 걸렀는지
 curl -s "$BASE/api/summary?days=14" | jq '{missing: .meta.missing,
-  pipeline_sample: .meta.pipeline_is_sample, runs_sample: .meta.runs_is_sample,
+  pipeline_source: .meta.pipeline_source, env_scope: .meta.runs_env_scope,
+  env_excluded: .meta.runs_env_excluded,
   slo_days: (.pipeline.slo|length), runs_daily: (.runs.daily|length),
   monitored_dags: (.runs.expectations|length), serving_calls: (.serving.routes|length)}'
 
@@ -84,9 +87,23 @@ curl -si -X POST "$BASE/api/keys" -H "authorization: Bearer $TOKEN" \
 curl -s "$BASE/api/summary" | jq '.meta.missing'   # ["serving"] 등 — 500 이 아니라 빈 섹션
 ```
 
-## 3. 실행 기록 탭 — 샘플에 박힌 검증 시나리오
+## 3. 실행 기록 탭 — 픽스처에 박힌 검증 시나리오
 
-`npm run seed` 의 합성 데이터에는 화면 경로가 하나씩 박혀 있다. 탭(`#runs`)에서 눈으로 확인한다.
+⚠️ **이 시나리오들은 시드로 들어오지 않는다.** 픽스처에는 화면 경로가 하나씩 박혀 있지만
+`npm run seed` 는 그걸 **넣지 않는다** — 합성 행이 운영 숫자로 읽히는 사고를 막으려고
+시드 체인에서 뺐다(2026-08-04). 파일은 남겨 뒀으니 **화면 경로를 확인할 때만 손으로 넣고,
+확인이 끝나면 지운다**(§4-2 의 삭제 명령).
+
+```bash
+# 검증용 합성 데이터 수동 주입 — 확인이 끝나면 반드시 지운다
+npx wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state \
+  --file=fixtures/ops_records_sample.sql
+```
+
+넣어도 **화면에는 안 뜬다.** 질의가 `event_id LIKE 'smp_%'` · `updated_at='sample'` 을
+배제하기 때문이다([src/index.js](../src/index.js) `evWhere`). 아래 표를 눈으로 확인하려면
+그 배제 조건을 **일시적으로 끄고** 봐야 하며, 확인 후 되돌린다 — 배제 조건을 지우고
+커밋하는 것이 합성이 새는 경로다(CLAUDE.md §4 🔴).
 
 | 시나리오 | 어디서 보이나 |
 |---|---|
@@ -106,13 +123,16 @@ curl -s "$BASE/api/summary" | jq '.meta.missing'   # ["serving"] 등 — 500 이
 
 ### 4-1. 파이프라인 SLO (`_ops_slo`)
 
-```bash
-npm run seed   # fixtures/slo_sample.sql — 전 행 is_sample=1
-```
+**이 탭은 로컬에서 비어 있는 게 정상이다.** `npm run seed` 는 표만 만들고 행을 넣지 않으므로
+`meta.pipeline_source` 가 `none` 이고 화면은 "기록이 없습니다"로 뜬다.
 
-**이 탭은 아직 합성값만 본다.** 실측을 넣는 정규 경로는 culture DAG 의 export task 이고
-(팀 D1 쓰기 = 승인 주체 미정(agreement §8-3)), 그게 붙어 `is_sample=0` 행이 들어오면 '합성 샘플' 배너가
-저절로 사라진다. 웨어하우스를 콘솔이 직접 훑던 임시 로더는 폐기했다
+실측을 넣는 정규 경로는 culture DAG 의 export task 다(팀 D1 쓰기 = 승인 주체 미정(agreement §8-3)).
+그게 붙어 `is_sample=0` 행이 들어오면 `pipeline_source` 가 `live` 로 바뀌고 탭이 채워진다.
+합성 픽스처([fixtures/slo_sample.sql](../fixtures/slo_sample.sql), 전 행 `is_sample=1`)를 손으로
+넣어도 **질의가 `is_sample=1` 을 배제하므로 화면은 그대로 비어 있다** — 픽스처는 화면 경로
+확인용이지 탭을 채우는 수단이 아니다.
+
+웨어하우스를 콘솔이 직접 훑던 임시 로더는 폐기했다
 ([0005](decision/0005-slo-snapshot-to-d1.md)) — 실측 파이프라인 상태는 **실행 기록 탭**이
 조회 DB 4종에서 직접 읽는다.
 
@@ -128,11 +148,18 @@ python domains/commerce/scripts/backfill_ops_records.py --since 2026-07-01 --unt
 python domains/commerce/scripts/backfill_ops_records.py --since 2026-07-01 --until 2026-07-31 --apply
 ```
 
-로컬 콘솔이 **팀 조회 DB 를 직접 읽는 경로는 아직 없다**(로컬 전용,
-[0002](decision/0002-local-only-mentor-gate.md)). 그때까지 이 탭은 합성 샘플로 화면 계약을
-검증하고, 승격 시 표 이름·컬럼이 그대로라 화면 코드는 바뀌지 않는다.
+**로컬 D1 에는 4종의 실측이 없다.** `migrations/0002` 는 화면을 돌려보기 위한 빈 껍데기이고,
+실측은 팀 조회 DB 에만 있다 — 보려면 원격 바인딩으로 띄운다:
 
-샘플만 걷어내고 싶으면(실측과 섞임 방지):
+```bash
+npm run dev:remote    # 팀 D1 을 그대로 읽는다
+```
+
+`--remote` 는 읽기 전용 모드가 **아니다** — 그 상태에서 한 키 조치는 팀 DB 에 적용된다.
+**보기 위한 모드**다([0002](decision/0002-local-only-mentor-gate.md)). 표 이름·컬럼이 로컬
+미러와 같으므로 화면 코드는 양쪽에서 그대로 돈다.
+
+과거에 픽스처를 넣어 둔 로컬 상태라면, 남은 합성 행을 걷어낸다(실측과 섞임 방지):
 
 ```bash
 npx wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state \
@@ -148,9 +175,8 @@ npx wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wr
 
 ```bash
 # 새 컬럼 → 새 파일로 추가만 (예: migrations/0003_add_x.sql 에 ALTER TABLE ... ADD COLUMN ...)
-npx wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state \
-  --file=migrations/0003_add_x.sql
-# package.json 의 seed 체인에도 같은 파일을 추가한다
+# seed 는 `migrations apply` 라 새 파일을 저절로 집는다 — package.json 을 고칠 일이 없다.
+npm run seed
 
 # 로컬을 통째로 리셋하고 싶을 때 — 마이그레이션이 아니라 상태를 지운다 (게이트웨이 데이터도 지워진다!)
 rm -rf ../marketplace/.wrangler/state && (cd ../marketplace && npm run seed) && npm run seed
@@ -190,7 +216,8 @@ curl -s -X POST "$BASE/api/keys" -H "authorization: Bearer $TOKEN" \
 
 | 증상 | 원인 | 조치 |
 |---|---|---|
-| '합성 샘플' 배너 | 픽스처 데이터로 동작 중 | §4 실적재. 배너는 실측이 들어오면 사라진다 |
+| '기록이 없습니다' (데이터 준비 상태) | `_ops_slo` 가 비었다 — 시드는 표만 만든다 | 정상. 실측은 §4-1 의 export task 가 붙어야 들어온다 |
+| 실행 기록 탭이 비었다 | 로컬 D1 에는 4종의 실측이 없다 | `npm run dev:remote` (§4-2) |
 | '조회 DB 표가 없습니다' | `npm run seed` 전 | `npm run seed` |
 | '서빙 로그를 찾지 못했습니다' | 게이트웨이 미시드 / `--persist-to` 불일치 | `cd ../marketplace && npm run seed`, 경로 확인 |
 | 조치 버튼이 안 보인다 | 읽기 전용 모드 | 상단 잠금 해제 (`.dev.vars` 의 `OPS_TOKEN`) |
