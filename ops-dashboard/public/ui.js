@@ -23,7 +23,8 @@
   "use strict";
   if (window.UITip) return;
 
-  var tip = null, current = null, pinned = false, hideT = null;
+  var tip = null, current = null, pinned = false, hideT = null, showT = null;
+  var HOVER_DELAY = 75;   // 호버로 열 때만 살짝 늦춘다 — 표를 스칠 때 배지마다 깜빡이지 않게
 
   function el() {
     if (tip) return tip;
@@ -51,20 +52,29 @@
     requestAnimationFrame(function () { t.classList.add("on"); });
   }
 
-  function show(target) {
-    clearTimeout(hideT);
+  // 실제로 그려 띄우는 부분 — show() 가 즉시 또는 지연 뒤에 부른다.
+  function render(target) {
     var text = target.getAttribute("data-tip");
     if (!text) return;
     var t = el();
     t.innerHTML = text;
-    current = target;
     if (!t.id) t.id = "uitip";
     target.setAttribute("aria-describedby", "uitip");
     place(target);
   }
 
+  function show(target, delay) {
+    clearTimeout(hideT);
+    clearTimeout(showT);
+    if (!target.getAttribute("data-tip")) return;
+    current = target;                       // 지연 중에도 '지금 대상'은 정해 둔다(호버 이탈 판정용)
+    if (delay) showT = setTimeout(function () { if (current === target) render(target); }, delay);
+    else render(target);
+  }
+
   function hide(force) {
     if (pinned && !force) return;
+    clearTimeout(showT);                    // 아직 안 뜬 예약분도 취소한다
     pinned = false;
     if (current) current.removeAttribute("aria-describedby");
     current = null;
@@ -86,7 +96,7 @@
     // 데스크톱: 올리면 열리고 벗어나면 닫힌다 (요청 그대로 — 호버 해제 시 자동 닫힘)
     document.addEventListener("mouseover", function (e) {
       var t = closest(e.target);
-      if (t && t !== current) { pinned = false; show(t); }
+      if (t && t !== current) { pinned = false; show(t, HOVER_DELAY); }
     });
     document.addEventListener("mouseout", function (e) {
       var t = closest(e.target);

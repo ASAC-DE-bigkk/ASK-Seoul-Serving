@@ -471,8 +471,42 @@ p.hint b { color:var(--muted); }
   .cal .d { width:30px; height:30px; }
 }
 
-/* 인쇄·모션 최소화 사용자 존중 */
+/* ═══ 미세 상호작용 — 눌림·초점·전환을 부드럽게 ══════════════════════════════
+   레이아웃(폭·위치)엔 손대지 않는다. 색·그림자·1px 눌림만 전환하므로
+   "본문은 가로로 안 민다" 계약을 그대로 지킨다. */
+.tabs button, .topbar select, .topbar a, .topbar .mode, .theme-btn, .kbtn,
+.filters .chip, .filters select, .filters input, .note.has-why, .scopebar select,
+.scopebar .clear, .hm .cell.click, .gate button, .gate input, .qcell input,
+.trace-row input {
+  transition:background-color .13s ease, border-color .13s ease,
+             color .13s ease, box-shadow .13s ease, transform .06s ease;
+}
+/* 누르는 순간 1px 내려가 손끝에 눌린 느낌을 준다 */
+.tabs button:active, .topbar .mode:active, .theme-btn:active, .kbtn:active,
+.filters .chip:active, .gate button:active { transform:translateY(1px); }
+
+/* 키보드 초점 링을 아직 없던 컨트롤에도 (마우스 클릭엔 안 뜬다) */
+.filters .chip:focus-visible, .scopebar .clear:focus-visible,
+.scopebar select:focus-visible {
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+
+/* 드래그로 글자를 고를 때도 팀 색으로 */
+::selection { background:var(--accent-line); }
+
+/* 카드 안 가로 스크롤바를 얇게 — 표를 옆으로 밀 때 덜 거슬린다 */
+.card .bd, .scroll { scrollbar-width:thin; scrollbar-color:var(--line-strong) transparent; }
+.card .bd::-webkit-scrollbar { width:9px; height:9px; }
+.card .bd::-webkit-scrollbar-thumb { background:var(--line-strong); border-radius:5px;
+                                     border:2px solid var(--panel); }
+.card .bd::-webkit-scrollbar-track { background:transparent; }
+
+/* 인쇄·모션 최소화 사용자 존중 — 전환/애니메이션을 사실상 끈다(표준 리셋) */
 @media (prefers-reduced-motion:reduce) {
-  * { scroll-behavior:auto; }
-  #uitip, tbody tr { transition:none; }
+  *, *::before, *::after {
+    transition-duration:.001ms !important; animation-duration:.001ms !important;
+    animation-iteration-count:1 !important; scroll-behavior:auto !important;
+  }
+  .tabs button:active, .kbtn:active, .filters .chip:active,
+  .gate button:active, .topbar .mode:active, .theme-btn:active { transform:none; }
 }
