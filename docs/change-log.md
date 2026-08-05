@@ -40,105 +40,70 @@
 
 ## 2026-08-05
 
-### 원격 D1 접속을 명령으로 만들고, 보기 전용 빗장을 코드로 내린다
+### 🔴 dev D1 폐기 — 콘솔이 운영 D1 을 직접 읽고 쓴다 (decision/0015)
 
 - **작업자**: @Exisign
-- **의도 · 목표**: "npm run 에 환경 옵션을 줘서 개발/운영 D1 에 붙을 수 있게" — 단
-  **로컬에서 붙어 확인만 하는 용도**로. 그런데 확인만 하려면 "확인만"이 **말이 아니라
-  코드로 보장**돼야 한다. `wrangler dev --remote` 는 읽기 전용 모드가 **아니고**, 지금까지
-  그 경계를 지킨 것은 environments.md 의 경고문 한 줄이었다:
-  "그 상태에서 조치 버튼을 누르지 않는다 / 안전장치를 코드로 넣을지는 미정".
-  화면은 로컬일 때와 똑같이 생겼고, 조치는 **되돌릴 수 없는 삭제**를 포함한다 —
-  경고문으로 지킬 수 있는 경계였다면 애초에 불변 경계가 아니다.
-- **조치**:
-  - **콘솔의 쓰기 표면을 먼저 전수 확인했다**(읽기만). `_keys` UPDATE 2건 · `_usage`·
-    `_burst`·`_keys` DELETE 3건이 전부이고 **모두 `keyAction()` 안**(714–730), 그 함수의
-    유일한 호출부가 `requireWrite` 뒤(758)다. 즉 **가드 한 곳으로 완전히 잠긴다.**
-  - `ENV_READONLY=1` → `canWrite()` 무조건 false, `requireWrite()` 가 **토큰 검사보다 먼저**
-    503 `read-only mode`. 401(인증)이 아닌 이유는 **원인이 토큰이 아니라 대상 DB** 라서다.
-  - 빗장을 `wrangler.toml` 이 아니라 **`--var` 로 명령에 붙였다.** `[env.production.vars]`
-    에 박으면 언젠가 그 섹션으로 배포할 때 따라가는데, 배포된 콘솔은 조치가 되어야 한다.
-    잠가야 하는 건 *운영 D1* 이 아니라 **"내 노트북에서 운영 D1 에 붙은 상태"** 이고,
-    그건 환경이 아니라 **실행 방식**이다.
-  - 스크립트: `dev:dev-d1`(:8798) · `dev:prod-d1`(:8799) · `d1:local`·`d1:dev`·`d1:prod`.
-    포트를 갈라 **로컬까지 셋을 동시에 띄워 비교**할 수 있다.
-    옛 `dev:remote`·`dev:prod-readonly` 는 이 이름으로 바뀌었다 — **`prod-readonly` 는
-    이름이 거짓말이었다**(readonly 를 도구가 강제하지 않았다).
-    ⚠️ 이 문서의 2026-08-04 이전 항목에 나오는 옛 이름은 그때의 기록이라 그대로 둔다.
-  - `scripts/d1-query.mjs` — SELECT·WITH·PRAGMA·EXPLAIN **한 문장만** 통과하는 화이트리스트.
-    블랙리스트를 안 쓴 이유는 빠뜨린 낱말이 곧 사고이기 때문이다(`REPLACE INTO`·`VACUUM`·
-    `ATTACH` 는 처음 목록에 없었다). 문자열·주석은 검사 전에 지운다 — 안 지우면
-    `SELECT 'DELETE' AS x` 가 막히고 주석 뒤에 숨긴 문장을 놓친다.
-  - `wrangler.toml` 에 `[env.dev]` 신설 — `--remote` 를 기본 환경으로 쓰면 화면 배지가
-    "로컬 개발"이라고 **거짓말한다.** 어느 DB 를 보는지가 이 콘솔의 제일 중요한 정보다.
-  - 화면: 환경 배지에 `· 보기 전용`, 잠금 해제 버튼이 `보기 전용 · 원격 D1` 로 바뀌고
-    눌리지 않는다. `meta.env.readonly` 를 `can_write` 와 **따로** 실었다 — 합치면 화면이
-    "토큰이 맞지 않습니다"라는 거짓말을 하고, 멀쩡한 세션 토큰까지 지운다.
-  - 문서: [decision/0013](../ops-dashboard/docs/decision/0013-remote-readonly-attach.md) 신규 ·
-    **환경별 실행 매뉴얼 3장**([run-local](run-local.md)·[run-remote-dev](run-remote-dev.md)·
-    [run-prod](run-prod.md)) · 공동 문서 지도 [docs/index.md](index.md) 신규 ·
-    루트 README·ops-dashboard docs/index 에 매핑 · environments.md 의 "안전장치 미정" 닫음.
-- **결과**:
-  - **실측 검증**(로컬 워커에 `--var` 로 강제 주입해 확인):
+- **의도 · 목표**: 팀 결정 — **dev D1 을 폐기하고 전체 작업·검증·배포를 운영 D1 기준으로**
+  한다. 근거는 실측이다: dev D1 `_ops_run_event` **0행** vs 운영 **19,832행**. 파이프라인이
+  운영에만 적재하므로 dev 로는 실행 기록·발행 점검 탭을 **검증할 수 없었고**, 화면 전체를
+  보려면 두 환경을 오가야 했다. 검증이 안 되는 환경을 유지하는 비용이 그 환경이 주는
+  안전보다 크다는 판단.
+- **조치** (콘솔만 — 게이트웨이는 그쪽 담당자 몫, **#85**)
+  - `wrangler.toml` — 기본 바인딩을 `ask-seoul-prod-d1` 로. `[env.dev]` 삭제.
+    `[env.production]` 라우트(`ops.ask-seoul.kr`) 활성화
+  - `package.json` — `dev` 는 플래그 없는 `wrangler dev`(바인딩이 `remote`). `seed`·`dev:remote`·
+    `dev:prod-readonly`·`deploy:dev` 삭제, `migrate`·`migrate:list`·`d1` 신설
+  - CD — `deploy-dev.yml` → `deploy-prod.yml`. **`dev` 브랜치 머지가 곧 운영 배포다**
+    (브랜치 이름과 배포 환경이 달라졌다). 게이트웨이 잡은 뺐다(#85 대기)
+  - `decision/0015` 신규 · `0002`(로컬 전용) **폐기 표시** · `0011`(환경별 설정) 개정
+  - `CLAUDE.md` §3·§4·§7·§9, README, runbook, docs/index, `.env.example` 동기화.
+    공유 문서(`docs/environments.md`·`docs/setup.md`)에는 **두 프로젝트가 갈라진 상태**를
+    배너로 명시
+- **남긴 경계 — "쓰지 마라"는 걷었지만 "남의 표 모양은 바꾸지 마라"는 그대로**:
+  `scripts/d1-query.mjs` 가 **DDL 을 전부 막는다**(대상 표 불문). 데이터 쓰기는 통과시키되
+  남의 표면 경고를 찍는다. 스키마 변경은 `migrations/` + `npm run migrate` 로만.
+- **🔴 검증 중에 잡은 것 — `0002` 를 운영에 돌릴 뻔했다**
 
-    | 시나리오 | 결과 |
-    |---|---|
-    | 읽기 전용 + **올바른 토큰**으로 조치 | `503 read-only mode` (problem+json) ✅ |
-    | 읽기 전용에서 `meta` | `can_write=false` · `env.readonly=true` ✅ |
-    | **회귀** — 빗장 없이 같은 토큰 | `404 unknown key` (쓰기 경로 도달) · `can_write=true` ✅ |
-    | `d1-query` 거절 6종 | DELETE · DROP · `SELECT 1; DELETE` · `WITH…DELETE` · `PRAGMA …=` · 없는 환경 ✅ |
-    | `d1-query` 통과 | `SELECT 'DELETE' AS label` (리터럴은 안 걸린다) ✅ |
-    | `[env.dev]` 파싱 | wrangler 가 로드 ✅ |
-  - **`marketplace` 는 손대지 않았다.** 저쪽은 `_burst`·`_usage`·`_gateway_request_log`
-    때문에 **GET 하나에도 D1 에 쓴다** — 같은 빗장으로는 "보기 전용"이 성립하지 않고,
-    계량 경로를 어떻게 할지가 먼저다. **그 판단은 게이트웨이 담당자 몫**이므로 원격 접속
-    경로를 만들지 않았고, 공동 문서에는 "담당자 판단 대기"로만 적었다.
-  - 남은 것: 운영 D1 에 콘솔 표(`_ops_slo`·`_ops_domain`)를 만드는 일은 여전히 **사람이
-    직접 실행하는 팀 D1 쓰기**다. `dev:prod-d1` 은 그 일을 하지 않는다.
+  `migrations/0002` 는 조회 DB 4종의 **로컬 미러**였다. 운영에는 ASAC-DAG 가 만든 진짜
+  표가 이미 있어 `CREATE TABLE IF NOT EXISTS` 는 무해하게 넘어가지만, **그 아래
+  `CREATE INDEX` 3개가 `_ops_run_event`(19,832행, 남의 운영 표)에 실제로 만들어진다.**
+  스키마 판단은 정본 소유자 몫이고, 라이브 표에 인덱스를 거는 비용도 그쪽 몫이다.
 
-### 시드가 합성값을 넣는다고 말하던 문서 정리 + 재발 방지 대응표
+  기존 장부 백필 패턴으로 막았다 — **표가 이미 있으면 실행하지 않고 장부에만 적는다.**
+  표가 없는 D1 에서는 그대로 실행돼 미러가 생기므로 두 경우 다 맞다.
+- **🔴 검증 중에 잡은 것 ② — 연결이 틀렸는데 화면은 "운영을 보고 있다"고 답했다**
 
-- **작업자**: @Exisign
-- **의도 · 목표**: "`npm run seed` 가 혹시 모의 데이터를 넣는 과정이냐"는 질문에서 출발했다.
-  **넣지 않는다** — 2026-08-04 의 "모의 데이터 배제"(a001835)가 시드 체인에서 픽스처 2개를
-  뺐다. 그런데 **문서는 하루 뒤까지 넣는다고 말하고 있었다.** 시드를 돌린 사람이 빈 화면을
-  보고 "덜 됐다"고 읽어 픽스처를 도로 넣으면, 배제 결정이 그 자리에서 되돌려진다.
-  문서가 코드를 잘못 설명하는 것 자체가 결정을 무르는 경로였다.
-- **조치**:
-  - **실체 확인**(읽기만): 현재 `ops-dashboard` 의 seed 는 장부 백필 + `migrations apply`
-    두 단계뿐이고 두 마이그레이션 다 `CREATE TABLE IF NOT EXISTS` 만이라 **업무 데이터 INSERT 0건**.
-    `public/index.html` 에는 '합성/샘플' 이라는 낱말이 **한 번도 나오지 않는다**(배지 폐기 완료).
-    `pipeline_source` 는 `live`/`none` 둘뿐(`src/index.js`).
-  - 낡은 서술 정정 — `ops-dashboard/README.md`(시드 주석 · "합성 예시입니다 배너" 절 전체 ·
-    `_ops_slo` 채우는 법 · 승격 경로), `docs/runbook.md`(§1 시드 주석 · §2 `jq` 가 이미 없는
-    `meta.pipeline_is_sample`·`runs_is_sample` 를 파던 것 · §3 · §4-1 · §4-2 · §5 · §6 증상표),
-    `CLAUDE.md`(§3 탭 표·구성도 · §7 검증).
-  - `runbook §4-2` 는 "팀 조회 DB 를 직접 읽는 경로는 아직 없다"고 했는데 `npm run dev:remote`
-    가 이미 있다 — 원격 바인딩 절차로 고쳤다.
-  - `src/index.js` 의 `pipeline_source` 주석이 아직 "배지를 띄운다"고 적혀 있어 정정.
-  - **재발 방지**: `CLAUDE.md` 에 **7-1 문서 동기화 대응표** 신설. "고친 것 → 같이 여는 문서"를
-    행으로 못 박고, 8절 완료 기준과 10절 작업 규칙에서 그 표를 참조하게 했다. 일반론
-    ("문서와 코드가 어긋나면 같이 고친다")은 **이미 10절에 있었는데 안 지켜졌다** — 규칙이
-    약해서가 아니라 *어느 문장이 그 코드를 비추는지 몰라서*였기 때문에, 매핑을 준다.
-    특히 **코드에서 무엇을 없앴을 때** 없앤 낱말로 `grep` 을 돌리라는 항목을 넣었다 —
-    추가는 눈에 띄지만 삭제는 문서에 흔적으로 남는다.
-- **결과**:
-  - 문서 3개 + 코드 주석 1곳 정정. **동작 변경 없음** (`src/index.js` 는 주석만).
-  - 곁가지로 `marketplace` 의 seed 도 점검했다 — 이쪽은 픽스처를 **실행한다**. 다만 성격이
-    다르다: `fixtures/seed.sql` 은 `build_fixtures.py` 가 팀 D1 에서 뽑은 **실측의 부분집합**
-    (제품 62종 · 테이블당 50행, README §표본 에 상한이 명시돼 있다)이고 게이트웨이 운영 표
-    (`_keys`·`_usage`·`_burst`·`_gateway_request_log`)는 **건드리지 않는다**(확인: 63개 DROP 이
-    전부 `_catalog`·제품 표 `d1_*`). 조작된 값이 아니므로 `ops-dashboard` 의 배제 결정과
-    충돌하지 않는다.
-  - ⚠️ **두 `npm run seed` 는 이름만 같고 하는 일이 다르다.** D1 은 하나를 공유하는 게 맞지만
-    (`--persist-to`, [0003](../ops-dashboard/docs/decision/0003-single-shared-local-d1.md)),
-    각자 **자기 소유 표만** 채운다 — 콘솔은 `_ops_slo`·`_ops_domain`(+4종 미러)에 **표만**,
-    게이트웨이는 `_catalog`·제품 표 `d1_*` 에 **데이터까지**. 그래서 "콘솔 시드를 돌렸는데
-    화면이 비었다"와 "게이트웨이 시드를 돌렸더니 데이터가 있다"가 **둘 다 정상**이다.
-    한쪽을 보고 다른 쪽 동작을 넘겨짚으면 "시드가 덜 됐다"는 오진이 나온다.
-  - 남은 것: `handoff_meta_sample.sql` 이 심는 `publication_id='local-fixture'` 표본을
-    marketplace 화면이 **걸러내지 않는다**(코드에 `local-fixture` 문자열이 없다). 로컬 전용
-    이라 지금 사고는 아니지만, 그 화면이 공개로 승격될 때 검토가 필요하다.
+  가장 위험한 실패였다. `--remote` 로 띄우니 **바인딩 이름·배지·`meta.env` 가 전부
+  "ask-seoul-prod-d1"인데 질의만 빈 결과**였다 — `_catalog` 68행이 0행, `_ops_run_event`
+  27,034행이 0행. `safeRows` 강등이 그걸 "표가 없습니다"로 표시해서, **화면만 보면
+  "운영에 데이터가 없다"로 읽힌다.** 눈으로는 절대 못 잡는 종류다.
+
+  | 시도 | 결과 |
+  |---|---|
+  | 맨 `wrangler dev --remote` | 전부 빈 결과 |
+  | `--remote` + `preview_database_id` | 전부 빈 결과 |
+  | **바인딩 `remote = true` + 플래그 없는 `wrangler dev`** | **정상** |
+
+  `--remote` **플래그는 폐기 경로**였다(wrangler 가 기동 로그에서 직접 안내한다).
+  ⚠️ 덧붙여 `experimental_remote` 는 이 버전에 **없는 필드**라 경고만 찍고 **local 로 조용히
+  떨어진다** — 오타 하나가 "운영을 본다고 믿으며 빈 로컬을 보는" 상태를 만든다.
+- **결과** — 운영 D1 실측(2026-08-05):
+  - 장부 백필 → `0002` **실행 없이 기록됨**. `migrations apply` 는 `0001` 만 실행(4 commands)
+  - `_ops_slo`·`_ops_domain` 생성 확인. `_ops_run_event` 인덱스는 **ASAC-DAG 것 그대로**
+    (우리 `0002` 는 실행되지 않았다)
+  - `npm run d1` 가드: `CREATE`·`ALTER`·`DROP` 차단 · `SELECT 'DROP' AS x` 오탐 없음 ·
+    읽기 통과
+  - 콘솔 화면: `runs.daily` **98일** · `expectations` **49건** · `environments` prod 27,017 /
+    dev 17 · `runs_env_excluded` **17**(섞인 dev 를 걸렀고, 거른 건수를 화면이 밝힌다)
+  - ⚠️ **운영 D1 에 게이트웨이 표가 없다** — `_keys`·`_usage`·`_burst`·`_gateway_request_log`
+    전부 부재. 응답 상태·이용 행동·API 사용량·이용자 키 **4개 탭이 빈다**(화면은 "이 환경에
+    없음"으로 사유를 말한다). 게이트웨이가 운영으로 옮겨야 채워진다(#85)
+- **되짚을 것 — 무엇을 잃었는지 적어 둔다**: 연습할 곳이 없어졌고(기본값이 운영이다),
+  조치 이력이 안 남으며(공유 정적 토큰 하나), 로컬 테스트가 운영 지표에 섞이게 된다.
+  셋 다 decision/0015 §대가에 적었다. **팀이 알고 택한 거래**이고, 되돌리려면 그 문서를
+  개정한다.
+
+---
 
 ## 2026-08-04
 

@@ -1,35 +1,33 @@
 #!/usr/bin/env node
 /**
- * d1-query — 로컬·팀 dev·운영 D1 을 **읽기만** 한다.
+ * d1 — 운영 D1 에 SQL 을 친다. **쓰기는 열려 있고, 스키마는 잠겨 있다.**
  *
  * ## 왜 있나
  *
- * "운영 D1 에 그 표가 실제로 있나"를 확인하려면 원격에 붙어야 하는데, 그 확인을
- * `wrangler d1 execute --remote --command "..."` 로 손수 치면 두 가지가 사람 손에 걸린다.
+ * D1 이 운영 하나뿐이 되면서(decision/0015) `wrangler d1 execute` 를 손수 치는 것과
+ * 운영 DB 를 만지는 것이 같은 일이 됐다. 팀이 **데이터 쓰기는 열기로** 정했으므로
+ * INSERT·UPDATE·DELETE 는 막지 않는다 — 막으면 결정을 코드가 뒤집는 것이다.
  *
- *   ① **환경 플래그.** `--env production` 을 빠뜨리면 조용히 dev D1 을 본다. 결과가
- *      그럴듯하게 나오기 때문에 틀린 줄도 모른다 — 없는 표를 "없다"고 확인하고 넘어간다.
- *   ② **SQL 자체.** `d1 execute` 는 DELETE 도 DROP 도 그대로 실행한다. 불변 경계는
- *      "팀(원격) D1 에 쓰지 않는다"(decision/0002)인데, 그 경계를 지키는 것이
- *      **치는 사람의 주의력**뿐이었다.
+ * 대신 **스키마는 막는다.** 그건 별개의 약속이고, 아직 살아 있다:
  *
- * 이 스크립트는 둘 다 코드로 옮긴다. 환경은 이름으로 고르고(`local`·`dev`·`prod`),
- * SQL 은 **읽기 문장만** 통과시킨다. 쓰기를 하려면 이 스크립트를 안 쓰면 되지만,
- * 그건 "실수로"가 아니라 **의도적으로** 다른 명령을 치는 것이라 성격이 다르다.
+ *   ① **마켓플레이스 소유 표의 스키마는 절대 바꾸지 않는다.** `_keys`·`_usage`·`_burst`·
+ *      `_gateway_request_log` 의 정본은 `../marketplace/migrations/` 다(CLAUDE.md §6).
+ *      여기서 ALTER 하면 저쪽 정본과 갈라지고, 갈라진 순간 양쪽 다 못 믿는다.
+ *   ② **파이프라인 소유 표(`_ops_run_event` 외 3종)도 마찬가지다.** 정본은 ASAC-DAG.
+ *   ③ **DDL 은 마이그레이션으로만 한다.** 손으로 친 CREATE 는 장부에 안 남아서,
+ *      다음 사람이 `migrate` 를 돌렸을 때 "이미 있음"과 "적용됨"이 어긋난다(0007 증분 규약).
+ *
+ * 즉 이 스크립트가 지키는 것은 "쓰지 마라"가 아니라 **"남의 표 모양을 바꾸지 마라"** 다.
  *
  * ## 사용
  *
- *   npm run d1:local -- "SELECT COUNT(*) FROM _ops_slo"
- *   npm run d1:dev   -- "SELECT COUNT(*) FROM _ops_run_event"
- *   npm run d1:prod  -- "SELECT name FROM sqlite_master WHERE type='table'"
- *   npm run d1:prod  -- --file=scripts/some-read-only.sql      # 파일도 같은 검사를 거친다
+ *   npm run d1 -- "SELECT COUNT(*) FROM _ops_run_event"
+ *   npm run d1 -- "UPDATE _keys SET daily_quota = 500 WHERE key_hash = '...'"
+ *   npm run d1 -- --file=scripts/some.sql
+ *   npm run d1 -- --json "SELECT ..."        # 나머지 플래그는 wrangler 로 그대로 넘어간다
  *
- * `--json` 등 나머지 플래그는 wrangler 로 그대로 넘어간다.
- *
- * ## 읽기 전용 판정
- *
- * 화이트리스트다 — "위험한 낱말을 지운다"가 아니라 **허용된 것만 통과**시킨다. 블랙리스트는
- * 언제나 빠뜨린 낱말이 있고(`REPLACE INTO`·`VACUUM`·`ATTACH` …), 빠뜨린 게 곧 사고다.
+ * 스키마를 정말 바꿔야 하면 `migrations/` 에 파일을 더하고 `npm run migrate` 를 쓴다.
+ * 남의 표라면 그 소유자에게 요청한다 — 우회로는 두지 않는다.
  */
 
 import { spawnSync } from "node:child_process";
@@ -40,115 +38,82 @@ import { dirname, resolve } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 
-// 환경 이름 → 어느 D1 을 어떻게 여는가. 사람이 외울 것은 왼쪽 낱말 하나뿐이다.
-//
-// local 의 --persist-to 는 생략하면 안 된다 — 게이트웨이와 상태를 공유하는 것이
-// 로컬의 정의이기 때문이다(decision/0003). 빠뜨리면 콘솔 전용의 **빈 DB** 가 하나 더
-// 생기고, "표가 없다"는 결과가 나온다.
-const TARGETS = {
-  local: { db: "ask-seoul-dev-d1", label: "로컬 (Miniflare)",
-           args: ["--local", "--persist-to", "../marketplace/.wrangler/state"] },
-  dev:   { db: "ask-seoul-dev-d1", label: "팀 dev D1 (원격)", args: ["--remote"] },
-  prod:  { db: "ask-seoul-prod-d1", label: "운영 D1 (원격)", args: ["--remote", "--env", "production"] },
+const DB = "ask-seoul-prod-d1";
+
+// 스키마를 바꾸는 문장. 하나라도 걸리면 통과시키지 않는다 — 대상 표가 무엇이든,
+// DDL 은 마이그레이션 장부를 거쳐야 하기 때문이다(③).
+const DDL = /\b(CREATE|ALTER|DROP|TRUNCATE|REINDEX|VACUUM|ATTACH|DETACH)\b/i;
+
+// 남의 표. DDL 이 아니어도 이름이 보이면 한 번 더 경고한다(데이터 쓰기는 허용).
+const FOREIGN = {
+  "마켓플레이스": ["_keys", "_usage", "_burst", "_gateway_request_log"],
+  "파이프라인(ASAC-DAG)": ["_ops_run_event", "_ops_daily_metric",
+                           "_ops_pipeline_state", "_ops_pipeline_expectation"],
+  "도메인 export(dbt)": ["_catalog", "_publication_ledger"],
 };
 
-// 읽기로 인정하는 시작 낱말. WITH 는 CTE 인데 SQLite 에서는 `WITH ... DELETE` 도 문법상
-// 가능하므로, 시작만 보지 않고 아래에서 금지 낱말을 한 번 더 본다.
-const READ_STARTS = /^(SELECT|WITH|PRAGMA|EXPLAIN)\b/i;
+const die = (msg) => { console.error("d1: " + msg); process.exit(1); };
 
-// 문장 어디에 나와도 읽기가 아닌 것들. READ_STARTS 를 통과한 뒤의 2차 검사다 —
-// `WITH x AS (SELECT 1) DELETE FROM t` 같은 것을 잡는다.
-const WRITE_WORDS =
-  /\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE|TRUNCATE|VACUUM|ATTACH|DETACH|REINDEX|GRANT|BEGIN|COMMIT|ROLLBACK)\b/i;
-
-// PRAGMA 는 읽기도 쓰기도 된다(`PRAGMA journal_mode=WAL`). `=` 가 붙으면 설정이다.
-const PRAGMA_WRITE = /^PRAGMA\b[^;]*=/i;
-
-const die = (msg) => { console.error("d1-query: " + msg); process.exit(1); };
-
-/**
- * 주석과 문자열 리터럴을 지운 뒤 검사한다. 안 지우면 `SELECT '삭제' AS x` 가
- * 금지 낱말에 걸려 멀쩡한 조회가 막히고, 반대로 `-- \n DELETE ...` 를 놓친다.
- */
-function stripNoise(sql) {
+/** 주석·문자열 리터럴을 지운다 — 안 지우면 `SELECT 'DROP' AS x` 가 DDL 로 잡힌다. */
+function strip(sql) {
   return sql
-    .replace(/--[^\n]*/g, " ")          // 한 줄 주석
-    .replace(/\/\*[\s\S]*?\*\//g, " ")  // 블록 주석
-    .replace(/'(?:[^']|'')*'/g, "''")   // 작은따옴표 문자열
-    .replace(/"(?:[^"]|"")*"/g, '""');  // 식별자 인용(값이 아니어도 검사에선 무해)
+    .replace(/--[^\n]*/g, " ")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/'(?:[^']|'')*'/g, " ")
+    .replace(/"(?:[^"]|"")*"/g, " ");
 }
 
-function assertReadOnly(sql, where) {
-  const clean = stripNoise(sql).trim();
-  if (!clean) die(`${where}: 실행할 SQL 이 없다`);
+const argv = process.argv.slice(2);
+if (!argv.length) die('SQL 이 없다. 예: npm run d1 -- "SELECT 1"');
 
-  // 여러 문장을 한 번에 보내면 앞은 SELECT 이고 뒤가 DELETE 일 수 있다. 끝의 세미콜론
-  // 하나는 습관이라 허용하고, 그 앞에 문장이 더 있으면 거절한다.
-  const statements = clean.split(";").map((s) => s.trim()).filter(Boolean);
-  if (statements.length > 1) {
-    die(`${where}: 한 번에 한 문장만 — 세미콜론으로 이어 붙인 ${statements.length}개는 거절한다`);
-  }
-
-  const stmt = statements[0];
-  if (!READ_STARTS.test(stmt)) {
-    die(`${where}: 읽기 문장이 아니다 (SELECT·WITH·PRAGMA·EXPLAIN 만 허용).\n` +
-        `  이 스크립트는 원격 D1 에 쓰지 않기 위한 빗장이다 — decision/0013`);
-  }
-  if (PRAGMA_WRITE.test(stmt)) die(`${where}: 값을 설정하는 PRAGMA 는 읽기가 아니다`);
-
-  // 시작이 SELECT 여도 뒤에 쓰기가 붙을 수 있다. PRAGMA/EXPLAIN 은 이 검사에서 뺀다 —
-  // `PRAGMA table_info(...)` 처럼 표 이름에 금지 낱말이 들어갈 수 있기 때문이다.
-  if (/^(SELECT|WITH)\b/i.test(stmt) && WRITE_WORDS.test(stmt)) {
-    const hit = stmt.match(WRITE_WORDS)[0];
-    die(`${where}: 읽기 문장 안에 '${hit}' 가 있다 — 거절한다`);
-  }
-}
-
-const [, , envName, ...rest] = process.argv;
-const target = TARGETS[envName];
-if (!target) {
-  die(`환경을 골라야 한다: ${Object.keys(TARGETS).join(" | ")}\n` +
-      `  예) npm run d1:prod -- "SELECT COUNT(*) FROM _catalog"`);
-}
-if (!rest.length) die("실행할 SQL 이 없다 — 따옴표로 감싼 질의나 --file=<경로> 를 준다");
-
-// SQL 은 --command 로 오거나(따옴표 인자), --file 로 온다. 어느 쪽이든 같은 검사를 거친다 —
-// 파일이면 안전하다고 볼 이유가 없다(오히려 길어서 사람이 안 읽는다).
-const passthrough = [];
-let sql = null;
-let sqlFile = null;
-
-for (const arg of rest) {
-  if (arg.startsWith("--file=")) { sqlFile = arg.slice(7); continue; }
-  if (arg.startsWith("--command=")) { sql = arg.slice(10); continue; }
-  if (arg.startsWith("-")) { passthrough.push(arg); continue; }
-  if (sql === null) { sql = arg; continue; }
-  die(`SQL 을 두 번 줬다: ${JSON.stringify(arg)}`);
-}
-
-if (sqlFile) {
-  const path = resolve(ROOT, sqlFile);
-  let text;
-  try { text = readFileSync(path, "utf8"); } catch { die(`파일을 못 읽는다: ${path}`); }
-  // 파일은 여러 문장이 정상이므로 문장별로 본다.
-  const stmts = stripNoise(text).split(";").map((s) => s.trim()).filter(Boolean);
-  if (!stmts.length) die(`${sqlFile}: 실행할 SQL 이 없다`);
-  stmts.forEach((s, i) => assertReadOnly(s, `${sqlFile} 문장 ${i + 1}`));
-} else if (sql) {
-  assertReadOnly(sql, "질의");
+// --file= 이면 파일 내용을, 아니면 첫 비플래그 인자를 검사 대상으로 삼는다.
+const fileArg = argv.find((a) => a.startsWith("--file="));
+const inline = argv.find((a) => !a.startsWith("-"));
+let sql;
+if (fileArg) {
+  const p = resolve(ROOT, fileArg.slice("--file=".length));
+  try { sql = readFileSync(p, "utf8"); } catch { die("파일을 못 읽는다: " + p); }
+} else if (inline) {
+  sql = inline;
 } else {
-  die("실행할 SQL 이 없다");
+  die("SQL 도 --file= 도 없다");
 }
 
-// 무엇을 어디에 물어보는지 **먼저 말한다.** 결과만 나오면 어느 D1 을 본 건지 화면에
-// 남지 않아, 나중에 그 출력을 옮겨 적을 때 환경이 섞인다.
-console.error(`d1-query → ${target.label} · ${target.db} · 읽기 전용`);
+const bare = strip(sql);
 
-const wrangler = resolve(ROOT, "node_modules", "wrangler", "bin", "wrangler.js");
-const args = ["d1", "execute", target.db, ...target.args, ...passthrough];
-if (sqlFile) args.push(`--file=${sqlFile}`);
-else args.push("--command", sql);
+const ddl = bare.match(DDL);
+if (ddl) {
+  die(
+    `스키마 변경(${ddl[1].toUpperCase()})은 이 경로로 하지 않는다.\n` +
+    "  · 콘솔 소유 표  → migrations/ 에 파일을 더하고 `npm run migrate`\n" +
+    "  · 남의 표        → 소유자에게 요청한다 (marketplace/ · ASAC-DAG)\n" +
+    "  근거: CLAUDE.md §4·§6 · decision/0007(증분) · decision/0015"
+  );
+}
 
-// 셸을 거치지 않는다 — SQL 에 든 따옴표가 OS 마다 다르게 깨지는 것을 피한다(Windows 실측).
-const r = spawnSync(process.execPath, [wrangler, ...args], { cwd: ROOT, stdio: "inherit" });
+// 데이터 쓰기 자체는 허용이지만, 남의 표를 만지는 건 눈에 보이게 한다.
+const writes = /\b(INSERT|UPDATE|DELETE|REPLACE)\b/i.test(bare);
+if (writes) {
+  for (const [owner, tables] of Object.entries(FOREIGN)) {
+    const hit = tables.filter((t) => new RegExp("\\b" + t + "\\b", "i").test(bare));
+    if (hit.length) {
+      console.error(`d1: ⚠️  ${owner} 소유 표에 쓴다 — ${hit.join(" · ")}`);
+      console.error("d1:    데이터 쓰기는 허용되지만 정본은 저쪽이다. 스키마는 못 바꾼다.");
+    }
+  }
+  console.error("d1: ⚠️  운영 D1 에 쓰는 중이다. 되돌릴 수 없는 문장인지 확인할 것.");
+}
+
+// 인라인 SQL 은 `--command` 로 감싼다 — 맨 인자로 넘기면 wrangler 가 "Unknown arguments"
+// 로 거절한다. `--file=` 이면 그대로 흘려보낸다(이미 플래그 형태다).
+const passthru = fileArg ? argv : argv.filter((a) => a !== inline);
+const sqlArgs = fileArg ? [] : ["--command", inline];
+
+// wrangler 의 bin 을 **node 로 직접** 부른다. `npx` + `shell:true` 를 쓰면 Windows 에서
+// 인자가 한 줄로 이어 붙으면서 공백 있는 SQL 이 토막 난다("--command 가 없다"로 실패).
+// 셸을 거치지 않으면 인자가 배열 그대로 전달돼 따옴표 문제가 생기지 않는다.
+const BIN = resolve(ROOT, "node_modules/wrangler/bin/wrangler.js");
+const args = [BIN, "d1", "execute", DB, "--remote", ...sqlArgs, ...passthru];
+console.error(`d1: ${DB} (운영 · 원격)`);
+const r = spawnSync(process.execPath, args, { cwd: ROOT, stdio: "inherit" });
 process.exit(r.status ?? 1);

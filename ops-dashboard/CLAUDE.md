@@ -62,16 +62,18 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 ```text
 단일 Worker (src/index.js)          — GET /api/summary · /api/trace · /api/apis · /api/apis/<이름>, GET·POST /api/keys
 + Static Assets (public/index.html) — 탭 6개짜리 단일 페이지
-+ 공유 로컬 D1                       — 게이트웨이(../marketplace)와 같은 상태 (--persist-to)
-+ 원격 D1 (npm run dev:remote)      — 조회 DB 4종의 **실측**은 여기에만 있다
-+ migrations/                       — 0001 _ops_slo·_ops_domain(정본) · 0002 조회 DB 4종(로컬 미러)
-+ fixtures/                         — 합성 샘플 시드 (slo_sample · ops_records_sample)
++ 운영 D1 (ask-seoul-prod-d1)       — **하나뿐이다.** 로컬 구동도 여기 직접 붙는다 (0015)
++ migrations/                       — 0001 _ops_slo·_ops_domain(정본) · 0002 조회 DB 4종(IF NOT EXISTS 미러)
++ fixtures/                         — 합성 샘플 (slo_sample · ops_records_sample) — 시드 체인에 없다
 ```
 
-**조회 DB 4종의 실측은 로컬 Miniflare 에 없다.** 팀 D1 에 있으므로 `npm run dev:remote`
-(원격 바인딩)로 띄워야 보인다. `--remote` 는 읽기 전용 모드가 아니라 그 상태의 키 조치가
-팀 DB 에 적용된다 — **보기 위한 모드다**([0002](docs/decision/0002-local-only-mentor-gate.md)).
-로컬의 `migrations/0002` 미러는 화면을 돌려보기 위한 **빈 껍데기**이지 정본이 아니다.
+🔴 **D1 은 운영 하나뿐이다**([0015](docs/decision/0015-single-production-d1.md)). dev D1 은
+2026-08-05 에 폐기했고 로컬 Miniflare 사본도 없다 — 바인딩에 `remote = true` 가 걸려 있어
+`npm run dev` 는 **띄우는 순간 운영 DB 에 붙는다.**
+
+**연습할 곳이 없다는 뜻이다.** 예전에는 플래그를 빠뜨리면 로컬로 떨어져 실수의 방향이
+안전한 쪽이었는데 **이제 기본값이 운영이다.** 화면의 '삭제' 두 번 클릭은 실제 고객의
+키·이메일·사용량을 지운다(불가역). 이 대가는 팀이 알고 택했다(0015 §대가).
 
 이용 행동 탭의 스펙 종속 축(ua_class 등)은 **게이트웨이 반영 전까지 '수집 전'** 이다 —
 `_gateway_request_log` 에 ALTER 미러를 만들지 않는다(0010: 정본 마이그레이션과 duplicate column 충돌).
@@ -84,18 +86,21 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 
 어기는 순간 사고가 되는 것들. 완화하려면 해당 결정 문서 개정이 먼저다.
 
-- **배포는 환경을 지정한 스크립트로만.** `npm run deploy:dev`(→ dev-ops.ask-seoul.kr) /
-  `npm run deploy:prod`(→ ops.ask-seoul.kr, **Cloudflare Access 승격 #20 결정 B-1 이 선행 —
-  현재 보류 상태고 production 라우트도 주석이다**). env 없는 맨 `wrangler deploy` 금지 —
-  기본 환경은 로컬 전용이다. 배포본 D1 은 게이트웨이의 같은 환경과 반드시 일치시킨다.
-  → [0002 개정](docs/decision/0002-local-only-mentor-gate.md)
-- **팀(원격) D1 쓰기는 `_ops_*` 마이그레이션 적용(콘솔 장부 `d1_migrations_ops_dashboard`)에
-  한정한다.** 로컬 시드·로더는 로컬 상태(`--persist-to`)만 만진다. 게이트웨이 소유
-  테이블에 대한 원격 임의 실행 금지.
-  → [0002 개정](docs/decision/0002-local-only-mentor-gate.md)
-- **게이트웨이 소유 테이블의 스키마를 여기서 바꾸지 않는다.** `_keys`·`_usage`·`_burst`·
-  `_gateway_request_log` 의 정본은 `../marketplace/migrations/`. 여기서는 읽기와 정해진 키 조치만.
-  → [0003](docs/decision/0003-single-shared-local-d1.md)
+- 🔴 **띄우면 운영이다.** 바인딩이 `remote` 라 **로컬 화면의 조치가 실제 고객
+  키에 그대로 간다.** 연습용 DB 는 없다. 조치 버튼을 누르기 전에 **무엇을 보고 있는지**
+  배지를 확인한다 — 배지는 언제나 "운영"이라고 말한다. 그게 정상이고, 그래서 위험하다.
+  → [0015](docs/decision/0015-single-production-d1.md)
+- **배포는 `npm run deploy:prod` 로만**(→ ops.ask-seoul.kr). `dev` 브랜치 머지가 곧 운영
+  배포다(CD `.github/workflows/deploy-prod.yml`) — **브랜치 이름과 배포 환경이 다르다.**
+  env 없는 맨 `wrangler deploy` 금지. 배포본 D1 은 게이트웨이 운영 환경과 반드시 일치시킨다.
+  ⚠️ 읽기 경로는 여전히 무인증이라(0004) Access 승격(#20 B-1)이 미완인 채 공개돼 있다.
+  → [0015](docs/decision/0015-single-production-d1.md) · [0002(폐기된 원 결정)](docs/decision/0002-local-only-mentor-gate.md)
+- 🔴 **남의 표 스키마는 절대 바꾸지 않는다 — 이 경계만 살아남았다.**
+  `_keys`·`_usage`·`_burst`·`_gateway_request_log` 의 정본은 `../marketplace/migrations/`,
+  `_ops_run_event` 외 3종은 ASAC-DAG, `_catalog`·`_publication_ledger` 는 도메인 export.
+  **데이터 쓰기는 열렸어도 스키마는 아니다.** DDL 은 `scripts/d1-query.mjs` 가 전부 막고,
+  콘솔 소유 표의 변경도 `migrations/` 추가 파일 + `npm run migrate` 로만 한다.
+  → [0015 §안전장치](docs/decision/0015-single-production-d1.md) · [0007](docs/decision/0007-schema-single-file-reset.md)
 - **이메일 원문을 API 응답에 싣지 않는다.** 마스킹은 서버에서(`email_masked`).
   화면에서만 가리는 건 마스킹이 아니다. → [0004](docs/decision/0004-read-open-write-token.md)
 - **키 조치 식별자는 `key_hash`.** prefix 는 충돌한다.
@@ -166,22 +171,25 @@ NOT EXISTS` 만, DROP·ALTER 없이, 팀 D1 에 이미 있으면 아무 일도 �
 
 ## 7. 검증
 
-배포 파이프라인이 없으므로 로컬에서 직접 확인한다.
+🔴 **검증도 운영 D1 에서 한다**(0015). 연습용 DB 가 없으므로 **읽기로 확인할 수 있는 것을
+먼저 다 하고**, 쓰기 검증은 마지막에 **자기가 만든 대상**으로만 한다.
 
 ```bash
-npm run seed   # _ops_* 증분 마이그레이션 + 합성 시드 → 공유 로컬 D1
-npm run dev    # :8788 — 게이트웨이(:8787)와 동시 구동 가능 (인스펙터 9230 고정 — 저쪽 기본 9229 와 안 겹친다)
+npm run dev          # :8788 — 바인딩이 remote 라 곧바로 운영 D1 이다. 띄우는 순간 실물
+npm run migrate      # 스키마 적용(수동). CREATE IF NOT EXISTS 뿐이라 있는 표는 안 건드린다
+npm run migrate:list # 무엇이 적용됐나 먼저 본다
+npm run d1 -- "SELECT COUNT(*) FROM _ops_run_event"   # DDL 은 막힌다
 ```
 
 OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) — 게이트웨이 담당자와
-함께 관리하는 문서다(같은 로컬 D1을 공유하므로 실행 절차가 하나다). 실행·시드·포트·비밀값
-규약을 바꾸면 같은 커밋에서 그 문서를 고치고 상대 담당자에게 알린다.
+함께 관리하는 문서다. 실행·마이그레이션·포트·비밀값 규약을 바꾸면 같은 커밋에서 그 문서를
+고치고 상대 담당자에게 알린다.
 
 - API 는 curl 로: `/api/summary?days=14`, `/api/keys` (GET 무인증 / POST 는 Bearer).
 - 쓰기 경로를 고쳤으면 **토큰 미설정(503)·토큰 없음(401)·잘못된 토큰(401)** 을 다 본다.
-- 게이트웨이 테이블이 없는 상태(마켓플레이스 미시드)에서도 콘솔이 뜨는지 본다
-  (`meta.missing` 강등).
-- 화면을 고쳤으면 탭 6개와 배지(샘플·읽기 전용·수집 전·탭 경고 점) 동작을 본다.
+  ⚠️ 정상 경로(200) 검증은 **실제 고객 키에 하지 않는다.** 확인용 키를 직접 발급해 그것으로만.
+- 화면을 고쳤으면 탭 6개와 배지(수집 전·탭 경고 점) 동작을 본다.
+- **화면 스크립트는 띄워서 실제로 눌러 본다** — `node --check` 는 TDZ 를 통과시킨다(실사례 2건).
 - 검증 명령 세트와 실행 기록 탭의 시나리오별 확인법은 [docs/runbook.md](docs/runbook.md).
 
 ## 8. 완료 기준
@@ -197,13 +205,14 @@ OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) �
 바로 구현하지 않는다. decision/ 문서(신규 또는 개정)로 사유·비용·단순 대안·롤백을 먼저 적는다.
 
 ```text
-공개 배포(어떤 형태든)             → 0002 개정 + 배포 결정(agreement §8)
 인증 방식 변경                     → 0004 개정 (Access/OAuth 승격 포함)
-게이트웨이 테이블 쓰기 확대        → 0003 개정
+조치 이력(누가 했나)을 남기는 것   → 0004 개정 — 0015 가 미룬 숙제다. 지금은 못 남긴다
 저장소·인프라 추가(Queue·R2·DO·AE …) → 0008 의 도입 신호 확인 후 신규 결정
 마이그레이션에 DROP·이름 변경      → 금지 — 0007 규약(증분·추가만, #78 D-6)
+남의 표 스키마 변경                → 금지. 정본 소유자가 먼저 (marketplace · ASAC-DAG · dbt)
 조회 DB 4종 스키마 변경            → 정본(ASAC-DAG)이 먼저 — 미러·화면은 0009 대로 추종
 키 상태 모델 확장                  → 0006 개정 (게이트웨이와 공동)
+격리 환경을 다시 만드는 것         → 0015 개정 — "왜 다시 필요한가"부터 적는다
 ```
 
 ## 10. Claude 작업 규칙

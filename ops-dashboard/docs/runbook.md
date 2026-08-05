@@ -4,49 +4,41 @@
 **설명 + 명령어** 단위로 묶었다. 왜 이런 구조인지는 [decision/](index.md#결정--docsdecision),
 경계는 [../CLAUDE.md](../CLAUDE.md) 4절이 정본이다.
 
-> **환경별 실행 절차는 공동 문서에 한 장씩 있다** — [로컬](../../docs/run-local.md) ·
-> [팀 dev D1](../../docs/run-remote-dev.md) · [운영 D1](../../docs/run-prod.md).
-> 여기는 콘솔 **한 프로젝트의** 검증·조치 절차다.
-
 ---
 
 ## 1. 처음 여는 사람 — 구동까지
 
-콘솔은 게이트웨이([../../marketplace/](../../marketplace/))와 **같은 로컬 D1 상태**를 읽는다
-(`--persist-to`). 서빙 품질(`_gateway_request_log`)·키(`_keys`)는 저쪽이 만들기 때문에, 게이트웨이도
-한 번은 시드해 두는 게 화면이 온전하다.
+> 🔴 **띄우면 운영이다.** D1 은 `ask-seoul-prod-d1` 하나뿐이고 `npm run dev` 는
+> 바인딩에 `remote = true` 가 걸려 있다([0015](decision/0015-single-production-d1.md)). 로컬
+> 사본이 없으므로 **연습 삼아 눌러 볼 곳이 없다.** 조치(폐기·복구·쿼터·삭제)는 실제 고객 키에 간다.
 
 ```bash
-# (선택이지만 권장) 게이트웨이 먼저 — _catalog·_keys·_gateway_request_log 가 생긴다
-cd marketplace && npm install && npm run seed
-
-# 콘솔
-cd ../ops-dashboard
+cd ops-dashboard
 npm install
-npm run seed          # _ops_slo/_ops_domain + 조회 DB 4종 미러 → 공유 로컬 D1 (표만, 데이터 0건)
+cp .env.example .env   # CLOUDFLARE_API_TOKEN — 원격 바인딩이라 자격증명 없이는 안 뜬다
 echo "OPS_TOKEN=$(openssl rand -hex 16)" > .dev.vars    # 조치(쓰기) 잠금 해제용 — .gitignore 대상
-npm run dev           # http://localhost:8788  (게이트웨이 :8787 과 동시 구동 가능)
+npm run dev            # http://localhost:8788  🔴 운영 D1
 ```
 
 - 토큰 없이도 화면은 뜬다 — 잠기는 건 **조치**(폐기·복구·쿼터·삭제)뿐이다.
-- **시드는 빈 스키마만 만든다.** 장부 백필 + `migrations/` 적용이 전부이고 `fixtures/` 는
-  실행하지 않는다 — 합성 행이 화면에 오르지 않게 시드 체인에서 뺐다(§3).
-  그래서 시드 직후의 화면은 **정상적으로 비어 있다.**
-- ⚠️ **위 두 `npm run seed` 는 이름만 같고 하는 일이 다르다.** D1 은 하나를 공유하지만
-  (`--persist-to`, [0003](decision/0003-single-shared-local-d1.md)) 각자 **자기 소유 표만** 채운다.
+- 게이트웨이를 따로 시드할 필요가 없다. `_gateway_request_log`·`_keys` 는 운영 D1 에 있고
+  콘솔이 거기서 직접 읽는다. **게이트웨이 로컬 구동은 아직 dev D1 을 본다** — 그쪽 전환은
+  담당자 몫이라(#85) 그때까지 두 프로젝트의 로컬이 서로 다른 DB 를 본다.
+- 인스펙터 포트는 콘솔이 9230 으로 고정돼 있어 게이트웨이 기본값(9229)과 겹치지 않는다.
 
-  | | 게이트웨이 시드 | 콘솔 시드 |
-  |---|---|---|
-  | 채우는 표 | `_catalog` · 제품 표 `d1_*` | `_ops_slo` · `_ops_domain` (+ 4종 미러) |
-  | 넣는 것 | 표 + **데이터**(팀 D1 실측 표본, 테이블당 50행) | 표 **만** |
+### 1-1. 스키마 적용 — 코드 배포와 분리돼 있다
 
-  게이트웨이 쪽을 돌리면 카탈로그에 값이 보이는데 콘솔 탭은 비어 있다 — **둘 다 정상이다.**
-  한쪽을 보고 다른 쪽을 넘겨짚으면 "시드가 덜 됐다"는 오진이 나온다.
-- 시드는 몇 번을 다시 돌려도 안전하다 — 마이그레이션은 `CREATE IF NOT EXISTS` 뿐이다
-  (DROP 금지, [0007](decision/0007-schema-single-file-reset.md)).
-- **동시 구동 순서**: 게이트웨이를 먼저 띄우고 콘솔을 나중에 띄운다(공유 sqlite 의 WAL
-  복구 잠금 충돌 예방). 인스펙터 포트는 콘솔이 9230 으로 고정돼 있어 게이트웨이의
-  기본값(9229)과 겹치지 않는다.
+```bash
+npm run migrate:list   # 무엇이 적용됐나 먼저 본다
+npm run migrate        # 장부 백필 → migrations apply (운영 D1, 원격)
+```
+
+CD 는 **코드만** 배포한다. 마이그레이션이 자동으로 돌면 운영 스키마가 머지 타이밍에
+바뀌는데, D1 이 하나뿐인 지금 그건 되돌릴 창이 없다는 뜻이다.
+
+`migrations/` 는 전부 `CREATE TABLE IF NOT EXISTS` 이고 DROP·ALTER 가 없다
+([0007](decision/0007-schema-single-file-reset.md)) — **있는 표는 건드리지 않는다.**
+0002 가 만드는 조회 DB 4종은 운영에 이미 있으므로 그대로 no-op 이다.
 
 ## 2. 맞게 떴는지 — API 검증 세트
 
@@ -55,10 +47,9 @@ npm run dev           # http://localhost:8788  (게이트웨이 :8787 과 동시
 ```bash
 BASE=http://localhost:8788
 
-# ① 요약 — 네 섹션이 다 있는지, 뭐가 비었는지(meta.missing), 무엇을 걸렀는지
+# ① 요약 — 네 섹션이 다 있는지, 뭐가 비었는지(meta.missing), 샘플인지
 curl -s "$BASE/api/summary?days=14" | jq '{missing: .meta.missing,
-  pipeline_source: .meta.pipeline_source, env_scope: .meta.runs_env_scope,
-  env_excluded: .meta.runs_env_excluded,
+  pipeline_sample: .meta.pipeline_is_sample, runs_sample: .meta.runs_is_sample,
   slo_days: (.pipeline.slo|length), runs_daily: (.runs.daily|length),
   monitored_dags: (.runs.expectations|length), serving_calls: (.serving.routes|length)}'
 
@@ -101,23 +92,9 @@ curl -si -X POST "$BASE/api/keys" -H "authorization: Bearer $TOKEN" \
 curl -s "$BASE/api/summary" | jq '.meta.missing'   # ["serving"] 등 — 500 이 아니라 빈 섹션
 ```
 
-## 3. 실행 기록 탭 — 픽스처에 박힌 검증 시나리오
+## 3. 실행 기록 탭 — 샘플에 박힌 검증 시나리오
 
-⚠️ **이 시나리오들은 시드로 들어오지 않는다.** 픽스처에는 화면 경로가 하나씩 박혀 있지만
-`npm run seed` 는 그걸 **넣지 않는다** — 합성 행이 운영 숫자로 읽히는 사고를 막으려고
-시드 체인에서 뺐다(2026-08-04). 파일은 남겨 뒀으니 **화면 경로를 확인할 때만 손으로 넣고,
-확인이 끝나면 지운다**(§4-2 의 삭제 명령).
-
-```bash
-# 검증용 합성 데이터 수동 주입 — 확인이 끝나면 반드시 지운다
-npx wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state \
-  --file=fixtures/ops_records_sample.sql
-```
-
-넣어도 **화면에는 안 뜬다.** 질의가 `event_id LIKE 'smp_%'` · `updated_at='sample'` 을
-배제하기 때문이다([src/index.js](../src/index.js) `evWhere`). 아래 표를 눈으로 확인하려면
-그 배제 조건을 **일시적으로 끄고** 봐야 하며, 확인 후 되돌린다 — 배제 조건을 지우고
-커밋하는 것이 합성이 새는 경로다(CLAUDE.md §4 🔴).
+`npm run seed` 의 합성 데이터에는 화면 경로가 하나씩 박혀 있다. 탭(`#runs`)에서 눈으로 확인한다.
 
 | 시나리오 | 어디서 보이나 |
 |---|---|
@@ -137,16 +114,13 @@ npx wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wr
 
 ### 4-1. 파이프라인 SLO (`_ops_slo`)
 
-**이 탭은 로컬에서 비어 있는 게 정상이다.** `npm run seed` 는 표만 만들고 행을 넣지 않으므로
-`meta.pipeline_source` 가 `none` 이고 화면은 "기록이 없습니다"로 뜬다.
+```bash
+npm run seed   # fixtures/slo_sample.sql — 전 행 is_sample=1
+```
 
-실측을 넣는 정규 경로는 culture DAG 의 export task 다(팀 D1 쓰기 = 승인 주체 미정(agreement §8-3)).
-그게 붙어 `is_sample=0` 행이 들어오면 `pipeline_source` 가 `live` 로 바뀌고 탭이 채워진다.
-합성 픽스처([fixtures/slo_sample.sql](../fixtures/slo_sample.sql), 전 행 `is_sample=1`)를 손으로
-넣어도 **질의가 `is_sample=1` 을 배제하므로 화면은 그대로 비어 있다** — 픽스처는 화면 경로
-확인용이지 탭을 채우는 수단이 아니다.
-
-웨어하우스를 콘솔이 직접 훑던 임시 로더는 폐기했다
+**이 탭은 아직 합성값만 본다.** 실측을 넣는 정규 경로는 culture DAG 의 export task 이고
+(팀 D1 쓰기 = 승인 주체 미정(agreement §8-3)), 그게 붙어 `is_sample=0` 행이 들어오면 '합성 샘플' 배너가
+저절로 사라진다. 웨어하우스를 콘솔이 직접 훑던 임시 로더는 폐기했다
 ([0005](decision/0005-slo-snapshot-to-d1.md)) — 실측 파이프라인 상태는 **실행 기록 탭**이
 조회 DB 4종에서 직접 읽는다.
 
@@ -162,33 +136,11 @@ python domains/commerce/scripts/backfill_ops_records.py --since 2026-07-01 --unt
 python domains/commerce/scripts/backfill_ops_records.py --since 2026-07-01 --until 2026-07-31 --apply
 ```
 
-**로컬 D1 에는 4종의 실측이 없다.** `migrations/0002` 는 화면을 돌려보기 위한 빈 껍데기이고,
-실측은 팀 조회 DB 에만 있다 — 보려면 원격 바인딩으로 띄운다:
+로컬 콘솔이 **팀 조회 DB 를 직접 읽는 경로는 아직 없다**(로컬 전용,
+[0002](decision/0002-local-only-mentor-gate.md)). 그때까지 이 탭은 합성 샘플로 화면 계약을
+검증하고, 승격 시 표 이름·컬럼이 그대로라 화면 코드는 바뀌지 않는다.
 
-```bash
-npm run dev:dev-d1    # 팀 dev D1 → :8798, 보기 전용
-npm run dev:prod-d1   # 운영 D1   → :8799, 보기 전용
-```
-
-`--remote` 는 **그 자체로는** 읽기 전용이 아니다 — 붙은 상태에서 한 키 조치는 팀 DB 에
-그대로 적용된다([0002](decision/0002-local-only-mentor-gate.md) 불변 경계). 그래서 위 두
-스크립트가 `--var ENV_READONLY:1` 을 넘겨 **코드로 잠근다** — 잠금 해제 버튼이
-`보기 전용 · 원격 D1` 로 바뀌어 눌리지 않고, 조치를 강제로 보내면 `503 read-only mode` 다
-([0013](decision/0013-remote-readonly-attach.md)).
-
-**안전한 것은 `--remote` 가 아니라 위 스크립트 경로다.** `npx wrangler dev --remote` 로 직접
-붙으면 빗장이 없다. 표 이름·컬럼은 로컬 미러와 같으므로 화면 코드는 양쪽에서 그대로 돈다.
-자세한 절차는 [../../docs/run-remote-dev.md](../../docs/run-remote-dev.md) ·
-[../../docs/run-prod.md](../../docs/run-prod.md).
-
-SQL 로 직접 볼 때는 읽기 문장만 통과하는 질의기를 쓴다:
-
-```bash
-npm run d1:dev  -- "SELECT COUNT(*) AS n FROM _ops_run_event"
-npm run d1:prod -- "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-```
-
-과거에 픽스처를 넣어 둔 로컬 상태라면, 남은 합성 행을 걷어낸다(실측과 섞임 방지):
+샘플만 걷어내고 싶으면(실측과 섞임 방지):
 
 ```bash
 npx wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wrangler/state \
@@ -204,15 +156,25 @@ npx wrangler d1 execute ask-seoul-dev-d1 --local --persist-to ../marketplace/.wr
 
 ```bash
 # 새 컬럼 → 새 파일로 추가만 (예: migrations/0003_add_x.sql 에 ALTER TABLE ... ADD COLUMN ...)
-# seed 는 `migrations apply` 라 새 파일을 저절로 집는다 — package.json 을 고칠 일이 없다.
-npm run seed
-
-# 로컬을 통째로 리셋하고 싶을 때 — 마이그레이션이 아니라 상태를 지운다 (게이트웨이 데이터도 지워진다!)
-rm -rf ../marketplace/.wrangler/state && (cd ../marketplace && npm run seed) && npm run seed
+npm run migrate:list          # 현재 적용 상태
+npm run migrate               # 새 파일까지 적용 (운영 D1)
 ```
 
-조회 DB 4종의 정본은 ASAC-DAG `common/ops/d1_ops.py` 다 — 정본이 바뀌면 미러
-(`migrations/0002`)를 따라 고치고, 임의로 컬럼을 더하지 않는다.
+🔴 **되돌릴 로컬이 없다.** 예전에는 `rm -rf .wrangler/state` 로 로컬을 통째로 리셋할 수
+있었지만 D1 이 운영 하나뿐이라 그 경로가 사라졌다([0015](decision/0015-single-production-d1.md)).
+**적용 전에 파일을 두 번 읽는다.**
+
+🔴 **콘솔 소유 표에만 쓴다** — `_ops_slo`·`_ops_domain`. 그 밖의 표는 정본이 남에게 있다:
+
+| 표 | 정본 |
+|---|---|
+| `_keys`·`_usage`·`_burst`·`_gateway_request_log` | `../../marketplace/migrations/` |
+| `_ops_run_event` 외 3종 | ASAC-DAG `common/ops/d1_ops.py` |
+| `_catalog`·`_publication_ledger` | 도메인 export(dbt) |
+
+정본이 바뀌면 미러(`migrations/0002`)를 **따라** 고치고, 임의로 컬럼을 더하지 않는다.
+손으로 치는 DDL 은 `npm run d1` 이 막는다 — 장부를 안 거친 스키마 변경은 다음 사람의
+`migrate` 를 어긋나게 하기 때문이다.
 
 ## 6. 운영 조치 시나리오
 
@@ -245,15 +207,20 @@ curl -s -X POST "$BASE/api/keys" -H "authorization: Bearer $TOKEN" \
 
 | 증상 | 원인 | 조치 |
 |---|---|---|
-| '기록이 없습니다' (데이터 준비 상태) | `_ops_slo` 가 비었다 — 시드는 표만 만든다 | 정상. 실측은 §4-1 의 export task 가 붙어야 들어온다 |
-| 실행 기록 탭이 비었다 | 로컬 D1 에는 4종의 실측이 없다 | `npm run dev:dev-d1` (§4-2) |
-| '조회 DB 표가 없습니다' | `npm run seed` 전 | `npm run seed` |
-| '서빙 로그를 찾지 못했습니다' | 게이트웨이 미시드 / `--persist-to` 불일치 | `cd ../marketplace && npm run seed`, 경로 확인 |
-| 조치 버튼이 안 보인다 | 읽기 전용 모드 | 상단 잠금 해제 (`.dev.vars` 의 `OPS_TOKEN`) |
+| 아예 안 뜬다 / D1 바인딩 오류 | 원격 바인딩인데 `.env` 의 `CLOUDFLARE_API_TOKEN` 없음·만료 | `.env` 확인 — 로컬 사본이 없어 자격증명 없이는 못 뜬다 |
+| '조회 DB 표가 없습니다' | 운영 D1 에 `_ops_slo`·`_ops_domain` 미적용 | `npm run migrate` |
+| 배지가 "운영"이라고 뜬다 | **정상이다** | 이제 언제나 운영이다([0015](decision/0015-single-production-d1.md)) |
+| 조치 버튼이 안 보인다 | 토큰 미입력 | 상단 잠금 해제 (`.dev.vars` 의 `OPS_TOKEN`) |
 | 조치가 503 | `OPS_TOKEN` 미설정 | `.dev.vars` 작성 후 `npm run dev` 재시작 |
+| `npm run d1` 이 DDL 을 거부 | 의도된 동작 | 스키마는 `migrations/` + `npm run migrate`. 남의 표면 소유자에게 |
 | :8788 충돌 | 다른 프로세스 | `lsof -i :8788` 로 확인 후 정리 |
 
 ## 7. 하지 말 것 (요약)
 
-`wrangler deploy` · 팀(원격) D1 쓰기 · 게이트웨이 소유 테이블 스키마 변경 · 마이그레이션에
-DROP · 이메일 원문 응답 · 토큰 커밋. 전문은 [../CLAUDE.md](../CLAUDE.md) 4절.
+**남의 표 스키마 변경**(마켓플레이스·ASAC-DAG·dbt 소유) · 마이그레이션에 DROP ·
+env 없는 맨 `wrangler deploy` · 이메일 원문 응답 · 토큰 커밋.
+전문은 [../CLAUDE.md](../CLAUDE.md) 4절.
+
+> ⚠️ 예전 목록에 있던 **"팀(원격) D1 쓰기 금지"** 는 [0015](decision/0015-single-production-d1.md)
+> 로 **폐기**됐다. 이제 쓰기는 열려 있다 — 대신 **되돌릴 수 없다**는 사실이 그 자리를
+> 대신한다. 특히 키 삭제는 `_usage`·`_burst`·`_keys` 연쇄 삭제라 복구 경로가 없다.

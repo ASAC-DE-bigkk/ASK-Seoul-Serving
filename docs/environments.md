@@ -4,6 +4,18 @@
 > 두 프로젝트가 **같은 구조**를 쓴다 — 한쪽만 바꾸면 규약이 아니라 예외가 된다.
 > 실제 실행 절차(OS별 설치·명령)는 [setup.md](setup.md), 여기는 **구조와 배분**이다.
 
+> 🔴 **2026-08-05 — 지금 두 프로젝트가 갈라져 있다.** 팀이 dev D1 을 폐기하고 전체 작업·
+> 검증·배포를 운영 D1 기준으로 하기로 했는데, **콘솔만 전환됐다.**
+>
+> | | 로컬이 보는 D1 | 배포 |
+> |---|---|---|
+> | **콘솔**(ops-dashboard) | **운영** `ask-seoul-prod-d1` (읽기/쓰기) | `ops.ask-seoul.kr` |
+> | **게이트웨이**(marketplace) | 로컬 Miniflare (dev D1 바인딩) — **전환 대기** | dev·prod 그대로 |
+>
+> 게이트웨이 전환은 **그쪽 담당자 몫**이라 여기서 손대지 않았다(**#85**). 그때까지 아래
+> 본문의 "두 프로젝트가 같은 구조"·"로컬 D1 공유"는 **콘솔에는 해당하지 않는다.**
+> 정본: 콘솔 [decision/0015](../ops-dashboard/docs/decision/0015-single-production-d1.md).
+
 ## 1. 한 줄 요약
 
 **환경마다 달라지는 값은 각 프로젝트 `wrangler.toml` 한 파일 안에 있다 — 기본이 로컬,
@@ -66,7 +78,7 @@ wrangler 는 같은 디렉토리의 `.env` 를 자동으로 읽는다(플래그 
 ```bash
 cd ops-dashboard
 cp .env.example .env      # CLOUDFLARE_API_TOKEN 채우기
-npm run dev:remote        # wrangler dev --remote — 실제 dev D1 바인딩
+npm run dev:remote        # ⚠️ 콘솔에서는 폐기된 스크립트 (0015) — 게이트웨이 기준 서술
 ```
 
 ⚠️ **`--remote` 는 읽기만 하는 모드가 아니다.** 화면의 키 차단·삭제가 그대로 팀 dev D1 에

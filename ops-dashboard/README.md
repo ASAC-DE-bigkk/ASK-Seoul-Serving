@@ -6,7 +6,7 @@
 
 | 탭 | 묻는 질문 | 출처 |
 |---|---|---|
-| 데이터 준비 상태 (`#pipeline`) | 수집·변환이 매일 제때 끝났나 | `_ops_slo` (보조 스냅샷 — 로컬은 비어 있다) |
+| 데이터 준비 상태 (`#pipeline`) | 수집·변환이 매일 제때 끝났나 | `_ops_slo` (보조·합성 스냅샷) |
 | 실행 기록 (`#runs`) | 무엇이 돌았고, 무엇이 조용한가 | 조회 DB 4종 `_ops_run_event` 외 (ASK-Seoul#78) |
 | 응답 상태 (`#serving`) | 외부에 잘 나가고 있나 | `_gateway_request_log` (게이트웨이가 쌓는다) |
 | 이용 행동 (`#usage`) | **누가** 쓰나 — 사람·AI·여정 | `_gateway_request_log` + `_keys` + 행동 스펙 초안(#9) |
@@ -47,8 +47,8 @@
 - **관측 공백** — 도메인×단계 매트릭스의 빈 칸: 그 단계는 기록 자체를 안 남긴다
 - **환경 섞임** — 한 조회 DB 에 dev 가 섞이면 운영 지표가 오염된다 (#78 Z-7, 실해 있음)
 
-로컬 D1 에는 4종의 실측이 없다 — `npm run dev:dev-d1`(보기 전용)로 팀 조회 DB 를 읽는다. 표
-이름·컬럼이 로컬 미러와 같아 화면 코드는 양쪽에서 그대로 돈다. 시나리오별 확인 방법은
+로컬은 합성 샘플로 화면 계약을 검증하고(경고 배너가 뜬다), 팀 조회 DB 로 승격해도 표
+이름·컬럼이 같아 화면 코드는 그대로다. 시나리오별 확인 방법은
 [runbook §3](docs/runbook.md).
 
 ## 이용 행동 탭 — 행동 로그 스펙 초안(#9)의 소비 화면
@@ -134,39 +134,51 @@
 - **읽기를 열었다고 노출해도 되는 화면이 된 건 아니다.** 파이프라인 SLO·요청 로그·키 사용량은
   여전히 내부 운영 정보이고, 이메일 도메인은 마스킹 뒤에도 남는다.
 
-## ⚠️ 배포는 스크립트로만
+## 🔴 띄우면 운영이다
 
-로컬 구동은 `wrangler dev`. 배포는 `npm run deploy:dev`(→ `dev-ops.ask-seoul.kr`,
-2026-08-04 시행) / `npm run deploy:prod`(→ `ops.ask-seoul.kr` — **Cloudflare Access 승격이
-선행이라 라우트가 주석 상태**, #20 결정 B-1). env 없는 맨 `wrangler deploy` 는 금지다.
-읽기 경로가 무인증인 채 dev 공개 URL 에 떠 있으므로(decision/0004) Access 권한 확보가
-최우선 과제다 — decision/0002 개정 이력 참조.
+**D1 은 운영 하나뿐이다**([0015](docs/decision/0015-single-production-d1.md), 2026-08-05).
+dev D1 은 폐기했고 로컬 Miniflare 사본도 없다 — 바인딩에 `remote = true` 가 걸려 있어
+`npm run dev` 는 **띄우는 순간 실제 운영 DB 에 붙는다.**
+
+**연습할 곳이 없다.** 화면의 '삭제' 두 번 클릭은 실제 고객의 키·이메일·사용량을 지운다
+(불가역). 예전에는 플래그를 빠뜨리면 로컬로 떨어졌지만 **이제 기본값이 운영이다.**
+
+살아남은 경계는 하나다 — **남의 표 스키마는 못 바꾼다.** DDL 은 `npm run d1` 이 전부 막고,
+스키마 변경은 `migrations/` 추가 파일 + `npm run migrate` 로만 한다.
+
+배포는 `npm run deploy:prod`(→ `ops.ask-seoul.kr`). **`dev` 브랜치 머지가 곧 운영 배포다**
+(CD `.github/workflows/deploy-prod.yml`) — 브랜치 이름과 배포 환경이 다르다.
+⚠️ 읽기 경로는 여전히 무인증이라(decision/0004) Access 승격(#20 B-1)이 미완인 채 공개된다.
 
 ## 실행
 
-D1 은 게이트웨이와 **같은 로컬 상태를 공유**한다(`--persist-to`). 서빙 품질 원본인
-`_gateway_request_log` 가 저쪽에 쌓이기 때문이다 — 그래서 **`../marketplace` 를 먼저 시드**해야 한다.
-
 사전 준비(Node 20+)·OS별 차이·증상별 해결은 **[../docs/setup.md](../docs/setup.md)**,
-환경별 설정 배치(로컬/운영 도메인·D1·시크릿)는 **[../docs/environments.md](../docs/environments.md)**
-가 정본이다. 둘 다 게이트웨이와 공유하는 문서라 실행 규약을 바꾸면 저쪽 담당자와 같이 고친다.
+환경 배치는 **[../docs/environments.md](../docs/environments.md)** 가 정본이다. 둘 다
+게이트웨이와 공유하는 문서라 실행 규약을 바꾸면 저쪽 담당자와 같이 고친다.
 
 ```bash
 # macOS / Linux
 cd ops-dashboard
 npm install
-npm run seed         # _ops_slo/_ops_domain + 조회 DB 4종 미러 → 공유 D1 (표만, 데이터 0건)
+cp .env.example .env  # CLOUDFLARE_API_TOKEN — 원격 바인딩이라 자격증명 없이는 안 뜬다
 node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" > .dev.vars
-npm run dev          # http://localhost:8788
+npm run dev           # http://localhost:8788 — 🔴 운영 D1
 ```
 
 ```powershell
 # Windows (PowerShell) — openssl 은 없다. && 도 없다.
 cd ops-dashboard
 npm install
-npm run seed
+Copy-Item .env.example .env
 node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" | Set-Content .dev.vars -Encoding ascii
-npm run dev          # http://localhost:8788
+npm run dev           # http://localhost:8788 — 🔴 운영 D1
+```
+
+스키마를 적용해야 하면(콘솔 소유 `_ops_slo`·`_ops_domain`):
+
+```bash
+npm run migrate:list  # 무엇이 적용됐나 먼저 본다
+npm run migrate       # CREATE IF NOT EXISTS 뿐 — 있는 표는 안 건드린다
 ```
 
 `.dev.vars` 는 `.gitignore` 대상이다(커밋 금지). 변수의 의미는
@@ -189,37 +201,16 @@ wrangler 가 토큰을 못 읽는데, 기동 로그에는 `Using secrets defined
 | `_ops_pipeline_state` | 작업(DAG)별 마지막 결과 + 점검 상태 |
 | `_ops_pipeline_expectation` | 얼마나 자주 돌아야 하는지(감시 대상 여부) |
 
-**이 표들은 로컬 Miniflare 에 없다** — 팀 dev D1 에 있다. 그래서 보려면 원격 바인딩으로 띄운다.
+이 표들의 **실측이 운영 D1 에만 있었다**는 것이 dev D1 을 폐기한 직접적인 이유다
+(실측 2026-08-04: dev `_ops_run_event` **0행** vs 운영 **19,832행**). 이제 `npm run dev`
+하나로 보인다 — 두 환경을 오갈 일이 없다([0015](docs/decision/0015-single-production-d1.md)).
 
-```bash
-cp .env.example .env    # CLOUDFLARE_API_TOKEN (D1:Read 면 충분)
-npm run dev:dev-d1      # 팀 dev D1 → :8798   🔒 보기 전용
-npm run dev:prod-d1     # 운영 D1   → :8799   🔒 보기 전용
-```
+지금 어느 DB 를 보고 있는지는 **상단 배지**가 늘 말한다. 이제 언제나 운영이라 배지는 늘
+붉은색이고, 옆에 마지막으로 읽은 시각이 붙는다. 재적재·정기런을 지켜볼 때는 **자동
+새로고침**(상단 버튼, 30초)을 켠다 — 화면이 멈춘 건지 값이 안 변한 건지 구분된다.
 
-포트를 갈라 뒀으므로 로컬(:8788)까지 **셋을 동시에 띄워 놓고 비교**할 수 있다. 절차는
-[../docs/run-remote-dev.md](../docs/run-remote-dev.md) · [../docs/run-prod.md](../docs/run-prod.md).
-
-지금 어느 DB 를 보고 있는지는 **상단 배지**가 늘 말한다 — 운영은 붉은색이고, 원격이면
-`· 보기 전용` 이 붙고, 옆에 마지막으로 읽은 시각이 있다. 재적재·정기런을 지켜볼 때는
-**자동 새로고침**(상단 버튼, 30초)을 켠다 — 화면이 멈춘 건지 값이 안 변한 건지가 갈린다.
-
-⚠️ `--remote` 는 **그 자체로는** 읽기 전용이 아니다 — 붙은 상태에서 키 차단·삭제를 누르면
-그 D1 에 그대로 적용된다([0002](docs/decision/0002-local-only-mentor-gate.md) 불변 경계).
-그래서 위 두 스크립트가 `--var ENV_READONLY:1` 을 넘겨 **코드로 잠근다** — `canWrite()` 가
-무조건 false, `requireWrite()` 가 503, 화면의 잠금 해제 버튼은 눌리지 않는다
-([0013](docs/decision/0013-remote-readonly-attach.md)).
-
-**안전한 것은 `--remote` 가 아니라 스크립트 경로다.** `npx wrangler dev --remote` 로 직접
-붙으면 빗장이 없다. 예전에는 스크립트 이름(`dev:prod-readonly`)이 약속을 상기시키는 게
-전부였는데, **이름은 실수를 막지 못한다** — 그래서 도구가 강제하도록 바꿨다.
-
-SQL 로 직접 볼 때는 읽기 문장만 통과하는 질의기를 쓴다:
-
-```bash
-npm run d1:prod -- "SELECT COUNT(*) AS n FROM _ops_run_event"
-# DELETE·DROP·세미콜론 체이닝은 거절된다
-```
+⚠️ **배지가 "운영"이라고 말하는 것이 정상이다.** 예전에는 그 배지가 경고였지만 이제는
+상태 표시일 뿐이라, 눈에 익어 안 읽히기 쉽다. 조치 버튼을 누르기 전에 한 번 더 본다.
 
 ### 모른다 ≠ 0
 
@@ -230,30 +221,20 @@ npm run d1:prod -- "SELECT COUNT(*) AS n FROM _ops_run_event"
 집계표(`_ops_daily_metric`)가 비었는데 원본에는 기록이 있으면 그 사실을 배너로 알린다.
 콘솔이 집계를 대신 만들지는 않는다 — 만드는 순간 정본이 둘이 된다.
 
-## 합성 데이터는 화면에 오르지 않는다
+## "이 숫자는 합성 예시입니다" 배너는 무엇을 보고 뜨나
 
-예전에는 합성 행을 **보여주고 배너로** "이 값으로 판단하지 마세요"를 붙였다. 그래도
-**화면에 있으면 읽힌다** — 사람은 경고보다 숫자를 먼저 본다. 그래서 배너를 없애고
-**질의에서 아예 뺐다**(2026-08-04):
-
-| 표 | 배제 조건 |
-|---|---|
-| `_ops_slo` | `is_sample = 1` |
-| `_ops_run_event` | `event_id LIKE 'smp_%'` |
-| `_ops_daily_metric` · `_ops_pipeline_state` · `_ops_pipeline_expectation` | `updated_at = 'sample'` |
-
-배제 조건은 **환경 필터와 같은 조각**(`evWhere`)에 얹혀 있다 — 흩어 두면 새 질의에서
-빠뜨리고, 그게 합성이 새는 경로다. `npm run seed` 도 픽스처를 실행하지 않는다(표만 만든다).
-
-남은 것은 `meta.pipeline_source` 두 상태뿐이다. `sample` 상태는 **존재할 수 없어 폐기했다**.
+**환경(dev/prod)이나 D1 이 아니라 `_ops_slo` 행의 `is_sample` 값**을 본다. 서버가 세 상태로
+갈라 내보내고(`meta.pipeline_source`), 화면은 그에 맞는 문구와 **다음에 할 일**을 적는다.
 
 | `pipeline_source` | 언제 | 화면 |
 |---|---|---|
-| `none` | 그 기간에 (합성을 뺀) `_ops_slo` 행이 없다 | "기록이 없습니다" |
-| `live` | 실측 행이 있다 | 정상 표시 |
+| `none` | 그 기간에 `_ops_slo` 행이 없다 | "기록이 없습니다" + `npm run seed` 안내 |
+| `sample` | `is_sample=1` 이 섞였다 | 합성 배너 + 실측으로 바꾸는 법 |
+| `live` | 전부 `is_sample=0` | 배너 없음 |
 
-**환경을 바꿔도 이 값은 안 바뀐다.** 어느 D1 이든 `_ops_slo` 에는 **우리가 넣은 것만** 들어 있고,
-실측을 넣는 경로(culture DAG 의 export task)가 아직 안 붙어서 로컬은 `none` 이 정상이다.
+**환경을 바꿔도 이 값은 안 바뀐다.** 어느 D1 이든 `_ops_slo` 에는 **우리가 넣은 것만** 들어 있기
+때문이다. 파이프라인은 이미 실행 기록을 조회 DB 에 싣고 있는데(아래) **콘솔이 아직 그걸 읽지
+않아서**, 로컬에는 `npm run seed` 의 합성값만 남는다.
 
 ### 정본 공급자는 조회 DB 4종이다
 
@@ -263,8 +244,8 @@ npm run d1:prod -- "SELECT COUNT(*) AS n FROM _ops_run_event"
 ASAC-DAG#647 병합 후 **#655**(2026-08-03)가 실제 조회 DB 에 표 4종 생성 · 52건 적재를 확인했다.
 
 콘솔은 이제 그 4종을 **직접 읽는다**(실행 기록 탭, [0009](docs/decision/0009-ops-records-consumption.md)).
-`_ops_slo` 는 그 옆에 남은 **보조 스냅샷**이고, 로컬에는 아무것도 안 들어간다 — 그래서
-환경을 바꿔도 `pipeline_source` 는 `none` 그대로다. 4종의 실측을 보려면 `npm run dev:dev-d1`.
+`_ops_slo` 는 그 옆에 남은 **보조 스냅샷**이고, 로컬에는 `npm run seed` 의 합성값
+(`is_sample=1`)만 들어간다 — 그래서 환경을 바꿔도 `pipeline_source` 는 안 바뀐다.
 
 선행 조건이던 **#78 D-6**(마이그레이션 DROP 금지)은 처리됐다 —
 [0007](docs/decision/0007-schema-single-file-reset.md) 개정으로 증분 규약이 됐다.
@@ -279,13 +260,12 @@ Cloudflare Worker 가 애초에 닿지도 못한다([0005](docs/decision/0005-sl
 
 ## `_ops_slo` 를 채우는 법
 
-`npm run seed` 는 **표만 만든다** — 행은 넣지 않는다. 그래서 로컬의 이 탭은 비어 있는 게 정상이다
-("기록이 없습니다").
+```bash
+npm run seed   # fixtures/slo_sample.sql — 모든 행에 is_sample=1, 화면에 경고 배너가 뜬다
+```
 
 실측을 넣는 정규 경로는 **culture DAG 의 export task**(팀 D1 쓰기 = 승인 주체 미정(agreement §8-3))다.
-그게 붙기 전까지 이 탭에 올릴 숫자는 없다 — 합성으로 채우지 않는다(위 절).
-픽스처([fixtures/slo_sample.sql](fixtures/slo_sample.sql))는 화면 경로 확인용으로 남겨 뒀고,
-손으로 넣어도 질의가 `is_sample=1` 을 빼므로 화면은 그대로 비어 있다.
+그전까지 이 탭의 숫자는 합성이고, 화면이 그걸 배너로 직접 밝힌다.
 
 ### 초록 위장을 놓치지 않는다
 
@@ -310,9 +290,8 @@ URL 에 싣지 않으며, 페이지는 `noindex` 다.
 ## 승격 경로
 
 - `_ops_slo` 실적재 — culture SLO export task(내 도메인) → 나머지 도메인은 각자 (팀 합의)
-- 운영 기록 — 지금은 `npm run dev:dev-d1`(보기 전용)로만 실측이 보인다. 표 4종은 이미 팀 D1 에
-  실존한다(ASAC-DAG 적재기, 2026-08-02 이후분) — 로컬 기본 바인딩으로 승격하는 건
-  팀 D1 접근 규약이 정해진 뒤다
+- 운영 기록 — 합성 샘플 → 팀 조회 DB 소비. 표 4종은 이미 팀 D1 에 실존한다(ASAC-DAG 적재기,
+  2026-08-02 이후분) — 콘솔 승격 시 연결만 하면 된다
 - 인증 — 공유 토큰 → Cloudflare Access / org OAuth
 - 알림 — 지금은 조회 전용. 정기런 실패 시 푸시는 Airflow 콜백(DeadlineAlert) 쪽이 맞다
 
