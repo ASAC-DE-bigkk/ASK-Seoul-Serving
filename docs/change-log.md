@@ -40,6 +40,62 @@
 
 ## 2026-08-05
 
+### 원격 D1 접속을 명령으로 만들고, 보기 전용 빗장을 코드로 내린다
+
+- **작업자**: @Exisign
+- **의도 · 목표**: "npm run 에 환경 옵션을 줘서 개발/운영 D1 에 붙을 수 있게" — 단
+  **로컬에서 붙어 확인만 하는 용도**로. 그런데 확인만 하려면 "확인만"이 **말이 아니라
+  코드로 보장**돼야 한다. `wrangler dev --remote` 는 읽기 전용 모드가 **아니고**, 지금까지
+  그 경계를 지킨 것은 environments.md 의 경고문 한 줄이었다:
+  "그 상태에서 조치 버튼을 누르지 않는다 / 안전장치를 코드로 넣을지는 미정".
+  화면은 로컬일 때와 똑같이 생겼고, 조치는 **되돌릴 수 없는 삭제**를 포함한다 —
+  경고문으로 지킬 수 있는 경계였다면 애초에 불변 경계가 아니다.
+- **조치**:
+  - **콘솔의 쓰기 표면을 먼저 전수 확인했다**(읽기만). `_keys` UPDATE 2건 · `_usage`·
+    `_burst`·`_keys` DELETE 3건이 전부이고 **모두 `keyAction()` 안**(714–730), 그 함수의
+    유일한 호출부가 `requireWrite` 뒤(758)다. 즉 **가드 한 곳으로 완전히 잠긴다.**
+  - `ENV_READONLY=1` → `canWrite()` 무조건 false, `requireWrite()` 가 **토큰 검사보다 먼저**
+    503 `read-only mode`. 401(인증)이 아닌 이유는 **원인이 토큰이 아니라 대상 DB** 라서다.
+  - 빗장을 `wrangler.toml` 이 아니라 **`--var` 로 명령에 붙였다.** `[env.production.vars]`
+    에 박으면 언젠가 그 섹션으로 배포할 때 따라가는데, 배포된 콘솔은 조치가 되어야 한다.
+    잠가야 하는 건 *운영 D1* 이 아니라 **"내 노트북에서 운영 D1 에 붙은 상태"** 이고,
+    그건 환경이 아니라 **실행 방식**이다.
+  - 스크립트: `dev:dev-d1`(:8798) · `dev:prod-d1`(:8799) · `d1:local`·`d1:dev`·`d1:prod`.
+    포트를 갈라 **로컬까지 셋을 동시에 띄워 비교**할 수 있다.
+    옛 `dev:remote`·`dev:prod-readonly` 는 이 이름으로 바뀌었다 — **`prod-readonly` 는
+    이름이 거짓말이었다**(readonly 를 도구가 강제하지 않았다).
+    ⚠️ 이 문서의 2026-08-04 이전 항목에 나오는 옛 이름은 그때의 기록이라 그대로 둔다.
+  - `scripts/d1-query.mjs` — SELECT·WITH·PRAGMA·EXPLAIN **한 문장만** 통과하는 화이트리스트.
+    블랙리스트를 안 쓴 이유는 빠뜨린 낱말이 곧 사고이기 때문이다(`REPLACE INTO`·`VACUUM`·
+    `ATTACH` 는 처음 목록에 없었다). 문자열·주석은 검사 전에 지운다 — 안 지우면
+    `SELECT 'DELETE' AS x` 가 막히고 주석 뒤에 숨긴 문장을 놓친다.
+  - `wrangler.toml` 에 `[env.dev]` 신설 — `--remote` 를 기본 환경으로 쓰면 화면 배지가
+    "로컬 개발"이라고 **거짓말한다.** 어느 DB 를 보는지가 이 콘솔의 제일 중요한 정보다.
+  - 화면: 환경 배지에 `· 보기 전용`, 잠금 해제 버튼이 `보기 전용 · 원격 D1` 로 바뀌고
+    눌리지 않는다. `meta.env.readonly` 를 `can_write` 와 **따로** 실었다 — 합치면 화면이
+    "토큰이 맞지 않습니다"라는 거짓말을 하고, 멀쩡한 세션 토큰까지 지운다.
+  - 문서: [decision/0013](../ops-dashboard/docs/decision/0013-remote-readonly-attach.md) 신규 ·
+    **환경별 실행 매뉴얼 3장**([run-local](run-local.md)·[run-remote-dev](run-remote-dev.md)·
+    [run-prod](run-prod.md)) · 공동 문서 지도 [docs/index.md](index.md) 신규 ·
+    루트 README·ops-dashboard docs/index 에 매핑 · environments.md 의 "안전장치 미정" 닫음.
+- **결과**:
+  - **실측 검증**(로컬 워커에 `--var` 로 강제 주입해 확인):
+
+    | 시나리오 | 결과 |
+    |---|---|
+    | 읽기 전용 + **올바른 토큰**으로 조치 | `503 read-only mode` (problem+json) ✅ |
+    | 읽기 전용에서 `meta` | `can_write=false` · `env.readonly=true` ✅ |
+    | **회귀** — 빗장 없이 같은 토큰 | `404 unknown key` (쓰기 경로 도달) · `can_write=true` ✅ |
+    | `d1-query` 거절 6종 | DELETE · DROP · `SELECT 1; DELETE` · `WITH…DELETE` · `PRAGMA …=` · 없는 환경 ✅ |
+    | `d1-query` 통과 | `SELECT 'DELETE' AS label` (리터럴은 안 걸린다) ✅ |
+    | `[env.dev]` 파싱 | wrangler 가 로드 ✅ |
+  - **`marketplace` 는 손대지 않았다.** 저쪽은 `_burst`·`_usage`·`_gateway_request_log`
+    때문에 **GET 하나에도 D1 에 쓴다** — 같은 빗장으로는 "보기 전용"이 성립하지 않고,
+    계량 경로를 어떻게 할지가 먼저다. **그 판단은 게이트웨이 담당자 몫**이므로 원격 접속
+    경로를 만들지 않았고, 공동 문서에는 "담당자 판단 대기"로만 적었다.
+  - 남은 것: 운영 D1 에 콘솔 표(`_ops_slo`·`_ops_domain`)를 만드는 일은 여전히 **사람이
+    직접 실행하는 팀 D1 쓰기**다. `dev:prod-d1` 은 그 일을 하지 않는다.
+
 ### 시드가 합성값을 넣는다고 말하던 문서 정리 + 재발 방지 대응표
 
 - **작업자**: @Exisign

@@ -50,6 +50,33 @@ migrations_dir = "migrations"
 # 소유가 갈리면 장부도 갈려야 한다 — 콘솔 표는 콘솔 장부가 센다.
 migrations_table = "d1_migrations_ops_dashboard"
 
+# ── 팀 dev D1 을 보기 위한 환경 (2026-08-05) ─────────────────────────────────
+# 파이프라인이 싣는 운영 기록 4종의 **실측은 팀 dev D1 에만** 있다 — 로컬 Miniflare 에는
+# 표만 있고 비어 있다(decision/0009). 그걸 화면으로 보려면 원격 바인딩이 필요한데,
+# 기본 환경으로 `--remote` 를 쓰면 화면 배지가 "로컬 개발"이라고 **거짓말을 한다.**
+# 어느 DB 를 보고 있는지가 이 콘솔에서 제일 중요한 정보라 환경을 따로 판다.
+#
+# ⚠️ 이 환경은 **보기 전용이다.** 읽기 전용 빗장(ENV_READONLY)은 여기 두지 않고
+# `package.json` 의 `dev:dev-d1` 이 `--var` 로 넘긴다 — 설정에 박아 두면 언젠가
+# 이 섹션으로 배포할 때 같이 따라가고, 그때는 조치가 되어야 하기 때문이다(decision/0013).
+[env.dev]
+name = "ask-seoul-ops-dashboard"
+
+[env.dev.assets]
+directory = "public"
+run_worker_first = ["/api/*"]
+
+[env.dev.vars]
+ENV_LABEL = "팀 dev"
+ENV_D1 = "ask-seoul-dev-d1"
+# 개발 D1 은 거르지 않는다 — 기본 환경과 같은 이유다(섞인 것도 다 보이는 편이 낫다).
+ENV_SCOPE = ""
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "ask-seoul-dev-d1"
+database_id = "9db0e851-558e-489f-9e76-f131d25aa267"
+
 # ── 배포 전용 환경 (2026-08-03) ──────────────────────────────────────────────
 # 게이트웨이 [env.production](../marketplace/wrangler.toml)과 같은 규약. 콘솔의 운영
 # 호스트는 `ops.ask-seoul.kr` 로 게이트웨이(`ask-seoul.kr` 기준 도메인)와 서브도메인으로

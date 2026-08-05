@@ -4,6 +4,10 @@
 **설명 + 명령어** 단위로 묶었다. 왜 이런 구조인지는 [decision/](index.md#결정--docsdecision),
 경계는 [../CLAUDE.md](../CLAUDE.md) 4절이 정본이다.
 
+> **환경별 실행 절차는 공동 문서에 한 장씩 있다** — [로컬](../../docs/run-local.md) ·
+> [팀 dev D1](../../docs/run-remote-dev.md) · [운영 D1](../../docs/run-prod.md).
+> 여기는 콘솔 **한 프로젝트의** 검증·조치 절차다.
+
 ---
 
 ## 1. 처음 여는 사람 — 구동까지
@@ -162,12 +166,27 @@ python domains/commerce/scripts/backfill_ops_records.py --since 2026-07-01 --unt
 실측은 팀 조회 DB 에만 있다 — 보려면 원격 바인딩으로 띄운다:
 
 ```bash
-npm run dev:remote    # 팀 D1 을 그대로 읽는다
+npm run dev:dev-d1    # 팀 dev D1 → :8798, 보기 전용
+npm run dev:prod-d1   # 운영 D1   → :8799, 보기 전용
 ```
 
-`--remote` 는 읽기 전용 모드가 **아니다** — 그 상태에서 한 키 조치는 팀 DB 에 적용된다.
-**보기 위한 모드**다([0002](decision/0002-local-only-mentor-gate.md)). 표 이름·컬럼이 로컬
-미러와 같으므로 화면 코드는 양쪽에서 그대로 돈다.
+`--remote` 는 **그 자체로는** 읽기 전용이 아니다 — 붙은 상태에서 한 키 조치는 팀 DB 에
+그대로 적용된다([0002](decision/0002-local-only-mentor-gate.md) 불변 경계). 그래서 위 두
+스크립트가 `--var ENV_READONLY:1` 을 넘겨 **코드로 잠근다** — 잠금 해제 버튼이
+`보기 전용 · 원격 D1` 로 바뀌어 눌리지 않고, 조치를 강제로 보내면 `503 read-only mode` 다
+([0013](decision/0013-remote-readonly-attach.md)).
+
+**안전한 것은 `--remote` 가 아니라 위 스크립트 경로다.** `npx wrangler dev --remote` 로 직접
+붙으면 빗장이 없다. 표 이름·컬럼은 로컬 미러와 같으므로 화면 코드는 양쪽에서 그대로 돈다.
+자세한 절차는 [../../docs/run-remote-dev.md](../../docs/run-remote-dev.md) ·
+[../../docs/run-prod.md](../../docs/run-prod.md).
+
+SQL 로 직접 볼 때는 읽기 문장만 통과하는 질의기를 쓴다:
+
+```bash
+npm run d1:dev  -- "SELECT COUNT(*) AS n FROM _ops_run_event"
+npm run d1:prod -- "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+```
 
 과거에 픽스처를 넣어 둔 로컬 상태라면, 남은 합성 행을 걷어낸다(실측과 섞임 방지):
 
@@ -227,7 +246,7 @@ curl -s -X POST "$BASE/api/keys" -H "authorization: Bearer $TOKEN" \
 | 증상 | 원인 | 조치 |
 |---|---|---|
 | '기록이 없습니다' (데이터 준비 상태) | `_ops_slo` 가 비었다 — 시드는 표만 만든다 | 정상. 실측은 §4-1 의 export task 가 붙어야 들어온다 |
-| 실행 기록 탭이 비었다 | 로컬 D1 에는 4종의 실측이 없다 | `npm run dev:remote` (§4-2) |
+| 실행 기록 탭이 비었다 | 로컬 D1 에는 4종의 실측이 없다 | `npm run dev:dev-d1` (§4-2) |
 | '조회 DB 표가 없습니다' | `npm run seed` 전 | `npm run seed` |
 | '서빙 로그를 찾지 못했습니다' | 게이트웨이 미시드 / `--persist-to` 불일치 | `cd ../marketplace && npm run seed`, 경로 확인 |
 | 조치 버튼이 안 보인다 | 읽기 전용 모드 | 상단 잠금 해제 (`.dev.vars` 의 `OPS_TOKEN`) |

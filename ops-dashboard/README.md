@@ -47,7 +47,7 @@
 - **관측 공백** — 도메인×단계 매트릭스의 빈 칸: 그 단계는 기록 자체를 안 남긴다
 - **환경 섞임** — 한 조회 DB 에 dev 가 섞이면 운영 지표가 오염된다 (#78 Z-7, 실해 있음)
 
-로컬 D1 에는 4종의 실측이 없다 — `npm run dev:remote` 로 팀 조회 DB 를 읽는다. 표
+로컬 D1 에는 4종의 실측이 없다 — `npm run dev:dev-d1`(보기 전용)로 팀 조회 DB 를 읽는다. 표
 이름·컬럼이 로컬 미러와 같아 화면 코드는 양쪽에서 그대로 돈다. 시나리오별 확인 방법은
 [runbook §3](docs/runbook.md).
 
@@ -188,19 +188,34 @@ wrangler 가 토큰을 못 읽는데, 기동 로그에는 `Using secrets defined
 **이 표들은 로컬 Miniflare 에 없다** — 팀 dev D1 에 있다. 그래서 보려면 원격 바인딩으로 띄운다.
 
 ```bash
-cp .env.example .env         # CLOUDFLARE_API_TOKEN (D1:Read 면 충분)
-npm run dev:remote           # 개발 D1  → :8788
-npm run dev:prod-readonly    # 운영 D1  → :8798 (포트를 갈라 두 화면을 같이 띄운다)
+cp .env.example .env    # CLOUDFLARE_API_TOKEN (D1:Read 면 충분)
+npm run dev:dev-d1      # 팀 dev D1 → :8798   🔒 보기 전용
+npm run dev:prod-d1     # 운영 D1   → :8799   🔒 보기 전용
 ```
 
-지금 어느 DB 를 보고 있는지는 **상단 배지**가 늘 말한다 — 운영은 붉은색이고, 옆에 마지막으로
-읽은 시각이 붙는다. 재적재·정기런을 지켜볼 때는 **자동 새로고침**(상단 버튼, 30초)을 켠다.
-켜 두면 화면이 멈춘 건지 값이 안 변한 건지를 시각으로 구분할 수 있다.
+포트를 갈라 뒀으므로 로컬(:8788)까지 **셋을 동시에 띄워 놓고 비교**할 수 있다. 절차는
+[../docs/run-remote-dev.md](../docs/run-remote-dev.md) · [../docs/run-prod.md](../docs/run-prod.md).
 
-⚠️ `--remote` 는 읽기 전용 모드가 아니다 — 그 상태에서 키 차단·삭제를 누르면 그 D1 에
-그대로 적용된다([0002](docs/decision/0002-local-only-mentor-gate.md) 불변 경계).
-**보기 위한 모드다.** 스크립트 이름에 `readonly` 를 붙인 건 그 약속을 상기시키려는 것이지
-도구가 강제하는 게 아니다.
+지금 어느 DB 를 보고 있는지는 **상단 배지**가 늘 말한다 — 운영은 붉은색이고, 원격이면
+`· 보기 전용` 이 붙고, 옆에 마지막으로 읽은 시각이 있다. 재적재·정기런을 지켜볼 때는
+**자동 새로고침**(상단 버튼, 30초)을 켠다 — 화면이 멈춘 건지 값이 안 변한 건지가 갈린다.
+
+⚠️ `--remote` 는 **그 자체로는** 읽기 전용이 아니다 — 붙은 상태에서 키 차단·삭제를 누르면
+그 D1 에 그대로 적용된다([0002](docs/decision/0002-local-only-mentor-gate.md) 불변 경계).
+그래서 위 두 스크립트가 `--var ENV_READONLY:1` 을 넘겨 **코드로 잠근다** — `canWrite()` 가
+무조건 false, `requireWrite()` 가 503, 화면의 잠금 해제 버튼은 눌리지 않는다
+([0013](docs/decision/0013-remote-readonly-attach.md)).
+
+**안전한 것은 `--remote` 가 아니라 스크립트 경로다.** `npx wrangler dev --remote` 로 직접
+붙으면 빗장이 없다. 예전에는 스크립트 이름(`dev:prod-readonly`)이 약속을 상기시키는 게
+전부였는데, **이름은 실수를 막지 못한다** — 그래서 도구가 강제하도록 바꿨다.
+
+SQL 로 직접 볼 때는 읽기 문장만 통과하는 질의기를 쓴다:
+
+```bash
+npm run d1:prod -- "SELECT COUNT(*) AS n FROM _ops_run_event"
+# DELETE·DROP·세미콜론 체이닝은 거절된다
+```
 
 ### 모른다 ≠ 0
 
@@ -245,7 +260,7 @@ ASAC-DAG#647 병합 후 **#655**(2026-08-03)가 실제 조회 DB 에 표 4종 �
 
 콘솔은 이제 그 4종을 **직접 읽는다**(실행 기록 탭, [0009](docs/decision/0009-ops-records-consumption.md)).
 `_ops_slo` 는 그 옆에 남은 **보조 스냅샷**이고, 로컬에는 아무것도 안 들어간다 — 그래서
-환경을 바꿔도 `pipeline_source` 는 `none` 그대로다. 4종의 실측을 보려면 `npm run dev:remote`.
+환경을 바꿔도 `pipeline_source` 는 `none` 그대로다. 4종의 실측을 보려면 `npm run dev:dev-d1`.
 
 선행 조건이던 **#78 D-6**(마이그레이션 DROP 금지)은 처리됐다 —
 [0007](docs/decision/0007-schema-single-file-reset.md) 개정으로 증분 규약이 됐다.
@@ -291,7 +306,7 @@ URL 에 싣지 않으며, 페이지는 `noindex` 다.
 ## 승격 경로
 
 - `_ops_slo` 실적재 — culture SLO export task(내 도메인) → 나머지 도메인은 각자 (팀 합의)
-- 운영 기록 — 지금은 `npm run dev:remote` 로만 실측이 보인다. 표 4종은 이미 팀 D1 에
+- 운영 기록 — 지금은 `npm run dev:dev-d1`(보기 전용)로만 실측이 보인다. 표 4종은 이미 팀 D1 에
   실존한다(ASAC-DAG 적재기, 2026-08-02 이후분) — 로컬 기본 바인딩으로 승격하는 건
   팀 D1 접근 규약이 정해진 뒤다
 - 인증 — 공유 토큰 → Cloudflare Access / org OAuth

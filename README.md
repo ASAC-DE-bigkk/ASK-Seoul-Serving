@@ -56,10 +56,23 @@ dbt manifest·Airflow 메타DB를 직접 읽는 경로는 존재하지 않는다
 
 | 문서 | 무엇 |
 |---|---|
+| [**docs/index.md**](docs/index.md) | **공동 문서 지도** — 아래 전부의 입구 |
 | [docs/agreement.md](docs/agreement.md) | **합의 정본** — 결정·경계·폐기된 안·남은 과제 |
 | [docs/change-log.md](docs/change-log.md) | **변경 이력** — 언제 무슨 의도로 코드에 닿았나(날짜·작업자·의도·조치·결과) |
-| [docs/setup.md](docs/setup.md) | 사전 준비(Node 20+)·OS별 실행 절차·증상별 해결 |
-| [docs/environments.md](docs/environments.md) | 환경 규약 — 설정 배치, local/prod 도메인·D1, 실행 파라미터 배분 |
+| [docs/setup.md](docs/setup.md) | 사전 준비(Node 20+)·OS별 설치·증상별 해결 |
+| [docs/environments.md](docs/environments.md) | 환경 **구조** — 설정 배치, local/prod 도메인·D1, 실행 파라미터 배분 |
+
+**환경별 실행 매뉴얼** — 셋의 차이는 플래그가 아니라 **쓰기가 되느냐**다.
+
+| 매뉴얼 | D1 | 쓰기 | 언제 |
+|---|---|---|---|
+| [docs/run-local.md](docs/run-local.md) | 로컬 sqlite (공유) | ✅ 가능 | 평소 개발·조치 |
+| [docs/run-remote-dev.md](docs/run-remote-dev.md) | 팀 `ask-seoul-dev-d1` | 🔒 잠김 | 운영 기록 4종 **실측**을 볼 때 |
+| [docs/run-prod.md](docs/run-prod.md) | `ask-seoul-prod-d1` | 🔒 잠김 | 운영 데이터를 눈으로 확인할 때 |
+
+플래그가 없으면 언제나 로컬이다. 원격 둘은 **배포가 아니라** 내 노트북의 워커가 팀 D1 에
+붙는 것이고, 잠금은 경고문이 아니라 코드다
+([ops-dashboard decision/0013](ops-dashboard/docs/decision/0013-remote-readonly-attach.md)).
 
 ```bash
 # macOS / Linux

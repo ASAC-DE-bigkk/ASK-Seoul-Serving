@@ -28,6 +28,7 @@ ops-dashboard 의 문서는 **세 층**이고, 층마다 구속력이 다르다.
 | [0010](decision/0010-behavior-log-console-first.md) | 행동 로그 콘솔 선반영 | 이용 행동 탭 — 수집 스펙은 #9 검토 중, ALTER 미러 금지 |
 | [0011](decision/0011-per-env-config.md) | 환경별 설정 | 한 파일 + `[env.production]` — 플래그 없으면 로컬, 실수의 방향이 안전한 쪽 |
 | [0012](decision/0012-runs-tab-observation-boundaries.md) | 실행 기록의 관측 경계 | 환경 스코프·신선도·감시 3분류·로그 번들 — **못 거른 범위까지 화면이 밝힌다** |
+| [0013](decision/0013-remote-readonly-attach.md) | 원격은 **보기 전용**으로만 | 경고문을 빗장으로 — `--remote` 는 읽기 전용이 아니다. 빗장은 설정이 아니라 **명령**에 딸려 온다 |
 
 ## 방향 — docs/direction.md
 
@@ -58,9 +59,13 @@ decision/ 이 정한다.
 
 | 정본 | 내용 |
 |---|---|
+| [**`../../docs/index.md`**](../../docs/index.md) | **공동 문서 지도** — 아래 문서들의 입구. 환경별 실행 매뉴얼 셋이 여기 매핑돼 있다 |
 | [**`../../docs/agreement.md`**](../../docs/agreement.md) | **합의 정본** — 이슈에 흩어져 있던 결정을 하나로. 수집 축·소유 경계·환경·배포·MCP + **폐기된 안** |
-| [`../../docs/setup.md`](../../docs/setup.md) | 로컬 실행 매뉴얼(macOS/Windows) — **게이트웨이 담당자와 공동 관리**. 실행 절차는 두 프로젝트가 하나를 공유한다 |
-| [`../../docs/environments.md`](../../docs/environments.md) | 환경 규약 — 설정 배치·로컬/운영 도메인·D1·`-c` 의 함정 셋. **공동 관리**([0011](decision/0011-per-env-config.md)의 실행 규약) |
+| [`../../docs/run-local.md`](../../docs/run-local.md) | **로컬 실행 매뉴얼** — 기본 환경. 시드 순서·비밀값·조치까지 (쓰기 가능한 유일한 환경) |
+| [`../../docs/run-remote-dev.md`](../../docs/run-remote-dev.md) | **팀 dev D1 매뉴얼** — 운영 기록 4종 실측을 보는 곳. **보기 전용**([0013](decision/0013-remote-readonly-attach.md)) |
+| [`../../docs/run-prod.md`](../../docs/run-prod.md) | **운영 D1 매뉴얼** — 배포가 아니라 원격 바인딩. **보기 전용** · Time Travel 이 DB 전체를 덮는다 |
+| [`../../docs/setup.md`](../../docs/setup.md) | OS별 사전 준비(macOS/Windows) — **게이트웨이 담당자와 공동 관리**. Node 설치·PATH·인코딩 함정 |
+| [`../../docs/environments.md`](../../docs/environments.md) | 환경 **구조** — 설정 배치·로컬/운영 도메인·D1·`-c` 의 함정 셋. **공동 관리**([0011](decision/0011-per-env-config.md)의 실행 규약) |
 | ASK-Seoul#78 | 저장소·운영 기록 적용 규약 v1 — 존/경로/확인서/보관/기록 형식/값 집합/조회 DB |
 | ASAC-DAG `common/ops/d1_ops.py` | 조회 DB 테이블 4종(`_ops_run_event` 등) 스키마 정본 |
 | `../marketplace/migrations/` | `_keys`·`_usage`·`_burst`·`_gateway_request_log` 스키마 정본 |
