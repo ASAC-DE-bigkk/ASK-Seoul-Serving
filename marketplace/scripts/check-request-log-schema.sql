@@ -13,8 +13,9 @@
 -- ⚠️ **행 수만 보면 못 잡는다.** ALTER 로 컬럼이 붙는 사고는 행 수가 그대로다.
 --    그래서 컬럼 수를 같이 본다.
 --
--- 실측 기준(2026-08-04, 읽기만): prod 4컬럼 `ts·path·query·token` ·
--- dev 5컬럼(= 위 사고로 `request_id` 가 이미 얹혀 있다. 그 자체가 이 검사가 필요한 증거다).
+-- 실측 기준(2026-08-05): prod·dev 모두 4컬럼 `ts·path·query·token`.
+-- dev 에 잘못 얹힌 `request_id` 는 작성자가 제거했다(#52). 이 검사는 적용 전후 4컬럼이
+-- 그대로인지 확인해 같은 사고의 재발을 막는다.
 --
 -- **사용법**: 원격 적용 전후로 돌려 값이 **변하지 않았음**을 본다.
 --   `npm run preflight` 가 같은 것을 보지만, 이건 apply 직후 한 줄로 확인하는 용도다.
@@ -33,7 +34,7 @@ SELECT
      AND EXISTS (SELECT 1 FROM pragma_table_info('_request_log') WHERE name IN ('route','request_id','product_id','env'))
       THEN 'STOP: 남의 표에 우리 컬럼이 얹혔다 — 우리 마이그레이션이 손댄 것이다'
     WHEN EXISTS (SELECT 1 FROM pragma_table_info('_request_log') WHERE name IN ('path','query','token'))
-      THEN 'OK: 남의 표 그대로 — 컬럼 수를 대조할 것 (prod 4 · dev 5)'
+      THEN 'OK: 남의 표 그대로 — 컬럼 수를 대조할 것 (prod·dev 모두 4)'
     ELSE 'OK: 0002 가 만든 우리 옛 표다 (로컬). 게이트웨이는 이제 _gateway_request_log 를 쓴다'
   END AS verdict,
   (SELECT COUNT(*) FROM _request_log) AS rows,
