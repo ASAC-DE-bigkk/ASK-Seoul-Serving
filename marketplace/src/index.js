@@ -9,7 +9,7 @@
 import {
   json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC,
   authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent, safeRows,
-  parseJsonArray,
+  parseJsonArray, loadRedistributionRights, redistributionBlockers, rightsBlockedProblem,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
 import { SKILL_BUNDLE_ID, handleSkillBundle, handleSkillData, handleSkillProduct } from "./skill.js";
@@ -315,6 +315,15 @@ async function handleData(env, id, params, keyRow, trace = {}) {
         { exported_at: meta.exported_at });
     where.push("rowid > ?");
     binds.push(cur.rid);
+  }
+
+  // 재배포 권리 게이트(#88 §1-2 B) — 쿼터보다 **앞**이다. 차단은 서빙이 아니므로 무과금이고,
+  // MCP `query_product` 가 이 함수를 그대로 쓰므로(mcp.js 의 deps.handleData) 같이 걸린다.
+  const rights = await loadRedistributionRights(env, meta.product_id);
+  const rightsBlockers = redistributionBlockers(rights);
+  if (rightsBlockers.length) {
+    trace.status = 503;   // waitUntil 로깅이 실제 응답 코드를 남기게(logStatus 규약)
+    return rightsBlockedProblem(meta.product_id, meta.publication_id, rightsBlockers);
   }
 
   // 쿼터는 유효한 요청(실제 서빙 직전)만 소모 — 400/404/409 는 무과금
