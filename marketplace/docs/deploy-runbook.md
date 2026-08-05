@@ -122,6 +122,12 @@ npm run smoke -- https://dev.ask-seoul.kr
 13항목 중 무인증 12개가 자동으로 돈다(MCP `initialize`·`tools/list` 포함). 인증까지 보려면
 키를 하나 발급해 `SMOKE_KEY=ask_… npm run smoke -- …`. 실패 신호는 §4 표와 같다.
 
+> 🔴 **이 스모크는 `/skill/v1` 을 보지 않는다.** 실측(2026-08-05): `scripts/smoke.mjs` 에
+> skill·bundle 검사가 **0건**이고 정적 확인도 `/legal`·`/llms.txt`·`/openapi.json` 셋뿐이라
+> `/skill-openapi.json` 이 빠져 있다. 즉 **게이트웨이가 서비스 가능한지**는 확인되지만
+> **K-Skill 계약(bundle exact-six · 제품 상세·데이터 · 범위 밖 404)은 확인되지 않는다** —
+> 그건 #4 담당이 따로 돌리는 remote smoke 의 몫이다. 스모크 PASS 를 계약 검증으로 읽지 않는다.
+
 **스모크 통과만으로는 관측을 확인할 수 없다** — 응답이 200 이어도 로그는 버려질 수 있다.
 한 바퀴 돌린 뒤 행이 실제로 늘었는지 본다:
 

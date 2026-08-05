@@ -69,7 +69,15 @@
   - 남은 것 ③: dev preflight 는 `_request_log` **오염**으로 🔴 중단 상태다. `--ack` 로
     통과시키려면 **#52 합의가 먼저** 있어야 한다(ack 는 판정을 바꾸지 않는다).
   - 남은 것 ④: `ISSUANCE_SALT` 는 환경마다 따로다 — `[env.dev]` 에 다시 넣어야 발급이 열린다.
-  - **미검증**: 실제 배포는 하지 않았다. `--env dev` 는 설정만 추가된 상태다.
+  - **로컬 실구동 검증**(`wrangler dev --env dev`, :8790): 네 네임스페이스가 전부 워커에
+    닿는다 — `/api/v1/catalog` 200 · `/api/v1/glossary` 401 · `/skill/v1/bundles/…` 401 ·
+    `POST /mcp` 200 · 없는 경로 404. 요청 로그도 `env='dev'` 로 기록돼 기존 `local` 행과
+    나란히 구분된다(route: `catalog`·`glossary`·`mcp`·`skill_bundle`). **`run_worker_first`
+    재선언이 실제로 먹는다**는 확인이다 — 이게 빠졌을 때의 모습이 현 배포본의 405 다.
+  - **미검증**: 실제 배포는 하지 않았다. 라우트 이전과 원격 D1 적용은 사람이 실행할 몫이다.
+  - 🔴 **덤으로 찾은 것**: `scripts/smoke.mjs` 에 **`/skill/v1` 검사가 0건**이고 정적 확인에
+    `/skill-openapi.json` 이 빠져 있다. 스모크 PASS 는 "게이트웨이가 서비스 가능하다"까지이지
+    K-Skill 계약 검증이 아니다 — §D-6 에 그 경계를 적었다.
 
 ---
 
