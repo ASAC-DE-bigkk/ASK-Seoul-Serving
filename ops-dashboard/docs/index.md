@@ -17,7 +17,7 @@ ops-dashboard 의 문서는 **세 층**이고, 층마다 구속력이 다르다.
 | # | 결정 | 한 줄 |
 |---|---|---|
 | [0001](decision/0001-separate-worker-from-marketplace.md) | 마켓플레이스와 별도 Worker | 청중이 다르고, 배포 단위가 갈려야 사고 반경도 갈린다 |
-| [0002](decision/0002-local-only-mentor-gate.md) | 로컬 전용 | `wrangler deploy` 금지 — 공개 URL 은 배포 결정(agreement §8) |
+| [0002](decision/0002-local-only-mentor-gate.md) | ~~로컬 전용~~ | **폐기** — 0015 가 대체. 그때의 판단으로만 읽는다 |
 | [0003](decision/0003-single-shared-local-d1.md) | 게이트웨이 D1 공유 | 원본 하나 — 복제 계층 없음, 부분 강등(`meta.missing`) |
 | [0004](decision/0004-read-open-write-token.md) | 읽기 공개·쓰기 토큰 | 보안 판단은 서버, 이메일은 서버측 마스킹 |
 | [0005](decision/0005-slo-snapshot-to-d1.md) | 파이프라인 상태의 정본 | **조회 DB 4종에서 읽는다**(#78 D-2) — 웨어하우스 직결 복사 경로는 폐기 |
@@ -26,8 +26,10 @@ ops-dashboard 의 문서는 **세 층**이고, 층마다 구속력이 다르다.
 | [0008](decision/0008-deferred-scope.md) | 후속으로 미룬 것 | 안 하기로 한 것의 전체 목록 + 도입 신호 |
 | [0009](decision/0009-ops-records-consumption.md) | 운영 기록 소비 | 조회 DB 4종을 읽기 전용으로 — 실행 기록 탭 (#78 적용 3단계) |
 | [0010](decision/0010-behavior-log-console-first.md) | 행동 로그 콘솔 선반영 | 이용 행동 탭 — 수집 스펙은 #9 검토 중, ALTER 미러 금지 |
-| [0011](decision/0011-per-env-config.md) | 환경별 설정 | 한 파일 + `[env.production]` — 플래그 없으면 로컬, 실수의 방향이 안전한 쪽 |
+| [0011](decision/0011-per-env-config.md) | 환경별 설정 | 한 파일 + `[env.production]` — **개정(0015)**: 기본 환경도 이제 운영이다 |
 | [0012](decision/0012-runs-tab-observation-boundaries.md) | 실행 기록의 관측 경계 | 환경 스코프·신선도·감시 3분류·로그 번들 — **못 거른 범위까지 화면이 밝힌다** |
+| [0014](decision/0014-console-route-contract.md) | 콘솔 route 계약 | route 17종 + 퇴역 2종 → 화면 문구 · `SERVE` 한 곳 · **못 가른 MCP 를 화면이 말한다** (#63) |
+| 🔴 [0015](decision/0015-single-production-d1.md) | **운영 D1 하나뿐** | dev D1 폐기 — 로컬도 운영에 직접 읽기/쓰기. **연습할 곳이 없다**. 남은 경계는 스키마뿐 |
 
 ## 방향 — docs/direction.md
 
