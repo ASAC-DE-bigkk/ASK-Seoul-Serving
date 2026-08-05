@@ -229,3 +229,16 @@ export function normalizeIntent(raw) {
   if (!value) return null;                       // 안 보낸 것과 못 알아본 것은 다르다
   return INTENT_RE.test(value) ? value : "other";
 }
+
+// D1 은 배열을 JSON 문자열로 싣는다(`requires`·`primary_key` — ASAC-DAG#638 §2). 깨진 값이
+// 와도 응답 전체를 죽이지 않는다 — 그 필드만 빈 배열로 두고 나머지를 서빙한다.
+// 같은 구현이 v1.js·skill.js 에 각각 있던 것을 여기로 모았다(정본이 셋이면 갈린다).
+export function parseJsonArray(raw) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}

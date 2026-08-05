@@ -5,7 +5,7 @@
 // 제품만 노출하고, 출처·권리·품질 증거가 아직 게시되지 않은 동안에는 데이터보다 먼저
 // `product_not_ready`를 반환한다. "모르는 데이터를 성공으로 보인다"보다 실패를 명시하는
 // 편이 등록 심사와 사용자 모두에게 안전하다.
-import { countUsage, json, problem, quotaExceededProblem, quotaHeaders, safeRows } from "./shared.js";
+import { countUsage, json, parseJsonArray, problem, quotaExceededProblem, quotaHeaders, safeRows } from "./shared.js";
 
 export const SKILL_BUNDLE_ID = "seoul-urban-analytics";
 
@@ -28,15 +28,6 @@ const MAX_LIMIT = 500;
 
 export const isSkillProduct = (productId) => PRODUCT_IDS.has(productId);
 
-function parseJsonArray(raw) {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
 
 function parseJsonObject(raw) {
   if (!raw) return null;

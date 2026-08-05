@@ -144,7 +144,8 @@ MCP 는 축이 둘인데 **경로는 둘 다 담당하지 않는다.**
 
 (정적)            사람           판 없음
   /docs /guide /catalog /status /support /legal /404
-  /llms.txt /openapi.json /skill-openapi.json /column-docs.json /usage-patterns.json
+  /llms.txt /openapi.json /skill-openapi.json
+  (column-docs.json · usage-patterns.json 은 퇴역 — 카탈로그 응답이 대신 싣는다)
 ```
 
 식별자는 세 문 모두 **`product_id` 한 벌**이다(0003). MCP `query_product` 도 이미 그렇게

@@ -7,6 +7,14 @@
 > 수집 축·소유 경계·환경 규약·공개 배포 결정과 **폐기된 안**이 거기 모여 있다. 같은 주제를
 > 두 번 논의하지 않기 위한 문서이므로, 이슈를 다시 뒤지기 전에 먼저 본다.
 
+> **작업 전에 [../docs/change-log.md](../docs/change-log.md) 를 읽는다** — 이 코드가 왜 이 모양인지,
+> 무엇이 이미 시도됐다 되돌려졌는지가 시간순으로 있다. 커밋 메시지는 *무엇을* 바꿨는지만
+> 남기고 **왜 그렇게 하기로 했나**는 거기 있다. 그리고 **작업이 끝나면 같은 커밋에서 한 항목을
+> 추가한다**(날짜 · 작업자 · 의도·목표 · 조치 · 결과) — 나중에 몰아 쓰면 의도가 이미 흐려져 있다.
+>
+> ⚠️ 그 문서는 2026-08-04 에 시작했다. **그 이전 작업은 뒤늦게 복원한 것이라 빠진 것이
+> 있을 수 있다** — 없다고 안 한 일은 아니다.
+
 이 프로젝트에 한정된 구속력 있는 결정은 [docs/decision/](docs/decision/)에 있고,
 콘솔(ops-dashboard)과 공유하는 계약은
 [decision/0001](docs/decision/0001-shared-contracts.md)이 정본이다.
@@ -30,7 +38,7 @@
 | `GET /api/v1/glossary` | 용어 사전 (`?vocabulary_id=`) — `d1_catalog_glossary` 를 읽는 유일한 문 | Bearer, 무과금 |
 | `GET /skill/v1/…` | K-Skill 전용 계약(번들·제품·데이터) — src/skill.js | Bearer |
 | `POST /mcp` | MCP 서버(JSON-RPC, 툴 5종) — src/mcp.js | `tools/call` 부터 Bearer |
-| 정적 | `/docs` `/legal` `/llms.txt` `/openapi.json` `/column-docs.json` | Assets 서빙 |
+| 정적 | `/docs` `/legal` `/llms.txt` `/openapi.json` `/skill-openapi.json` | Assets 서빙 |
 
 구성은 이것이 전부다:
 
