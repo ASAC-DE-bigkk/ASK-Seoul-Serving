@@ -10,7 +10,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { judge, expectedSchema, FOREIGN } from "./preflight-d1.mjs";
+import { judge, expectedSchema, FOREIGN, columnSchemaQueries } from "./preflight-d1.mjs";
 
 let DatabaseSync;
 try { ({ DatabaseSync } = await import("node:sqlite")); } catch { /* skip 처리 */ }
@@ -23,11 +23,38 @@ const find = (fs, t) => fs.find((f) => f.table === t);
 const FOREIGN_PROD = cols("ts", "path", "query", "token");
 const FOREIGN_DEV = cols("ts", "path", "query", "token", "request_id");   // 0004 가 잘못 얹힘
 
+test("원격 컬럼 조회는 최대 5개 SELECT로 나눈다 — 6개면 D1이 compound SELECT를 거부한다", () => {
+  const queries = columnSchemaQueries(["a", "b", "c", "d", "e", "f"]);
+  assert.equal(queries.length, 2);
+  assert.equal(queries[0].match(/\bSELECT\b/g)?.length, 5);
+  assert.equal(queries[1].match(/\bSELECT\b/g)?.length, 1);
+});
+
 test("빈 DB — 전부 '없음'이고 진행 가능하다 (apply 가 새로 만든다)", () => {
   const expected = new Map([["_keys", cols("key_hash", "email")], ["_usage", cols("key_hash", "day")]]);
   const fs = judge(expected, new Map());
   assert.equal(fs.filter((f) => f.blocking).length, 0);
   assert.equal(find(fs, "_keys").verdict, "없음");
+});
+
+test("🔴 배포 모드는 우리 표가 없으면 중단한다 — route 전에 migrations apply 가 필요하다", () => {
+  const expected = new Map([
+    ["_keys", cols("key_hash", "email")],
+    ["_gateway_request_log", cols("ts", "route", "status")],
+  ]);
+  const fs = judge(expected, new Map(), { requireApplied: true });
+  assert.equal(fs.filter((f) => f.blocking).length, 2);
+  assert.equal(find(fs, "_keys").verdict, "없음");
+  assert.equal(find(fs, "_keys").requiredForDeploy, true);
+  assert.match(find(fs, "_gateway_request_log").note, /migrations apply/);
+});
+
+test("배포 모드도 남의 표가 없거나 원래 모양이면 막지 않는다 — Gateway 의존성이 아니다", () => {
+  const expected = new Map([["_request_log", cols("ts", "route", "status", "request_id")]]);
+  const missing = judge(expected, new Map(), { requireApplied: true });
+  const present = judge(expected, new Map([["_request_log", FOREIGN_PROD]]), { requireApplied: true });
+  assert.equal(find(missing, "_request_log").blocking, false);
+  assert.equal(find(present, "_request_log").blocking, false);
 });
 
 test("모양이 같으면 '일치' — 재적용해도 안전하다", () => {

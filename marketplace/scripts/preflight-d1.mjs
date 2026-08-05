@@ -41,6 +41,7 @@
  *
  *   npm run preflight -- <DB이름>
  *   npm run preflight -- <DB이름> --env production
+ *   npm run preflight -- <DB이름> --env dev --require-applied
  *   npm run preflight -- <DB이름> --env production --json
  *
  * 종료 코드: 0 진행 가능 · 1 **중단**(모양 다름·오염·인수됨) · 2 검사 자체 실패(권한·네트워크 등)
@@ -103,10 +104,20 @@ async function expectedSchema() {
 
 // ── 원격 D1 실측 ──────────────────────────────────────────────────────────────
 // 읽기만 한다(sqlite_master · pragma). 쓰기 문장을 이 파일에서 만들지 않는다.
-// 한 문장에 넣을 표 개수. D1 은 긴 문장을 `SQLITE_TOOBIG` 으로 거절한다 —
-// ASAC-DAG#677 에서 적재기가 같은 이유로 매번 죽었다(개수가 아니라 **길이**가 한도다).
-// 여기는 표 이름만 실어 문장이 짧지만, 같은 함정이라 조각을 낸다.
-const CHUNK = 20;
+// 한 문장에 넣을 표 개수. D1 원격 query 는 compound SELECT 가 6항이 되면
+// `too many terms in compound SELECT` 로 거절한다(2026-08-05 dev 실측). 길이가 짧아도
+// 항 개수 제한에 먼저 걸리므로 최대 5개씩 조각낸다.
+const CHUNK = 5;
+
+function columnSchemaQueries(names) {
+  const queries = [];
+  for (let i = 0; i < names.length; i += CHUNK) {
+    queries.push(names.slice(i, i + CHUNK)
+      .map((n) => `SELECT '${n}' AS tbl, name AS col FROM pragma_table_info('${n}')`)
+      .join(" UNION ALL "));
+  }
+  return queries;
+}
 
 function remoteSchema(dbName, envFlag, interesting) {
   // ⚠️ D1 은 `pragma_table_info(m.name)` 처럼 **인자가 리터럴이 아닌** pragma 함수를 막는다
@@ -124,11 +135,7 @@ function remoteSchema(dbName, envFlag, interesting) {
   const names = all.filter((n) => interesting.has(n));
 
   const out = new Map();
-  for (let i = 0; i < names.length; i += CHUNK) {
-    const part = names.slice(i, i + CHUNK);
-    const sql = part
-      .map((n) => `SELECT '${n}' AS tbl, name AS col FROM pragma_table_info('${n}')`)
-      .join(" UNION ALL ");
+  for (const sql of columnSchemaQueries(names)) {
     for (const r of queryD1(dbName, envFlag, sql)) {
       if (!out.has(r.tbl)) out.set(r.tbl, new Set());
       out.get(r.tbl).add(r.col);
@@ -190,7 +197,7 @@ function queryD1(dbName, envFlag, sql) {
 }
 
 // ── 판정 ──────────────────────────────────────────────────────────────────────
-function judge(expected, remote) {
+function judge(expected, remote, { requireApplied = false } = {}) {
   const findings = [];
 
   for (const [tbl, want] of expected) {
@@ -224,8 +231,9 @@ function judge(expected, remote) {
     }
 
     if (!have) {
-      findings.push({ table: tbl, verdict: "없음", blocking: false,
-        note: "apply 가 새로 만든다", expected: [...want], actual: null });
+      findings.push({ table: tbl, verdict: "없음", blocking: requireApplied,
+        note: requireApplied ? "배포 전에 migrations apply 가 필요하다" : "apply 가 새로 만든다",
+        expected: [...want], actual: null, requiredForDeploy: requireApplied });
       continue;
     }
 
@@ -254,7 +262,7 @@ function judge(expected, remote) {
 // 판정을 늘리면 여기도 늘린다 — 빠지면 표에 `undefined` 가 찍힌다(실제로 겪었다).
 const MARK = { "없음": "· ", "일치": "OK", "일치+": "OK", "모양 다름": "!!", "남의 표": "~ ", "오염": "!!", "인수됨": "!!" };
 
-function report(findings, { db, env, ack }) {
+function report(findings, { db, env, ack, requireApplied }) {
   const w = Math.max(...findings.map((f) => f.table.length), 12);
   console.log(`\n원격 D1 배포 전 검사 — ${db}${env ? ` (--env ${env})` : ""}\n`);
   console.log(`  ${"표".padEnd(w)}  판정        비고`);
@@ -266,9 +274,16 @@ function report(findings, { db, env, ack }) {
   const blocked = findings.filter((f) => f.blocking);
   console.log("");
   if (!blocked.length) {
-    console.log("[OK] 진행 가능 — 다음은 장부 백필, 그다음 migrations apply");
+    console.log(requireApplied
+      ? "[OK] 배포 가능 — 필수 Gateway 테이블이 모두 적용돼 있다"
+      : "[OK] 진행 가능 — 다음은 장부 백필, 그다음 migrations apply");
     console.log("     절차: docs/deploy-runbook.md §0·§1\n");
     return 0;
+  }
+
+  const unapplied = blocked.filter((f) => f.requiredForDeploy);
+  if (unapplied.length) {
+    console.log("[중단] Gateway 마이그레이션이 끝나지 않았습니다 — route 배포 전에 §1을 실행하십시오.\n");
   }
 
   // 오염은 "이대로 가면 생길 일"이 아니라 **이미 일어난 일**이라, 안내가 달라야 한다.
@@ -280,6 +295,11 @@ function report(findings, { db, env, ack }) {
     console.log(`  [${f.table}] ${f.note}`);
     console.log(`     기대: ${f.expected.join(", ")}`);
     console.log(`     실제: ${f.actual ? f.actual.join(", ") : "(없음)"}\n`);
+  }
+  if (requireApplied) {
+    console.log("다음에 할 일: docs/deploy-runbook.md §1의 장부 백필 → migrations apply → 사후 검사를 실행한다.");
+    console.log("  --require-applied 는 --ack 로 우회할 수 없습니다.\n");
+    return 1;
   }
   if (contaminated.length) {
     console.log("어떻게 생겼나: 장부(d1_migrations)가 빈 D1 에 apply 를 돌리면 0001 부터 재실행되고,");
@@ -305,7 +325,7 @@ function report(findings, { db, env, ack }) {
   }
   console.log(`정하고 나서 진행할 때: npm run preflight -- ${db}${env ? ` --env ${env}` : ""} --ack "<결정과 근거>"\n`);
 
-  if (ack) {
+  if (ack && !requireApplied) {
     console.log("[통과] --ack 로 통과시킵니다 — 위 판정은 없던 일이 되지 않습니다.");
     console.log(`       사유: ${ack}\n`);
     return 0;
@@ -320,9 +340,14 @@ async function main(argv) {
   const env = args.includes("--env") ? args[args.indexOf("--env") + 1] : null;
   const ack = args.includes("--ack") ? args[args.indexOf("--ack") + 1] : null;
   const asJson = args.includes("--json");
+  const requireApplied = args.includes("--require-applied");
 
   if (!db) {
-    console.error('사용: npm run preflight -- <DB이름> [--env production] [--ack "사유"] [--json]');
+    console.error('사용: npm run preflight -- <DB이름> [--env production] [--require-applied] [--ack "사유"] [--json]');
+    return 2;
+  }
+  if (requireApplied && ack) {
+    console.error("[중단] --require-applied 는 --ack 로 우회할 수 없습니다. 마이그레이션을 먼저 적용하십시오.");
     return 2;
   }
 
@@ -339,17 +364,18 @@ async function main(argv) {
   try { remote = remoteSchema(db, env, new Set(expected.keys())); }
   catch (e) { console.error(`[실패] ${e.message}`); return 2; }
 
-  const findings = judge(expected, remote);
+  const findings = judge(expected, remote, { requireApplied });
   if (asJson) {
     const blocked = findings.some((f) => f.blocking);
-    console.log(JSON.stringify({ db, env, ok: !blocked || Boolean(ack), ack, findings }, null, 2));
-    return blocked && !ack ? 1 : 0;
+    const ok = !blocked || (!requireApplied && Boolean(ack));
+    console.log(JSON.stringify({ db, env, mode: requireApplied ? "deploy" : "migrate", ok, ack, findings }, null, 2));
+    return ok ? 0 : 1;
   }
-  return report(findings, { db, env, ack });
+  return report(findings, { db, env, ack, requireApplied });
 }
 
 // 테스트에서 판정 로직만 따로 부르기 위해 내보낸다 — 원격을 타지 않는 부분이다.
-export { judge, expectedSchema, FOREIGN };
+export { judge, expectedSchema, FOREIGN, columnSchemaQueries };
 
 if (process.argv[1] && process.argv[1].endsWith("preflight-d1.mjs")) {
   process.exit(await main(process.argv));
