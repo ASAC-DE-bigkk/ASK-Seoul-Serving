@@ -218,3 +218,18 @@ test("성공한 호출은 상태를 정하지 않는다 — HTTP 200 이 그대�
   await handleMcp(rpc("tools/call", { name: "list_products", arguments: {} }), {}, trace, mkDeps());
   assert.equal(trace.status, undefined);
 });
+
+test("route 세분화(#63 A) — tools/call 은 mcp_<툴명>, 프로토콜 단계·모르는 툴은 그대로", async () => {
+  const t1 = {};
+  await handleMcp(rpc("tools/call", { name: "query_product", arguments: { product_id: "p" } }), {}, t1, mkDeps());
+  assert.equal(t1.route, "mcp_query_product");
+  const t2 = {};
+  await handleMcp(rpc("tools/call", { name: "list_products", arguments: {} }), {}, t2, mkDeps());
+  assert.equal(t2.route, "mcp_list_products");
+  const t3 = { route: "mcp" };
+  await handleMcp(rpc("initialize"), {}, t3, mkDeps());
+  assert.equal(t3.route, "mcp");                       // 발견 단계는 세분화하지 않는다
+  const t4 = { route: "mcp" };
+  await handleMcp(rpc("tools/call", { name: "bogus_tool", arguments: {} }), {}, t4, mkDeps());
+  assert.equal(t4.route, "mcp");                       // 모르는 이름이 값 집합을 오염시키지 않는다
+});
