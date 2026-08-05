@@ -144,6 +144,33 @@ function requireWrite(env, request) {
   return null;
 }
 
+// 🔴 읽기 문 (2026-08-06, decision/0004 개정)
+//
+// 원래 이 콘솔은 **읽기를 열어 뒀다.** 근거는 "로컬 전용이라 노출 반경이 작다"였는데,
+// 0015 로 `ops.ask-seoul.kr` 에 공개 배포되면서 **그 전제가 사라졌다.** 실측으로 인증 없이
+// `/api/summary` 가 200 이었고, 운영 D1 의 실행 기록이 그대로 나갔다.
+//
+// 원 문서의 재검토 조건은 "공개 배포 시 Cloudflare Access 로 교체"였다. 그런데 계정 권한이
+// 없어 Access·WAF·IP 규칙이 전부 403 이다 — **할 수 있는 것으로 먼저 막는다.**
+//
+// `requireWrite` 와 **합치지 않았다.** 자물쇠는 같아도 문은 둘이어야 한다 — 나중에 읽기를
+// Access 로 넘길 때 쓰기 게이트를 건드리지 않고 이 함수만 걷어내면 된다.
+function requireRead(env, request) {
+  const token = String(env.OPS_TOKEN || "").trim();
+  // 🔴 fail-closed. 시크릿을 안 넣은 배포본은 **아무것도 안 내보낸다.**
+  // "열려 있는 채로 잊히는 것"보다 "안 보여서 바로 아는 것"이 낫다.
+  if (!token) {
+    return problem(503, "ops console locked",
+      "OPS_TOKEN 미설정 — 이 콘솔은 조회에도 운영자 토큰이 필요하다(decision/0004 개정). " +
+      "로컬은 .dev.vars, 배포본은 `wrangler secret put OPS_TOKEN --env production`.");
+  }
+  if (!canWrite(env, request)) {
+    return problem(401, "unauthorized",
+      "조회에 운영자 토큰이 필요하다 — 화면 우상단 '잠금 해제'에 OPS_TOKEN 을 입력한다.");
+  }
+  return null;
+}
+
 // 테이블이 아직 없을 수 있다(게이트웨이만 시드한 상태 등) — 콘솔 전체가 죽는 대신
 // 그 섹션만 비운다. 어느 쪽이 없는지는 meta.missing 으로 화면에 알린다.
 async function safeRows(env, sql, ...bind) {
@@ -922,6 +949,19 @@ async function keyAction(env, request) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    // 🔴 읽기 게이트 — **여기 한 곳에서 건다** (decision/0004 개정, 2026-08-06).
+    //
+    // 라우트마다 붙이면 새 엔드포인트를 더할 때 빠뜨리고, 그게 곧 공개 노출이다.
+    // `SERVE`·`gwWhere` 를 한 줄로 모은 것과 같은 이유다 — 흩어 두면 언젠가 새어 나간다.
+    //
+    // 정적 자산(HTML·JS)은 `run_worker_first = ["/api/*"]` 라 Assets 가 먼저 서빙하므로
+    // 여기 안 걸린다. **데이터는 한 줄도 안 나가고**, 화면은 잠금 오버레이만 띄운다.
+    if (url.pathname.startsWith("/api/")) {
+      const denied = requireRead(env, request);
+      if (denied) return denied;
+    }
+
     if (url.pathname === "/api/summary") {
       if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
       return summary(env, url.searchParams, canWrite(env, request));
@@ -943,10 +983,10 @@ export default {
       if (request.method === "POST") return requireWrite(env, request) || keyAction(env, request);
       return problem(405, "method not allowed", "GET(목록) · POST(조치)");
     }
-    // 요청 추적 — 지원 문의의 "그 요청" 한 건을 request_id 로 특정한다. 무인증(읽기 공개)인
-    // 근거: request_id 는 그 응답을 받은 사람만 아는 16-hex 난수이고, 응답에는 키 8자
-    // 축약·컬럼명 축만 실린다(decision/0010).
-    // 안정성 추이의 드릴다운 — 무인증 조회. 요약과 같은 표를 같은 필터로 읽는다.
+    // 안정성 추이의 드릴다운 — 요약과 같은 표를 같은 필터로 읽는다.
+    // ⚠️ 예전에는 `/api/trace` 를 **무인증으로 열어 뒀다** — "`request_id` 는 응답 받은
+    // 사람만 아는 16-hex 난수"라는 근거였다. 콘솔 전체를 잠그면서 그 예외를 걷었다:
+    // 잠긴 화면에 예외 구멍을 두면 그 구멍이 잊힌다(decision/0004 개정).
     if (url.pathname === "/api/drill") {
       if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
       return domainDay(env, url.searchParams);
