@@ -79,6 +79,22 @@ curl -s "$BASE/api/summary?days=14" | jq '{serve: .meta.serve_routes, mcp: .meta
 curl -s "$BASE/api/summary?days=14" | jq -r '.serving.routes[].route' | sort -u | while read r; do
   grep -q "\b$r:" ops-dashboard/public/index.html || echo "MISSING in ROUTE_KO: $r"
 done
+
+# ⑦ 환경 스코프 — 서빙 수치가 한 환경의 것인가, 무엇을 뺐나 (#64)
+curl -s "$BASE/api/summary?days=14" | jq '{scope: .meta.serving_env_scope,
+  mix: .meta.serving_env_mix, excluded: .meta.serving_env_excluded,
+  unknown: .meta.serving_env_unknown}'
+#   scope    = "prod"  ← null 이면 안 좁히고 있다는 뜻이다(ENV_SCOPE 확인)
+#   mix      = 거르기 **전** 분포. 여기에 scope 아닌 값이 보이면 섞여 있는 것이다
+#   excluded > 0 이면 화면 네 탭에 "prod 요청만" 안내가 뜬다
+#   unknown  = env IS NULL 건수 — **운영으로 채우지 않는다**(ASAC-DAG#692)
+
+# ⑦-a 합이 맞는가 — 스코프 적용분 + 제외분 = 전체
+curl -s "$BASE/api/summary?days=14" | jq '
+  (.serving.routes | map(.calls) | add // 0) as $scoped
+  | (.meta.serving_env_mix | map(.calls) | add // 0) as $all
+  | {scoped: $scoped, excluded: .meta.serving_env_excluded, all: $all,
+     ok: (($scoped + .meta.serving_env_excluded) == $all)}'
 ```
 
 **쓰기 문 3종 세트** — 쓰기 경로를 고쳤다면 반드시 셋 다 본다
