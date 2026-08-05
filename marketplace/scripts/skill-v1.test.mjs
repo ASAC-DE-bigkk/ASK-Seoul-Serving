@@ -5,6 +5,8 @@ import worker from "../src/index.js";
 import {
   SKILL_BUNDLE_ID,
   SKILL_PRODUCT_IDS,
+  freshnessAsOfMillis,
+  freshnessState,
   handleSkillBundle,
   handleSkillData,
   handleSkillProduct,
@@ -27,6 +29,9 @@ function fixtureDb({
   sourcePublicationId = "active-publication",
   qualityPublicationId = "active-publication",
   evidence = false,
+  freshnessAsOf = new Date().toISOString(),
+  freshnessSloMinutes = 240,
+  measuredAt = new Date().toISOString(),
   coverage = {
     field: "admin_dong_code",
     expected_distinct_count: 427,
@@ -44,7 +49,7 @@ function fixtureDb({
     serving_status: "published",
     publication_id: "active-publication",
     row_count: 427,
-    freshness: "2026-08-03",
+    freshness: freshnessAsOf,
     time_axis: "observed_at",
     columns: JSON.stringify([
       { name: "admin_dong_code", type: "TEXT" },
@@ -89,10 +94,10 @@ function fixtureDb({
               d1_row_count: 427,
               duplicate_primary_key_count: 0,
               null_primary_key_count: 0,
-              freshness_as_of: "2026-08-03",
-              freshness_slo_minutes: 240,
+              freshness_as_of: freshnessAsOf,
+              freshness_slo_minutes: freshnessSloMinutes,
               serving_status: "published",
-              measured_at: "2026-08-03T01:00:00Z",
+              measured_at: measuredAt,
               projection_schema_version: "1.1.0",
               projection_schema_hash: "evidence-fixture-projection-hash",
               coverage_json: JSON.stringify(coverage),
@@ -255,6 +260,34 @@ test("skill product becomes registration-ready only when publication-bound sourc
   assert.deepEqual(body.blockers, []);
   assert.equal(body.metadata.sources[0].attribution, "기상청");
   assert.equal(body.metadata.quality.coverage.status, "passed");
+});
+
+test("freshness parsing applies Seoul time to naive Publisher values and respects the SLO boundary", () => {
+  const nowMs = Date.parse("2026-08-04T12:00:00Z"); // 21:00 KST
+
+  assert.equal(
+    freshnessAsOfMillis("2026-08-04 20:00:00"),
+    Date.parse("2026-08-04T20:00:00+09:00"),
+  );
+  assert.equal(freshnessState("2026-08-04 20:00:00", 60, nowMs), "fresh");
+  assert.equal(freshnessState("2026-08-04 19:59:59", 60, nowMs), "stale");
+  assert.equal(freshnessState("2026-08-04", 1260, nowMs), "fresh");
+  assert.equal(freshnessState("2026-07", 89280, nowMs), "fresh");
+  assert.equal(freshnessState("not-a-timestamp", 60, nowMs), "incomplete");
+});
+
+test("skill product blocks complete but wall-clock-stale freshness evidence", async () => {
+  const staleAsOf = new Date(Date.now() - 241 * 60_000).toISOString();
+  const response = await handleSkillProduct(
+    { DB: fixtureDb({ evidence: true, freshnessAsOf: staleAsOf, freshnessSloMinutes: 240 }) },
+    "weather_place_forecast_change_daily",
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.registration_ready, false);
+  assert.ok(body.blockers.includes("quality_freshness_stale"));
+  assert.ok(!body.blockers.includes("quality_freshness_evidence_incomplete"));
 });
 
 test("skill product accepts explicit not-applicable coverage with a reason", async () => {
