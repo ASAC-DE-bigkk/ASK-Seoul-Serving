@@ -10,7 +10,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { judge, expectedSchema, FOREIGN } from "./preflight-d1.mjs";
+import { judge, expectedSchema, FOREIGN, columnSchemaQueries } from "./preflight-d1.mjs";
 
 let DatabaseSync;
 try { ({ DatabaseSync } = await import("node:sqlite")); } catch { /* skip 처리 */ }
@@ -22,6 +22,13 @@ const find = (fs, t) => fs.find((f) => f.table === t);
 // 원격 실측(2026-08-04, 읽기만). 남의 표가 이 모양으로 선점돼 있었다.
 const FOREIGN_PROD = cols("ts", "path", "query", "token");
 const FOREIGN_DEV = cols("ts", "path", "query", "token", "request_id");   // 0004 가 잘못 얹힘
+
+test("원격 컬럼 조회는 최대 5개 SELECT로 나눈다 — 6개면 D1이 compound SELECT를 거부한다", () => {
+  const queries = columnSchemaQueries(["a", "b", "c", "d", "e", "f"]);
+  assert.equal(queries.length, 2);
+  assert.equal(queries[0].match(/\bSELECT\b/g)?.length, 5);
+  assert.equal(queries[1].match(/\bSELECT\b/g)?.length, 1);
+});
 
 test("빈 DB — 전부 '없음'이고 진행 가능하다 (apply 가 새로 만든다)", () => {
   const expected = new Map([["_keys", cols("key_hash", "email")], ["_usage", cols("key_hash", "day")]]);

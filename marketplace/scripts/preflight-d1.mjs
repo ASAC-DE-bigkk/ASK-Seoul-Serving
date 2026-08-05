@@ -104,10 +104,20 @@ async function expectedSchema() {
 
 // ── 원격 D1 실측 ──────────────────────────────────────────────────────────────
 // 읽기만 한다(sqlite_master · pragma). 쓰기 문장을 이 파일에서 만들지 않는다.
-// 한 문장에 넣을 표 개수. D1 은 긴 문장을 `SQLITE_TOOBIG` 으로 거절한다 —
-// ASAC-DAG#677 에서 적재기가 같은 이유로 매번 죽었다(개수가 아니라 **길이**가 한도다).
-// 여기는 표 이름만 실어 문장이 짧지만, 같은 함정이라 조각을 낸다.
-const CHUNK = 20;
+// 한 문장에 넣을 표 개수. D1 원격 query 는 compound SELECT 가 6항이 되면
+// `too many terms in compound SELECT` 로 거절한다(2026-08-05 dev 실측). 길이가 짧아도
+// 항 개수 제한에 먼저 걸리므로 최대 5개씩 조각낸다.
+const CHUNK = 5;
+
+function columnSchemaQueries(names) {
+  const queries = [];
+  for (let i = 0; i < names.length; i += CHUNK) {
+    queries.push(names.slice(i, i + CHUNK)
+      .map((n) => `SELECT '${n}' AS tbl, name AS col FROM pragma_table_info('${n}')`)
+      .join(" UNION ALL "));
+  }
+  return queries;
+}
 
 function remoteSchema(dbName, envFlag, interesting) {
   // ⚠️ D1 은 `pragma_table_info(m.name)` 처럼 **인자가 리터럴이 아닌** pragma 함수를 막는다
@@ -125,11 +135,7 @@ function remoteSchema(dbName, envFlag, interesting) {
   const names = all.filter((n) => interesting.has(n));
 
   const out = new Map();
-  for (let i = 0; i < names.length; i += CHUNK) {
-    const part = names.slice(i, i + CHUNK);
-    const sql = part
-      .map((n) => `SELECT '${n}' AS tbl, name AS col FROM pragma_table_info('${n}')`)
-      .join(" UNION ALL ");
+  for (const sql of columnSchemaQueries(names)) {
     for (const r of queryD1(dbName, envFlag, sql)) {
       if (!out.has(r.tbl)) out.set(r.tbl, new Set());
       out.get(r.tbl).add(r.col);
@@ -369,7 +375,7 @@ async function main(argv) {
 }
 
 // 테스트에서 판정 로직만 따로 부르기 위해 내보낸다 — 원격을 타지 않는 부분이다.
-export { judge, expectedSchema, FOREIGN };
+export { judge, expectedSchema, FOREIGN, columnSchemaQueries };
 
 if (process.argv[1] && process.argv[1].endsWith("preflight-d1.mjs")) {
   process.exit(await main(process.argv));
