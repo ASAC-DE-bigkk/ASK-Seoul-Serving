@@ -139,8 +139,8 @@ function canWrite(env, request) {
 
 function requireWrite(env, request) {
   const token = String(env.OPS_TOKEN || "").trim();
-  if (!token) return problem(503, "ops write disabled", "OPS_TOKEN 미설정 — 조치하려면 .dev.vars 에 설정할 것");
-  if (!canWrite(env, request)) return problem(401, "unauthorized", "조치에는 운영자 토큰이 필요하다");
+  if (!token) return problem(503, "ops write disabled", "조치 기능이 아직 설정되지 않았습니다.");
+  if (!canWrite(env, request)) return problem(401, "unauthorized", "조치하려면 운영자 인증이 필요합니다.");
   return null;
 }
 
@@ -160,13 +160,11 @@ function requireRead(env, request) {
   // 🔴 fail-closed. 시크릿을 안 넣은 배포본은 **아무것도 안 내보낸다.**
   // "열려 있는 채로 잊히는 것"보다 "안 보여서 바로 아는 것"이 낫다.
   if (!token) {
-    return problem(503, "ops console locked",
-      "OPS_TOKEN 미설정 — 이 콘솔은 조회에도 운영자 토큰이 필요하다(decision/0004 개정). " +
-      "로컬은 .dev.vars, 배포본은 `wrangler secret put OPS_TOKEN --env production`.");
+    // 공개 주소에 뜨는 화면이라 설정 방법·토큰명을 노출하지 않는다(운영자는 secrets.md 로 안내).
+    return problem(503, "ops console locked", "콘솔이 아직 설정되지 않았습니다.");
   }
   if (!canWrite(env, request)) {
-    return problem(401, "unauthorized",
-      "조회에 운영자 토큰이 필요하다 — 화면 우상단 '잠금 해제'에 OPS_TOKEN 을 입력한다.");
+    return problem(401, "unauthorized", "운영자 인증이 필요합니다.");
   }
   return null;
 }
