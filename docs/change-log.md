@@ -536,11 +536,17 @@
   - 문서 정합: 런북·환경·설정·접근통제·README·CLAUDE.md 에서 dev 배포면 참조 제거
 - **결과**: 워커 3개만 남았다(`ask-seoul-gateway` · `ask-seoul-ops-dashboard` ·
   transit). 테스트 118/118, prod D1 preflight 통과.
-  - 🔴 **`ask-seoul.kr` 은 아직 안 붙었다** — 커스텀 도메인 등록이 409 로 실패한다:
-    `code 100117: Hostname 'ask-seoul.kr' already has externally managed DNS records`.
-    루트에 손으로 만든 A 레코드 2개(응답 없음)가 자리를 잡고 있다. **대시보드에서 그
-    레코드를 지워야** 붙는다 — wrangler OAuth 에는 DNS 편집 스코프가 없다(실측).
-    워커 스크립트는 업로드돼 있으므로 레코드 삭제 후 재배포만 하면 된다.
+  - **`ask-seoul.kr` 은 커스텀 도메인이 아니라 Route 로 붙였다.** 커스텀 도메인 등록이
+    409 로 거부됐다 — `code 100117: already has externally managed DNS records`. 루트에
+    도메인 등록업체(후이즈) 파킹 페이지의 A 레코드 2개(75.2.85.42 · 99.83.196.71)가
+    남아 있고, 그 원본은 443 이 닫혀 있어 **그동안 `https://ask-seoul.kr` 은 522 였다.**
+    - 처음엔 그 레코드를 지우는 길만 보고 DNS 편집 권한을 찾아다녔는데(wrangler OAuth 에는
+      DNS 스코프가 없고, 발급한 토큰도 Read 로만 붙었다), **`routes` 로 바꾸니 DNS 를
+      전혀 건드리지 않고 해결됐다.** 막혔을 때 대안을 먼저 시도했어야 했다.
+    - ⚠️ **전제가 뒤집혔다**: 이제 그 파킹 레코드는 **지우면 안 된다.** Route 는 프록시된
+      DNS 레코드 위에서 동작하므로 레코드가 사라지면 루트가 통째로 내려간다. 레코드를
+      정리할 수 있게 되면 `custom_domain = true` 로 되돌리는 것이 정석이다(ops·transit 방식).
+    - `www.ask-seoul.kr` 은 여전히 죽은 파킹 원본을 가리킨다 — Route 를 추가할지 미결.
 
 ## 2026-08-04
 

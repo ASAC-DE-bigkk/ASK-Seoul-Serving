@@ -72,11 +72,21 @@ ASK_ENV = "local"
 # **같은 D1** 을 보고, 갈리는 것은 `ASK_ENV` 값과 배포 주소뿐이다(#85).
 # ⚠️ 선행: prod D1 스키마를 새로 만들 때는 파이프라인 쪽과 조율(agreement §8-3),
 # ISSUANCE_SALT 를 `--env production` 으로 설정(2026-08-06 완료).
+# 🔴 `custom_domain = true` 가 아니라 **Route** 다 — 이유가 있다.
+# 루트에는 도메인 등록업체 파킹 페이지의 A 레코드 2개(75.2.85.42 · 99.83.196.71)가 남아
+# 있고, 커스텀 도메인은 그 자리에 자기 레코드를 만들려다 409 로 거부된다
+# (`code 100117: already has externally managed DNS records`).
+# Route 는 **기존 프록시 레코드 앞에서 요청을 가로채므로** DNS 를 건드리지 않고 동작한다.
+#
+# ⚠️ 대가: 저 파킹 레코드가 **Route 의 전제**가 된다 — 프록시(주황 구름)된 레코드가 없으면
+#    Route 도 죽는다. "쓸모없어 보이는 레코드"를 누가 지우면 루트가 통째로 내려간다.
+#    파킹 레코드를 지울 수 있게 되면 `{ pattern = "ask-seoul.kr", custom_domain = true }`
+#    로 되돌리는 게 정석이다(ops·transit 이 그 방식이다).
 [env.production]
 name = "ask-seoul-gateway"
 workers_dev = false
 routes = [
-  { pattern = "ask-seoul.kr", custom_domain = true }
+  { pattern = "ask-seoul.kr/*", zone_name = "ask-seoul.kr" }
 ]
 
 [env.production.assets]
