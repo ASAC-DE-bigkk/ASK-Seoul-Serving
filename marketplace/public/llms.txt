@@ -72,8 +72,14 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
 1. `GET /api/v1/catalog` — 제품 목록. 인증 불필요. 각 제품의 `product_question`(자연어 질문)으로
    사용자 질문과 매칭해 제품을 고른다. `description` = 그레인·주의사항, `columns` = 스키마.
 2. `GET /api/v1/preview/<product_id>` — 샘플 5행(최신 구간). 인증·쿼터 없음. 스키마·실값 확인용.
-3. `POST /api/v1/keys` body `{"email": "..."}` — 키 발급(응답에 1회만 표시). 이메일당 1키.
-   이미 있으면 409 가 오고, 기존 키를 만료시키려면 `"confirm_rotate": true` 를 추가한다.
+3. 키 발급 — **방법이 배포 환경마다 다르다.** 추측하지 말고 1번 응답의 `key_issuance` 를 볼 것.
+   - `{"method":"google_oauth","start":"/api/v1/auth/google"}` — **사람이 브라우저로** 그 주소를
+     열어 Google 로 로그인해야 한다. 이메일 소유를 Google 이 확인해 주는 경로라 **자동화로는
+     받을 수 없다.** 에이전트라면 운영자에게 키를 받아 설정에 넣는 것이 정상 경로다.
+   - `{"method":"email","start":"POST /api/v1/keys"}` — body `{"email": "..."}` 로 발급
+     (응답에 1회만 표시). 이미 있으면 409 가 오고, 기존 키를 만료시키려면
+     `"confirm_rotate": true` 를 추가한다.
+   - 어느 쪽이든 **한 이메일에 키 하나**다. 앞의 방식에서 `POST /api/v1/keys` 는 403 으로 닫힌다.
 4. `GET /api/v1/data/<product_id>?...` — 헤더 `Authorization: Bearer ask_…` 로 조회.
 
 스키마를 더 자세히 봐야 하면 **2 와 4 사이**에 이 둘이 있다(Bearer 필요, 일일 쿼터 무과금):

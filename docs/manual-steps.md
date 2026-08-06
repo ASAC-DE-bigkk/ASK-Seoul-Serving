@@ -184,6 +184,94 @@ Zero Trust → Access → Applications → Add an application
 
 ---
 
+## Google OAuth 클라이언트 — 발급 이메일 소유 확인 (#110 ②)
+
+**코드는 다 들어가 있다.** 이 절차를 밟기 전까지 `GOOGLE_CLIENT_ID` 가 비어 있어 **아무것도
+바뀌지 않는다** — 기존 이메일 발급이 그대로 열려 있다. 🔴 **값을 채우는 순간 정책이 바뀐다**:
+`POST /api/v1/keys` 가 403 으로 닫히고 Google 로그인만 남는다.
+
+에이전트가 대신할 수 없는 이유는 **자격증명**이라서다 — 계정으로 발급되는 값이고
+`wrangler secret put` 도 사람이 친다.
+
+### 1. Google Cloud 에서 OAuth 클라이언트 만들기 — **무료**
+
+```
+① console.cloud.google.com 에서 프로젝트 생성 (결제 계정 연결 불필요)
+② API 및 서비스 → OAuth 동의 화면
+     User Type            외부
+     앱 이름              ASK: SEOUL
+     지원 이메일          팀 대표 주소
+     승인된 도메인        ask-seoul.kr
+     개인정보처리방침 URL  https://ask-seoul.kr/legal
+     서비스 약관 URL       https://ask-seoul.kr/legal
+     범위                 openid · email  ← **이것만.** 비민감 스코프라 Google 심사가 없다
+     게시 상태            프로덕션        ← 테스트로 두면 100명 제한에 걸린다
+③ 사용자 인증 정보 → OAuth 클라이언트 ID → 웹 애플리케이션
+     승인된 리디렉션 URI   https://ask-seoul.kr/api/v1/auth/google/callback
+```
+
+> ⚠️ **Google Identity Platform · Firebase Authentication 은 쓰지 않는다.** 이름이 비슷하지만
+> 별개 유료 상품(MAU 과금)이다. 우리는 Worker 에서 리다이렉트 + 토큰 교환을 직접 한다.
+
+> ⚠️ 리디렉션 URI 는 **정확히 일치**해야 한다. 로컬에서도 흐름을 보려면
+> `http://localhost:8787/api/v1/auth/google/callback` 을 따로 추가한다.
+
+### 2. 값 넣기
+
+```bash
+# client_id 는 공개값 — 커밋한다 (marketplace/wrangler.toml 의 [env.production.vars])
+GOOGLE_CLIENT_ID = "…apps.googleusercontent.com"
+
+# client_secret 은 시크릿 — 커밋하지 않는다
+cd marketplace && npx wrangler secret put GOOGLE_CLIENT_SECRET --env production
+```
+
+`ISSUANCE_SALT` 도 설정돼 있어야 한다 — **state 서명에 같은 값을 쓴다.** 없으면 로그인이
+503 으로 닫힌다(발급이 이미 그랬던 것과 같은 이유).
+
+### 3. 확인
+
+```bash
+curl -s https://ask-seoul.kr/api/v1/catalog | grep -o '"key_issuance":{[^}]*}'
+# → {"method":"google_oauth","start":"/api/v1/auth/google"}   설정 전에는 "email"
+
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://ask-seoul.kr/api/v1/keys \
+  -H 'content-type: application/json' -d '{"email":"x@example.com"}'
+# → 403   (설정 전에는 201 — 즉 이 숫자가 정책 스위치의 실측이다)
+
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://ask-seoul.kr/api/v1/auth/google
+# → 302 https://accounts.google.com/o/oauth2/v2/auth?...
+```
+
+브라우저로 `/catalog.html` 을 열면 이메일 입력칸이 사라지고 **"Google 계정으로 키 발급"** 만
+보여야 한다.
+
+### 상태 — ✅ **완료 (2026-08-06)**
+
+`GOOGLE_CLIENT_ID`(공개값, 커밋) + `GOOGLE_CLIENT_SECRET`(시크릿) 둘 다 설정됐고 **정책이
+전환됐다.** 실측:
+
+```
+key_issuance              {"method":"google_oauth","start":"/api/v1/auth/google"}
+POST /api/v1/keys         403      이메일 발급이 닫혔다
+GET  /api/v1/auth/google  302      redirect_uri=https://ask-seoul.kr/api/v1/auth/google/callback
+                                   scope=openid email · prompt=select_account
+실제 로그인 왕복           auth_start 302 → auth_callback 201 (585ms) — 키 발급 완료
+```
+
+🔑 **`wrangler secret put` 은 워커를 새 버전으로 올린다** — 코드 배포를 다시 하지 않아도
+**즉시** 반영된다. 되돌리려면 `wrangler secret delete GOOGLE_CLIENT_SECRET --env production`.
+
+✅ **동의 화면 게시 상태 = 프로덕션** (2026-08-06 확인). 테스트로 두면 등록된 100명만
+로그인되는데 그 상태가 아니다 — **누구나 키를 받을 수 있다.**
+
+> 🔎 이 값은 **밖에서 못 잰다.** Google 은 게시 상태와 무관하게 같은 로그인 화면을 주고,
+> 제한은 계정을 고른 뒤에야 드러난다. 확인은 콘솔(Google Auth Platform → 대상)을 보거나,
+> 테스트 사용자 목록에 없는 계정으로 실제 로그인해 보는 두 가지뿐이다.
+> 리다이렉트 URL 의 `app_domain=https://ask-seoul.kr` 로 **승인된 도메인 설정**은 확인된다.
+
+---
+
 ## 갱신 규칙
 
 - **상태 칸은 실측으로 채운다.** 각 항목의 "확인" 명령을 실제로 돌린 값만 적는다.

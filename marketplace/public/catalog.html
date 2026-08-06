@@ -390,8 +390,21 @@
         <div>
           <h3>API 키 발급</h3>
           <div class="row">
-            <input type="email" id="email" placeholder="you@example.com" autocomplete="email" aria-label="이메일">
+            <!-- pattern 은 type="email" 에 **점 요구 하나만** 더한다(#109). HTML5 의 도메인
+                 규칙(레이블이 영숫자로 시작·끝)은 서버 normalizeEmail 과 이미 같고, 다른 건
+                 HTML5 가 점을 안 요구한다는 것뿐이라 여기서만 보탠다. 규칙 전체를 복제하면
+                 두 곳이 갈린다. -->
+            <input type="email" id="email" placeholder="you@example.com" autocomplete="email" aria-label="이메일"
+                   required pattern="[^@\s]+@[^@\s]+\.[^@\s]+"
+                   title="도메인에 점이 필요합니다 — 예: you@example.com">
             <button class="btn-p" id="issueBtn">발급</button>
+          </div>
+          <!-- 배포 환경은 Google 로그인으로만 발급한다(#110 ②) — 어느 쪽인지는 서버가
+               `/api/v1/catalog` 의 key_issuance 로 알려 주므로 화면이 골라 보여준다.
+               둘 다 띄워 두면 이용자가 닫힌 문을 먼저 두드린다. -->
+          <div class="row" id="googleAuth" style="display:none">
+            <a class="btn-p" href="/api/v1/auth/google">Google 계정으로 키 발급</a>
+            <span class="dim" style="font-size:.9rem">이메일 소유 확인을 Google 이 대신합니다</span>
           </div>
           <div class="reveal" id="keyReveal">
             <div class="k"><code id="keyValue"></code><button class="btn-g btn-sm" id="copyKey">복사</button></div>
@@ -533,7 +546,14 @@ async function boot() {
     fetch("/product-display.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
   ]);
   TITLE_FALLBACK = fbJson || {};
-  PRODUCTS = (await res.json()).products || [];
+  const catalog = await res.json();
+  PRODUCTS = catalog.products || [];
+  // 발급 창구는 환경이 정한다(#110 ②) — 서버가 말해 준 쪽만 띄운다.
+  // 값이 없으면(옛 배포본) 손대지 않는다 — 화면이 비어 버리는 것보다 낫다.
+  if (catalog.key_issuance && catalog.key_issuance.method === "google_oauth") {
+    $("googleAuth").style.display = "";
+    $("email").closest(".row").style.display = "none";
+  }
   // 설명·표시명이 없어도 카탈로그는 그대로 뜬다 — 부가 정보라 실패를 삼킨다
   // 검증된 질의 예시(usage) — 라이브 d1_usage_patterns(commerce) + culture Phase 0 검증분.
   // #600 채택 시 이 정적 자산은 게시 테이블 조회(안 B 번들)로 교체된다.
@@ -580,7 +600,7 @@ function renderStart() {
     "<div class='step' onclick=\"goHash('" + hash + "')\"><div class='num'>" + n + "</div>" +
     "<div><div class='tt'>" + tt + "</div><div class='dd'>" + dd + "</div></div></div>";
   $("steps").innerHTML =
-    step(1, "API 키 받기", "이메일만 넣으면 즉시 발급됩니다", "#auth") +
+    step(1, "API 키 받기", "Google 계정으로 로그인하면 즉시 발급됩니다", "#auth") +
     step(2, "데이터 고르기", "답하고 싶은 질문으로 찾아보세요", "#catalog") +
     step(3, "바로 호출하기", "curl 한 줄 · JSON 응답", "#playground");
   $("terms").innerHTML =
@@ -850,10 +870,13 @@ function friendly(status, body) {
   if (status === 409 && t === "cursor expired")
     return "데이터가 그 사이 새로 발행됐어요 — 첫 페이지부터 다시 받아주세요.";
   if (status === 401) return "키가 유효하지 않아요 — 위 '인증 · API 키'에서 발급하거나 다시 입력해주세요.";
-  if (status === 403) return "폐기된 키예요 — 같은 이메일로 재발급하면 새 키를 받을 수 있어요.";
+  if (status === 403) return "폐기된 키예요 — 같은 계정으로 다시 로그인하면 새 키를 받을 수 있어요.";
   if (status === 400 && t === "no time axis")
     return "이 데이터는 시간축이 없어서 기간(from/to) 필터를 지원하지 않아요 — 기간을 비우고 호출해주세요.";
   if (status === 400 && t === "unknown filter") return (body.detail || "") + " — 컬럼 이름 오타를 확인해주세요.";
+  // 화면 검증을 통과해도 서버가 더 좁게 볼 수 있다(API 직접 호출도 이 문구를 본다) — #109
+  if (status === 400 && t === "invalid email")
+    return "이메일 형식을 확인해주세요 — 예: you@example.com";
   return (body && (body.detail || body.title)) || "요청이 실패했어요.";
 }
 function showStatus(code, msg) {
@@ -914,6 +937,14 @@ function resetIssueBtn() {
 }
 $("issueBtn").addEventListener("click", async () => {
   $("issueErr").textContent = "";
+  // 입력칸이 <form> 밖이라 **제약 검증이 저절로 돌지 않는다** — submit·checkValidity() 에서만
+  // 돈다. 안 부르면 type="email" 은 키보드 힌트 역할만 하고 어떤 문자열이든 그대로 나간다(#109).
+  //
+  // 검증 **전에** 서버(shared.js normalizeEmail)와 같은 정규화를 한 번 한다. 후행 점은 DNS
+  // 루트 표기라 서버가 합쳐서 받는데, 그냥 검증하면 화면이 먼저 거절해 판정이 갈린다.
+  const el = $("email");
+  el.value = el.value.trim().replace(/\.+$/, "");
+  if (!el.reportValidity()) return;
   const confirmRotate = $("issueBtn").dataset.confirm === "1";
   const res = await fetch("/api/v1/keys", {
     method: "POST", headers: { "content-type": "application/json" },
@@ -976,7 +1007,7 @@ async function callRevoke(purge) {
     $("revokeNote").className = "done";
     $("revokeNote").textContent = purge
       ? "삭제했습니다 — 키·이메일·사용량이 지워졌습니다."
-      : "폐기했습니다 — 이 키는 이제 403입니다. 같은 이메일로 다시 발급할 수 있습니다.";
+      : "폐기했습니다 — 이 키는 이제 403입니다. 같은 계정으로 다시 로그인하면 새 키를 받습니다.";
     $("purgeBtn").style.display = purge ? "none" : "inline-block";
     $("revokeBtn").style.display = "none";
     if (purge) $("pKey").value = "";

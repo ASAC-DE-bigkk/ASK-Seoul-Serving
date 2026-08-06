@@ -8,12 +8,16 @@
 // 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
 import {
   json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC,
-  authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent, safeRows,
+  authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent, normalizeEmail, safeRows,
   parseJsonArray, loadRedistributionRights, redistributionBlockers, rightsBlockedProblem,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
 import { SKILL_BUNDLE_ID, handleSkillBundle, handleSkillData, handleSkillProduct } from "./skill.js";
 import { handleMcp } from "./mcp.js";
+import {
+  isConfigured, redirectUri, authorizeUrl, exchangeCode, makeState, verifyState,
+  readIdTokenFromTokenEndpoint, stateCookie, readCookie, STATE_COOKIE,
+} from "./google-oauth.js";
 
 const ISSUE_HOURLY_CAP = 5;
 const DEFAULT_LIMIT = 500;
@@ -51,8 +55,10 @@ async function issueKey(env, request) {
   } catch {
     return problem(400, "invalid body", "JSON body { email } 이 필요하다");
   }
-  const email = String(body.email || "").trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+  // 정규화 → 검증 (#109). 후행 점 같은 동치 표기를 먼저 합쳐야 `_keys.email UNIQUE` 가
+  // "이메일당 1키"를 실제로 지킨다 — 정규화 규칙과 근거는 shared.js 의 normalizeEmail.
+  const email = normalizeEmail(body.email);
+  if (!email)
     return problem(400, "invalid email", "올바른 이메일 형식이 아니다");
 
   // 발급 rate limit 의 IP 축은 원문을 저장하지 않는다(#9 §7-①·⑥) — 일 회전 솔트 해시.
@@ -123,6 +129,125 @@ async function issueKey(env, request) {
   return json({ key, key_prefix: prefix, rotated, note: "이 키는 지금 한 번만 표시된다 — 저장해 둘 것" }, 201);
 }
 
+// ── Google OAuth 발급 경로 (#110 ②) ─────────────────────────────────────────
+// 순수 로직(state 서명·ID 토큰 판정)은 src/google-oauth.js 에 있고 단독 테스트가 붙어 있다.
+// 여기 있는 건 그걸 D1·응답에 잇는 배선뿐이다.
+
+const oauthConfigured = (env) => isConfigured(env);
+const nowSec = () => Math.floor(Date.now() / 1000);
+
+// 서명 키는 ISSUANCE_SALT 를 재사용한다 — 이유는 google-oauth.js 주석 참조.
+// 미설정이면 발급이 이미 503 이므로 로그인만 열어 둘 이유가 없다.
+const authSecret = (env) => String(env.ISSUANCE_SALT || "").trim();
+
+async function startGoogleAuth(env, url) {
+  if (!oauthConfigured(env))
+    return problem(503, "oauth disabled", "GOOGLE_CLIENT_ID·GOOGLE_CLIENT_SECRET 미설정");
+  const secret = authSecret(env);
+  if (!secret) return problem(503, "issuance disabled", "ISSUANCE_SALT 미설정 — 발급 경로가 닫혀 있다");
+  const state = await makeState(secret, nowSec());
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: authorizeUrl({ clientId: env.GOOGLE_CLIENT_ID, redirect: redirectUri(url), state }),
+      "set-cookie": stateCookie(state, url),
+      // 로그인 시작 페이지가 캐시되면 남의 state 를 물고 갈 수 있다
+      "cache-control": "no-store",
+    },
+  });
+}
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// 🔴 키는 **URL 에 절대 싣지 않는다** — 주소창·브라우저 이력·Referer·서버 로그에 남는다.
+// 그래서 리다이렉트로 넘기지 않고 콜백이 직접 페이지를 그린다. 기존 "지금 한 번만 표시"
+// 계약과 같고, 새 엔드포인트도 새 표도 필요 없다.
+const authPage = (title, bodyHtml, status = 200) => new Response(
+  `<!doctype html><html lang="ko"><head><meta charset="utf-8">` +
+  `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+  `<meta name="robots" content="noindex"><title>${esc(title)} — ASK: SEOUL</title>` +
+  `<link rel="stylesheet" href="/site.css"></head><body class="doc">` +
+  `<main style="max-width:44rem;margin:3rem auto;padding:0 1.25rem">${bodyHtml}` +
+  `<p style="margin-top:2rem"><a href="/catalog.html">← 데이터 카탈로그로</a></p></main></body></html>`,
+  { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+
+async function googleCallback(env, request, url, trace) {
+  if (!oauthConfigured(env)) return problem(503, "oauth disabled", "GOOGLE_CLIENT_ID·GOOGLE_CLIENT_SECRET 미설정");
+  const secret = authSecret(env);
+  if (!secret) return problem(503, "issuance disabled", "ISSUANCE_SALT 미설정");
+
+  const err = url.searchParams.get("error");
+  if (err) return authPage("로그인 취소", `<h1>로그인이 완료되지 않았어요</h1><p>Google 에서 <code>${esc(err)}</code> 로 돌아왔습니다. 다시 시도해 주세요.</p>`, 400);
+
+  // state 는 **두 곳이 일치**해야 한다 — 쿼리(돌아온 값)와 쿠키(우리가 심은 값).
+  // 하나만 봐서는 남이 만든 로그인을 우리 브라우저에 이어붙이는 것을 못 막는다.
+  const qState = url.searchParams.get("state");
+  const cState = readCookie(request.headers.get("cookie"), STATE_COOKIE);
+  if (!qState || !cState || qState !== cState || !(await verifyState(secret, qState, nowSec())))
+    return authPage("로그인 확인 실패", "<h1>로그인 확인에 실패했어요</h1><p>주소가 오래됐거나 중간에 바뀌었습니다. 처음부터 다시 시도해 주세요.</p>", 400);
+
+  const code = url.searchParams.get("code");
+  if (!code) return authPage("로그인 실패", "<h1>로그인 정보가 없어요</h1><p>처음부터 다시 시도해 주세요.</p>", 400);
+
+  const ex = await exchangeCode({
+    code, clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET, redirect: redirectUri(url),
+  });
+  if (ex.error) return authPage("로그인 실패", "<h1>Google 확인에 실패했어요</h1><p>잠시 뒤 다시 시도해 주세요.</p>", 502);
+
+  const id = readIdTokenFromTokenEndpoint(ex.idToken, { clientId: env.GOOGLE_CLIENT_ID, nowSec: nowSec() });
+  if (id.error) {
+    // email_verified 가 아닌 계정은 여기서 멈춘다 — 이 이슈의 전부가 이 한 줄이다.
+    const detail = id.error === "email not verified"
+      ? "이 Google 계정은 이메일이 확인되지 않은 상태예요. 계정 설정에서 이메일을 확인한 뒤 다시 시도해 주세요."
+      : "Google 응답을 확인하지 못했어요. 다시 시도해 주세요.";
+    return authPage("발급 불가", `<h1>키를 발급하지 못했어요</h1><p>${esc(detail)}</p>`, 403);
+  }
+  const email = id.email;
+
+  // 발급 rate limit 은 그대로 둔다 — 로그인이 확인해 주는 건 **주소 소유**이지 남용 의도가 아니다.
+  const ip = await sha256hex(`${kstDay()}|${secret}|${request.headers.get("cf-connecting-ip") || "local"}`);
+  const hourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
+  const { results: recent } = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM _issuance_log WHERE ip = ? AND created_at > ?").bind(ip, hourAgo).all();
+  if (recent[0].n >= ISSUE_HOURLY_CAP)
+    return authPage("잠시 뒤에", `<h1>발급이 잦았어요</h1><p>같은 네트워크에서 시간당 ${ISSUE_HOURLY_CAP}회까지예요. 잠시 뒤 다시 시도해 주세요.</p>`, 429);
+
+  // 🔑 이미 키가 있으면 **회전하지 않는다.** 콜백의 code 는 일회용이라 "정말 만료시킬까요"를
+  // 되물을 왕복을 만들 수 없고, 파괴적 동작을 확인 없이 실행하지 않는다는 규약(#58)이 있다.
+  // 기존 키를 못 찾는 사람은 폐기 후 다시 로그인하면 된다 — 그 경로는 이미 있다.
+  const existing = await env.DB.prepare("SELECT key_prefix FROM _keys WHERE email = ?").bind(email).first();
+  if (existing)
+    return authPage("이미 키가 있어요",
+      `<h1>이미 발급된 키가 있어요</h1><p>이 계정에는 <code>${esc(existing.key_prefix)}…</code> 로 시작하는 키가 이미 있습니다. ` +
+      `키는 계정당 하나예요.</p><p>키를 잃어버리셨다면 기존 키를 폐기한 뒤 다시 로그인해 주세요 — ` +
+      `<code>DELETE /api/v1/keys</code> 에 기존 키로 요청하시면 됩니다.</p>`, 409);
+
+  const key = newKey();
+  const hash = await sha256hex(key);
+  const prefix = key.slice(0, 8);
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO _keys (key_hash, key_prefix, email, created_at) VALUES (?, ?, ?, ?)")
+      .bind(hash, prefix, email, now),
+    env.DB.prepare("INSERT INTO _issuance_log (ip, created_at) VALUES (?, ?)").bind(ip, now),
+    env.DB.prepare("DELETE FROM _issuance_log WHERE created_at < ?")
+      .bind(new Date(Date.now() - 86400000).toISOString()),
+  ]);
+  trace.keyHash = hash;
+
+  // 키 원문은 여기 한 번만 나온다. 쿠키는 역할이 끝났으니 즉시 지운다.
+  return new Response(authPage("키 발급 완료",
+    `<h1>키가 발급됐어요</h1>` +
+    `<p><strong>이 키는 지금 한 번만 표시됩니다</strong> — 서버에는 해시만 저장돼 다시 보여드릴 수 없어요.</p>` +
+    `<p><code style="display:block;padding:.75rem 1rem;font-size:1.05rem;word-break:break-all">${esc(key)}</code></p>` +
+    `<p>요청 헤더에 <code>Authorization: Bearer &lt;키&gt;</code> 로 실어 보내세요.</p>`).body,
+    { status: 201, headers: {
+        "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
+        "set-cookie": stateCookie("", url, 0),
+      } });
+}
+
 // 폐기 — 키를 즉시 무효화한다. purge=true 면 이메일·사용량까지 지운다(처리방침의 삭제 요청
 // 셀프 경로). 요청 로그의 key_hash 는 남지만, 해시→이메일 대응이 사라지므로 사람과 연결되지
 // 않는다. 30일 뒤 자동 삭제되는 건 그대로다.
@@ -142,7 +267,9 @@ async function revokeKey(env, keyRow, purge) {
     .bind(keyRow.key_hash).run();
   return json({
     key_prefix: keyRow.key_prefix, revoked: true,
-    note: "이 키는 즉시 무효다. 같은 이메일로 다시 발급하면 새 키를 받는다",
+    // 발급 경로가 환경마다 갈리므로(#110 ②) 한쪽을 단정하지 않는다 — 이메일 폼일 수도,
+    // Google 로그인일 수도 있다. 어느 쪽인지는 카탈로그의 key_issuance 가 말한다.
+    note: "이 키는 즉시 무효다. 같은 주소로 다시 발급받으면 새 키를 받는다 — 발급 방법은 GET /api/v1/catalog 의 key_issuance 참조",
   });
 }
 
@@ -177,7 +304,14 @@ const CATALOG_STALE_TTL = 600;
 const CATALOG_CACHE_HEADER = `public, max-age=${CATALOG_STALE_TTL}`;
 // 캐시 키는 **합성 URL** 이다 — 이 핸들러는 `/api/v1/catalog` 와 MCP `list_products` 양쪽에서
 // 불리는데(mcp.js 의 deps.handleCatalog), 요청 객체가 서로 달라도 같은 응답이라 한 칸을 쓴다.
-const CATALOG_CACHE_KEY = "https://catalog.internal/api/v1/catalog";
+// 🔴 캐시 키에 **발급 방식**을 섞는다. 응답 본문에 `key_issuance` 가 들어 있어서, 정책을
+// 켠 직후에도 캐시가 옛 값("email")을 최대 10분간 준다 — 그 사이 화면은 이메일 폼을 띄우고
+// 제출은 403 을 받는다. 실측으로 걸린 함정이다(2026-08-06, #110 ② 로컬 검증).
+// 캐시를 지우는 대신 **키를 가른다**: 정책이 바뀌면 다른 칸을 보므로 즉시 새 값이 나가고,
+// 옛 칸은 TTL 로 알아서 만료된다.
+// 테스트가 키를 하드코딩하면 다음에 축을 하나 더 섞을 때 조용히 어긋난다 — 그래서 내보낸다.
+export const catalogCacheKey = (env) =>
+  `https://catalog.internal/api/v1/catalog?ki=${isConfigured(env) ? "google_oauth" : "email"}`;
 
 // 캐시에 담긴 사본의 나이(초). `x-cached-at` 이 없으면 옛 형식이라 만료로 본다.
 const cachedAgeSeconds = (res) => {
@@ -202,7 +336,7 @@ async function handleCatalog(env, ctx) {
   // Cache API 가 없는 실행기(테스트 하네스 등)에서도 그대로 동작해야 한다 — 캐시는 성능이지
   // 계약이 아니다. 못 쓰면 조용히 매번 만든다.
   const cache = typeof caches !== "undefined" && caches.default ? caches.default : null;
-  const cacheKey = cache ? new Request(CATALOG_CACHE_KEY) : null;
+  const cacheKey = cache ? new Request(catalogCacheKey(env)) : null;
   if (cache) {
     const hit = await cache.match(cacheKey);
     if (hit) {
@@ -319,6 +453,11 @@ async function buildCatalog(env, cache, cacheKey) {
     attribution: "공공 원천의 2차 가공물 — 출처·이용조건 /legal#attribution",
     docs: "/llms.txt",
     openapi: "/openapi.json",
+    // 키를 어떻게 받는지는 **화면을 안 거치는 소비자에게도** 필요하다(#110 ②). 환경마다
+    // 갈리므로(로컬은 이메일, 배포는 Google) 문서에 못 박지 않고 응답이 말한다.
+    key_issuance: isConfigured(env)
+      ? { method: "google_oauth", start: "/api/v1/auth/google" }
+      : { method: "email", start: "POST /api/v1/keys" },
     join_axes: JOIN_AXES,
     products: results.map((r) => {
       const columns = JSON.parse(r.columns).map((c) => ({
@@ -516,7 +655,7 @@ export const LOG_COLUMNS = [
   "request_id", "product_id", "env", "intent",
   // 행동 로그 (#9 · agreement §3-1) — 원문은 하나도 없다. UA 는 분류 상수로, Referer 는
   // 호스트로, IP 는 아예 안 본다(§3-2). 미배선으로 남는 셋은 아래 주석에 이유를 적었다.
-  "ua_class", "agent_name", "agent_mode", "country", "asn", "referer_host",
+  "ua_class", "agent_name", "agent_mode", "agent_verified", "country", "asn", "referer_host",
   "publication_id",
 ];
 
@@ -533,17 +672,18 @@ export function logValues(trace, env) {
     // 헤더 제어가 되는 클라이언트는 `X-ASK-Intent` 로 보낸다. 컬럼과 화면은 하나다.
     trace.intent ?? null,
     // 요청 축(#9) — `clientAxes` 가 만든 값 그대로. 라우팅과 무관해 모든 표면에 같이 붙는다.
+    // agent_verified 는 0 이 뜻을 갖는 값이다(자칭인데 CF 가 확인 못 함) — `??` 여야 한다.
+    // `||` 였으면 0 이 조용히 NULL 로 바뀌어 "검증 실패"가 "검증 안 함"이 된다.
     trace.uaClass ?? null, trace.agentName ?? null, trace.agentMode ?? null,
+    trace.agentVerified ?? null,
     trace.country ?? null, trace.asn ?? null, trace.refererHost ?? null,
     // 어느 게시본을 읽었는지 — 제품을 해석한 핸들러만 안다(카탈로그·미리보기·데이터·skill).
     trace.publicationId ?? null,
   ];
 }
 
-// 아직 채우지 않는 셋 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
+// 아직 채우지 않는 둘 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
 //
-//   agent_verified  검증 수단 자체가 없다. **NULL 로 시작**이 스펙이다(§3-1 · #78 F-3) —
-//                   0 으로 두면 "검증 실패"로 읽힌다.
 //   page_path       정적 페이지·기계 문서는 `run_worker_first` 밖이라 워커에 닿지 않는다.
 //                   관측하려면 §3-4 의 6경로를 워커로 통과시키는 결정이 먼저다(#63 ④).
 //   pattern_id      패턴 실행 API(ASAC-DAG#642 안 C)가 아직 없다. 소비자가 생기면 붙인다.
@@ -571,7 +711,23 @@ async function route(request, env, url, trace, ctx) {
 
   if (path === "/api/v1/keys" && request.method === "POST") {
     trace.route = "keys";
+    // OAuth 가 설정된 환경에서는 이 문을 닫는다(#110 ②). 확인되지 않은 주소로 키가 나가면
+    // OAuth 를 붙인 의미가 없다 — 두 문을 열어 두면 느슨한 쪽으로만 온다.
+    // 미설정(로컬·테스트)에서는 그대로 동작한다: 설정 여부가 곧 정책이다.
+    if (oauthConfigured(env))
+      return problem(403, "email issuance disabled",
+        "이 환경은 Google 로그인으로만 키를 발급한다 — GET /api/v1/auth/google 로 시작할 것",
+        { auth_url: "/api/v1/auth/google" });
     return issueKey(env, request);
+  }
+  // ── Google OAuth (#110 ②) — 목적은 로그인이 아니라 **이메일 소유 확인**이다 ──────────
+  if (path === "/api/v1/auth/google" && request.method === "GET") {
+    trace.route = "auth_start";
+    return startGoogleAuth(env, url);
+  }
+  if (path === "/api/v1/auth/google/callback" && request.method === "GET") {
+    trace.route = "auth_callback";
+    return googleCallback(env, request, url, trace);
   }
   if (path === "/api/v1/keys" && request.method === "DELETE") {
     trace.route = "revoke";
@@ -709,6 +865,7 @@ export default {
     const trace = {
       route: null, requestId: newRequestId(),
       uaClass: axes.ua_class, agentName: axes.agent_name, agentMode: axes.agent_mode,
+      agentVerified: axes.agent_verified,
       country: axes.country, asn: axes.asn, refererHost: axes.referer_host,
       // 헤더로 온 의도. MCP 는 툴 인자로 받아 이 값을 덮어쓴다 — 질의마다 바뀌는 쪽이
       // 더 정확하기 때문이다(agreement §3-6: 경로는 둘, 컬럼은 하나).

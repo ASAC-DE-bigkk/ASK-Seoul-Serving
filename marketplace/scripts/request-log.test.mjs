@@ -89,7 +89,7 @@ test("요청 축이 제자리에 들어간다 — 목록과 값 순서가 어긋
     const db = migratedDb();
     const trace = {
       ...TRACE,
-      uaClass: "ai_agent", agentName: "anthropic", agentMode: "on_demand",
+      uaClass: "ai_agent", agentName: "anthropic", agentMode: "on_demand", agentVerified: 1,
       country: "KR", asn: "4766", refererHost: "chat.example.com",
       intent: "dong_activity_rank", publicationId: "pub_2026_08_04",
     };
@@ -101,6 +101,7 @@ test("요청 축이 제자리에 들어간다 — 목록과 값 순서가 어긋
     assert.equal(row.ua_class, "ai_agent");
     assert.equal(row.agent_name, "anthropic");
     assert.equal(row.agent_mode, "on_demand");
+    assert.equal(row.agent_verified, 1);
     assert.equal(row.country, "KR");
     assert.equal(row.asn, "4766");
     assert.equal(row.referer_host, "chat.example.com");
@@ -108,10 +109,10 @@ test("요청 축이 제자리에 들어간다 — 목록과 값 순서가 어긋
     assert.equal(row.publication_id, "pub_2026_08_04");
   });
 
-test("배선하지 않은 셋은 NULL 로 남는다 — 0 은 '검증 실패'로 읽힌다", NEEDS_SQLITE, () => {
-  // agent_verified 는 스펙상 NULL 로 시작이고(§3-1 · #78 F-3), page_path·pattern_id 는
-  // 값을 만들 곳이 아직 없다. 목록에 넣어 두고 undefined 를 실으면 0/'' 로 굳는다.
-  for (const c of ["agent_verified", "page_path", "pattern_id"])
+test("배선하지 않은 둘은 NULL 로 남는다 — 0 은 '검증 실패'로 읽힌다", NEEDS_SQLITE, () => {
+  // page_path·pattern_id 는 값을 만들 곳이 아직 없다. 목록에 넣어 두고 undefined 를 실으면
+  // 0/'' 로 굳는다. agent_verified 는 #111 에서 배선했다 — 아래 테스트가 그 경계를 지킨다.
+  for (const c of ["page_path", "pattern_id"])
     assert.ok(!LOG_COLUMNS.includes(c), `${c} 는 아직 채울 값이 없다 — 목록에 넣지 않는다`);
 
   const db = migratedDb();
@@ -119,9 +120,29 @@ test("배선하지 않은 셋은 NULL 로 남는다 — 0 은 '검증 실패'로
     `VALUES (${LOG_COLUMNS.map(() => "?").join(", ")})`;
   db.prepare(sql).run(...logValues(TRACE, { ASK_ENV: "local" }));
   const row = db.prepare("SELECT * FROM _gateway_request_log").get();
-  assert.equal(row.agent_verified, null);
   assert.equal(row.page_path, null);
   assert.equal(row.pattern_id, null);
+});
+
+// 🔴 배선했다고 해서 값이 늘 채워지는 건 아니다 — 검증 대상이 아닌 요청(브라우저·curl)은
+// NULL 로 남아야 한다. `?? null` 이 아니라 `|| null` 이었으면 **0 이 NULL 로 뒤바뀐다**.
+test("agent_verified 는 배선됐지만 검증 대상이 아니면 NULL 이다", NEEDS_SQLITE, () => {
+  assert.ok(LOG_COLUMNS.includes("agent_verified"), "#111 에서 배선했다");
+
+  const db = migratedDb();
+  const sql = `INSERT INTO _gateway_request_log (${LOG_COLUMNS.join(", ")}) ` +
+    `VALUES (${LOG_COLUMNS.map(() => "?").join(", ")})`;
+  db.prepare(sql).run(...logValues(TRACE, { ASK_ENV: "local" }));
+  assert.equal(db.prepare("SELECT * FROM _gateway_request_log").get().agent_verified, null);
+});
+
+test("0 은 값이다 — agent_verified 가 0 이면 0 으로 실려야 한다", NEEDS_SQLITE, () => {
+  // 자칭 AI 인데 CF 가 확인 못 한 경우다. `|| null` 이면 이 사실이 조용히 사라진다.
+  const db = migratedDb();
+  const sql = `INSERT INTO _gateway_request_log (${LOG_COLUMNS.join(", ")}) ` +
+    `VALUES (${LOG_COLUMNS.map(() => "?").join(", ")})`;
+  db.prepare(sql).run(...logValues({ ...TRACE, agentVerified: 0 }, { ASK_ENV: "local" }));
+  assert.equal(db.prepare("SELECT * FROM _gateway_request_log").get().agent_verified, 0);
 });
 
 test("축을 못 뽑은 요청도 기록된다 — 축이 없다고 행을 버리지 않는다", NEEDS_SQLITE, () => {

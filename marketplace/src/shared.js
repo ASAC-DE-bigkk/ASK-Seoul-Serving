@@ -175,10 +175,22 @@ const GENERIC_BOT_PATTERN = /bot|crawler|spider|slurp|scrapy/i;
 
 // UA 문자열 → {ua_class, agent_name, agent_mode}. request 가 아니라 문자열을 받는
 // 순수 함수 — 스키마·D1 없이 단독 테스트가 가능하다(scripts/classify.test.mjs).
-// 판정 순서가 곧 규칙이다: AI 목록 → cli → 일반 bot → browser → unknown.
+// 판정 순서가 곧 규칙이다: 헤더 없음 → AI 목록 → cli → 일반 bot → browser → unknown.
 // 일반 bot 을 browser 보다 먼저 보는 이유: 크롤러 UA 대부분이 Mozilla/ 를 포함한다.
+//
+// ua_class 값: no_ua | ai_agent | ai_crawler | cli | bot | browser | unknown
+//
+// **`no_ua` 와 `unknown` 은 다르다** (#112) — 안 보낸 것과 못 알아본 것은 다른 사실이고,
+// 원문 UA 를 저장하지 않으므로 **여기서 안 가르면 영구히 사라진다.** 같은 원칙을 바로 아래
+// `normalizeIntent` 가 이미 쓰고 있었다(NULL 과 "other" 를 안 섞는다). prod 실측에서
+// Node 18+ 의 global fetch 가 UA 를 안 보내 10건이 통째로 unknown 에 섞였고, 그중 둘은
+// `/mcp` 요청이었다 — 정의상 에이전트인데 "못 알아본 클라이언트"와 한 칸에 있었다.
+//
+// NULL 이 아니라 **값**으로 두는 이유: 콘솔이 `ua_class IS NULL` 로 "게이트웨이가 아직 이
+// 축을 안 싣는다"(axes_unfilled)를 판정한다. NULL 로 두면 UA 없는 요청 하나가 '축 미배선'
+// 으로 읽혀 카드가 통째로 미발행을 말한다.
 export function classifyClient(ua) {
-  if (!ua) return { ua_class: "unknown", agent_name: null, agent_mode: null };
+  if (!ua) return { ua_class: "no_ua", agent_name: null, agent_mode: null };
   for (const [re, name, mode] of AI_AGENT_PATTERNS)
     if (re.test(ua))
       return { ua_class: mode === "crawler" ? "ai_crawler" : "ai_agent", agent_name: name, agent_mode: mode };
@@ -197,11 +209,32 @@ export function classifyClient(ua) {
 // 채워 준다(실측 2026-08-04: `country=KR · asn=4766`). 다만 **항상 있다고 가정하지 않는다** —
 // Node 의 Request 에는 없고, 그때 NULL 로 남는 게 맞다. "모른다"를 다른 값으로 꾸미면
 // 배포 후 실측과 섞인다(§4-3).
+// UA 는 **자기 신고**다 — 아무나 `ClaudeBot` 을 적을 수 있고, 진짜 에이전트가 안 밝힐 수도
+// 있다. `cf.verifiedBotCategory` 는 그것과 층위가 다르다: **Cloudflare 가 확인한 값**이다.
+// prod 실측(2026-08-06, `wrangler tail`)에서 이 필드가 실제로 온다는 것을 확인했다
+// (curl 요청이라 값은 `""`). `botManagement`(score·ja3)는 이 플랜에 없다.
+//
+// 🔑 결과가 셋이어야 한다. `"" → 0` 으로 접으면 브라우저·curl 이 전부 "검증 실패"가 되는데,
+// 그들은 애초에 **검증 대상이 아니다**(§3-1 · #78 F-3 — 0 은 "검증 실패"로 읽힌다).
+//
+//   AI 에이전트 + 카테고리 있음  →  1     CF 가 확인했다
+//   AI 에이전트 + ""             →  0     자칭인데 CF 가 확인 못 했다 = 진짜 검증 실패
+//   AI 에이전트가 아님            →  NULL  검증할 것이 없다
+//
+// 필드 자체가 없을 때(`cf` 를 못 받는 환경)도 NULL 이다 — **"봤는데 아니다"(`""`)와
+// "못 물어봤다"(부재)는 다른 사실**이고, 후자를 0 으로 적으면 모른다가 검증 실패로 굳는다.
+export function agentVerified(agentName, category) {
+  if (!agentName) return null;
+  if (typeof category !== "string") return null;
+  return category.trim() ? 1 : 0;
+}
+
 export function clientAxes(request) {
   const cf = request.cf || {};
   const { ua_class, agent_name, agent_mode } = classifyClient(request.headers.get("user-agent"));
   return {
     ua_class, agent_name, agent_mode,
+    agent_verified: agentVerified(agent_name, cf.verifiedBotCategory),
     country: cf.country ?? null,
     // asn 은 숫자로 온다 — 컬럼이 TEXT 라 문자열로 맞춰 넣는다(집계 축이지 산술 대상이 아니다).
     asn: cf.asn == null ? null : String(cf.asn),
@@ -228,6 +261,31 @@ export function normalizeIntent(raw) {
   const value = (raw ?? "").trim();
   if (!value) return null;                       // 안 보낸 것과 못 알아본 것은 다르다
   return INTENT_RE.test(value) ? value : "other";
+}
+
+// ── 발급 이메일 정규화 (#109) ────────────────────────────────────────────────
+// `_keys.email UNIQUE` 가 "이메일당 1키"를 지키는 **유일한 실질 장치**다. 그래서 같은
+// 메일함을 가리키는 두 문자열이 들어오면 그 제약이 조용히 통과된다 — prod 에서 실제로
+// `qe@gg.gg.` 와 `qe@gg.gg` 가 각각 키를 받았다(2026-08-06).
+//
+// 그래서 순서가 **정규화 → 검증**이다. 검증만 강화하면 이번 형태 하나만 막고,
+// 정규화만 하면 잘못된 도메인이 통과한다.
+//
+// 후행 점을 **거절이 아니라 정규화**하는 이유: `example.com.` 은 DNS 루트 표기라 같은
+// 메일함이다. 합쳐 두면 이후 같은 주소로 오는 요청이 409(재발급 확인)로 제대로 합류한다.
+// 반대로 `gg..gg`(빈 레이블)는 `gg.gg` 의 다른 표기가 **아니라** 그냥 잘못된 도메인이라
+// 거절한다 — 점을 전부 뭉개면 서로 다른 도메인이 한 값으로 붙어 더 큰 사고가 된다.
+//
+// 제공자 소관인 동치(gmail 의 점 무시·플러스 주소)는 **건드리지 않는다.** 그건 도메인마다
+// 규칙이 달라 우리가 알 수 없고, 지어내면 남의 주소를 같은 것으로 취급하게 된다.
+//
+// 도메인 레이블 규칙은 HTML5 `type="email"` 과 같은 수준으로 맞췄다 — 프런트와 서버의
+// 판정이 갈리면 화면에서 통과한 값이 서버에서 400 이 된다.
+const EMAIL_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const EMAIL_RE = new RegExp(`^[^\\s@]+@${EMAIL_LABEL}(?:\\.${EMAIL_LABEL})+$`);
+export function normalizeEmail(raw) {
+  const value = String(raw ?? "").trim().toLowerCase().replace(/\.+$/, "");
+  return EMAIL_RE.test(value) ? value : null;
 }
 
 // D1 은 배열을 JSON 문자열로 싣는다(`requires`·`primary_key` — ASAC-DAG#638 §2). 깨진 값이

@@ -1,40 +1,37 @@
-# CD — dev 브랜치에 푸시(머지)되면 **운영** 워커를 자동 배포한다.
+# CD — **main** 브랜치에 푸시(머지)되면 운영 워커 두 개를 자동 배포한다.
 #
-# ⚠️ 2026-08-05 전환: 예전에는 dev 환경 두 워커(dev.ask-seoul.kr · dev-ops.ask-seoul.kr)를
-# 배포했다. dev D1 폐기와 함께 **dev 환경 자체를 접었으므로**(decision/0015) 배포 대상이
-# 운영으로 바뀌었다. 브랜치는 그대로 `dev` 다 — **브랜치 이름과 배포 환경이 이제 다르다.**
-# `dev` 머지 = **운영 배포**다. 헷갈리면 사고가 나는 자리라 여기 크게 적어 둔다.
+# ⚠️ 2026-08-06 전환 (팀 합의): 브랜치와 환경을 이름 그대로 맞췄다.
+#   `dev`  = 통합 브랜치 — PR 이 모이는 곳. **배포하지 않는다.**
+#   `main` = 배포 브랜치 — 여기 머지되면 운영에 나간다.
+# 그 전에는 `dev` 머지가 곧 운영 배포라 브랜치 이름과 배포 환경이 어긋나 있었다
+# (decision/0015 전환의 잔재). 헷갈리면 사고가 나는 자리라 정리했다.
 #
-# 대상: 콘솔(ops.ask-seoul.kr) — `--env production`.
-#
-# 🔴 게이트웨이(marketplace)는 **여기서 다루지 않는다.** 소유가 다르고, dev D1 폐기에
-# 따른 전환도 그쪽 담당자 몫이다(#85). 그쪽 결정이 서기 전에 CI 가 대신 배포하면 남의
-# 환경 결정을 자동화가 먼저 해 버리는 셈이다. 정리되면 잡을 다시 넣는다.
+# 대상: 게이트웨이(ask-seoul.kr) · 콘솔(ops.ask-seoul.kr) — 둘 다 `--env production`.
+# dev 배포면은 **자동화에서 빠진다** — D1 이 운영 하나뿐이라(decision/0015) 개발용
+# 배포면이 실제 데이터를 못 가졌다. 콘솔 dev(dev-ops)는 이미 접혔고, 게이트웨이
+# dev(dev.ask-seoul.kr)는 **#4 K-Skill 검증이 그 주소를 쓰는지 확인될 때까지 살려 둔다**
+# (wrangler.toml `[env.dev]` 참조). 확인되면 그 블록·`deploy:dev`·워커를 함께 지운다.
 #
 # 경로 필터를 두지 않는다 — 배포는 멱등이고, 공유 문서·계약 변경이 어느 워커에 닿는지
 # 필터로 가르는 비용이 이 규모에선 더 크다.
 #
 # ⚠️ deploy:prod 스크립트가 아니라 wrangler deploy 를 직접 부른다 — 마이그레이션은
 # **코드 배포와 분리**한다. 운영 D1 스키마를 CI 가 자동으로 만지지 않는다는 뜻이고,
-# 그건 D1 이 운영 하나뿐이 된 뒤로 더 중요해졌다(런북 §1-1 의 `npm run migrate` 수동 절차).
+# 그건 D1 이 운영 하나뿐이 된 뒤로 더 중요해졌다(런북 §1 의 수동 절차).
 #
-# 🔒 대신 **적용됐는지는 확인한다**(`schema-ready`). #80 이 dev 배포에 넣었던 게이트를
-# 승계한 것이고, 운영 하나뿐인 지금 **더 필요하다** — 스키마보다 코드가 먼저 나가면 화면이
+# 🔒 대신 **적용됐는지는 확인한다**(각 잡의 첫 단계). 스키마보다 코드가 먼저 나가면 화면이
 # 없는 표를 읽고, 되돌릴 창이 없다. 자동으로 적용하지는 않는다: 확인만 하고 **막는다.**
-#
-# ⚠️ #80 의 게이트는 게이트웨이 `preflight`(marketplace 소유, 기대 스키마를 그쪽
-# `migrations/` 에서 뽑는다)를 썼다. **그대로 가져올 수 없다** — 운영 D1 에는 게이트웨이 표가
-# 아직 없어서(#85) `--require-applied` 가 언제나 실패하고, 그러면 콘솔 배포가 영구히 막힌다.
-# 그래서 **배포하는 것의 스키마만** 본다. 게이트웨이 잡이 돌아올 때 그쪽 preflight 도 같이 온다.
+# 게이트웨이는 자기 `preflight --require-applied`(기대 스키마를 marketplace/migrations 에서
+# 뽑는다), 콘솔은 자기 장부(`d1_migrations_ops_dashboard`)를 본다 — 소유가 갈리면 게이트도 갈린다.
 #
 # 필요한 GitHub Secrets:
-#   CLOUDFLARE_API_TOKEN  — Workers Scripts:Edit 권한 (배포용)
+#   CLOUDFLARE_API_TOKEN  — Workers Scripts:Edit · Zone Workers Routes:Edit (배포용)
 #   CLOUDFLARE_ACCOUNT_ID — 0d39ddce… (팀 계정)
 name: Deploy prod
 
 on:
   push:
-    branches: [dev]
+    branches: [main]
 
 # 기본 GITHUB_TOKEN 을 읽기로 좁힌다 — 배포 자격은 Cloudflare secrets 가 담당한다.
 permissions:
@@ -46,9 +43,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 배포하려는 워커의 D1 스키마가 **이미 적용돼 있는지**만 본다. 읽기 전용이고,
-  # 적용은 하지 않는다 — 사람이 `npm run migrate` 로 한다(런북 §1-1).
-  schema-ready:
+  gateway:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: marketplace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: marketplace/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # 운영 D1 스키마가 이미 적용돼 있는지 본다(읽기 전용). 적용은 사람이 한다 — 런북 §1.
+      # `--require-applied` 는 `--ack` 로 우회되지 않는다: 스키마 미적용은 협의 대상이 아니다.
+      - name: Verify gateway D1 schema is applied (read-only)
+        run: npm run preflight -- ask-seoul-prod-d1 --env production --require-applied
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Deploy gateway (ask-seoul.kr)
+        run: npx wrangler deploy --env production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  console:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -61,9 +83,9 @@ jobs:
           cache: npm
           cache-dependency-path: ops-dashboard/package-lock.json
       - run: npm ci
+      # `migrations list` 는 미적용분이 있어도 exit 0 이라 출력을 봐야 한다.
+      # 적용이 끝났을 때만 "No migrations to apply!" 가 찍힌다(실측 wrangler 4.115).
       - name: Verify console D1 migrations are applied (read-only)
-        # `migrations list` 는 미적용분이 있어도 exit 0 이라 출력을 봐야 한다.
-        # 적용이 끝났을 때만 "No migrations to apply!" 가 찍힌다(실측 wrangler 4.115).
         run: |
           set -o pipefail
           out=$(npx wrangler d1 migrations list ask-seoul-prod-d1 --remote 2>&1) || true
@@ -77,21 +99,6 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-  console:
-    needs: schema-ready
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ops-dashboard
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: ops-dashboard/package-lock.json
-      - run: npm ci
       - name: Deploy console (ops.ask-seoul.kr)
         run: npx wrangler deploy --env production
         env:
