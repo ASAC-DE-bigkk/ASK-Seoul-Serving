@@ -630,13 +630,34 @@ const parseHash = () => {
 // 스코프가 안 걸리는 탭(키·API 사용량 상세)에서는 스코프바를 숨긴다 — 있으면 "여기서도
 // 좁혀지겠지" 오해한다.
 const SCOPED_PANES = ["pipeline", "runs", "serving", "usage"];
+// 드롭다운에 넣을 '집계 가능한 분야'를 등록부(_ops_domain)가 아니라 **실제 적재된 데이터**에서
+// 뽑는다. 운영 실측(2026-08-06) _ops_domain 은 0행이라, 등록부만 보면 드롭다운이 '전체'뿐이다.
+// 발행·SLO·실행·서빙 데이터에 실제로 나타난 분야를 모아 쓴다(스코프 필터가 거르는 축과 같다).
+// 라벨은 등록부가 있으면 그 값(정본), 없으면 분야 코드를 그대로 — 화면에서 라벨을 지어내지 않는다.
+function collectScopeDomains(d) {
+  const seen = new Map();
+  const add = (dom, label) => {
+    if (!dom) return;
+    if (!seen.has(dom)) seen.set(dom, label || "");
+    else if (label && !seen.get(dom)) seen.set(dom, label);
+  };
+  const P = d.pipeline || {}, R = d.runs || {}, S = d.serving || {}, U = d.publication || {};
+  for (const x of P.domains || []) add(x.domain, x.label);       // 등록부 — 라벨의 정본
+  for (const x of U.by_domain || []) add(x.domain);              // 발행된 분야(product_id 접두사)
+  for (const x of P.slo || []) add(x.domain);
+  for (const x of R.daily || []) add(x.domain);
+  for (const x of R.expectations || []) add(x.domain);
+  for (const x of S.products || []) add(domOf(x.product_id || x.table_name));
+  return [...seen.keys()].sort().map((domain) => ({ domain, label: seen.get(domain) || domain }));
+}
 function syncScopeBar(domains) {
   const sel = $("domScope");
-  if (sel.dataset.filled !== String((domains || []).length)) {
+  const key = (domains || []).map((x) => x.domain).join(",");   // 개수가 같아도 분야가 바뀌면 다시 그린다
+  if (sel.dataset.filled !== key) {
     sel.innerHTML = "<option value=''>전체 통합</option>" +
       (domains || []).map((x) => "<option value='" + esc(x.domain) + "'>" +
         esc(x.label || x.domain) + "</option>").join("");
-    sel.dataset.filled = String((domains || []).length);
+    sel.dataset.filled = key;
   }
   sel.value = DOMSCOPE;
   $("scopeNow").textContent = DOMSCOPE ? domLabel(DOMSCOPE) : "모든 분야";
@@ -953,8 +974,8 @@ function render(d) {
   // ── 파이프라인
   // 분야 한글명은 **스코프 전 전체 목록**에서 채운다 — 스코프를 걸어도 드롭다운·라벨이
   // 전 분야를 알아야 하기 때문이다. 그 다음 표시용 slo·doms 에만 스코프를 건다.
-  for (const x of d.pipeline.domains) DOM_LABEL[x.domain] = x.label;
-  syncScopeBar(d.pipeline.domains);   // 도메인 드롭다운을 전체 분야로 채운다(#3)
+  for (const x of d.pipeline.domains) DOM_LABEL[x.domain] = x.label;   // 라벨 정본(등록부)
+  syncScopeBar(collectScopeDomains(d));   // 드롭다운은 실제 적재된 데이터의 분야로 채운다(#3 · _ops_domain 0행 대응)
   const slo = byDomain(d.pipeline.slo);
   const doms = byDomain(d.pipeline.domains);
   const withSlo = doms.filter((x) => x.has_slo).length;
