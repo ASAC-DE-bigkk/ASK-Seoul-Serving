@@ -26,3 +26,24 @@ SELECT '0001_ops_slo.sql'
 WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_ops_slo')
   AND EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_ops_domain')
   AND NOT EXISTS (SELECT 1 FROM d1_migrations_ops_dashboard WHERE name='0001_ops_slo.sql');
+
+-- 🔴 0002 는 **남의 표를 만드는 파일**이라 더 조심해야 한다 (2026-08-05, decision/0015).
+--
+-- 이 파일은 조회 DB 4종이 **없는** 곳(옛 로컬 Miniflare)에서 화면을 돌려보려고 만든
+-- 미러였다. D1 이 운영 하나뿐이 되면서 그 전제가 사라졌다 — 운영에는 ASAC-DAG 적재기가
+-- 만든 진짜 표가 이미 있고, 거기엔 실측 수만 행이 들어 있다.
+--
+-- ⚠️ 그대로 apply 하면 `CREATE TABLE IF NOT EXISTS` 는 무해하게 넘어가지만
+--    **`CREATE INDEX IF NOT EXISTS` 3개가 `_ops_run_event` 에 실제로 만들어진다.**
+--    남의 운영 표에 인덱스를 얹는 것은 우리가 할 일이 아니다(CLAUDE.md §6 소유 경계) —
+--    스키마 판단은 정본 소유자의 몫이고, 라이브 표에 인덱스를 거는 비용도 그쪽 몫이다.
+--
+-- 그래서 **표가 이미 있으면 실행하지 않고 장부에만 적는다.** 표가 없는 곳(새 D1)에서는
+-- 그대로 실행돼 미러가 생긴다 — 두 경우 다 맞게 동작한다.
+INSERT INTO d1_migrations_ops_dashboard(name)
+SELECT '0002_ops_records.sql'
+WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_ops_run_event')
+  AND EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_ops_daily_metric')
+  AND EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_ops_pipeline_state')
+  AND EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_ops_pipeline_expectation')
+  AND NOT EXISTS (SELECT 1 FROM d1_migrations_ops_dashboard WHERE name='0002_ops_records.sql');

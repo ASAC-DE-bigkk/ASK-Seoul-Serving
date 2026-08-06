@@ -114,10 +114,6 @@ async function toToolResult(res, trace = {}) {
 async function callTool(name, args, ctx) {
   const { env, request, keyRow, trace, deps } = ctx;
   args = args || {};
-  // 관측 route 세분화(#63 결정 A) — 발견/확인/서빙 퍼널을 로그에서 가르기 위한 것으로,
-  // 툴 이름·응답 계약(클라이언트가 보는 것)은 무변경. 프로토콜 단계(initialize 등)는
-  // "mcp" 그대로고, 모르는 툴 이름은 값 집합을 오염시키지 않게 세분화하지 않는다.
-  if (TOOLS.some((t) => t.name === name)) trace.route = `mcp_${name}`;
   if (name === "list_products") {
     const res = await deps.handleCatalog(env);
     if (res.status >= 400) return toToolResult(res, trace);
@@ -201,6 +197,13 @@ export async function handleMcp(request, env, trace, deps) {
       );
     }
     trace.keyHash = keyRow.key_hash;
+
+    // 관측 route 세분화(#63 A)는 **버스트 앞**에서 정한다 — REST 는 라우터가 버스트 앞에서
+    // route 를 정해 429 도 'data' 로 남는데, 이 줄이 callTool 안(버스트 뒤)에 있으면 MCP 만
+    // 거부분이 'mcp' 로 남아 SERVE 집계에서 통째로 빠진다(성진 실측: 통과 60 / 거부 4).
+    // 모르는 툴 이름은 세분화하지 않는다 — route 값 집합을 오염시키지 않기 위해서다.
+    const toolName = params && params.name;
+    if (TOOLS.some((t) => t.name === toolName)) trace.route = `mcp_${toolName}`;
 
     // 버스트는 다른 네 표면과 **같은 자리·같은 버킷**에서 본다(agreement §7 — 쿼터보다 먼저).
     // 여기만 비어 있으면 루프를 도는 에이전트가 상한 없이 들어온다(#61). 인증 뒤에 두는 것도

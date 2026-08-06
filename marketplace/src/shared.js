@@ -242,3 +242,53 @@ export function parseJsonArray(raw) {
     return [];
   }
 }
+
+// ── 재배포 권리 게이트 (#88 §1-2 B) ──────────────────────────────────────────
+//
+// 전 표면 공통이다. 준비도·projection·품질은 문마다 기준이 달라도 되지만(그건 "이 제품이
+// 쓸 만한가"라 소비자마다 다르다), **재배포 권리는 원천과의 약속이라 소비자와 무관하다** —
+// 문을 바꾼다고 허락이 달라지지 않으므로 어느 문으로도 못 뚫려야 한다.
+//
+// `/skill/v1` 은 이 둘에 더해 게시본 정합(`source_rights_publication_mismatch`)·증거 완결성
+// (`source_rights_evidence_incomplete`)까지 본다 — 그건 준비도 영역이라 여기로 올리지 않는다
+// (#88 masondev 조건: "`/skill` 의 나머지 blocker 는 손대지 않는다").
+//
+// ⚠️ 단계를 코드 상수로 둔다. `[vars]` 로 빼면 환경 구성이 바뀌는 중인 지금(#85 운영 이관)
+//    두 번 손대게 된다 — 2단계로 넘길 때 그 자리에서 함께 정한다.
+//    1 = 명시적 거부만 차단 (실측 2026-08-05: prod 에 거부 0종 → 아무것도 안 막는다)
+//    2 = 증거 누락도 차단 (fail-closed. 같은 실측에서 68종 중 63종이 막힌다 — 백필이 선행)
+export const RIGHTS_GATE_STAGE = 1;
+
+// D1 의 재배포 권리 증거를 읽는다. 반환은 세 갈래이고 셋이 다 다른 뜻이다:
+//   null = 표가 없다(파이프라인이 아직 안 만들었다)  ·  [] = 표는 있는데 이 제품 행이 0
+//   [...] = 선언된 원천들
+export async function loadRedistributionRights(env, productId) {
+  return safeRows(env.DB
+    .prepare("SELECT source_id, redistribution FROM d1_catalog_sources WHERE product_id = ?")
+    .bind(productId));
+}
+
+// 위 세 갈래를 단계에 따라 판정한다. blocker 이름은 skill.js 와 **같은 어휘**를 쓴다 —
+// 같은 사유를 문마다 다른 말로 부르면 소비자가 두 문을 오갈 때 원인을 못 맞춘다.
+export function redistributionBlockers(sources, stage = RIGHTS_GATE_STAGE) {
+  const blockers = [];
+  if (sources === null || !sources.length) {
+    // 1단계에서는 "아직 안 적었다"를 막지 않는다 — 백필 전에 켜면 전 제품이 닫힌다.
+    if (stage >= 2) blockers.push("missing_source_rights_evidence");
+    return blockers;
+  }
+  // 하나라도 재배포를 허용하지 않으면 제품 전체가 막힌다 — 원천이 섞인 제품에서
+  // 허용된 원천만 골라 낼 방법이 없기 때문이다(컬럼 단위 출처 표시가 없다).
+  if (sources.some((s) => s.redistribution !== "allowed_with_attribution")) {
+    blockers.push("source_redistribution_not_allowed");
+  }
+  return blockers;
+}
+
+// 차단 응답. `/skill/v1` 의 `product_not_ready` 와 **같은 형태**로 답한다(코드·blockers 키) —
+// 소비자가 두 문에서 다른 모양을 받으면 같은 원인을 두 번 배워야 한다.
+export function rightsBlockedProblem(productId, publicationId, blockers) {
+  return problem(503, "product not ready",
+    "원천이 재배포를 허용한 근거가 게시되기 전까지 데이터 조회를 닫는다",
+    { code: "product_not_ready", product_id: productId, publication_id: publicationId ?? null, blockers });
+}
