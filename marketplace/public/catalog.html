@@ -475,6 +475,21 @@ const DOMAINS = [
 // 정본은 게시본 `d1_catalog_display`·`d1_catalog_ext`(ASAC-DAG#706)이고 서버가 붙인다.
 // 옛 정적 `product-display.json` 은 지웠다 — 사람이 갱신하는 사본이라 게시본과 어긋났다.
 
+// ⚠️ **한시적 폴백이다 — 정본이 아니다.** 표시명의 정본은 계약 `meta.serving.display`
+// → 게시본 `d1_catalog_display` → 카탈로그 응답의 `display` 다(ASAC-DAG#706).
+//
+// 이 파일이 다시 온 이유: 게시본으로 갈아타면서 사본을 **대체물이 다 게시되기 전에** 지웠고,
+// 그 결과 56종 중 49종이 화면에서 `product_id` 로 내려앉았다(선언한 건 culture 7종뿐).
+// 계약상으로는 정상이지만 화면은 나빠졌다 — 순서를 잘못 잡은 것이다.
+//
+// 규칙 셋:
+//   ① **게시본이 이긴다.** 여기는 게시본에 없는 제품의 빈 자리만 메운다.
+//   ② **갱신하지 않는다.** 생성기(fixtures)는 지운 채로 두고 이 파일은 얼려 둔다 —
+//      사본을 다시 기르면 같은 어긋남이 돌아온다.
+//   ③ **비우는 조건**: 각 도메인이 `meta.serving.display` 를 선언·발행하면 그 제품은
+//      자동으로 여기를 안 본다. 전 도메인이 차면 이 파일과 아래 폴백을 함께 지운다.
+let TITLE_FALLBACK = {};
+
 let PRODUCTS = [];
 let activeDomain = "all";
 let query = "";
@@ -484,7 +499,8 @@ let page = 1;
 const PAGE_SIZE = 10;
 
 const domainOf = (p) => (p.product_id || p.name || "").replace(/^gold_/, "").split("_")[0];
-const titleOf = (p) => (p.display || {}).title || p.product_id || p.name;
+const fb = (p) => TITLE_FALLBACK[p.product_id] || {};
+const titleOf = (p) => (p.display || {}).title || fb(p).title || p.product_id || p.name;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 
 // 컬럼 설명은 **카탈로그 응답이 실어 온다**(`columns[].description`). 정본은 게시본
@@ -510,7 +526,13 @@ function goHash(hash, behavior) {
 }
 
 async function boot() {
-  const res = await fetch("/api/v1/catalog");
+  // 두 요청을 **동시에** 띄운다 — 폴백은 카탈로그와 무관하므로 줄세울 이유가 없다.
+  // 폴백은 부가 정보라 실패를 삼킨다(제목이 product_id 로 내려앉을 뿐).
+  const [res, fbJson] = await Promise.all([
+    fetch("/api/v1/catalog"),
+    fetch("/product-display.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
+  ]);
+  TITLE_FALLBACK = fbJson || {};
   PRODUCTS = (await res.json()).products || [];
   // 설명·표시명이 없어도 카탈로그는 그대로 뜬다 — 부가 정보라 실패를 삼킨다
   // 검증된 질의 예시(usage) — 라이브 d1_usage_patterns(commerce) + culture Phase 0 검증분.
@@ -580,7 +602,7 @@ function visible() {
     if (!query) return true;
     // 검색 표면: 표시명·기술명·설명(쉬운 문장 + 계약 원문) + usage 질문들
     const uq = (p.usage_patterns || []).map((u) => u.question_ko).join(" ");
-    const hay = (titleOf(p) + " " + ((p.display || {}).summary || "") + " " +
+    const hay = (titleOf(p) + " " + ((p.display || {}).summary || fb(p).desc || "") + " " +
       (p.product_question || "") + " " + (p.description || "") + " " + uq + " " + p.name).toLowerCase();
     return hay.includes(query);
   });
@@ -630,7 +652,7 @@ function renderList() {
       "<div class='t' title='" + esc(p.name) + "'>" + titleOf(p) + "</div>" +
       // 목록 설명은 쉬운 한 줄 문장(display 사전 desc)을 우선한다 — 계약 description 은
       // 그레인 기호·내부 용어 중심이라 처음 보는 사용자에게 안 읽힌다(멘토 피드백).
-      "<div class='desc'>" + esc(d.summary || p.description || p.product_question || "—") + "</div>" +
+      "<div class='desc'>" + esc(d.summary || fb(p).desc || p.description || p.product_question || "—") + "</div>" +
       (usage.length
         ? "<span class='ubadge' data-uq role='button' title='활용 예시 " + usage.length + "건 펼치기'>질문 " + usage.length + "건</span>"
         : "<span class='ubadge none'>예시 준비 중</span>") +
