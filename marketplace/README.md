@@ -1,25 +1,34 @@
 # marketplace — V1 마켓플레이스 프로토타입 (ASK-Seoul#58)
 
-팀 D1 에 적재된 6개 도메인 서빙 제품(등록 62종 중 **공개 59종** — 아래 '공개 게이트' 참고)을
+운영 D1 에 적재된 6개 도메인 서빙 제품(**공개 56종** — 아래 '공개 게이트' 참고)을
 **키 발급 + 일일 쿼터** 게이트 뒤에서 제공하는
 Workers + Static Assets + D1 웹서비스. #476 게이트웨이 역할(키 검증·rate limit·통합
-카탈로그)의 로컬 실물 검증이자, #55 "프로토타입 검증 → 팀 이관" 경로의 산출물.
+카탈로그)의 실물 검증이자, #55 "프로토타입 검증 → 팀 이관" 경로의 산출물.
+
+## 🔴 로컬 구동도 운영 D1 에 붙는다
+
+- `npm run dev` 는 **플래그 없이 운영 D1 을 본다**(#85 — dev D1 폐기). 바인딩에
+  `remote = true` 가 박혀 있어서지 플래그 때문이 아니다. **`--remote` 는 쓰지 않는다**
+  — 붙은 것처럼 보이면서 질의만 비는 폐기 경로다.
+- 대가: 로컬 구동이 운영 `_keys`·`_usage`·`_burst` 를 실제로 건드린다. 테스트 키는
+  `DELETE /api/v1/keys?purge=true` 로 지운다. 요청 로그는 `ASK_ENV="local"` 로 찍혀
+  콘솔이 걸러낸다(#64).
+- 🔴 **남의 표 모양은 바꾸지 않는다** — `_request_log`(transit) · `_ops_*`(ASAC-DAG) ·
+  `_catalog`·제품 표(도메인 export)에 `DROP`·`ALTER` 금지. 스키마 변경은
+  `migrations/` + `npm run migrate` 로만.
 
 ## ⚠️ 배포는 스크립트로만
 
-- 로컬 구동은 `wrangler dev`(로컬 Miniflare sqlite D1). 배포는 `npm run deploy:dev`
-  (→ `dev.ask-seoul.kr`, 2026-08-04 시행) / `npm run deploy:prod`(→ `ask-seoul.kr`,
-  agreement §8-3 조율 선행) — env 없는 맨 `wrangler deploy` 는 금지, 절차 정본은
-  [docs/deploy-runbook.md](docs/deploy-runbook.md).
-- 팀(원격) D1 쓰기는 런북 절차(preflight → 장부 → apply)를 통해서만. `wrangler.toml`
-  기본 환경의 database_id 는 로컬 모드에서 사용되지 않는다(시드는 전부 `.wrangler/`
-  로컬 상태) — 플래그 없는 명령은 언제나 로컬이다.
+`npm run deploy:dev`(→ `dev.ask-seoul.kr`, 2026-08-04 시행) / `npm run deploy:prod`
+(→ `ask-seoul.kr`, agreement §8-3 조율 선행). env 없는 맨 `wrangler deploy` 는 금지 —
+base 환경은 로컬 전용이라 라우트 없는 워커가 하나 더 생긴다. 절차 정본은
+[docs/deploy-runbook.md](docs/deploy-runbook.md).
 
 ## 실행
 
-**여기가 로컬 D1 상태의 주인이다** — [ops-dashboard](../ops-dashboard/)가 이 디렉토리의
-`.wrangler/state`를 `--persist-to`로 붙어 읽으므로, 두 프로젝트를 다 띄울 땐 **여기를 먼저**
-시드한다. 사전 준비(Node 20+)·OS별 차이·증상별 해결은 **[../docs/setup.md](../docs/setup.md)**,
+**두 프로젝트가 같은 운영 D1 을 본다** — 콘솔([ops-dashboard](../ops-dashboard/))이 이
+디렉토리의 `.wrangler/state` 를 붙어 읽던 구조는 끝났다. 기동 순서를 맞출 필요가 없다.
+사전 준비(Node 20+)·OS별 차이·증상별 해결은 **[../docs/setup.md](../docs/setup.md)**,
 환경별 설정 배치(로컬/운영 도메인·D1·시크릿)는 **[../docs/environments.md](../docs/environments.md)**
 가 정본이고, 둘 다 콘솔 담당자와 함께 관리하는 문서다.
 
