@@ -38,36 +38,13 @@ $ curl -s https://ops.ask-seoul.kr/api/summary?days=1
 **이건 고장이 아니라 의도된 기본값이다**(fail-closed). 시크릿을 안 넣으면 아무것도 안
 내보낸다 — "열린 채 잊히는 것"보다 "안 보여서 바로 아는 것"이 낫다는 판단이다.
 
-### 하는 법
+### 하는 법 · 확인 — [secrets.md §4](secrets.md)
 
-```bash
-cd ops-dashboard
-npx wrangler secret put OPS_TOKEN --env production
-# 프롬프트에 값 입력. 로컬 .dev.vars 의 값과 **같을 필요는 없다** —
-# 로컬과 배포본은 각자 자기 토큰을 갖는 게 맞다.
-```
+`npx wrangler secret put OPS_TOKEN --env production` 한 줄이다. 토큰 생성·인증 선행·되읽기 불가·
+`put` 시 자동 반영·`503→401→200` 확인은 **[secrets.md](secrets.md) 가 정본**이라 여기서 안 되풀이한다.
 
-토큰 생성:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(16).toString('hex'))"
-```
-
-### 확인
-
-```bash
-BASE=https://ops.ask-seoul.kr
-curl -s -o /dev/null -w "토큰 없이   %{http_code}\n" "$BASE/api/summary?days=1"
-curl -s -o /dev/null -w "올바른 토큰 %{http_code}\n" -H "authorization: Bearer $TOKEN" "$BASE/api/summary?days=1"
-```
-
-```text
-토큰 없이   401     ← 503 에서 401 로 바뀌면 시크릿이 들어간 것이다
-올바른 토큰 200
-```
-
-> **CI 는 이걸 하지 않는다.** 배포는 코드만 나간다. 시크릿은 Cloudflare 가 보관하고
-> 배포마다 유지되므로 **한 번만** 하면 된다.
+> **CI 는 이걸 하지 않는다.** 배포는 코드만 나간다. 시크릿은 Cloudflare 가 배포마다 유지하므로
+> **한 번만** 하면 된다.
 
 ---
 

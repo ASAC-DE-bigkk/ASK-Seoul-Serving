@@ -155,33 +155,10 @@ if (url.pathname.startsWith("/api/")) {
 }
 ```
 
-#### 설정 방법 — 실제 예제
+#### 값을 어떻게 넣나 — [secrets.md §4](secrets.md)
 
-```bash
-# 로컬
-cd ops-dashboard
-node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" > .dev.vars
-npm run dev
-
-# 배포본 — 이걸 안 하면 콘솔이 503 으로 잠긴 채다(의도된 기본값)
-npx wrangler secret put OPS_TOKEN --env production
-```
-
-#### 확인 — 세 상태를 다 본다
-
-```bash
-BASE=https://ops.ask-seoul.kr
-
-curl -s -o /dev/null -w "토큰 없이      %{http_code}\n" "$BASE/api/summary?days=1"
-curl -s -o /dev/null -w "틀린 토큰      %{http_code}\n" -H "authorization: Bearer wrong" "$BASE/api/summary?days=1"
-curl -s -o /dev/null -w "올바른 토큰    %{http_code}\n" -H "authorization: Bearer $OPS_TOKEN" "$BASE/api/summary?days=1"
-```
-
-```text
-토큰 없이      401     (시크릿 미설정이면 503)
-틀린 토큰      401
-올바른 토큰    200
-```
+`OPS_TOKEN` 등록(로컬 `.dev.vars` · 배포본 `wrangler secret put`)과 `503→401→200` 확인 절차는
+**[secrets.md](secrets.md) 에 모았다.** 이 문서는 그 토큰이 **무엇을 잠그나**(정책)만 다룬다.
 
 #### 한계 — **이게 Access 를 대신하지 못한다**
 

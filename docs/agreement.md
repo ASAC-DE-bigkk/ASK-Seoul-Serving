@@ -416,7 +416,8 @@ EXISTS` 만 ② DROP·ALTER 금지 ③ 미러는 소유 주장이 아니다 — 
 | 콘솔 | `:8788` | `ops.ask-seoul.kr` |
 
 **비밀값은 로컬은 파일(`.dev.vars`), 배포는 파일 밖(`wrangler secret put`).** 환경별 비밀
-파일을 만들지 않는다 — `.dev.vars` 의 `dev` 가 이미 "개발 환경"을 뜻한다.
+파일을 만들지 않는다 — `.dev.vars` 의 `dev` 가 이미 "개발 환경"을 뜻한다. 목록·설정법·권한은
+[secrets.md](secrets.md) 가 정본.
 
 **환경을 아는 값은 `[vars]` 에 둔다:**
 

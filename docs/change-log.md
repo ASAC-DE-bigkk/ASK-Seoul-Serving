@@ -40,6 +40,32 @@
 
 ## 2026-08-06
 
+### 시크릿·자격증명 서술을 한 문서(`secrets.md`)로 모은다
+
+- **작업자**: @Exisign
+- **의도 · 목표**: `OPS_TOKEN`·`CLOUDFLARE_API_TOKEN`·`.dev.vars`/`wrangler secret put`·권한 이야기가
+  `environments`·`run-prod`·`access-control`·`runbook`·`setup`·`manual-steps`·README 에 **조금씩
+  흩어져 같은 걸 여러 번 다르게** 적고 있었다(권한표만 3곳, "두 파일" 모델 2곳). 흩어지면 한 곳만
+  고쳐지고 나머지가 조용히 거짓말을 한다 — 정본 하나를 만들고 나머지는 링크만 걸게 한다.
+- **조치**
+  - [docs/secrets.md](secrets.md) **신규 — 정본.** 목록(0장)·두 갈래 파일 규칙(§1)·`secret put`
+    성질(§2: 되읽기 불가·`put` 시 자동 배포·인증 선행·한 번만)·권한 등급(§3: `D1:Read`/`D1:Edit`/
+    `Workers Scripts:Edit`)·콘솔 `OPS_TOKEN` 설정·확인(§4)·CI(§5)·게이트웨이는 **링크만**(§6, 분리 원칙).
+    🔴 **값 자체는 이 문서에도 안 적는다** — 이름·위치·설정법·권한만.
+  - **중복 서술을 링크로 교체**: `environments §1-2/§3-2`(두 파일·권한표)→포인터, `run-prod §1`
+    (권한표)→포인터, `access-control`(설정·확인 블록)→포인터, `manual-steps §1`(하는 법)→포인터,
+    `agreement`·`setup`·`runbook`·`ops-dashboard/README`·`docs/index`·`ops-dashboard/CLAUDE.md`
+    에 정본 링크. 런북의 **실행 명령 한 줄은 그대로 두고**(복붙 흐름이 끊기지 않게) 설명만 걷었다.
+  - `docs/index.md` 규약표에 `secrets.md` 한 줄 추가(발견 가능하게) · `CLAUDE.md §7-1` 대응표에
+    "시크릿·자격증명 값·위치·권한 → secrets.md" 행 추가.
+- **곁다리 수정**: `CLAUDE.md §7-1` 의 깨진 링크 2개(`../../docs/…` → `../docs/…`, 리포 밖을 가리키고
+  있었다)를 고쳤다.
+- **검증**: 링크 체커로 리포 전체 41개 `.md` 의 `.md` 링크 318개를 훑어 **깨진 링크 0개** 확인
+  (`secrets.md` 를 가리키는 16개 전부 resolve).
+- ⚠️ **함께 발견한 별건(안 고침)**: `ops-dashboard/README §인증`·`runbook.md` 이 아직 "읽기는
+  토큰 없이 열려 있다"는 **#93 이전 서술**로 남아 있다. 코드(`requireRead`)·`access-control.md` 는
+  읽기도 토큰을 요구한다 — 이번 범위(자격증명 합치기) 밖이라 손대지 않고 남긴다.
+
 ### 콘솔 UI — 반응형 재작성 · 도메인 스코프 · 상태 툴팁 · 용어 정리
 
 - **작업자**: @Exisign

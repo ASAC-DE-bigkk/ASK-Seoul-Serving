@@ -20,6 +20,8 @@ echo "OPS_TOKEN=$(openssl rand -hex 16)" > .dev.vars    # 조치(쓰기) 잠금 
 npm run dev            # http://localhost:8788  🔴 운영 D1
 ```
 
+> 토큰·자격증명(`OPS_TOKEN`·`CLOUDFLARE_API_TOKEN`)의 위치·설정법·권한 정본: [secrets.md](../../docs/secrets.md).
+
 - 토큰 없이도 화면은 뜬다 — 잠기는 건 **조치**(폐기·복구·쿼터·삭제)뿐이다.
 - 게이트웨이를 따로 시드할 필요가 없다. `_gateway_request_log`·`_keys` 는 운영 D1 에 있고
   콘솔이 거기서 직접 읽는다. **게이트웨이 로컬 구동은 아직 dev D1 을 본다** — 그쪽 전환은

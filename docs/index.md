@@ -58,6 +58,7 @@ DDL 을 전부 막는다. 정본 소유자는
 |---|---|
 | [agreement.md](agreement.md) | **합의 정본** — 수집 축·소유 경계·환경·배포·MCP + **폐기된 안**. 이슈를 다시 뒤지기 전에 먼저 본다 |
 | [environments.md](environments.md) | 환경 **구조** — 설정을 어디에 두나, 무엇이 환경마다 달라지나, 함정 셋 |
+| 🔴 [secrets.md](secrets.md) | **시크릿·자격증명 정본** — `OPS_TOKEN`·`CLOUDFLARE_*` 이 어디에·어떻게·어떤 권한. 다른 문서는 설명을 여기로 링크한다 |
 | [setup.md](setup.md) | OS별 사전 준비 — Node 설치, Windows 인코딩·PATH 함정, 증상표 |
 | 🔴 [manual-steps.md](manual-steps.md) | **수동 작업** — 코드·CI 가 대신 못 하는 것과 그 현재 상태(실측) |
 | [access-control.md](access-control.md) | 🔴 **접근 제어** — 어느 레이어에서 무엇을 막나 · 권한이 없어 못 하는 것 · 1인 프로젝트 재사용 |
@@ -71,6 +72,6 @@ DDL 을 전부 막는다. 정본 소유자는
 - 새 문서를 만들면 **이 인덱스에 한 줄 추가**한다. 문서를 **없앨 때도** 한 줄 남긴다 —
   어디로 갔는지 모르면 옛 링크를 따라온 사람이 헤맨다(위 `run-remote-dev` 처럼).
 - 실행·마이그레이션·포트·비밀값 규약을 바꾸면 **같은 커밋에서** 해당 매뉴얼을 고치고
-  상대 담당자에게 알린다.
+  상대 담당자에게 알린다. **비밀값·자격증명은 [secrets.md](secrets.md) 가 정본**이니 거기부터 고친다.
 - 코드를 고쳤을 때 어느 문서를 같이 여는지는
   [ops-dashboard CLAUDE.md 7-1 대응표](../ops-dashboard/CLAUDE.md)가 정본이다.
