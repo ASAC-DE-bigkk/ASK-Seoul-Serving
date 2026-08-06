@@ -603,37 +603,80 @@ function kstStamp(iso) {
 // 이유는 아래 SAMPLES 주석. 꾸며낸 행은 넣지 않으며, 시점은 화면에 적는다.
 // 도메인마다 하나씩 — 한 도메인만 계속 보여주면 "문화 데이터 사이트"로 읽힌다.
 // 순서는 히어로 문구(문화·인구·교통·상권·날씨)를 따르고 도로 소통을 끝에 붙였다.
-// dom 은 DOMAINS 의 id — 표시명을 여기 복제하지 않는다.
-// pid 는 화면에 뜨는 공개 식별자(decision/0003)이고 table 은 스냅샷 파일의 조회 키다.
-// 스냅샷(demo-samples.json)은 테이블명으로 키잉돼 있고 그건 생성기 사정이라 그대로 둔다 —
-// 사람에게 보이는 곳만 공개 식별자를 쓴다.
-const DEMOS = [
-  { dom: "culture", pid: "culture_activity_by_dong", table: "gold_culture_activity_by_dong",
-    q: "어느 동네에 문화 활동이 몰리나?",
-    cols: [["admin_dong", "행정동"], ["event_date", "날짜"], ["activities_count", "활동"], ["free_events_count", "무료"]],
-    foot: "<b>admin_dong_code</b>(행안부 10자리)를 그대로 실어 인구·상권·교통 데이터에 바로 조인됩니다." },
-  { dom: "citydata", pid: "citydata_ppltn_hourly", table: "gold_citydata_ppltn_hourly",
-    q: "이 시각 서울 어디가 붐비나?",
-    cols: [["area_nm", "장소"], ["time_bucket", "시각"], ["average_population", "평균 인원"], ["peak_congestion_level", "혼잡"]],
-    foot: "관측 지점 <b>121곳</b>의 시간 단위 인구. 장소마다 행정동 코드가 붙어 동네 단위로 말아 볼 수 있습니다." },
-  { dom: "transit", pid: "transit_dong_now", table: "gold_transit_dong_now",
-    q: "지금 이 동네 버스는 어떤가?",
-    cols: [["admin_dong", "행정동"], ["gu", "자치구"], ["bus_congestion_grade", "버스 혼잡"], ["bus_veh_cnt", "관측 차량"]],
-    foot: "버스·지하철·주차를 <b>행정동 한 줄</b>로 합칩니다 — 세 원천을 각각 부를 필요가 없습니다." },
-  { dom: "commerce", pid: "commerce_dong_category_matrix", table: "d1_dong_category_matrix",
-    q: "이 동네엔 무슨 업종이 많나?",
-    cols: [["admin_dong", "행정동"], ["category_ko", "업종"], ["active_cnt", "영업 중"], ["opened_last_365d", "최근 1년 개업"]],
-    foot: "행정동 × 업종 격자라, 위 문화 활동과 <b>같은 키로 붙여</b> '행사 많은 동네의 상권'을 볼 수 있습니다." },
-  { dom: "weather", pid: "weather_place_risk_window", table: "gold_weather_place_risk_window",
-    q: "언제 더위·비를 조심해야 하나?",
-    cols: [["place_name", "장소"], ["forecast_at", "예보 시각"], ["temp_c", "기온"], ["risk_labels", "주의"]],
-    foot: "KMA 예보를 시간 단위로 펼치고 <b>주의 구간에 이름을 붙여</b> 둡니다 — 임계값을 직접 계산하지 않아도 됩니다." },
-  { dom: "traffic", pid: "traffic_incident_x_weather_current_hourly", table: "gold_traffic_incident_x_weather_current_hourly",
-    q: "돌발이 난 동네, 그때 날씨는?",
-    cols: [["admin_dong", "행정동"], ["hour_at", "시각"], ["incident_count", "돌발"], ["tmp_value_num", "기온"]],
-    foot: "도로 돌발과 같은 시각 예보를 <b>미리 붙여 둔</b> 제품 — 두 도메인을 직접 맞출 필요가 없습니다." },
-];
+// 🔑 **손으로 쓴 데모 대본은 없다.** 질문·컬럼 라벨·각주·검증 시점이 전부 카탈로그 응답
+// (`/api/v1/catalog` → `usage_patterns`·`columns`·`product_question`)에서 온다. 예전에는
+// 여섯 시나리오를 질문 문구까지 이 파일에 적어 뒀는데, 그게 **게시본과 조용히 어긋나는
+// 손 사본**이었다 — 도메인이 계약에 검증된 질의를 채워도 랜딩은 옛 문구를 계속 보여줬다.
+// (같은 이유로 `column-docs.json`·`usage-patterns.json` 을 이미 퇴역시켰다 — README '손 사본'.)
+//
+// 데모에 오르는 제품은 **스냅샷 파일이 가진 것**으로 정해진다(아래 SAMPLES 주석) —
+// 그 목록도 여기 적지 않고 `demo-samples.json` 의 키에서 읽는다.
+let DEMOS = [];
 const domName = (id) => (DOMAINS.find((d) => d.id === id) || {}).name || id;
+
+// 컬럼 라벨 — 계약의 `description` 앞머리를 잘라 쓴다. culture 처럼 "행정동 이름(예 명동)",
+// "활동 일자(KST). 여러 날에 걸친…" 꼴이면 첫 구분자까지가 곧 라벨이다.
+// ⚠️ **도메인마다 설명 문체가 다르다** — weather 는 "장소 식별자입니다." 같은 완결 문장이라
+// 그대로 자르면 "장소 식별자입니다"가 표 머리에 앉는다(실측). 문장으로 끝나면(…다) 라벨이
+// 아니라고 보고 컬럼명으로 내려앉는다. **지어내지 않는다** — 못 줄이면 실제 필드명이 낫다.
+// 12자 — 표 머리에 앉힐 수 있는 한계이자, "시간 평균 추정 인구"(11자) 같은 실제 라벨이
+// 들어오는 선이다. 10자였을 때 그게 한 글자 차로 잘려 컬럼명으로 내려앉았다(실측).
+const LABEL_MAX = 12;
+function colLabel(c) {
+  let d = (c.description || "").split(/[—(.,:·]/)[0].trim();
+  d = d.replace(/입니다$/, "").trim();       // "장소 식별자입니다" → "장소 식별자"
+  if (!d || d.length > LABEL_MAX || /다$/.test(d)) return c.name;
+  return d;
+}
+// 표에서 빼는 컬럼: 조인 키(`*_code`·`*_cd`)·식별자(`*_id`)·좌표. 사람이 읽는 화면에서
+// `seoul_admd_1171064200|2026-08-03T10:00:00` 같은 값이 첫 칸을 차지하면 정작 데이터가
+// 안 보인다(실측 — weather 의 `product_row_id`). 조인 가능하다는 사실은 카탈로그가 말한다.
+const isKey = (n) => /(_code|_cd|_id)$/.test(n) || n === "longitude" || n === "latitude";
+const isTime = (t) => /^(timestamp|date)/.test(t || "");
+const isNum = (t) => /^(bigint|integer|double|decimal)/.test(t || "");
+
+// 표에 세울 넉 자리를 **뜻으로 고른다** — 이름 하나 · 시간축 하나 · 측정값 둘.
+// 앞에서 넷을 그냥 자르면 `시도명`(늘 서울) · `admin_dong_revision_date` 같은 칸이 올라와
+// 데모가 아무것도 말하지 않는다(실측). 자리를 못 채우면 남은 것으로 메운다.
+function pickCols(columns) {
+  const rest = columns.filter((c) => !isKey(c.name));
+  const take = (fn) => { const i = rest.findIndex(fn); return i < 0 ? null : rest.splice(i, 1)[0]; };
+  const chosen = [
+    take((c) => !isTime(c.type) && !isNum(c.type)),   // 이름·라벨
+    take((c) => isTime(c.type)),                      // 언제
+    take((c) => isNum(c.type)),                       // 얼마
+    take((c) => isNum(c.type)),
+  ].filter(Boolean);
+  while (chosen.length < 4 && rest.length) chosen.push(rest.shift());
+  return chosen;
+}
+
+// 스냅샷 키(테이블명) → 카탈로그 제품을 붙여 데모 한 편을 만든다.
+// 카탈로그에 없는 스냅샷은 버린다 — 게시가 내린 제품을 랜딩이 되살리면 안 된다.
+function buildDemos(products, samples) {
+  const byName = Object.fromEntries(products.map((p) => [p.name, p]));
+  const order = Object.fromEntries(DOMAINS.map((d, i) => [d.id, i]));
+  return Object.keys(samples)
+    .map((table) => {
+      const p = byName[table];
+      const rows = samples[table] || [];
+      if (!p || !rows.length) return null;
+      const present = new Set(Object.keys(rows[0]));
+      const cols = pickCols((p.columns || []).filter((c) => present.has(c.name)))
+        .map((c) => [c.name, colLabel(c), c.description || ""]);
+      if (!cols.length) return null;
+      return { dom: domainOf(p), pid: p.product_id, table, cols,
+               patterns: p.usage_patterns || [],
+               // 질문이 없을 때 쓸 것과 각주가 없을 때 쓸 것은 다르다 —
+               // 각주 자리에 물음표를 넣으면 답을 준 것처럼 읽힌다(실측).
+               fallbackQ: p.product_question || "",
+               // 설명이 `gold_citydata_ppltn_hourly — 장소별 …` 처럼 테이블명을 달고 오는
+               // 도메인이 있다. 사람이 읽는 각주에 기술명이 앞장서지 않게 떼어낸다.
+               desc: (p.description || "").replace(/^\s*[a-z0-9_]+\s*[—-]\s*/i, "") };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (order[a.dom] ?? 99) - (order[b.dom] ?? 99));
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -654,6 +697,13 @@ const samplesReady = fetch("/demo-samples.json")
   .then((j) => { SAMPLES = j; return j; })
   .catch(() => null);
 
+// 카탈로그는 **한 번만** 부른다 — 데모(질문·라벨·실측)와 아래 카탈로그 절이 같은 응답을 쓴다.
+// 따로 부르면 방문 1회에 워커 왕복이 둘이 되고, 두 화면이 서로 다른 게시본을 볼 수도 있다.
+const catalogReady = fetch("/api/v1/catalog")
+  .then((r) => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status))))
+  .then((j) => j.products || [])
+  .catch(() => null);
+
 async function previewRows(table) {
   const j = SAMPLES || (await samplesReady);
   if (!j) return null;
@@ -671,9 +721,14 @@ async function playDemo(i, manual) {
   const run = ++demoRun;
   demoIdx = i;
   const d = DEMOS[i];
+  if (!d) return;
+  // 이 제품의 검증된 질의를 한 편씩 돌아가며 보여준다 — 자동 순환이 같은 문장을 되풀이하지
+  // 않게. 계약에 패턴이 아직 없는 제품(traffic_weather 미발행분)은 제품 질문으로 내려앉는다.
+  d.at = ((d.at ?? -1) + 1) % Math.max(d.patterns.length, 1);
+  const pat = d.patterns[d.at] || null;
   demoDots();
   $("demoDom").textContent = domName(d.dom);
-  $("demoQ").textContent = d.q;
+  $("demoQ").textContent = (pat && pat.question_ko) || d.fallbackQ || "";
   $("demoOut").innerHTML = "";
   $("demoFoot").innerHTML = "&nbsp;";
   $("demoStamp").textContent = "";
@@ -704,7 +759,8 @@ async function playDemo(i, manual) {
 
   const show = rows.slice(0, 3);
   $("demoOut").innerHTML =
-    "<table><thead><tr>" + d.cols.map((c) => "<th>" + esc(c[1]) + "</th>").join("") +
+    "<table><thead><tr>" + d.cols.map((c) =>
+      "<th title=\"" + esc(c[2] || c[0]) + "\">" + esc(c[1]) + "</th>").join("") +
     "</tr></thead><tbody>" + show.map((r) =>
       "<tr><td class='k'>" + esc(r[d.cols[0][0]] ?? "—") + "</td>" +
       d.cols.slice(1).map((c) => "<td>" + esc(r[c[0]] ?? "—") + "</td>").join("") + "</tr>").join("") +
@@ -719,11 +775,23 @@ async function playDemo(i, manual) {
     await sleep(trs.length * 110);
   }
   if (run !== demoRun) return;
-  $("demoFoot").innerHTML = d.foot;
-  // 위 curl 은 지금도 유효한 명령이지만, 화면의 행은 고정된 시점의 응답이다 — 그 사실을 적는다
-  const at = (SAMPLES && SAMPLES.generated_at || "").slice(0, 10);
-  $("demoStamp").textContent = at ? at + " 응답 스냅샷 — 위 명령으로 최신 5행을 직접 받을 수 있습니다"
-                                  : "응답 스냅샷 — 위 명령으로 최신 5행을 직접 받을 수 있습니다";
+  // 각주 = 그 질문에 대한 **실측 한 줄**(계약의 insight_sample_ko). 없으면 제품 설명으로
+  // 내려앉는다 — 질문으로 대신하면 답을 준 것처럼 읽힌다.
+  const insight = (pat && pat.insight_sample_ko) || "";
+  $("demoFoot").textContent = insight || d.desc || "";
+  // 위 curl 은 지금도 유효한 명령이지만 표의 행은 고정된 시점의 미리보기이고, 실측 한 줄은
+  // 그와 다른 시점의 검증 결과다 — **두 시점을 뭉뚱그리지 않고 각각 적는다.**
+  // 검증 시각은 도메인마다 날짜(2026-08-05)와 타임스탬프(…T14:39:11Z)가 섞여 있어 날짜로 맞춘다.
+  const snap = (SAMPLES && SAMPLES.generated_at || "").slice(0, 10);
+  const parts = [];
+  if (snap) parts.push(snap + " 미리보기 스냅샷");
+  // "답은 … 검증"은 **실제로 답이 있을 때만** 붙인다
+  if (insight && pat.verified_at) {
+    parts.push("답은 " + String(pat.verified_at).slice(0, 10) + " 검증" +
+      (pat.verified_rows ? "(" + nf.format(pat.verified_rows) + "행)" : ""));
+  }
+  parts.push("위 명령으로 최신 5행을 직접 받을 수 있습니다");
+  $("demoStamp").textContent = parts.join(" · ");
 
   if (manual || REDUCED) return;   // 직접 고른 뒤에는 자동 전환하지 않는다
   await sleep(4200);
@@ -802,7 +870,14 @@ function bootField() {
   draw();
 }
 
-function bootDemo() {
+async function bootDemo() {
+  // 대본이 카탈로그에서 오므로 **둘 다 받은 뒤에** 시작한다. 하나라도 없으면 데모를 접는다 —
+  // 빈 표를 돌리느니 안 보이는 편이 낫다(꾸며낸 행을 넣지 않는다는 원칙과 같은 이유).
+  const [products, samples] = await Promise.all([catalogReady, samplesReady]);
+  if (!products || !samples) { $("demo").hidden = true; return; }
+  DEMOS = buildDemos(products, samples.samples || {});
+  if (!DEMOS.length) { $("demo").hidden = true; return; }
+
   demoDots();
   // 화면 밖이거나 탭이 가려지면 멈춘다 — 안 보는 애니메이션에 호출을 쓰지 않는다
   document.addEventListener("visibilitychange", () => { demoVisible = !document.hidden; });
@@ -835,11 +910,8 @@ async function bootCatalog() {
   let products;
   // 표시명은 부가 정보다 — 못 읽어도 카탈로그는 그대로 뜬다(제목이 product_id 로 내려앉을 뿐)
   try { DISPLAY = await (await fetch("/product-display.json")).json(); } catch { DISPLAY = {}; }
-  try {
-    const res = await fetch("/api/v1/catalog");
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    products = (await res.json()).products || [];
-  } catch {
+  products = await catalogReady;
+  if (!products) {
     setStat("statProducts", "—"); setStat("statDong", "—"); setStat("statTimed", "—"); setStat("statFresh", "—");
     $("statFreshK").textContent = "마지막 갱신 · 확인 불가";
     failState("domains", "도메인 정보를 불러오지 못했습니다");
