@@ -727,9 +727,9 @@ async function domainDay(env, params) {
   const day = (params.get("day") || "").trim();
   // 형식 검증 — 어차피 바인딩으로 넘기지만, 어긋난 요청은 일찍 돌려보낸다
   if (!/^[a-z0-9_]{1,40}$/.test(domain))
-    return problem(400, "invalid domain", "도메인은 소문자·숫자·밑줄 40자 이내");
+    return problem(400, "invalid domain", "분야 값은 소문자·숫자·밑줄 40자 이내여야 합니다.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day))
-    return problem(400, "invalid day", "YYYY-MM-DD 형식으로 보낼 것");
+    return problem(400, "invalid day", "날짜는 YYYY-MM-DD 형식이어야 합니다.");
 
   // summary 와 같은 환경 필터(§6-2) — 값은 상수 목록에서만 온다
   const envW = ({ prod: " AND environment = 'prod'", dev: " AND environment = 'dev'" })[
@@ -849,7 +849,7 @@ async function usageDetail(env, name, params) {
   const product = await env.DB.prepare(
     "SELECT name, product_id, description, row_count, time_axis, columns FROM _catalog WHERE name = ?")
     .bind(name).first().catch(() => null);
-  if (!product) return problem(404, "unknown api", "카탈로그에 없는 API 다");
+  if (!product) return problem(404, "unknown api", "카탈로그에 없는 API 입니다.");
 
   // 목록과 같은 축으로 찾는다(#63 ③). 상세로 들어오는 값은 표명(`_catalog.name`)이지만
   // 로그에는 `product_id` 로만 남은 행이 있다 — `skill_data` 와 MCP 가 그렇다. 표명으로만
@@ -911,13 +911,13 @@ function maskEmail(email) {
 }
 async function keyAction(env, request) {
   let body;
-  try { body = await request.json(); } catch { return problem(400, "invalid body", "JSON 본문이 필요하다"); }
+  try { body = await request.json(); } catch { return problem(400, "invalid body", "JSON 본문이 필요합니다."); }
   const { action, key_hash: hash } = body || {};
-  if (!HASH_RE.test(String(hash || ""))) return problem(400, "invalid key", "key_hash 형식이 아니다");
+  if (!HASH_RE.test(String(hash || ""))) return problem(400, "invalid key", "key_hash 형식이 올바르지 않습니다.");
 
   const row = await env.DB.prepare("SELECT key_hash, key_prefix, status FROM _keys WHERE key_hash = ?")
     .bind(hash).first();
-  if (!row) return problem(404, "unknown key", "그런 키가 없다");
+  if (!row) return problem(404, "unknown key", "해당 키를 찾을 수 없습니다.");
 
   if (action === "revoke" || action === "restore") {
     const status = action === "revoke" ? "revoked" : "active";
@@ -927,7 +927,7 @@ async function keyAction(env, request) {
   if (action === "quota") {
     const q = parseInt(body.daily_quota, 10);
     if (!Number.isInteger(q) || q < MIN_QUOTA || q > MAX_QUOTA)
-      return problem(400, "invalid quota", `daily_quota 는 ${MIN_QUOTA}~${MAX_QUOTA} 정수여야 한다`);
+      return problem(400, "invalid quota", `daily_quota 는 ${MIN_QUOTA}~${MAX_QUOTA} 사이의 정수여야 합니다.`);
     await env.DB.prepare("UPDATE _keys SET daily_quota = ? WHERE key_hash = ?").bind(q, hash).run();
     return json({ key_prefix: row.key_prefix, daily_quota: q });
   }
@@ -941,7 +941,7 @@ async function keyAction(env, request) {
     ]);
     return json({ key_prefix: row.key_prefix, deleted: true });
   }
-  return problem(400, "unknown action", "action 은 revoke·restore·quota·delete 중 하나여야 한다");
+  return problem(400, "unknown action", "action 은 revoke·restore·quota·delete 중 하나여야 합니다.");
 }
 
 export default {
@@ -971,7 +971,7 @@ export default {
     if (url.pathname.startsWith("/api/apis/")) {
       if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용");
       const name = decodeURIComponent(url.pathname.slice("/api/apis/".length));
-      if (!name) return problem(400, "missing api", "API 이름이 필요하다");
+      if (!name) return problem(400, "missing api", "API 이름이 필요합니다.");
       return usageDetail(env, name, url.searchParams);
     }
     if (url.pathname === "/api/keys") {
@@ -994,7 +994,7 @@ export default {
       const rid = (url.searchParams.get("request_id") || "").trim();
       if (!/^req_[0-9a-f]{16}$/.test(rid))
         return problem(400, "invalid request_id",
-          "req_ + 16자리 hex — 게이트웨이 응답 헤더 X-Request-Id(오류 본문 request_id) 값");
+          "요청 번호 형식이 올바르지 않습니다 — 게이트웨이 응답 헤더 X-Request-Id 값입니다.");
       const res = await safeRows(env,
         // 🔴 여기만은 환경으로 거르지 않는다(#64). `request_id` 는 지원 문의의 출발점이라,
         // 다른 환경 요청이어도 **"그 환경 것이다"라고 답하는 편이 "없다"보다 낫다.**
@@ -1003,7 +1003,7 @@ export default {
         "SELECT ts, route, table_name, status, substr(key_hash, 1, 8) AS key_id, " +
         "filters, row_count, ms, env FROM _gateway_request_log WHERE request_id = ? LIMIT 5", rid);
       if (!res.ok) return problem(503, "log unavailable",
-        "_gateway_request_log 를 조회할 수 없다 — 게이트웨이 D1 상태 공유와 마이그레이션 0005 적용 여부를 확인할 것");
+        "요청 로그를 조회할 수 없습니다 — 게이트웨이 데이터 연결 상태를 확인해 주세요.");
       return json({ request_id: rid, found: res.rows.length, rows: res.rows });
     }
     if (url.pathname.startsWith("/api/")) return problem(404, "not found",
