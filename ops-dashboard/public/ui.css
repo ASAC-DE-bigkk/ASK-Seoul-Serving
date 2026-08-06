@@ -445,10 +445,18 @@ p.hint b { color:var(--muted); }
           border-bottom:1px solid var(--sidebar-line); }
   .side .brand { margin-bottom:0; }
   .side .group, .side .foot { display:none; }
-  .tabs { display:flex; overflow-x:auto; gap:4px; padding:8px;
-          -webkit-overflow-scrolling:touch; }
-  .tabs button { width:auto; white-space:nowrap; }
+  /* 🔴 가로 스크롤 대신 격자 — 6개 탭이 전부 한눈에 보이고, 스크롤이 안 생긴다.
+     예전(overflow-x:auto)엔 좁은 폭에서 탭이 옆으로 잘려 스크롤해야 보였다. */
+  .tabs { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:8px; }
+  .tabs li { display:flex; }
+  .tabs button { width:100%; display:inline-flex; align-items:center; justify-content:center;
+                 gap:7px; white-space:normal; text-align:center; line-height:1.25;
+                 border:1px solid var(--line-strong); border-radius:8px;
+                 min-height:var(--tap); padding:8px; }
+  .tabs button .dot { flex:none; }
   .tabs button .sub { display:none; }
+  .tabs button[aria-selected="true"] { box-shadow:none; border-color:var(--accent);
+                 background:var(--accent-soft); color:var(--accent-deep); font-weight:600; }
 }
 
 /* KPI 4열 → 2열 */
@@ -469,6 +477,7 @@ p.hint b { color:var(--muted); }
   /* 상세 그리드 여백 축소 */
   .detail { padding:12px var(--pad-x) 14px; }
   .drill { padding:12px var(--pad-x); }
+  .tabs { grid-template-columns:repeat(2,1fr); }   /* 폰은 2열 — 라벨이 안 눌린다 */
   .card .bd, .card .hd { padding-left:14px; padding-right:14px; }
   .filters { padding-left:14px; padding-right:14px; }
 }
