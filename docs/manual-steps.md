@@ -262,8 +262,13 @@ GET  /api/v1/auth/google  302      redirect_uri=https://ask-seoul.kr/api/v1/auth
 🔑 **`wrangler secret put` 은 워커를 새 버전으로 올린다** — 코드 배포를 다시 하지 않아도
 **즉시** 반영된다. 되돌리려면 `wrangler secret delete GOOGLE_CLIENT_SECRET --env production`.
 
-⚠️ **동의 화면 게시 상태는 별도 확인이 필요하다.** "테스트" 로 두면 등록된 100명만
-로그인된다 — 외부 공개가 목적이면 프로덕션으로 게시돼 있어야 한다.
+✅ **동의 화면 게시 상태 = 프로덕션** (2026-08-06 확인). 테스트로 두면 등록된 100명만
+로그인되는데 그 상태가 아니다 — **누구나 키를 받을 수 있다.**
+
+> 🔎 이 값은 **밖에서 못 잰다.** Google 은 게시 상태와 무관하게 같은 로그인 화면을 주고,
+> 제한은 계정을 고른 뒤에야 드러난다. 확인은 콘솔(Google Auth Platform → 대상)을 보거나,
+> 테스트 사용자 목록에 없는 계정으로 실제 로그인해 보는 두 가지뿐이다.
+> 리다이렉트 URL 의 `app_domain=https://ask-seoul.kr` 로 **승인된 도메인 설정**은 확인된다.
 
 ---
 
