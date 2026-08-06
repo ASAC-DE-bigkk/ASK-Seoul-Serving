@@ -546,10 +546,12 @@ const $ = (id) => document.getElementById(id);
 const nf = new Intl.NumberFormat("ko-KR");
 const HOME_CARDS = 6;  // 홈은 큐레이션 — 나머지는 카탈로그에서
 
-// 표시명 사전 — _catalog 에 표시명 컬럼이 없어 클라이언트가 갖는다.
-// catalog.html 과 같은 생성물(fixtures/build_fixtures.py)을 읽으므로 양쪽을 따로 고칠 일이 없다.
-// 계약에 display 필드가 생기면 서버 응답으로 일원화하고 이 파일은 지운다.
-let DISPLAY = {};
+// 표시명·설명은 **카탈로그 응답이 실어 온다**(`products[].display`). 정본은 게시본
+// `d1_catalog_display`(ASAC-DAG#706)이고 서버가 붙인다 — 화면이 사전을 들고 있지 않는다.
+// 옛 정적 `product-display.json` 은 지웠다: 원천이 dbt yml 인데 생성기를 사람이 돌리는
+// 구조라 게시본과 어긋났다(사본 57키 대 카탈로그 56종 · 내려간 제품이 그대로 남음).
+// `column-docs.json`·`usage-patterns.json` 이 같은 이유로 먼저 퇴역했다.
+// 미선언 제품은 `display: null` 이라 제목이 product_id 로 내려앉는다 — 그게 정상이다.
 // 공간 단위는 도메인마다 다르다 — 여기에 실측값을 적어 "426동 전역"이 플랫폼 전체인 것처럼
 // 읽히지 않게 한다. 근거: culture=dim_admin_dong 426 scaffold · citydata=통합 API 121장소
 // (citydata_bronze.py) · weather=config/seoul_kma_grids.csv 80칸 · transit/commerce=gold 그레인이
@@ -578,7 +580,7 @@ const DOMAINS = [
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 const domainOf = (p) => (p.product_id || p.name || "").replace(/^gold_/, "").split("_")[0];
-const titleOf = (p) => (DISPLAY[p.product_id] || {}).title || p.product_id || p.name;
+const titleOf = (p) => (p.display || {}).title || p.product_id || p.name;
 
 // 신선도는 카탈로그가 내려주는 exported_at 실측 — 고정 문구 금지(파이프라인 시각과 어긋난다)
 function relTime(iso) {
@@ -908,8 +910,6 @@ function failState(id, msg) {
 // ── 카탈로그: 통계 · 제품 카드 · 도메인
 async function bootCatalog() {
   let products;
-  // 표시명은 부가 정보다 — 못 읽어도 카탈로그는 그대로 뜬다(제목이 product_id 로 내려앉을 뿐)
-  try { DISPLAY = await (await fetch("/product-display.json")).json(); } catch { DISPLAY = {}; }
   products = await catalogReady;
   if (!products) {
     setStat("statProducts", "—"); setStat("statDong", "—"); setStat("statTimed", "—"); setStat("statFresh", "—");
@@ -952,16 +952,15 @@ async function bootCatalog() {
   $("allLink").textContent = "전체 " + products.length + "종 보기 →";
   if (!shown.length) { failState("cards", "아직 공개된 제품이 없습니다"); return; }
   $("cards").innerHTML = shown.map((p) => {
-    const d = DISPLAY[p.product_id] || {};
+    const d = p.display || {};
     // 기술명·시간축 컬럼명은 카드에 싣지 않는다 — 호출 직전 정보라 카탈로그 상세·docs 의
     // 몫이고, 시간축 컬럼명은 제품마다 달라(18종) 랜딩 어휘가 흩어진다. "기간으로 자를 수
     // 있다"는 그레인 줄(행정동 × 날짜 …)이 이미 사람 말로 전달한다.
     return "<a class='card' href='/catalog?q=" + encodeURIComponent(p.name) + "'>" +
       "<span class='t'>" + esc(titleOf(p)) + "</span>" +
       // 질문형 대신 설명 문장 — 카탈로그 목록과 같은 우선순위(쉬운 문장 desc 우선)
-      "<span class='q'>" + esc(d.desc || p.description || p.product_question || "—") + "</span>" +
+      "<span class='q'>" + esc(d.summary || p.description || p.product_question || "—") + "</span>" +
       "<span class='meta'><span><b>" + nf.format(p.row_count || 0) + "</b> 행</span>" +
-      (d.unit ? "<span>" + esc(d.unit) + "</span>" : "") +
       "<span class='free'>미리보기</span></span></span></a>";
   }).join("");
 }

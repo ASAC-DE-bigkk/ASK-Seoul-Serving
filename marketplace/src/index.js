@@ -231,6 +231,35 @@ async function handleCatalog(env) {
       insight_sample_ko: p.insight_sample_ko,
     });
   }
+  // 표시 메타도 게시본에서 온다(`d1_catalog_display`, ASAC-DAG#706). 여기가 **손 사본을
+  // 없앤 자리**다 — `public/product-display.json` 이 제목·설명을 들고 있었는데, 원천이 dbt yml
+  // 이고 생성기를 사람이 돌리는 구조라 게시본과 계속 어긋났다(62키 대 카탈로그 56종, 내려간
+  // 제품이 그대로 남음). `column-docs.json`·`usage-patterns.json` 과 같은 처리다.
+  //
+  // 미선언 제품은 `display: null` 이다 — 빈 문자열로 채우면 화면이 "제목이 있는 척"한다.
+  // 지금은 절반(citydata·culture·transit)만 선언했고, 나머지는 화면이 product_id 로 내려앉는다.
+  const displayRows = await safeRows(env.DB.prepare(
+    "SELECT product_id, title, summary, caveat, use_cases FROM d1_catalog_display"
+  ));
+  const displays = new Map();
+  for (const r of displayRows || []) {
+    displays.set(r.product_id, {
+      title: r.title ?? null,
+      summary: r.summary ?? null,
+      caveat: r.caveat ?? null,
+      use_cases: parseJsonArray(r.use_cases),
+    });
+  }
+
+  // 그레인은 `d1_catalog_ext` 에 이미 게시돼 있다. 사본이 `unit`("행정동 × 날짜")으로 들고
+  // 있던 것의 정본이고, 사본을 지우면서 이쪽으로 옮긴다. **별도 질의로 둔다** — 조인하면
+  // 한쪽 표가 없을 때 둘 다 잃는다.
+  const grainRows = await safeRows(env.DB.prepare(
+    "SELECT product_id, grain FROM d1_catalog_ext"
+  ));
+  const grains = new Map();
+  for (const r of grainRows || []) grains.set(r.product_id, r.grain ?? null);
+
   // description 을 반드시 실어야 한다 — 제품의 주의사항("기상청 공식 특보가 아님" 등)이
   // 여기에 있고, 화면을 안 거치는 소비자에게는 이 응답이 그걸 전달할 유일한 경로다.
   const res = json({
@@ -247,6 +276,8 @@ async function handleCatalog(env) {
         ...r, columns,
         join_keys: columns.map((c) => c.name).filter((n) => JOIN_AXES.includes(n)),
         usage_patterns: patterns.get(r.product_id) || [],
+        display: displays.get(r.product_id) || null,
+        grain: grains.get(r.product_id) ?? null,
       };
     }),
   }, 200, {
