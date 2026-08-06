@@ -175,10 +175,22 @@ const GENERIC_BOT_PATTERN = /bot|crawler|spider|slurp|scrapy/i;
 
 // UA 문자열 → {ua_class, agent_name, agent_mode}. request 가 아니라 문자열을 받는
 // 순수 함수 — 스키마·D1 없이 단독 테스트가 가능하다(scripts/classify.test.mjs).
-// 판정 순서가 곧 규칙이다: AI 목록 → cli → 일반 bot → browser → unknown.
+// 판정 순서가 곧 규칙이다: 헤더 없음 → AI 목록 → cli → 일반 bot → browser → unknown.
 // 일반 bot 을 browser 보다 먼저 보는 이유: 크롤러 UA 대부분이 Mozilla/ 를 포함한다.
+//
+// ua_class 값: no_ua | ai_agent | ai_crawler | cli | bot | browser | unknown
+//
+// **`no_ua` 와 `unknown` 은 다르다** (#112) — 안 보낸 것과 못 알아본 것은 다른 사실이고,
+// 원문 UA 를 저장하지 않으므로 **여기서 안 가르면 영구히 사라진다.** 같은 원칙을 바로 아래
+// `normalizeIntent` 가 이미 쓰고 있었다(NULL 과 "other" 를 안 섞는다). prod 실측에서
+// Node 18+ 의 global fetch 가 UA 를 안 보내 10건이 통째로 unknown 에 섞였고, 그중 둘은
+// `/mcp` 요청이었다 — 정의상 에이전트인데 "못 알아본 클라이언트"와 한 칸에 있었다.
+//
+// NULL 이 아니라 **값**으로 두는 이유: 콘솔이 `ua_class IS NULL` 로 "게이트웨이가 아직 이
+// 축을 안 싣는다"(axes_unfilled)를 판정한다. NULL 로 두면 UA 없는 요청 하나가 '축 미배선'
+// 으로 읽혀 카드가 통째로 미발행을 말한다.
 export function classifyClient(ua) {
-  if (!ua) return { ua_class: "unknown", agent_name: null, agent_mode: null };
+  if (!ua) return { ua_class: "no_ua", agent_name: null, agent_mode: null };
   for (const [re, name, mode] of AI_AGENT_PATTERNS)
     if (re.test(ua))
       return { ua_class: mode === "crawler" ? "ai_crawler" : "ai_agent", agent_name: name, agent_mode: mode };

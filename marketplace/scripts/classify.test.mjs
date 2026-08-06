@@ -42,10 +42,14 @@ const cases = [
   ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
     { ua_class: "browser", agent_name: null, agent_mode: null }],
 
-  // unknown — 매칭 실패는 지어내지 않는다
-  ["", { ua_class: "unknown", agent_name: null, agent_mode: null }],
-  [null, { ua_class: "unknown", agent_name: null, agent_mode: null }],
+  // no_ua — UA 헤더 자체가 없다 (#112). Node 18+ 의 global fetch 가 대표적이다
+  ["", { ua_class: "no_ua", agent_name: null, agent_mode: null }],
+  [null, { ua_class: "no_ua", agent_name: null, agent_mode: null }],
+  [undefined, { ua_class: "no_ua", agent_name: null, agent_mode: null }],
+
+  // unknown — UA 는 왔는데 못 알아봤다. 매칭 실패는 지어내지 않는다
   ["WeirdClient/0.1", { ua_class: "unknown", agent_name: null, agent_mode: null }],
+  ["node", { ua_class: "unknown", agent_name: null, agent_mode: null }],
 ];
 
 for (const [ua, expected] of cases) {
@@ -150,4 +154,19 @@ test("intent — 슬러그는 그대로, 자유 문장은 other, 없으면 NULL"
 
 test("안 보낸 것과 못 알아본 것은 다르다 — NULL 과 other 를 섞지 않는다", () => {
   assert.notEqual(normalizeIntent(""), normalizeIntent("!!!"));
+});
+
+// #112 — 위 원칙을 ua_class 에도 적용한다. 40줄 거리에서 두 축이 다른 규칙을 쓰고 있었다.
+test("ua_class 도 안 보낸 것과 못 알아본 것을 가른다 — no_ua ≠ unknown", () => {
+  assert.notEqual(classifyClient(null).ua_class, classifyClient("WeirdClient/0.1").ua_class);
+  assert.equal(classifyClient(null).ua_class, "no_ua");
+  assert.equal(classifyClient("WeirdClient/0.1").ua_class, "unknown");
+});
+
+// NULL 이 아니라 **값**이어야 하는 이유 — 콘솔이 `ua_class IS NULL` 로 "게이트웨이가 아직
+// 이 축을 안 싣는다"(axes_unfilled)를 판정한다. NULL 로 두면 UA 없는 요청 하나가
+// "축 미배선"으로 읽혀 카드가 통째로 '미발행'을 말한다.
+test("no_ua 는 NULL 이 아니라 값이다 — 콘솔의 미배선 판정과 섞이지 않게", () => {
+  assert.equal(typeof classifyClient(null).ua_class, "string");
+  assert.notEqual(classifyClient(null).ua_class, null);
 });
