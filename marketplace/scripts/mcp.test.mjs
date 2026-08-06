@@ -22,6 +22,7 @@ const mkDeps = (over = {}) => ({
   handleProductBundle: async (_e, pid) => jsonRes({ product_id: pid, columns: [], usage_patterns: [] }),
   handlePreview: async (_e, id) => jsonRes({ id, preview: true, rows: [{ a: 1 }] }),
   handleData: async (_e, id) => jsonRes({ id, rows: [] }),
+  lookupProduct: async () => null,
   ...over,
 });
 
@@ -241,4 +242,51 @@ test("버스트로 거부돼도 route 는 mcp_<툴명> — 거부분이 SERVE �
     rpc("tools/call", { name: "query_product", arguments: { product_id: "p" } }), {}, trace, deps);
   assert.equal(res.status, 429);                       // #61: HTTP 429 + Retry-After
   assert.equal(trace.route, "mcp_query_product");      // #63 A: REST 와 같이 거부도 제 이름으로
+});
+
+test("query_product 성공 응답에 data_context 동봉 — 신선도·경고·출처·주의", async () => {
+  const deps = mkDeps({
+    lookupProduct: async () => ({ description: "공식 특보 아님", freshness: "2026-08-04T00:00:00Z", serving_status: "degraded" }),
+  });
+  const res = await handleMcp(
+    rpc("tools/call", { name: "query_product", arguments: { product_id: "p" } }), {}, {}, deps);
+  const payload = JSON.parse((await res.json()).result.content[0].text);
+  assert.equal(payload.data_context.freshness, "2026-08-04T00:00:00Z");
+  assert.match(payload.data_context.warning, /degraded/);           // published 아니면 경고
+  assert.match(payload.data_context.attribution, /출처 표시/);
+  assert.equal(payload.data_context.caution, "공식 특보 아님");
+});
+
+test("data_context 조회가 실패해도 데이터 응답은 그대로 나간다 — 가드레일은 덤", async () => {
+  const deps = mkDeps({ lookupProduct: async () => { throw new Error("boom"); } });
+  const res = await handleMcp(
+    rpc("tools/call", { name: "query_product", arguments: { product_id: "p" } }), {}, {}, deps);
+  const body = await res.json();
+  assert.equal(body.result.isError, undefined);
+});
+
+test("없는 제품 404 — 카탈로그에서 비슷한 이름을 제안한다", async () => {
+  const deps = mkDeps({
+    handleData: async () => jsonRes({ type: "not found" }, 404),
+    handleCatalog: async () => jsonRes({ products: [
+      { product_id: "citydata_ppltn_daily" }, { product_id: "citydata_ppltn_hourly" }, { product_id: "commerce_flow_monthly" },
+    ] }),
+  });
+  const res = await handleMcp(
+    rpc("tools/call", { name: "query_product", arguments: { product_id: "citydata_pplnt_daily" } }), {}, {}, deps);
+  const text = (await res.json()).result.content[0].text;
+  assert.match(text, /citydata_ppltn_daily/);                       // 오타 교정 제안
+  assert.doesNotMatch(text, /commerce_flow_monthly/);               // 안 비슷한 건 안 끼움
+});
+
+test("제안 계산이 실패해도 404 안내는 나간다", async () => {
+  const deps = mkDeps({
+    handleData: async () => jsonRes({ type: "not found" }, 404),
+    handleCatalog: async () => { throw new Error("boom"); },
+  });
+  const res = await handleMcp(
+    rpc("tools/call", { name: "query_product", arguments: { product_id: "nope" } }), {}, {}, deps);
+  const body = await res.json();
+  assert.equal(body.result.isError, true);
+  assert.match(body.result.content[0].text, /없는 제품/);
 });

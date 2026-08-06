@@ -587,6 +587,7 @@ async function route(request, env, url, trace, ctx) {
     return handleMcp(request, env, trace, {
       authenticate, checkBurst,
       handleCatalog, handlePreview, handleData, handleMe, handleProductBundle,
+      lookupProduct,
     });
   }
   if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/v1/keys)");

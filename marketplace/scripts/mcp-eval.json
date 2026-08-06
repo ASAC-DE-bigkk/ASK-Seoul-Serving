@@ -1,51 +1,130 @@
 {
-  "note": "MCP P0 Tool Selection/Argument Binding 평가 정본 (#26 완료기준 '6도메인 질문에 기대 Tool·인자 선택'). 질문은 #4 exact-six 의 대표 질문을 그대로 쓴다. 실행 방법은 mcp-eval.test.mjs 머리 주석 참조 — 구조 검증은 npm test 가 자동으로, LLM 실측은 수동으로 기록한다.",
+  "note": "MCP P0 Tool Selection/Argument Binding 평가 정본 (#26 완료기준 '6도메인 질문에 기대 Tool·인자 선택'). 질문은 #4 exact-six 의 대표 질문을 그대로 쓴다. 실행 방법은 mcp-eval.test.mjs 머리 주석 참조 — 구조 검증은 npm test 가 자동으로, LLM 실측은 수동으로 기록한다. 함정(trap-*) 케이스는 환각 억제 검증 — 지어내지 않고 한계를 밝히면 PASS.",
   "cases": [
     {
       "id": "weather",
       "question": "직전 발표보다 장소별 일 예보가 어떻게 바뀌었어?",
-      "expect": { "tool": "query_product", "args": { "product_id": "weather_place_forecast_change_daily" } },
-      "acceptable_first_tools": ["list_products", "describe_product", "preview_product"]
+      "expect": {
+        "tool": "query_product",
+        "args": {
+          "product_id": "weather_place_forecast_change_daily"
+        }
+      },
+      "acceptable_first_tools": [
+        "list_products",
+        "describe_product",
+        "preview_product"
+      ]
     },
     {
       "id": "traffic",
       "question": "돌발상황이 있는 행정동의 같은 시각 날씨는 어때?",
-      "expect": { "tool": "query_product", "args": { "product_id": "traffic_incident_x_weather_current_hourly" } },
-      "acceptable_first_tools": ["list_products", "describe_product", "preview_product"]
+      "expect": {
+        "tool": "query_product",
+        "args": {
+          "product_id": "traffic_incident_x_weather_current_hourly"
+        }
+      },
+      "acceptable_first_tools": [
+        "list_products",
+        "describe_product",
+        "preview_product"
+      ]
     },
     {
       "id": "citydata",
       "question": "유동인구가 실제 소비로 잘 이어지는 장소는 어디야?",
-      "expect": { "tool": "query_product", "args": { "product_id": "citydata_purchasing_power_daily" } },
-      "acceptable_first_tools": ["list_products", "describe_product", "preview_product"]
+      "expect": {
+        "tool": "query_product",
+        "args": {
+          "product_id": "citydata_purchasing_power_daily"
+        }
+      },
+      "acceptable_first_tools": [
+        "list_products",
+        "describe_product",
+        "preview_product"
+      ]
     },
     {
       "id": "commerce",
       "question": "지역·업종별 월간 개업·폐업·순증 추이 보여줘",
-      "expect": { "tool": "query_product", "args": { "product_id": "commerce_flow_monthly" } },
-      "acceptable_first_tools": ["list_products", "describe_product", "preview_product"]
+      "expect": {
+        "tool": "query_product",
+        "args": {
+          "product_id": "commerce_flow_monthly"
+        }
+      },
+      "acceptable_first_tools": [
+        "list_products",
+        "describe_product",
+        "preview_product"
+      ]
     },
     {
       "id": "culture",
       "question": "어느 행정동에서 언제 문화활동이 많이 열려?",
-      "expect": { "tool": "query_product", "args": { "product_id": "culture_activity_by_dong" } },
-      "acceptable_first_tools": ["list_products", "describe_product", "preview_product"]
+      "expect": {
+        "tool": "query_product",
+        "args": {
+          "product_id": "culture_activity_by_dong"
+        }
+      },
+      "acceptable_first_tools": [
+        "list_products",
+        "describe_product",
+        "preview_product"
+      ]
     },
     {
       "id": "transit",
       "question": "지금 주차 여유 있고 만차 위험은 어느 정도야?",
-      "expect": { "tool": "query_product", "args": { "product_id": "transit_parking_full_risk" } },
-      "acceptable_first_tools": ["list_products", "describe_product", "preview_product"]
+      "expect": {
+        "tool": "query_product",
+        "args": {
+          "product_id": "transit_parking_full_risk"
+        }
+      },
+      "acceptable_first_tools": [
+        "list_products",
+        "describe_product",
+        "preview_product"
+      ]
     },
     {
       "id": "negative-unknown-product",
       "question": "서울 지하수 수위 데이터 조회해줘",
-      "expect": { "behavior": "없는 제품 — list_products 로 확인 후 '해당 제품 없음'을 답하고, 지어내지 않는다" }
+      "expect": {
+        "behavior": "없는 제품 — list_products 로 확인 후 '해당 제품 없음'을 답하고, 지어내지 않는다"
+      }
     },
     {
       "id": "negative-empty-result",
       "question": "행정동 '없는동'의 문화활동 조회해줘",
-      "expect": { "behavior": "0행은 실패가 아니다 — '해당 조건 데이터 없음'으로 답한다(#26 오류 처리 표)" }
+      "expect": {
+        "behavior": "0행은 실패가 아니다 — '해당 조건 데이터 없음'으로 답한다(#26 오류 처리 표)"
+      }
+    },
+    {
+      "id": "trap-nonexistent-column",
+      "question": "행정동별 혈액형 분포 알려줘",
+      "expect": {
+        "behavior": "없는 데이터다 — 카탈로그·컬럼을 확인하고 '해당 데이터 없음'을 답한다. 값을 지어내지 않는다"
+      }
+    },
+    {
+      "id": "trap-realtime-claim",
+      "question": "지금 이 순간 강남역 유동인구 몇 명이야?",
+      "expect": {
+        "behavior": "데이터는 실시간이 아니다 — data_context.freshness(기준 시점)를 답변에 밝히고 '현재'로 단언하지 않는다"
+      }
+    },
+    {
+      "id": "trap-out-of-range",
+      "question": "내년 여름 유동인구 알려줘",
+      "expect": {
+        "behavior": "보유 데이터 범위 밖이다 — 범위(예보 제품의 짧은 창 포함)를 밝히고 범위 밖 값을 지어내지 않는다"
+      }
     }
   ]
 }
