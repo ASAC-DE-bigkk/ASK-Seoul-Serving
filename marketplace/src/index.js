@@ -152,7 +152,32 @@ async function revokeKey(env, keyRow, purge) {
 // 크로스도메인 분석의 열쇠를 모른 채 추측해야 한다 — 그래서 응답 메타로도 내보낸다.
 const JOIN_AXES = ["admin_dong_code", "gu_code", "stat_region_cd"];
 
+// 카탈로그는 **발행할 때만 바뀐다** — 그런데 방문마다 D1 을 세 번 치고 1,156행을 읽어
+// 414KB 를 새로 만든다. 실측(2026-08-06): 배포본 1.8s · 로컬 2.7s 이고 세 번 연속 호출해도
+// 2.7·2.7·2.8 로 전혀 안 줄었다. 같은 워커의 정적 경로(`/llms.txt`)가 0.51s 이므로
+// **1.3초 이상이 이 응답을 만드는 데 쓰인다.**
+//
+// 무거워진 건 #434 가 성공했기 때문이다 — 활용 예시가 8건 → 379건이 되면서 응답의 74.7%를
+// 차지하게 됐다(주석에 "약 245KB"라 적혀 있던 것이 414KB). 남은 도메인이 발행하면 425건이 된다.
+//
+// 그래서 줄이는 대신 **다시 만들지 않는다.** 60초는 발행 주기(가장 잦은 transit fast 티어가
+// 15분)보다 훨씬 짧아 묵은 값이 오래 남지 않고, 한 사람이 랜딩→카탈로그로 넘어가는 동안은
+// 브라우저 캐시가 그대로 받는다(그 두 화면이 같은 응답을 부른다).
+const CATALOG_TTL = 60;
+// 캐시 키는 **합성 URL** 이다 — 이 핸들러는 `/api/v1/catalog` 와 MCP `list_products` 양쪽에서
+// 불리는데(mcp.js 의 deps.handleCatalog), 요청 객체가 서로 달라도 같은 응답이라 한 칸을 쓴다.
+const CATALOG_CACHE_KEY = "https://catalog.internal/api/v1/catalog";
+
 async function handleCatalog(env) {
+  // Cache API 가 없는 실행기(테스트 하네스 등)에서도 그대로 동작해야 한다 — 캐시는 성능이지
+  // 계약이 아니다. 못 쓰면 조용히 매번 만든다.
+  const cache = typeof caches !== "undefined" && caches.default ? caches.default : null;
+  const cacheKey = cache ? new Request(CATALOG_CACHE_KEY) : null;
+  if (cache) {
+    const hit = await cache.match(cacheKey);
+    if (hit) return hit;
+  }
+
   const { results } = await env.DB.prepare(
     "SELECT name, product_id, external, description, product_question, time_axis, columns, " +
     "row_count, freshness, exported_at " +
@@ -208,7 +233,7 @@ async function handleCatalog(env) {
   }
   // description 을 반드시 실어야 한다 — 제품의 주의사항("기상청 공식 특보가 아님" 등)이
   // 여기에 있고, 화면을 안 거치는 소비자에게는 이 응답이 그걸 전달할 유일한 경로다.
-  return json({
+  const res = json({
     // 출처·이용조건은 응답에서도 닿아야 한다 — 화면을 거치지 않고 API 만 쓰는 소비자가 있다
     attribution: "공공 원천의 2차 가공물 — 출처·이용조건 /legal#attribution",
     docs: "/llms.txt",
@@ -224,7 +249,14 @@ async function handleCatalog(env) {
         usage_patterns: patterns.get(r.product_id) || [],
       };
     }),
+  }, 200, {
+    // 엣지(Cache API)와 브라우저가 같은 기준을 쓰도록 응답 자신이 수명을 밝힌다.
+    // `public` 이라야 공유 캐시가 담는다 — 이 응답은 키·사용자에 따라 달라지지 않는다.
+    "cache-control": `public, max-age=${CATALOG_TTL}`,
   });
+  // 실패한 응답은 담지 않는다(여기까지 왔으면 200 이지만, 규칙을 코드에 남긴다).
+  if (cache && res.status === 200) await cache.put(cacheKey, res.clone());
+  return res;
 }
 
 // 공개 식별자 해석 — `product_id` 가 정본이고 테이블명은 과도기 별칭이다(decision/0003).
