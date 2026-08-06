@@ -43,14 +43,9 @@ cp .env.example .env      # CLOUDFLARE_API_TOKEN · CLOUDFLARE_ACCOUNT_ID
 
 원격 바인딩이라 **자격증명이 없으면 화면이 아예 안 뜬다** — 로컬 사본이 없기 때문이다.
 
-권한은 하는 일에 맞춘다. **토큰 권한이 이제 유일한 바깥 방어선이다**:
-
-| 권한 | 할 수 있는 것 |
-|---|---|
-| `D1:Read` | 보기만. **조치 버튼을 눌러도 실패한다** — 실수로 지울 일이 없다 |
-| `D1:Edit` | 조치까지. 실제 고객 키를 지울 수 있다 |
-
-> **평소에는 `D1:Read` 를 권한다.** 조치할 일이 생겼을 때만 올린다.
+권한은 하는 일에 맞춘다(`D1:Read` 보기 / `D1:Edit` 조치). **토큰 권한이 이제 유일한 바깥
+방어선이다** — 등급별 설명·배포 권한(`Workers Scripts:Edit`)의 정본은 **[secrets.md §3](secrets.md)**.
+**평소에는 `D1:Read` 를 권한다.**
 
 ## 2. 띄우기
 
@@ -59,6 +54,8 @@ cd ops-dashboard
 node -e "console.log('OPS_TOKEN='+require('crypto').randomBytes(16).toString('hex'))" > .dev.vars
 npm run dev               # :8788 — 🔴 띄우는 순간 운영이다
 ```
+
+> 로컬은 위처럼 `.dev.vars` 파일로 넣는다. **배포본 `OPS_TOKEN` 등록·확인**은 [secrets.md §4](secrets.md).
 
 ## 3. 운영을 보고 있는지 확인한다 — **이걸 건너뛰지 않는다**
 

@@ -53,23 +53,11 @@ name = "..."                  # ← 여기부터 기본 환경
 
 ## 1-2. 시크릿 파일 두 개 — 역할은 다르고 규칙은 같다
 
-| 파일 | 누가 읽나 | 무엇 |
-|---|---|---|
-| `.dev.vars` | **Worker 안** | `env.OPS_TOKEN`·`env.ISSUANCE_SALT` — 화면·발급 기능용 |
-| `.env` | **wrangler 라는 도구** | `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID` — 원격 D1 접속용 |
+시크릿은 두 갈래다 — **Worker 안에서 읽는 값**(`.dev.vars`: `env.OPS_TOKEN`·`env.ISSUANCE_SALT`)과
+**wrangler 도구가 읽는 값**(`.env`: `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID`). 규칙은 하나다 —
+**로컬은 파일, 배포는 파일 밖(`wrangler secret put`).** 환경별 시크릿 파일은 만들지 않는다.
 
-역할이 갈리는 만큼 헷갈리기 쉽지만, **규칙은 하나다 — 로컬은 파일, 배포는 파일 밖.**
-wrangler 는 같은 디렉토리의 `.env` 를 자동으로 읽는다(플래그 불필요).
-
-**환경별 시크릿 파일을 만들지 않는다.** `.dev.vars.production`·`.env.production` 같은 것을
-두면 *운영 시크릿이 로컬 파일에 있다*는 뜻이 되고, 그 자체가 유출 경로다. 배포용 Worker
-시크릿은 Cloudflare 가 보관하고(`wrangler secret put`), 자격증명은 배포하는 사람·CI 가 가진다.
-
-둘 다 `.gitignore` 대상이고 값이 빈 `.env.example`·`.dev.vars.example` 만 추적한다.
-권한은 필요한 만큼만 준다 — 토큰이 새면 그 권한만큼이 사고 반경이다.
-
-> ⚠️ **토큰 권한의 무게가 두 프로젝트에서 다르다.** 게이트웨이는 로컬이 사본이라 `D1:Read`
-> 로 충분하지만, **콘솔은 토큰 권한이 사실상 마지막 바깥 방어선**이다 — [3-2](#3-2-자격증명--권한이-마지막-방어선이다) 참고.
+목록·설정법·권한·배포 시크릿의 성질은 **[secrets.md](secrets.md) 에 모았다** — 여기서 되풀이하지 않는다.
 
 ## 1-3. `[env.production]` 은 상속되지 않는다 — assets·vars 를 양쪽에 적는다
 
@@ -164,14 +152,11 @@ npx wrangler deploy --env production
 
 ## 3-2. 자격증명 — 권한이 마지막 방어선이다
 
-로컬 사본이 없어 **`.env` 의 `CLOUDFLARE_API_TOKEN` 없이는 화면이 아예 안 뜬다.**
+환경이 운영 하나뿐이라(§3-1) 토큰 권한이 사실상 마지막 바깥 방어선이다 — 로컬 구동도 운영에
+그대로 간다. 로컬 사본이 없어 **`.env` 의 `CLOUDFLARE_API_TOKEN` 없이는 화면이 아예 안 뜬다.**
 
-| 권한 | 할 수 있는 것 |
-|---|---|
-| `D1:Read` | 보기만. **조치 버튼을 눌러도 실패한다** — 실수로 지울 일이 없다 |
-| `D1:Edit` | 조치까지. 실제 고객 키를 지울 수 있다 |
-
-**평소에는 `D1:Read` 를 권한다.** 조치할 일이 생겼을 때만 올린다.
+권한 등급(`D1:Read` 보기 / `D1:Edit` 조치 / `Workers Scripts:Edit` 배포)과 설정법은
+**[secrets.md §3](secrets.md)** 에 모았다. **평소에는 `D1:Read` 를 권한다.**
 
 ## 3-3. 사람이 치는 명령 — `seed` 가 없다
 

@@ -119,7 +119,8 @@ npm run dev                        # http://localhost:8787
 
 ### 2-2. 🔴 콘솔 (`ops-dashboard`) — 운영 D1
 
-**`npm run seed` 가 없다.** 띄우는 순간 운영 DB 에 붙는다 — 절차 정본은 [run-prod.md](run-prod.md).
+**`npm run seed` 가 없다.** 띄우는 순간 운영 DB 에 붙는다 — 절차 정본은 [run-prod.md](run-prod.md),
+토큰·자격증명(`OPS_TOKEN`·`CLOUDFLARE_API_TOKEN`)은 [secrets.md](secrets.md).
 
 ```bash
 # macOS / Linux
