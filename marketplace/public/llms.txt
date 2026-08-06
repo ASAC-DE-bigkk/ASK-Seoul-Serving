@@ -46,6 +46,12 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
 - `query_product(product_id, filters, from, to, limit, cursor, intent)` — 데이터 조회.
 - `check_quota` — 남은 일일 쿼터.
 
+`query_product` 응답에는 `data_context` 가 동봉된다 — `freshness`(이 게시본의 기준 시점) ·
+`serving_status`(published 가 아니면 warning) · `attribution`(출처 표시 의무) · `caution`(제품
+주의사항). **답변에 기준 시점과 출처를 반영하고, 데이터를 "현재"로 단언하지 말 것.**
+없는 product_id 를 부르면 404 안내에 **비슷한 제품 이름이 제안된다** — 제안을 보고 스스로
+교정해 재시도하면 된다(사용자에게 반문할 필요 없음).
+
 인증은 **`tools/call` 부터** 필요하다(`Authorization: Bearer ask_…`). `initialize`·`tools/list`
 는 발견 단계라 키 없이 되고 데이터·쿼터를 소모하지 않는다.
 
