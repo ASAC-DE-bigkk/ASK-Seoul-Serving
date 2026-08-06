@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS _gateway_request_log (
   product_id TEXT,
 
   -- 행동 로그 8종 (#9) — 배선 대기
-  ua_class       TEXT,     -- browser | ai_agent | ai_crawler | bot | cli | unknown
+  -- no_ua(헤더 없음) 와 unknown(왔는데 못 알아봄) 은 다른 사실이다 — #112
+  ua_class       TEXT,     -- no_ua | browser | ai_agent | ai_crawler | bot | cli | unknown
   agent_name     TEXT,     -- 에이전트 이름(코드 상수). 원문 UA 는 저장하지 않는다
   agent_mode     TEXT,     -- crawler | on_demand
   agent_verified INTEGER,  -- **NULL 로 시작** — 검증 수단 없음 ≠ 검증 실패

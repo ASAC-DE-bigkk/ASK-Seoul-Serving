@@ -1,7 +1,7 @@
 // classifyClient 단독 테스트 (#9 §3) — 실제 UA 문자열 기준. 실행: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyClient, clientAxes, refererHost, normalizeIntent } from "../src/shared.js";
+import { classifyClient, clientAxes, refererHost, normalizeIntent, agentVerified } from "../src/shared.js";
 
 const cases = [
   // AI — crawler (사전 수집)
@@ -42,10 +42,14 @@ const cases = [
   ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
     { ua_class: "browser", agent_name: null, agent_mode: null }],
 
-  // unknown — 매칭 실패는 지어내지 않는다
-  ["", { ua_class: "unknown", agent_name: null, agent_mode: null }],
-  [null, { ua_class: "unknown", agent_name: null, agent_mode: null }],
+  // no_ua — UA 헤더 자체가 없다 (#112). Node 18+ 의 global fetch 가 대표적이다
+  ["", { ua_class: "no_ua", agent_name: null, agent_mode: null }],
+  [null, { ua_class: "no_ua", agent_name: null, agent_mode: null }],
+  [undefined, { ua_class: "no_ua", agent_name: null, agent_mode: null }],
+
+  // unknown — UA 는 왔는데 못 알아봤다. 매칭 실패는 지어내지 않는다
   ["WeirdClient/0.1", { ua_class: "unknown", agent_name: null, agent_mode: null }],
+  ["node", { ua_class: "unknown", agent_name: null, agent_mode: null }],
 ];
 
 for (const [ua, expected] of cases) {
@@ -99,6 +103,46 @@ test("asn 은 숫자로 오지만 TEXT 컬럼이라 문자열로 맞춘다", () 
   assert.equal(axes.asn, "4766");
 });
 
+// ── agent_verified (#111) ────────────────────────────────────────────────────
+// `cf.verifiedBotCategory` 는 **Cloudflare 가 확인한 값**이라 UA 자기 신고와 층위가 다르다.
+// prod 실측(2026-08-06, wrangler tail)에서 이 필드가 실제로 온다는 것을 확인했다 —
+// curl 요청이라 값은 `""` 였다. `botManagement`(score·ja3)는 이 플랜에 없다.
+test("검증 대상이 아니면 NULL — AI 에이전트가 아닌 클라이언트는 검증할 것이 없다", () => {
+  assert.equal(agentVerified(null, ""), null);
+  assert.equal(agentVerified(null, "Search Engine Crawler"), null);
+});
+
+test("자칭 AI 인데 CF 가 확인 못 하면 0 — 이건 진짜 '검증 실패'다", () => {
+  assert.equal(agentVerified("anthropic", ""), 0);
+  assert.equal(agentVerified("anthropic", "   "), 0);
+});
+
+test("CF 가 카테고리를 주면 1", () => {
+  assert.equal(agentVerified("anthropic", "AI Crawler"), 1);
+  assert.equal(agentVerified("openai", "Search Engine Crawler"), 1);
+});
+
+// 🔴 이게 이 축의 핵심이다. `""`(CF 가 봤고 아니라고 했다) 와 필드 부재(못 물어봤다)는
+// 다른 사실이다. 후자를 0 으로 적으면 "모른다"가 "검증 실패"로 굳는다(§4-3 · #78 F-3).
+test("cf 가 필드를 안 주면 NULL — 모른다를 검증 실패로 만들지 않는다", () => {
+  assert.equal(agentVerified("anthropic", undefined), null);
+  assert.equal(agentVerified("anthropic", null), null);
+});
+
+test("clientAxes 가 agent_verified 를 싣는다 — 세 결과가 각각 나온다", () => {
+  const ai = clientAxes(req({ "user-agent": "ClaudeBot/1.0" }, { verifiedBotCategory: "AI Crawler" }));
+  assert.equal(ai.agent_name, "anthropic");
+  assert.equal(ai.agent_verified, 1);
+
+  const spoofed = clientAxes(req({ "user-agent": "ClaudeBot/1.0" }, { verifiedBotCategory: "" }));
+  assert.equal(spoofed.agent_verified, 0);
+
+  // 브라우저는 CF 가 카테고리를 줘도 검증 대상이 아니다 — agent_name 이 없으면 NULL.
+  const human = clientAxes(req({ "user-agent": "Mozilla/5.0 (Windows NT 10.0)" }, { verifiedBotCategory: "" }));
+  assert.equal(human.agent_name, null);
+  assert.equal(human.agent_verified, null);
+});
+
 test("intent — 슬러그는 그대로, 자유 문장은 other, 없으면 NULL", () => {
   assert.equal(normalizeIntent("dong_activity_rank"), "dong_activity_rank");
   // 문장을 그대로 실으면 질문 원문이 로그에 남는다(§3-6) — 그래서 뭉갠다.
@@ -110,4 +154,19 @@ test("intent — 슬러그는 그대로, 자유 문장은 other, 없으면 NULL"
 
 test("안 보낸 것과 못 알아본 것은 다르다 — NULL 과 other 를 섞지 않는다", () => {
   assert.notEqual(normalizeIntent(""), normalizeIntent("!!!"));
+});
+
+// #112 — 위 원칙을 ua_class 에도 적용한다. 40줄 거리에서 두 축이 다른 규칙을 쓰고 있었다.
+test("ua_class 도 안 보낸 것과 못 알아본 것을 가른다 — no_ua ≠ unknown", () => {
+  assert.notEqual(classifyClient(null).ua_class, classifyClient("WeirdClient/0.1").ua_class);
+  assert.equal(classifyClient(null).ua_class, "no_ua");
+  assert.equal(classifyClient("WeirdClient/0.1").ua_class, "unknown");
+});
+
+// NULL 이 아니라 **값**이어야 하는 이유 — 콘솔이 `ua_class IS NULL` 로 "게이트웨이가 아직
+// 이 축을 안 싣는다"(axes_unfilled)를 판정한다. NULL 로 두면 UA 없는 요청 하나가
+// "축 미배선"으로 읽혀 카드가 통째로 '미발행'을 말한다.
+test("no_ua 는 NULL 이 아니라 값이다 — 콘솔의 미배선 판정과 섞이지 않게", () => {
+  assert.equal(typeof classifyClient(null).ua_class, "string");
+  assert.notEqual(classifyClient(null).ua_class, null);
 });
