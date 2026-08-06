@@ -8,6 +8,10 @@
 
 export const BURST_PER_MIN = 60;
 
+// 법적 고지 정본 — 카탈로그(/api/v1)와 MCP(data_context)가 같은 문장을 쓴다. 두 벌이면
+// /legal 개정 때 한쪽만 고쳐지는데, 하필 법적 고지라 어긋났을 때 비용이 크다(PR #108 리뷰).
+export const ATTRIBUTION = "공공 원천의 2차 가공물 — 출처·이용조건 /legal#attribution";
+
 export const json = (obj, status = 200, headers = {}) =>
   new Response(JSON.stringify(obj), {
     status,
