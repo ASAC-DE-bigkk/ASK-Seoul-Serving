@@ -1,11 +1,13 @@
 # CI — PR 검증 (agreement §8-4 "CI 신설" 이행)
-# dev 로 향하는 PR 마다 게이트웨이 테스트(계약 98종 + partials 정합 --check)를 돌린다.
+# dev·main 양쪽으로 향하는 PR 마다 게이트웨이 테스트(계약 + partials 정합 --check)를 돌린다.
+# main 을 넣은 이유: main 이 배포 브랜치가 됐으므로(deploy-prod.yml) dev→main 승격 PR 도
+# 검증을 거쳐야 한다 — 배포 직전이 마지막 관문이다.
 # ops-dashboard 는 테스트 스위트가 아직 없어 잡을 두지 않는다 — 생기면 여기 추가.
 name: CI
 
 on:
   pull_request:
-    branches: [dev]
+    branches: [dev, main]
 
 # 기본 GITHUB_TOKEN 을 읽기로 좁힌다 — 이 워크플로는 체크아웃 외에 리포 권한이 필요 없다.
 permissions:
