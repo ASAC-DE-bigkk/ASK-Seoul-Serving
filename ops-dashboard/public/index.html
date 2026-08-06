@@ -1534,7 +1534,8 @@ async function openDrill(domain, day) {
 
 function renderDrill(d0) {
   const el = $("runsDrill");
-  const sec = (title, html) => "<h4>" + title + "</h4>" + html;
+  // 각 표를 가로 스크롤 상자로 감싼다 — drill 박스(칩)를 뚫고 나가지 않고 상자 안에서 스크롤한다.
+  const sec = (title, html) => "<h4>" + title + "</h4><div class='tscroll'>" + html + "</div>";
   const tOf = (x) => x ? esc(String(x).slice(11, 16)) : "—";
   const tries = (r) => r.is_final_try === 1 ? "<span class='pill bad'>최종 실패</span>"
     : r.is_final_try === 0 ? "<span class='pill warn'>재시도 중</span>"
