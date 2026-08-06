@@ -99,6 +99,12 @@ test("응답이 스스로 수명을 밝힌다 — 브라우저·엣지가 같은
   try {
     const res = await call(stubDb());
     assert.equal(res.headers.get("cache-control"), "public, max-age=60");
+
+    // 캐시 히트도 같은 헤더여야 한다 — 사본은 stale 을 꺼내려고 긴 max-age 를 달고 있는데
+    // 그대로 나가면 브라우저가 10분을 들고 있고 내부 표식이 응답에 샌다(실측으로 잡았다).
+    const hit = await call(stubDb());
+    assert.equal(hit.headers.get("cache-control"), "public, max-age=60");
+    assert.equal(hit.headers.get("x-cached-at"), null, "내부 표식이 새면 안 된다");
   } finally { globalThis.caches = prev; }
 });
 
@@ -155,4 +161,126 @@ test("표가 아직 없어도 카탈로그는 그대로 나간다 — 관측 부
     assert.equal(res.status, 200);
     assert.equal((await res.json()).products[0].display, null);
   } finally { globalThis.caches = prev; }
+});
+
+// ── stale-while-revalidate · 병렬 질의 (2026-08-06 2차) ───────────────────────
+// 60초 TTL 만으로는 거의 안 들었다: 사람은 띄엄띄엄 들어와서 대부분 콜드를 맞는다
+// (실측 — curl 연타 0.014s, 1분 뒤 브라우저 진입 4.5s). 그래서 ①콜드 자체를 낮추고
+// (병렬) ②만료돼도 기다리게 하지 않는다(SWR).
+
+const withCaches = async (stub, fn) => {
+  const prev = globalThis.caches;
+  globalThis.caches = stub;
+  try { return await fn(); } finally { globalThis.caches = prev; }
+};
+
+/** 캐시에 나이 든 사본을 직접 심는다 — 시계를 돌리지 않고 만료 상태를 만든다. */
+function seedAged(stub, ageSeconds, body = { products: [{ product_id: "stale_one" }] }) {
+  const res = new Response(JSON.stringify(body), {
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "x-cached-at": String(Date.now() - ageSeconds * 1000),
+    },
+  });
+  return stub.default.put(new Request("https://catalog.internal/api/v1/catalog"), res);
+}
+
+const callWithCtx = (db, ctx) => worker.fetch(
+  new Request("https://marketplace.example.test/api/v1/catalog"),
+  { DB: db, ASK_ENV: "dev" },
+  ctx,
+);
+
+test("만료된 사본은 **기다리게 하지 않는다** — 옛것을 즉시 주고 뒤에서 갱신한다", async () => {
+  const stub = stubCaches();
+  await withCaches(stub, async () => {
+    await seedAged(stub, 120);              // TTL 60 초과, stale 한도 600 이내
+    const db = stubDb();
+    const pending = [];
+    const res = await callWithCtx(db, { waitUntil: (p) => pending.push(p) });
+
+    const body = await res.json();
+    assert.equal(body.products[0].product_id, "stale_one", "응답은 옛 사본이어야 한다");
+    // waitUntil 은 둘이다 — 카탈로그 갱신 + 요청 로그 기록(라우터가 늘 건다)
+    assert.ok(pending.length >= 1, `갱신이 waitUntil 로 예약돼야 한다 (실제 ${pending.length})`);
+
+    await Promise.all(pending);
+    assert.equal(catalogReads(db), 1, "예약된 갱신이 실제로 D1 을 읽는다");
+  });
+});
+
+test("waitUntil 이 없으면 갱신을 띄우지 않는다 — 취소될 약속을 남기지 않는다", async () => {
+  const stub = stubCaches();
+  await withCaches(stub, async () => {
+    await seedAged(stub, 120);
+    const db = stubDb();
+    const res = await callWithCtx(db, {});      // ctx 는 있는데 waitUntil 이 없다
+
+    assert.equal((await res.json()).products[0].product_id, "stale_one");
+    assert.equal(catalogReads(db), 0, "그래도 응답은 즉시 나간다");
+  });
+});
+
+test("stale 한도를 넘긴 사본은 쓰지 않는다 — 새로 만든다", async () => {
+  const stub = stubCaches();
+  await withCaches(stub, async () => {
+    await seedAged(stub, 7200);             // 2시간 — stale 한도 600 초과
+    const db = stubDb();
+    const res = await callWithCtx(db, { waitUntil() {} });
+
+    assert.equal(catalogReads(db), 1, "새로 만들어야 한다");
+    assert.equal((await res.json()).products[0].product_id, "culture_activity_by_dong");
+  });
+});
+
+test("다섯 질의를 **동시에** 띄운다 — 줄세우면 D1 왕복이 그대로 더해진다", async () => {
+  const stub = stubCaches();
+  await withCaches(stub, async () => {
+    const issued = [];
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const db = {
+      calls: [],
+      prepare(sql) {
+        db.calls.push(sql);
+        issued.push(sql);
+        const rows = sql.includes("FROM _catalog") ? [CATALOG_ROW] : [];
+        // 모든 질의가 같은 게이트에서 대기한다 — 순차라면 첫 질의가 안 풀려 두 번째가 안 뜬다
+        const all = async () => { await gate; return { results: rows }; };
+        return { all, first: async () => rows[0] ?? null, run: async () => ({}) };
+      },
+    };
+    const p = callWithCtx(db, { waitUntil() {} });
+    await new Promise((r) => setImmediate(r));
+
+    assert.equal(issued.length, 5, `다섯 질의가 모두 떠 있어야 한다 (실제 ${issued.length})`);
+    release();
+    assert.equal((await p).status, 200);
+  });
+});
+
+test("만료돼도 응답은 갱신을 **기다리지 않는다** — 갱신이 매달려 있어도 즉시 나간다", async () => {
+  const stub = stubCaches();
+  await withCaches(stub, async () => {
+    await seedAged(stub, 120);
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const db = {
+      calls: [],
+      prepare(sql) {
+        db.calls.push(sql);
+        const rows = sql.includes("FROM _catalog") ? [CATALOG_ROW] : [];
+        return { all: async () => { await gate; return { results: rows }; },
+                 first: async () => rows[0] ?? null, run: async () => ({}) };
+      },
+    };
+    const pending = [];
+    // 갱신 질의를 **풀어 주지 않은 채** 응답을 기다린다 — 블로킹이면 여기서 멈춘다
+    const res = await callWithCtx(db, { waitUntil: (p) => pending.push(p) });
+
+    assert.equal((await res.json()).products[0].product_id, "stale_one");
+    assert.ok(pending.length >= 1);
+    release();
+    await Promise.all(pending);
+  });
 });
