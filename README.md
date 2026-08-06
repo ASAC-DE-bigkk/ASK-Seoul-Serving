@@ -100,4 +100,4 @@ cd ops-dashboard ; npm install ; npm run dev     # :8788  🔴 운영 D1
 
 콘솔은 `ops.ask-seoul.kr` 로 배포된다 — **`dev` 브랜치 머지가 곧 운영 배포다**
 (브랜치 이름과 배포 환경이 다르다). 읽기 경로는 아직 무인증이고 Cloudflare Access 승격
-(#20 B-1)이 남아 있다. 게이트웨이도 2026-08-06 에 운영 D1 로 전환됐다(#85) — `dev.ask-seoul.kr` 배포면을 유지할지는 미결.
+(#20 B-1)이 남아 있다. 게이트웨이도 2026-08-06 에 운영 D1 로 전환됐고(#85), 같은 날 팀 합의로 `dev.ask-seoul.kr` 배포면을 접었다 — 남는 배포면은 `ask-seoul.kr`·`ops.ask-seoul.kr` 둘이다.

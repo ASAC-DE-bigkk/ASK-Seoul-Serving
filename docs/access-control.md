@@ -61,9 +61,8 @@ curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
 
 ```text
 transit.ask-seoul.kr   ->  ask-seoul-transit-api
-dev.ask-seoul.kr       ->  ask-seoul-gateway-dev
-dev-ops.ask-seoul.kr   ->  ask-seoul-ops-dashboard-dev     ← 폐기했다고 적었는데 살아 있다
 ops.ask-seoul.kr       ->  ask-seoul-ops-dashboard
+(ask-seoul.kr 은 루트 DNS 레코드 충돌로 아직 미연결 — 아래 §정리 참고)
 ```
 
 ⚠️ **`wrangler.toml` 에서 `routes` 를 지우고 재배포해도 커스텀 도메인은 남는 경우가 있다.**
@@ -280,7 +279,7 @@ Zone 읽기만 있다. 아래는 **계정 소유자만** 할 수 있다.
 | 콘솔 `ops.ask-seoul.kr` — 페이지 | 🟡 열림 | 데이터는 없음. 잠금 화면만 |
 | 콘솔 `/api/*` | ✅ **잠김** | L3 토큰 게이트 (2026-08-06~) |
 | 콘솔 조치(폐기·삭제) | ✅ 잠김 | 같은 토큰 + 화면 2단 확인 |
-| `dev-ops.ask-seoul.kr` | 🔴 **떠 있음** | 폐기했다고 적었으나 도메인이 남아 있다 — 정리 필요 |
+| ~~`dev.` · `dev-ops.` 배포면~~ | ✅ **정리됨** | 2026-08-06 팀 합의로 워커·도메인 삭제 |
 | 게이트웨이 API | ✅ 키 인증 + 버스트 + 쿼터 | 의도된 공개 서비스 |
 | **사람 단위 접근 제어** | 🔴 **없음** | Access 미확보(§5) |
 | **감사 로그(누가 했나)** | 🔴 **없음** | 공유 토큰 하나 |
