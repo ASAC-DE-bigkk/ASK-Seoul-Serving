@@ -1,7 +1,7 @@
 // classifyClient 단독 테스트 (#9 §3) — 실제 UA 문자열 기준. 실행: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyClient, clientAxes, refererHost, normalizeIntent } from "../src/shared.js";
+import { classifyClient, clientAxes, refererHost, normalizeIntent, agentVerified } from "../src/shared.js";
 
 const cases = [
   // AI — crawler (사전 수집)
@@ -101,6 +101,46 @@ test("asn 은 숫자로 오지만 TEXT 컬럼이라 문자열로 맞춘다", () 
   const axes = clientAxes(req({}, { country: "KR", asn: 4766 }));
   assert.equal(axes.country, "KR");
   assert.equal(axes.asn, "4766");
+});
+
+// ── agent_verified (#111) ────────────────────────────────────────────────────
+// `cf.verifiedBotCategory` 는 **Cloudflare 가 확인한 값**이라 UA 자기 신고와 층위가 다르다.
+// prod 실측(2026-08-06, wrangler tail)에서 이 필드가 실제로 온다는 것을 확인했다 —
+// curl 요청이라 값은 `""` 였다. `botManagement`(score·ja3)는 이 플랜에 없다.
+test("검증 대상이 아니면 NULL — AI 에이전트가 아닌 클라이언트는 검증할 것이 없다", () => {
+  assert.equal(agentVerified(null, ""), null);
+  assert.equal(agentVerified(null, "Search Engine Crawler"), null);
+});
+
+test("자칭 AI 인데 CF 가 확인 못 하면 0 — 이건 진짜 '검증 실패'다", () => {
+  assert.equal(agentVerified("anthropic", ""), 0);
+  assert.equal(agentVerified("anthropic", "   "), 0);
+});
+
+test("CF 가 카테고리를 주면 1", () => {
+  assert.equal(agentVerified("anthropic", "AI Crawler"), 1);
+  assert.equal(agentVerified("openai", "Search Engine Crawler"), 1);
+});
+
+// 🔴 이게 이 축의 핵심이다. `""`(CF 가 봤고 아니라고 했다) 와 필드 부재(못 물어봤다)는
+// 다른 사실이다. 후자를 0 으로 적으면 "모른다"가 "검증 실패"로 굳는다(§4-3 · #78 F-3).
+test("cf 가 필드를 안 주면 NULL — 모른다를 검증 실패로 만들지 않는다", () => {
+  assert.equal(agentVerified("anthropic", undefined), null);
+  assert.equal(agentVerified("anthropic", null), null);
+});
+
+test("clientAxes 가 agent_verified 를 싣는다 — 세 결과가 각각 나온다", () => {
+  const ai = clientAxes(req({ "user-agent": "ClaudeBot/1.0" }, { verifiedBotCategory: "AI Crawler" }));
+  assert.equal(ai.agent_name, "anthropic");
+  assert.equal(ai.agent_verified, 1);
+
+  const spoofed = clientAxes(req({ "user-agent": "ClaudeBot/1.0" }, { verifiedBotCategory: "" }));
+  assert.equal(spoofed.agent_verified, 0);
+
+  // 브라우저는 CF 가 카테고리를 줘도 검증 대상이 아니다 — agent_name 이 없으면 NULL.
+  const human = clientAxes(req({ "user-agent": "Mozilla/5.0 (Windows NT 10.0)" }, { verifiedBotCategory: "" }));
+  assert.equal(human.agent_name, null);
+  assert.equal(human.agent_verified, null);
 });
 
 test("intent — 슬러그는 그대로, 자유 문장은 other, 없으면 NULL", () => {

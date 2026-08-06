@@ -516,7 +516,7 @@ export const LOG_COLUMNS = [
   "request_id", "product_id", "env", "intent",
   // 행동 로그 (#9 · agreement §3-1) — 원문은 하나도 없다. UA 는 분류 상수로, Referer 는
   // 호스트로, IP 는 아예 안 본다(§3-2). 미배선으로 남는 셋은 아래 주석에 이유를 적었다.
-  "ua_class", "agent_name", "agent_mode", "country", "asn", "referer_host",
+  "ua_class", "agent_name", "agent_mode", "agent_verified", "country", "asn", "referer_host",
   "publication_id",
 ];
 
@@ -533,17 +533,18 @@ export function logValues(trace, env) {
     // 헤더 제어가 되는 클라이언트는 `X-ASK-Intent` 로 보낸다. 컬럼과 화면은 하나다.
     trace.intent ?? null,
     // 요청 축(#9) — `clientAxes` 가 만든 값 그대로. 라우팅과 무관해 모든 표면에 같이 붙는다.
+    // agent_verified 는 0 이 뜻을 갖는 값이다(자칭인데 CF 가 확인 못 함) — `??` 여야 한다.
+    // `||` 였으면 0 이 조용히 NULL 로 바뀌어 "검증 실패"가 "검증 안 함"이 된다.
     trace.uaClass ?? null, trace.agentName ?? null, trace.agentMode ?? null,
+    trace.agentVerified ?? null,
     trace.country ?? null, trace.asn ?? null, trace.refererHost ?? null,
     // 어느 게시본을 읽었는지 — 제품을 해석한 핸들러만 안다(카탈로그·미리보기·데이터·skill).
     trace.publicationId ?? null,
   ];
 }
 
-// 아직 채우지 않는 셋 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
+// 아직 채우지 않는 둘 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
 //
-//   agent_verified  검증 수단 자체가 없다. **NULL 로 시작**이 스펙이다(§3-1 · #78 F-3) —
-//                   0 으로 두면 "검증 실패"로 읽힌다.
 //   page_path       정적 페이지·기계 문서는 `run_worker_first` 밖이라 워커에 닿지 않는다.
 //                   관측하려면 §3-4 의 6경로를 워커로 통과시키는 결정이 먼저다(#63 ④).
 //   pattern_id      패턴 실행 API(ASAC-DAG#642 안 C)가 아직 없다. 소비자가 생기면 붙인다.
@@ -708,6 +709,7 @@ export default {
     const trace = {
       route: null, requestId: newRequestId(),
       uaClass: axes.ua_class, agentName: axes.agent_name, agentMode: axes.agent_mode,
+      agentVerified: axes.agent_verified,
       country: axes.country, asn: axes.asn, refererHost: axes.referer_host,
       // 헤더로 온 의도. MCP 는 툴 인자로 받아 이 값을 덮어쓴다 — 질의마다 바뀌는 쪽이
       // 더 정확하기 때문이다(agreement §3-6: 경로는 둘, 컬럼은 하나).
