@@ -378,10 +378,17 @@ p.hint b { color:var(--muted); }
 .hm .cell.click:hover { box-shadow:0 0 0 2px var(--accent-soft); border-color:var(--accent-line); }
 .hm .cell.sel { box-shadow:0 0 0 2px var(--accent); }
 .drill { border:1px solid var(--line-strong); border-radius:8px; background:var(--chip);
-         padding:12px 14px; }
+         padding:12px 14px; min-width:0; overflow:hidden; }
 .drill-hd { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .drill-hd .sub { font-size:11.5px; color:var(--faint); }
 .drill h4 { font-size:12.5px; font-weight:700; margin:12px 0 4px; }
+/* 🔴 drill 안의 넓은 표는 각자 이 상자 안에서만 가로 스크롤한다 — drill 칩을 뚫고 나가지 않게.
+   (표를 바로 두면 nowrap 셀이 칩 밖으로 삐져나가 "페이지 밖으로 나가는" 것처럼 보인다) */
+.drill .tscroll { overflow-x:auto; min-width:0; scrollbar-width:thin;
+                  scrollbar-color:var(--line-strong) transparent; }
+.drill .tscroll::-webkit-scrollbar { height:8px; }
+.drill .tscroll::-webkit-scrollbar-thumb { background:var(--line-strong); border-radius:4px; }
+.drill .tscroll table { margin:0; }
 
 /* ── 상세 패널 ─────────────────────────────────────────────────────────────── */
 .detail { border-top:2px solid var(--accent); background:var(--accent-soft);
@@ -400,6 +407,15 @@ p.hint b { color:var(--muted); }
 .detail .box p.note { font-size:11px; color:var(--faint); margin-bottom:6px; }
 .detail .box .scroll { max-height:230px; }
 .detail .box .scroll thead th { background:var(--panel); }
+
+/* 🔴 상세를 표 바깥 패널이 아니라 **그 행 안에서** 펼친다(#apis · .scroll.tall 안) —
+   클릭한 자리에서 문맥을 잃지 않게, 행 바로 아래 colspan 셀로 끼운다. */
+tr#apiDetRow > td { padding:0; }
+/* 표가 열 수 때문에 가로로 넓어 좌우 스크롤이 생겨도, 상세는 **보이는 폭에 고정**해서
+   왼쪽으로 잘려 나가지 않게 한다(sticky left:0 · 폭은 ui.js 가 컨테이너 clientWidth 로). */
+tr#apiDetRow .detail { position:sticky; left:0; box-sizing:border-box; }
+tbody tr.expanded > td { background:var(--accent-soft); }
+tbody tr.expanded td.name { color:var(--accent-deep); font-weight:600; }
 
 /* ── 요청 추적 ─────────────────────────────────────────────────────────────── */
 .trace-row { display:flex; gap:8px; margin:4px 0 10px; flex-wrap:wrap; }
@@ -438,10 +454,18 @@ p.hint b { color:var(--muted); }
           border-bottom:1px solid var(--sidebar-line); }
   .side .brand { margin-bottom:0; }
   .side .group, .side .foot { display:none; }
-  .tabs { display:flex; overflow-x:auto; gap:4px; padding:8px;
-          -webkit-overflow-scrolling:touch; }
-  .tabs button { width:auto; white-space:nowrap; }
+  /* 🔴 가로 스크롤 대신 격자 — 6개 탭이 전부 한눈에 보이고, 스크롤이 안 생긴다.
+     예전(overflow-x:auto)엔 좁은 폭에서 탭이 옆으로 잘려 스크롤해야 보였다. */
+  .tabs { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:8px; }
+  .tabs li { display:flex; }
+  .tabs button { width:100%; display:inline-flex; align-items:center; justify-content:center;
+                 gap:7px; white-space:normal; text-align:center; line-height:1.25;
+                 border:1px solid var(--line-strong); border-radius:8px;
+                 min-height:var(--tap); padding:8px; }
+  .tabs button .dot { flex:none; }
   .tabs button .sub { display:none; }
+  .tabs button[aria-selected="true"] { box-shadow:none; border-color:var(--accent);
+                 background:var(--accent-soft); color:var(--accent-deep); font-weight:600; }
 }
 
 /* KPI 4열 → 2열 */
@@ -461,6 +485,8 @@ p.hint b { color:var(--muted); }
   .kpi .v { font-size:19px; }
   /* 상세 그리드 여백 축소 */
   .detail { padding:12px var(--pad-x) 14px; }
+  .drill { padding:12px var(--pad-x); }
+  .tabs { grid-template-columns:repeat(2,1fr); }   /* 폰은 2열 — 라벨이 안 눌린다 */
   .card .bd, .card .hd { padding-left:14px; padding-right:14px; }
   .filters { padding-left:14px; padding-right:14px; }
 }
