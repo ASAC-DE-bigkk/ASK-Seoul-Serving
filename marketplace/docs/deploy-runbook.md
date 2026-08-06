@@ -266,6 +266,30 @@ SMOKE_KEY=ask_… npm run smoke -- https://<배포주소>
 | `data 401` 이 500 | `_keys` 테이블 없음 | 1번 다시 |
 | `X-Request-Id` 누락 | 구 버전 배포본 | 코드 SHA 확인 후 재배포 |
 
+### 🔴 이 스모크가 **보지 않는 것** — `/skill/v1`
+
+실측(2026-08-05): `scripts/smoke.mjs` 에 **skill·bundle 검사가 0건**이고, 정적 확인도
+`/legal`·`/llms.txt`·`/openapi.json` 셋뿐이라 **`/skill-openapi.json` 이 빠져 있다.**
+
+```
+확인되는 것    카탈로그·미리보기·발급 경로·데이터 401·없는 제품 404·
+              MCP initialize/tools-list·X-Request-Id·정적 3종
+확인 안 되는 것 K-Skill 계약 — bundle exact-six · 6개 제품 상세·데이터 ·
+              범위 밖 제품 404 · publication/evidence parity
+```
+
+**PASS 를 계약 검증으로 읽지 않는다.** 이 스모크가 답하는 질문은 *"배포본이 서비스
+가능한가"* 까지이고, *"K-Skill 이 쓸 수 있는 상태인가"* 는 #4 담당이 따로 돌리는
+authenticated remote smoke 의 몫이다. 두 검사는 겹치지 않고 **보완 관계**이므로 둘 다 돌린다.
+
+> 이 경계를 적어 두는 이유: 13항목이 전부 초록이면 "다 됐다"로 읽는 게 자연스럽고,
+> 실제로 그렇게 오독한 적이 있다(#4 에서 "말씀하신 4가지가 여기 들어 있다"고 답했다가
+> 세어 보니 하나도 없어 정정). dev 자동 배포(#79)로 CI 에서 돌게 되면서 초록불의 뜻이
+> 더 중요해졌다.
+>
+> `/skill/v1` 검사를 이 스모크에 넣을지는 **계약 소유자 판단**이다 — 그쪽 remote smoke 와
+> 같은 것을 두 곳에서 재게 되므로, 넣는다면 역할을 먼저 가른다.
+
 ## 5. 되돌리기
 
 ```bash
