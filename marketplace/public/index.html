@@ -688,9 +688,15 @@ function buildDemos(products, samples) {
                // 질문이 없을 때 쓸 것과 각주가 없을 때 쓸 것은 다르다 —
                // 각주 자리에 물음표를 넣으면 답을 준 것처럼 읽힌다(실측).
                fallbackQ: p.product_question || "",
-               // 설명이 `gold_citydata_ppltn_hourly — 장소별 …` 처럼 테이블명을 달고 오는
-               // 도메인이 있다. 사람이 읽는 각주에 기술명이 앞장서지 않게 떼어낸다.
-               desc: (p.description || "").replace(/^\s*[a-z0-9_]+\s*[—-]\s*/i, "") };
+               // 각주가 실측 한 줄(insight_sample_ko)로 못 채워질 때 쓸 대체 문장.
+               // 🔴 **모델 `description` 은 쓰지 않는다.** 그건 개발자용 계보 기록으로 남기기로
+               // 했고(ASAC-DBT#450 논의), 실제로 랜딩에 이런 문장이 그대로 떴다:
+               //   "정본 Traffic 현재-시간 행정동 행에 no-hindsight KMA 예보 맥락을 left join…"
+               //   "\"지금 우리 동네 교통\" 스코어카드(#289 G1). grain admin_dong_code…"
+               // 사람이 읽는 자리에는 사람 말만 쓴다 — 계약의 display.summary 를 먼저 보고,
+               // 아직 선언 안 된 도메인은 한시적 폴백 사본을 본다. 둘 다 없으면 **비운다**
+               // (기술 서술로 채우느니 안 쓰는 게 낫다).
+               desc: (p.display || {}).summary || (TITLE_FALLBACK[p.product_id] || {}).desc || "" };
     })
     .filter(Boolean)
     .sort((a, b) => (order[a.dom] ?? 99) - (order[b.dom] ?? 99));
@@ -717,6 +723,13 @@ const samplesReady = fetch("/demo-samples.json")
 
 // 카탈로그는 **한 번만** 부른다 — 데모(질문·라벨·실측)와 아래 카탈로그 절이 같은 응답을 쓴다.
 // 따로 부르면 방문 1회에 워커 왕복이 둘이 되고, 두 화면이 서로 다른 게시본을 볼 수도 있다.
+// 폴백도 **모듈 수준에서 한 번만** 띄운다. bootCatalog 안에서 받으면 bootDemo 가 먼저
+// 끝났을 때 빈 사전을 읽는다(데모 각주가 조용히 비는 경합) — 두 곳이 같은 약속을 기다린다.
+const fallbackReady = fetch("/product-display.json")
+  .then((r) => (r.ok ? r.json() : {}))
+  .then((j) => { TITLE_FALLBACK = j || {}; return TITLE_FALLBACK; })
+  .catch(() => ({}));
+
 const catalogReady = fetch("/api/v1/catalog")
   .then((r) => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status))))
   .then((j) => j.products || [])
@@ -891,7 +904,7 @@ function bootField() {
 async function bootDemo() {
   // 대본이 카탈로그에서 오므로 **둘 다 받은 뒤에** 시작한다. 하나라도 없으면 데모를 접는다 —
   // 빈 표를 돌리느니 안 보이는 편이 낫다(꾸며낸 행을 넣지 않는다는 원칙과 같은 이유).
-  const [products, samples] = await Promise.all([catalogReady, samplesReady]);
+  const [products, samples] = await Promise.all([catalogReady, samplesReady, fallbackReady]);
   if (!products || !samples) { $("demo").hidden = true; return; }
   DEMOS = buildDemos(products, samples.samples || {});
   if (!DEMOS.length) { $("demo").hidden = true; return; }
@@ -927,7 +940,7 @@ function failState(id, msg) {
 async function bootCatalog() {
   let products;
   // 폴백은 **부가 정보다** — 못 읽어도 카탈로그는 그대로 뜬다(제목이 product_id 로 내려앉을 뿐).
-  try { TITLE_FALLBACK = await (await fetch("/product-display.json")).json(); } catch { TITLE_FALLBACK = {}; }
+  await fallbackReady;
   products = await catalogReady;
   if (!products) {
     setStat("statProducts", "—"); setStat("statDong", "—"); setStat("statTimed", "—"); setStat("statFresh", "—");
