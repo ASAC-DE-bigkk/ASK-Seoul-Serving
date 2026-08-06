@@ -160,29 +160,94 @@ const JOIN_AXES = ["admin_dong_code", "gu_code", "stat_region_cd"];
 // 무거워진 건 #434 가 성공했기 때문이다 — 활용 예시가 8건 → 379건이 되면서 응답의 74.7%를
 // 차지하게 됐다(주석에 "약 245KB"라 적혀 있던 것이 414KB). 남은 도메인이 발행하면 425건이 된다.
 //
-// 그래서 줄이는 대신 **다시 만들지 않는다.** 60초는 발행 주기(가장 잦은 transit fast 티어가
-// 15분)보다 훨씬 짧아 묵은 값이 오래 남지 않고, 한 사람이 랜딩→카탈로그로 넘어가는 동안은
-// 브라우저 캐시가 그대로 받는다(그 두 화면이 같은 응답을 부른다).
-const CATALOG_TTL = 60;
+// 그래서 줄이는 대신 **다시 만들지 않는다.**
+//
+// 🔴 **60초 TTL 만으로는 거의 안 들었다**(2026-08-06 재실측). 카탈로그는 발행할 때만 바뀌는데
+// 사람은 띄엄띄엄 들어온다 — curl 세 번은 0.014s 였는데 1분 뒤 브라우저 진입은 **4.5초**였다.
+// 캐시가 "연타할 때만" 듣고 있었다. 그래서 두 가지를 더한다:
+//   ① 질의 병렬화 — 아래 Promise.all. 콜드 경로 자체를 낮춘다
+//   ② stale-while-revalidate — 만료돼도 옛것을 즉시 주고 뒤에서 갱신한다
+// ②가 있으면 **첫 방문 한 번**만 콜드를 맞고 이후는 계속 즉시 응답이다.
+const CATALOG_TTL = 60;              // 이 안이면 그냥 신선
+// 만료 뒤에도 이만큼은 **옛것을 주면서** 뒤에서 갱신한다. 카탈로그 메타(제품 목록·설명·예시)는
+// 하루 단위로 바뀌고 15분마다 바뀌는 것은 `exported_at` 뿐이라, 10분 묵은 값이 틀린 값은 아니다.
+const CATALOG_STALE_TTL = 600;
+// 캐시에 담는 사본은 **더 길게** 산다 — Cache API 가 max-age 로 만료시켜 버리면 stale 을 꺼낼
+// 수가 없다. 신선도 판정은 우리가 `x-cached-at` 으로 직접 한다.
+const CATALOG_CACHE_HEADER = `public, max-age=${CATALOG_STALE_TTL}`;
 // 캐시 키는 **합성 URL** 이다 — 이 핸들러는 `/api/v1/catalog` 와 MCP `list_products` 양쪽에서
 // 불리는데(mcp.js 의 deps.handleCatalog), 요청 객체가 서로 달라도 같은 응답이라 한 칸을 쓴다.
 const CATALOG_CACHE_KEY = "https://catalog.internal/api/v1/catalog";
 
-async function handleCatalog(env) {
+// 캐시에 담긴 사본의 나이(초). `x-cached-at` 이 없으면 옛 형식이라 만료로 본다.
+const cachedAgeSeconds = (res) => {
+  const at = Number(res.headers.get("x-cached-at"));
+  return Number.isFinite(at) && at > 0 ? (Date.now() - at) / 1000 : Infinity;
+};
+
+// 캐시 사본을 **클라이언트용 헤더로 갈아입혀** 내보낸다. 사본은 stale 을 꺼내려고 긴
+// `max-age` 와 내부 표식(`x-cached-at`)을 달고 있는데, 그대로 주면 브라우저가 10분을 들고
+// 있고 내부 구현이 응답에 샌다(실측 — 히트 시 `max-age=600` 이 나갔다).
+const asClientResponse = (hit) =>
+  new Response(hit.body, {
+    status: hit.status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "access-control-allow-origin": "*",
+      "cache-control": `public, max-age=${CATALOG_TTL}`,
+    },
+  });
+
+async function handleCatalog(env, ctx) {
   // Cache API 가 없는 실행기(테스트 하네스 등)에서도 그대로 동작해야 한다 — 캐시는 성능이지
   // 계약이 아니다. 못 쓰면 조용히 매번 만든다.
   const cache = typeof caches !== "undefined" && caches.default ? caches.default : null;
   const cacheKey = cache ? new Request(CATALOG_CACHE_KEY) : null;
   if (cache) {
     const hit = await cache.match(cacheKey);
-    if (hit) return hit;
+    if (hit) {
+      const age = cachedAgeSeconds(hit);
+      if (age <= CATALOG_TTL) return asClientResponse(hit);  // 신선 — 그대로
+      if (age <= CATALOG_STALE_TTL) {
+        // 만료됐지만 **기다리게 하지 않는다** — 옛것을 즉시 주고 뒤에서 새로 만든다.
+        // waitUntil 이 없으면(=MCP 경유 등) 갱신을 띄우지 않는다. 응답 반환과 함께
+        // 취소될 약속을 남기면 "갱신했다고 믿는데 안 된" 상태가 된다.
+        if (ctx && ctx.waitUntil) ctx.waitUntil(buildCatalog(env, cache, cacheKey));
+        return asClientResponse(hit);
+      }
+      // 그보다 오래됐으면 옛것을 주지 않는다 — 새로 만든다(아래로 떨어진다).
+    }
   }
+  return buildCatalog(env, cache, cacheKey);
+}
 
-  const { results } = await env.DB.prepare(
-    "SELECT name, product_id, external, description, product_question, time_axis, columns, " +
-    "row_count, freshness, exported_at " +
-    `FROM _catalog WHERE ${PUBLIC} ORDER BY name`
-  ).all();
+async function buildCatalog(env, cache, cacheKey) {
+  // 🔴 **다섯 질의를 줄세우지 않는다.** 서로 독립적인 읽기인데 순차로 `await` 하면 D1 왕복이
+  // 그대로 더해진다 — 한국↔CF 왕복이 회당 0.7~0.9s 라 5번이면 4~4.5s 다(브라우저 실측 4,529ms).
+  // 병렬로 띄우면 가장 느린 하나로 수렴한다. 실패 처리는 그대로다: `_catalog` 이 깨지면
+  // 전체가 reject 되고(카탈로그 없이는 응답이 성립하지 않는다), 나머지 넷은 `safeRows` 가
+  // null 로 내려앉아 **그 부분만 빠진 채** 응답이 나간다.
+  const [catalogRes, docRows, patternRows, displayRows, grainRows] = await Promise.all([
+    env.DB.prepare(
+      "SELECT name, product_id, external, description, product_question, time_axis, columns, " +
+      "row_count, freshness, exported_at " +
+      `FROM _catalog WHERE ${PUBLIC} ORDER BY name`
+    ).all(),
+    safeRows(env.DB.prepare(
+      "SELECT product_id, column_name, description_ko FROM d1_catalog_columns"
+    )),
+    safeRows(env.DB.prepare(
+      'SELECT product_id, pattern_id, question_ko, axes, "sql", requires, verified_rows, ' +
+      'verified_at, allow_empty, insight_sample_ko FROM d1_usage_patterns ORDER BY product_id, pattern_id'
+    )),
+    safeRows(env.DB.prepare(
+      "SELECT product_id, title, summary, caveat, use_cases FROM d1_catalog_display"
+    )),
+    safeRows(env.DB.prepare(
+      "SELECT product_id, grain FROM d1_catalog_ext"
+    )),
+  ]);
+  const { results } = catalogRes;
 
   // 컬럼 설명의 정본은 **게시본**이다(`d1_catalog_columns.description_ko`, ASAC-DAG#642 §3).
   // `_catalog.columns` 는 name·type 만 실어 오므로 여기서 붙인다.
@@ -195,9 +260,6 @@ async function handleCatalog(env) {
   // 표가 없거나 못 읽으면 **설명만 빠지고 카탈로그는 그대로 나간다** — 관측 부재가 서빙을
   // 막지 않는다. 값이 없는 컬럼은 `description: null` 로 명시한다("모른다"를 빈 문자열로
   // 꾸미면 화면이 설명이 있는 척한다).
-  const docRows = await safeRows(env.DB.prepare(
-    "SELECT product_id, column_name, description_ko FROM d1_catalog_columns"
-  ));
   const docs = new Map();
   for (const r of docRows || []) docs.set(`${r.product_id}|${r.column_name}`, r.description_ko || null);
 
@@ -210,10 +272,6 @@ async function handleCatalog(env) {
   //
   // 필드 이름은 번들(`/api/v1/products/<id>`)과 같은 게시본 어휘로 맞춘다 — 같은 것을 문마다
   // 다르게 부르면 소비자가 두 벌을 배워야 한다.
-  const patternRows = await safeRows(env.DB.prepare(
-    'SELECT product_id, pattern_id, question_ko, axes, "sql", requires, verified_rows, ' +
-    'verified_at, allow_empty, insight_sample_ko FROM d1_usage_patterns ORDER BY product_id, pattern_id'
-  ));
   const patterns = new Map();
   for (const p of patternRows || []) {
     if (!patterns.has(p.product_id)) patterns.set(p.product_id, []);
@@ -238,9 +296,6 @@ async function handleCatalog(env) {
   //
   // 미선언 제품은 `display: null` 이다 — 빈 문자열로 채우면 화면이 "제목이 있는 척"한다.
   // 지금은 절반(citydata·culture·transit)만 선언했고, 나머지는 화면이 product_id 로 내려앉는다.
-  const displayRows = await safeRows(env.DB.prepare(
-    "SELECT product_id, title, summary, caveat, use_cases FROM d1_catalog_display"
-  ));
   const displays = new Map();
   for (const r of displayRows || []) {
     displays.set(r.product_id, {
@@ -254,9 +309,6 @@ async function handleCatalog(env) {
   // 그레인은 `d1_catalog_ext` 에 이미 게시돼 있다. 사본이 `unit`("행정동 × 날짜")으로 들고
   // 있던 것의 정본이고, 사본을 지우면서 이쪽으로 옮긴다. **별도 질의로 둔다** — 조인하면
   // 한쪽 표가 없을 때 둘 다 잃는다.
-  const grainRows = await safeRows(env.DB.prepare(
-    "SELECT product_id, grain FROM d1_catalog_ext"
-  ));
   const grains = new Map();
   for (const r of grainRows || []) grains.set(r.product_id, r.grain ?? null);
 
@@ -281,12 +333,28 @@ async function handleCatalog(env) {
       };
     }),
   }, 200, {
-    // 엣지(Cache API)와 브라우저가 같은 기준을 쓰도록 응답 자신이 수명을 밝힌다.
-    // `public` 이라야 공유 캐시가 담는다 — 이 응답은 키·사용자에 따라 달라지지 않는다.
+    // 브라우저에게 알리는 수명은 **짧게** — 사람이 새로고침했을 때 한 세대 묵은 값을
+    // 오래 들고 있지 않게 한다. 엣지 사본은 아래에서 더 길게 담는다(stale 을 꺼내야 하므로).
     "cache-control": `public, max-age=${CATALOG_TTL}`,
   });
-  // 실패한 응답은 담지 않는다(여기까지 왔으면 200 이지만, 규칙을 코드에 남긴다).
-  if (cache && res.status === 200) await cache.put(cacheKey, res.clone());
+
+  if (cache) {
+    // 캐시 사본은 **클라이언트에 준 것과 헤더가 다르다.**
+    //  · `max-age` 를 stale 한도까지 늘린다 — Cache API 가 만료로 지워 버리면 stale 을
+    //    꺼낼 수가 없어 SWR 자체가 성립하지 않는다.
+    //  · `x-cached-at` 으로 **우리가 직접** 신선도를 잰다(Age 헤더는 실행기마다 다르다).
+    const copy = new Response(res.clone().body, {
+      status: res.status,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "access-control-allow-origin": "*",
+        "cache-control": CATALOG_CACHE_HEADER,
+        "x-cached-at": String(Date.now()),
+      },
+    });
+    // 실패한 응답은 담지 않는다(여기까지 왔으면 200 이지만, 규칙을 코드에 남긴다).
+    if (res.status === 200) await cache.put(cacheKey, copy);
+  }
   return res;
 }
 
@@ -498,7 +566,7 @@ async function logRequest(env, trace) {
   }
 }
 
-async function route(request, env, url, trace) {
+async function route(request, env, url, trace, ctx) {
   const path = url.pathname;
 
   if (path === "/api/v1/keys" && request.method === "POST") {
@@ -522,7 +590,7 @@ async function route(request, env, url, trace) {
     });
   }
   if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/v1/keys)");
-  if (path === "/api/v1/catalog") { trace.route = "catalog"; return handleCatalog(env); }
+  if (path === "/api/v1/catalog") { trace.route = "catalog"; return handleCatalog(env, ctx); }
 
   const previewMatch = path.match(/^\/api\/v1\/preview\/([^/]+)$/);
   if (previewMatch) {
@@ -645,7 +713,7 @@ export default {
       // 더 정확하기 때문이다(agreement §3-6: 경로는 둘, 컬럼은 하나).
       intent: normalizeIntent(request.headers.get("x-ask-intent")),
     };
-    let res = await route(request, env, url, trace);
+    let res = await route(request, env, url, trace, ctx);
 
     // 오류는 본문에도 요청 ID 를 넣는다 — 사람이 복사해 오는 건 헤더가 아니라 JSON 이다
     if (res.status >= 400 && (res.headers.get("content-type") || "").includes("problem+json")) {
