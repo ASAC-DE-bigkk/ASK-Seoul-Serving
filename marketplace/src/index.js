@@ -541,7 +541,7 @@ async function handlePreview(env, id, trace = {}) {
   return json({ product_id: meta.product_id, table, preview: true, row_count: results.length, rows: results });
 }
 
-async function handleData(env, id, params, keyRow, trace = {}) {
+async function handleData(env, id, params, keyRow, trace = {}, opts = {}) {
   trace.table = id;   // handlePreview 와 같은 이유 — 실패 요청도 무엇을 찾았는지 남는다
   if (!/^[a-z0-9_]+$/.test(id))
     return problem(400, "invalid id", "제품 id 형식이 아니다");
@@ -616,6 +616,13 @@ async function handleData(env, id, params, keyRow, trace = {}) {
   trace.rows = rows.length;
   return json({
     product_id: meta.product_id,
+    // MCP data_context 용(#118 리뷰 ②) — 이 함수가 이미 읽은 카탈로그 행을 재사용해
+    // 핫패스에 D1 왕복을 안 늘린다. REST 응답 형태는 옵트인이라 그대로다.
+    ...(opts.includeMeta ? { product_meta: {
+      description: meta.description ?? null,
+      freshness: meta.freshness ?? null,
+      serving_status: meta.serving_status ?? null,
+    } } : {}),
     table,
     row_count: rows.length,
     limit,
@@ -742,8 +749,10 @@ async function route(request, env, url, trace, ctx) {
     trace.route = "mcp";
     return handleMcp(request, env, trace, {
       authenticate, checkBurst,
-      handleCatalog, handlePreview, handleData, handleMe, handleProductBundle,
-      lookupProduct,
+      // ctx 를 물려 SWR 캐시가 살게 한다(#118 리뷰 ③) — 안 물리면 404 제안 경로의 캐시
+      // 미스가 오류 경로에서 동기 D1 5회가 된다.
+      handleCatalog: (e) => handleCatalog(e, ctx),
+      handlePreview, handleData, handleMe, handleProductBundle,
     });
   }
   if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/v1/keys)");

@@ -196,27 +196,27 @@ async function callTool(name, args, ctx) {
     if (args.to) params.set("to", String(args.to));
     if (args.limit) params.set("limit", String(args.limit));
     if (args.cursor) params.set("cursor", String(args.cursor));
-    const res = await deps.handleData(env, args.product_id, params, keyRow, trace);
+    const res = await deps.handleData(env, args.product_id, params, keyRow, trace, { includeMeta: true });
     if (res.status === 404) return notFoundWithSuggestions(env, deps, args.product_id, trace);
     if (res.status >= 400) return toToolResult(res, trace);
     const body = await res.json();
     // 답변 가드레일 — 신선도·출처·주의를 결과에 동봉한다. AI 가 "언제 기준·어디 출처"를
-    // 답변에 실을 수 있어야 오래된 데이터를 현재로 단언하는 환각이 줄어든다. 조회 자체는
-    // 성공했으므로 여기서의 실패는 삼킨다(가드레일은 덤이지 조회의 조건이 아니다).
-    try {
-      const meta = await deps.lookupProduct(env, args.product_id, "description, freshness, serving_status");
-      if (meta) {
-        body.data_context = {
-          freshness: meta.freshness ?? null,          // 이 게시본의 원천 기준 시각 — "지금"이 아니다
-          serving_status: meta.serving_status ?? null,
-          ...(meta.serving_status && meta.serving_status !== "published"
-            ? { warning: `serving_status='${meta.serving_status}' — 원천 수집 지연 등으로 최신성이 보장되지 않는다` }
-            : {}),
-          attribution: ATTRIBUTION,  // 정본 한 벌(shared) — "답변에 반영" 지시는 툴 description 몫
-          caution: meta.description ?? null,          // 제품 주의사항("공식 특보 아님" 등)이 여기 있다
-        };
-      }
-    } catch { /* 메타 실패가 조회 성공을 가리면 안 된다 */ }
+    // 답변에 실을 수 있어야 오래된 데이터를 현재로 단언하는 환각이 줄어든다.
+    // 메타는 handleData 가 같은 행에서 이미 읽은 것을 재사용한다(#118 리뷰 ② — 핫패스에
+    // D1 왕복을 안 늘린다). product_meta 는 운반용이라 밖으로는 data_context 로만 나간다.
+    const meta = body.product_meta;
+    delete body.product_meta;
+    if (meta) {
+      body.data_context = {
+        freshness: meta.freshness ?? null,          // 이 게시본의 원천 기준 시각 — "지금"이 아니다
+        serving_status: meta.serving_status ?? null,
+        ...(meta.serving_status && meta.serving_status !== "published"
+          ? { warning: `serving_status='${meta.serving_status}' — 원천 수집 지연 등으로 최신성이 보장되지 않는다` }
+          : {}),
+        attribution: ATTRIBUTION,  // 정본 한 벌(shared) — "답변에 반영" 지시는 툴 description 몫
+        caution: meta.description ?? null,          // 제품 주의사항("공식 특보 아님" 등)이 여기 있다
+      };
+    }
     return okJson(body);
   }
   return errText(`알 수 없는 tool: ${name}`);
