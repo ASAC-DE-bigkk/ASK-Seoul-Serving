@@ -578,9 +578,25 @@ const DOMAINS = [
     note:"TOPIS 도로 링크 단위 — 6종 중 5종(돌발×기상만 행정동)" },
 ];
 
+// ⚠️ **한시적 폴백이다 — 정본이 아니다.** 표시명의 정본은 계약 `meta.serving.display`
+// → 게시본 `d1_catalog_display` → 카탈로그 응답의 `display` 다(ASAC-DAG#706).
+//
+// 이 파일이 다시 온 이유: 게시본으로 갈아타면서 사본을 **대체물이 다 게시되기 전에** 지웠고,
+// 그 결과 56종 중 49종이 화면에서 `product_id` 로 내려앉았다(선언한 건 culture 7종뿐).
+// 계약상으로는 정상이지만 화면은 나빠졌다 — 순서를 잘못 잡은 것이다.
+//
+// 규칙 셋:
+//   ① **게시본이 이긴다.** 여기는 게시본에 없는 제품의 빈 자리만 메운다.
+//   ② **갱신하지 않는다.** 생성기(fixtures)는 지운 채로 두고 이 파일은 얼려 둔다 —
+//      사본을 다시 기르면 같은 어긋남이 돌아온다.
+//   ③ **비우는 조건**: 각 도메인이 `meta.serving.display` 를 선언·발행하면 그 제품은
+//      자동으로 여기를 안 본다. 전 도메인이 차면 이 파일과 아래 폴백을 함께 지운다.
+let TITLE_FALLBACK = {};
+
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 const domainOf = (p) => (p.product_id || p.name || "").replace(/^gold_/, "").split("_")[0];
-const titleOf = (p) => (p.display || {}).title || p.product_id || p.name;
+const fb = (p) => TITLE_FALLBACK[p.product_id] || {};
+const titleOf = (p) => (p.display || {}).title || fb(p).title || p.product_id || p.name;
 
 // 신선도는 카탈로그가 내려주는 exported_at 실측 — 고정 문구 금지(파이프라인 시각과 어긋난다)
 function relTime(iso) {
@@ -910,6 +926,8 @@ function failState(id, msg) {
 // ── 카탈로그: 통계 · 제품 카드 · 도메인
 async function bootCatalog() {
   let products;
+  // 폴백은 **부가 정보다** — 못 읽어도 카탈로그는 그대로 뜬다(제목이 product_id 로 내려앉을 뿐).
+  try { TITLE_FALLBACK = await (await fetch("/product-display.json")).json(); } catch { TITLE_FALLBACK = {}; }
   products = await catalogReady;
   if (!products) {
     setStat("statProducts", "—"); setStat("statDong", "—"); setStat("statTimed", "—"); setStat("statFresh", "—");
@@ -959,7 +977,7 @@ async function bootCatalog() {
     return "<a class='card' href='/catalog?q=" + encodeURIComponent(p.name) + "'>" +
       "<span class='t'>" + esc(titleOf(p)) + "</span>" +
       // 질문형 대신 설명 문장 — 카탈로그 목록과 같은 우선순위(쉬운 문장 desc 우선)
-      "<span class='q'>" + esc(d.summary || p.description || p.product_question || "—") + "</span>" +
+      "<span class='q'>" + esc(d.summary || fb(p).desc || p.description || p.product_question || "—") + "</span>" +
       "<span class='meta'><span><b>" + nf.format(p.row_count || 0) + "</b> 행</span>" +
       "<span class='free'>미리보기</span></span></span></a>";
   }).join("");
