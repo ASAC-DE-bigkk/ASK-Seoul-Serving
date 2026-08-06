@@ -246,9 +246,24 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://ask-seoul.kr/ap
 브라우저로 `/catalog.html` 을 열면 이메일 입력칸이 사라지고 **"Google 계정으로 키 발급"** 만
 보여야 한다.
 
-### 상태 — 🔴 미실행 (2026-08-06 기준)
+### 상태 — ✅ **완료 (2026-08-06)**
 
-코드는 머지됐고 `GOOGLE_CLIENT_ID` 가 비어 있다. **현재 배포본은 여전히 이메일 발급**이다.
+`GOOGLE_CLIENT_ID`(공개값, 커밋) + `GOOGLE_CLIENT_SECRET`(시크릿) 둘 다 설정됐고 **정책이
+전환됐다.** 실측:
+
+```
+key_issuance              {"method":"google_oauth","start":"/api/v1/auth/google"}
+POST /api/v1/keys         403      이메일 발급이 닫혔다
+GET  /api/v1/auth/google  302      redirect_uri=https://ask-seoul.kr/api/v1/auth/google/callback
+                                   scope=openid email · prompt=select_account
+실제 로그인 왕복           auth_start 302 → auth_callback 201 (585ms) — 키 발급 완료
+```
+
+🔑 **`wrangler secret put` 은 워커를 새 버전으로 올린다** — 코드 배포를 다시 하지 않아도
+**즉시** 반영된다. 되돌리려면 `wrangler secret delete GOOGLE_CLIENT_SECRET --env production`.
+
+⚠️ **동의 화면 게시 상태는 별도 확인이 필요하다.** "테스트" 로 두면 등록된 100명만
+로그인된다 — 외부 공개가 목적이면 프로덕션으로 게시돼 있어야 한다.
 
 ---
 

@@ -40,6 +40,38 @@
 
 ## 2026-08-06
 
+### 운영 전환 — Google 발급을 켰다 (#110 ② 완결)
+
+- **작업자**: @yooseongjin527
+- **의도 · 목표**: 코드는 배포됐지만 `GOOGLE_CLIENT_SECRET` 이 없어 **꺼진 채** 돌고 있었다.
+  시크릿을 넣어 정책을 전환하고, 운영에서 실제 로그인까지 끝냈다.
+- **조치 · 실측**
+  - `main` 머지 → CD(`deploy-prod.yml`) 자동 배포. `sha=80fc631` · gateway·console 둘 다 성공.
+  - `wrangler secret put GOOGLE_CLIENT_SECRET --env production`. 🔑 **이 명령이 워커를 새
+    버전으로 올려 코드 재배포 없이 즉시 반영된다.**
+
+    ```
+    key_issuance              google_oauth   ← 즉시 뒤집혔다
+    POST /api/v1/keys         403
+    GET  /api/v1/auth/google  302  redirect_uri=https://ask-seoul.kr/…/callback
+    auth_start 302 → auth_callback 201 (585ms)   운영에서 실제 키 발급 완료
+    ```
+  - **캐시 키 수정(앞 항목)이 실전에서 증명됐다** — 시크릿을 넣자마자 `key_issuance` 가
+    뒤집혔다. 그 수정이 없었으면 **최대 10분간 화면이 이메일 폼을 띄우고 제출은 403** 을
+    받는 구간이 생겼다.
+  - 시크릿 넣기 전의 `auth_callback 503` 이 로그에 남아 있다 — **fail-closed 가 제대로
+    동작했다는 증거**다.
+- **결과**
+  - `_keys` 에 **소유가 확인된 첫 키**(`ask_a199`)가 생겼다. 옛 키(`ask_6507`, 이메일 폼으로
+    받은 것)는 그대로 유효하다 — 발급 경로만 닫혔지 기존 키를 무효화하지는 않는다.
+  - ⚠️ **동의 화면 게시 상태는 미확인**이다. "테스트" 면 등록된 100명만 로그인된다 —
+    외부 공개가 목적이면 프로덕션 게시가 필요하다.
+  - 🔎 검증 중 **두 번 오진했다** — ① `key_issuance` 가 없다고 봤는데 `grep` 패턴이 `": {"`
+    공백을 못 맞춘 것이었다 ② `docs.html` 이 미반영이라고 봤는데 `/docs.html` → `/docs`
+    **307 리다이렉트를 안 따라간 것**이었다(`curl -L` 없이). `git show origin/main` 도
+    fetch 안 한 낡은 참조를 봤다. **셋 다 배포·캐시 문제로 몰아갔는데 전부 확인 방법이
+    틀린 것**이었다 — 검증 명령을 먼저 의심해야 했다.
+
 ### Google 발급 실물 검증 — 그 과정에서 캐시 버그를 잡았다 (#110 ② 후속)
 
 - **작업자**: @yooseongjin527
