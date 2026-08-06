@@ -302,7 +302,14 @@ const CATALOG_STALE_TTL = 600;
 const CATALOG_CACHE_HEADER = `public, max-age=${CATALOG_STALE_TTL}`;
 // 캐시 키는 **합성 URL** 이다 — 이 핸들러는 `/api/v1/catalog` 와 MCP `list_products` 양쪽에서
 // 불리는데(mcp.js 의 deps.handleCatalog), 요청 객체가 서로 달라도 같은 응답이라 한 칸을 쓴다.
-const CATALOG_CACHE_KEY = "https://catalog.internal/api/v1/catalog";
+// 🔴 캐시 키에 **발급 방식**을 섞는다. 응답 본문에 `key_issuance` 가 들어 있어서, 정책을
+// 켠 직후에도 캐시가 옛 값("email")을 최대 10분간 준다 — 그 사이 화면은 이메일 폼을 띄우고
+// 제출은 403 을 받는다. 실측으로 걸린 함정이다(2026-08-06, #110 ② 로컬 검증).
+// 캐시를 지우는 대신 **키를 가른다**: 정책이 바뀌면 다른 칸을 보므로 즉시 새 값이 나가고,
+// 옛 칸은 TTL 로 알아서 만료된다.
+// 테스트가 키를 하드코딩하면 다음에 축을 하나 더 섞을 때 조용히 어긋난다 — 그래서 내보낸다.
+export const catalogCacheKey = (env) =>
+  `https://catalog.internal/api/v1/catalog?ki=${isConfigured(env) ? "google_oauth" : "email"}`;
 
 // 캐시에 담긴 사본의 나이(초). `x-cached-at` 이 없으면 옛 형식이라 만료로 본다.
 const cachedAgeSeconds = (res) => {
@@ -327,7 +334,7 @@ async function handleCatalog(env, ctx) {
   // Cache API 가 없는 실행기(테스트 하네스 등)에서도 그대로 동작해야 한다 — 캐시는 성능이지
   // 계약이 아니다. 못 쓰면 조용히 매번 만든다.
   const cache = typeof caches !== "undefined" && caches.default ? caches.default : null;
-  const cacheKey = cache ? new Request(CATALOG_CACHE_KEY) : null;
+  const cacheKey = cache ? new Request(catalogCacheKey(env)) : null;
   if (cache) {
     const hit = await cache.match(cacheKey);
     if (hit) {
