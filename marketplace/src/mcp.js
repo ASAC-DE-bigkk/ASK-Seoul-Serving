@@ -96,6 +96,12 @@ async function toToolResult(res, trace = {}) {
   const body = ct.includes("json") ? await res.json() : await res.text();
   if (res.status >= 400) {
     trace.status = res.status;
+    // 권리 차단(#88)은 게시 정합성 503 과 달리 재시도해도 동일하다 — 일반 "재시도" 문구로
+    // 오도하지 않고 권리 사유로 안내한다. handleData(rightsBlockedProblem)가 blockers 로 표식한다.
+    const rightsBlockers = (body && typeof body === "object" && Array.isArray(body.blockers)) ? body.blockers : [];
+    if (res.status === 503 && rightsBlockers.some((b) => b === "source_redistribution_not_allowed" || b === "missing_source_rights_evidence")) {
+      return errText("이 제품은 원천이 재배포를 허용한 근거가 아직 확인되지 않아 제공할 수 없습니다(권리 사유 — 재시도해도 동일). describe_product 로 원천·라이선스를 확인하세요.");
+    }
     const hint =
       {
         400: "요청이 잘못됐습니다(없는 필터/시간축) — describe_product 로 컬럼을 확인하세요.",
