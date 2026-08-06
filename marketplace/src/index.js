@@ -7,7 +7,7 @@
 // 흡수했다(agreement §10 · decision/0004 D-2) — 제품 번들·용어 사전 두 경로다.
 // 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
 import {
-  json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC,
+  json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC, ATTRIBUTION,
   authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent, normalizeEmail, safeRows,
   parseJsonArray, loadRedistributionRights, redistributionBlockers, rightsBlockedProblem,
 } from "./shared.js";
@@ -450,7 +450,7 @@ async function buildCatalog(env, cache, cacheKey) {
   // 여기에 있고, 화면을 안 거치는 소비자에게는 이 응답이 그걸 전달할 유일한 경로다.
   const res = json({
     // 출처·이용조건은 응답에서도 닿아야 한다 — 화면을 거치지 않고 API 만 쓰는 소비자가 있다
-    attribution: "공공 원천의 2차 가공물 — 출처·이용조건 /legal#attribution",
+    attribution: ATTRIBUTION,
     docs: "/llms.txt",
     openapi: "/openapi.json",
     // 키를 어떻게 받는지는 **화면을 안 거치는 소비자에게도** 필요하다(#110 ②). 환경마다

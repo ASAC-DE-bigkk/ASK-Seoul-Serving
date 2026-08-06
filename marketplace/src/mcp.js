@@ -9,7 +9,7 @@
 // run_pattern 은 서버 실행계약 확정 후 P1.
 
 import { SKILL_BUNDLE_ID, SKILL_PRODUCT_IDS } from "./skill.js";
-import { burstProblem, normalizeIntent } from "./shared.js";
+import { burstProblem, normalizeIntent, ATTRIBUTION } from "./shared.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "ask-seoul", version: "0.1.0" };
@@ -120,6 +120,8 @@ async function toToolResult(res, trace = {}) {
 // 오타·기억 오류로 없는 product_id 를 부르면 비슷한 이름을 제안한다 — AI 가 사용자에게
 // 반문하는 대신 스스로 교정해 재시도할 수 있게 한다(왕복 절약). 404 에서만 카탈로그를 읽는다.
 // bigram 겹침 비율이면 충분하다 — 제품명은 소문자 스네이크라 형태가 균질하다.
+// 임계 0.3: 오타 한두 글자(예: pplnt→ppltn)는 0.5 안팎, 무관한 이름은 0.2 아래로 갈리는
+// 경계 실측값. 상위 3: 안내 문장이 읽히는 상한 — 더 주면 AI 가 고르다 또 헤맨다.
 function similarIds(target, ids, n = 3) {
   const bigrams = (s) => { const set = new Set(); for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2)); return set; };
   const t = bigrams(String(target));
@@ -210,7 +212,7 @@ async function callTool(name, args, ctx) {
           ...(meta.serving_status && meta.serving_status !== "published"
             ? { warning: `serving_status='${meta.serving_status}' — 원천 수집 지연 등으로 최신성이 보장되지 않는다` }
             : {}),
-          attribution: "공공 원천의 2차 가공물 — 답변에 출처 표시 필요, 조건은 /legal#attribution",
+          attribution: ATTRIBUTION,  // 정본 한 벌(shared) — "답변에 반영" 지시는 툴 description 몫
           caution: meta.description ?? null,          // 제품 주의사항("공식 특보 아님" 등)이 여기 있다
         };
       }

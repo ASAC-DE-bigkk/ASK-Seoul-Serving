@@ -253,7 +253,7 @@ test("query_product 성공 응답에 data_context 동봉 — 신선도·경고·
   const payload = JSON.parse((await res.json()).result.content[0].text);
   assert.equal(payload.data_context.freshness, "2026-08-04T00:00:00Z");
   assert.match(payload.data_context.warning, /degraded/);           // published 아니면 경고
-  assert.match(payload.data_context.attribution, /출처 표시/);
+  assert.match(payload.data_context.attribution, /공공 원천/);   // 정본 상수(shared.ATTRIBUTION)와 동일 문구
   assert.equal(payload.data_context.caution, "공식 특보 아님");
 });
 
@@ -289,4 +289,14 @@ test("제안 계산이 실패해도 404 안내는 나간다", async () => {
   const body = await res.json();
   assert.equal(body.result.isError, true);
   assert.match(body.result.content[0].text, /없는 제품/);
+});
+
+test("describe_product 404 도 유사 제품을 제안한다 — 세 경로 공통 회귀 방지", async () => {
+  const deps = mkDeps({
+    handleProductBundle: async () => jsonRes({ type: "not found" }, 404),
+    handleCatalog: async () => jsonRes({ products: [{ product_id: "culture_activity_by_dong" }] }),
+  });
+  const res = await handleMcp(
+    rpc("tools/call", { name: "describe_product", arguments: { product_id: "culture_activity_dong" } }), {}, {}, deps);
+  assert.match((await res.json()).result.content[0].text, /culture_activity_by_dong/);
 });
