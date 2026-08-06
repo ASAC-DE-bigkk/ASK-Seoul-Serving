@@ -8,7 +8,7 @@
 // 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
 import {
   json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC,
-  authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent, safeRows,
+  authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent, normalizeEmail, safeRows,
   parseJsonArray, loadRedistributionRights, redistributionBlockers, rightsBlockedProblem,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
@@ -51,8 +51,10 @@ async function issueKey(env, request) {
   } catch {
     return problem(400, "invalid body", "JSON body { email } 이 필요하다");
   }
-  const email = String(body.email || "").trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+  // 정규화 → 검증 (#109). 후행 점 같은 동치 표기를 먼저 합쳐야 `_keys.email UNIQUE` 가
+  // "이메일당 1키"를 실제로 지킨다 — 정규화 규칙과 근거는 shared.js 의 normalizeEmail.
+  const email = normalizeEmail(body.email);
+  if (!email)
     return problem(400, "invalid email", "올바른 이메일 형식이 아니다");
 
   // 발급 rate limit 의 IP 축은 원문을 저장하지 않는다(#9 §7-①·⑥) — 일 회전 솔트 해시.
