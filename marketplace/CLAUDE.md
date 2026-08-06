@@ -73,7 +73,7 @@
   `npm run deploy:prod`(→ ask-seoul.kr, **agreement §8-3 조율 후에만** — prod D1 은
   파이프라인의 DB 다). env 없는 맨 `wrangler deploy` 는 금지 — 기본 환경은 로컬 전용이고
   라우트 없는 워커가 하나 더 생긴다. 절차 정본은 [docs/deploy-runbook.md](docs/deploy-runbook.md).
-- **🔴 스키마 변경은 `migrations/` + `npm run migrate` 로만.** 원격 D1 을 향한 임의 파일
+- **🔴 스키마 변경은 `migrations/` + `migrate:backfill` → `migrate:apply` 로만.** 원격 D1 을 향한 임의 파일
   직실행 금지(`0004` 가 남의 표를 오염시킨 실사고). 장부 백필이 먼저다 — 건너뛰면 `0001`
   부터 재실행돼 조건 없는 `ALTER` 가 남의 표를 또 건드린다.
   **"팀 D1 에 쓰지 마라"는 걷혔다**(#85 — dev D1 폐기로 로컬이 운영을 본다). 대신 남은

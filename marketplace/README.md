@@ -15,7 +15,7 @@ Workers + Static Assets + D1 웹서비스. #476 게이트웨이 역할(키 검�
   콘솔이 걸러낸다(#64).
 - 🔴 **남의 표 모양은 바꾸지 않는다** — `_request_log`(transit) · `_ops_*`(ASAC-DAG) ·
   `_catalog`·제품 표(도메인 export)에 `DROP`·`ALTER` 금지. 스키마 변경은
-  `migrations/` + `npm run migrate` 로만.
+  `migrations/` + `npm run migrate:backfill` → `migrate:apply` 로만.
 
 ## ⚠️ 배포는 스크립트로만
 
@@ -53,7 +53,7 @@ npm run dev
 넣을 자리가 없다 — `fixtures/` 는 스키마 참고용으로만 남는다. 대신 **검증이 운영 데이터를
 만든다**: 발급한 테스트 키는 `DELETE /api/v1/keys?purge=true` 로 지운다.
 
-스키마를 원격에 적용하는 것은 `npm run migrate` 다(장부 백필 → `wrangler d1 migrations apply`) — 적용 여부를 D1 안의
+스키마를 원격에 적용하는 것은 `npm run migrate:backfill` → `npm run migrate:apply` 다. **한 명령으로 묶지 않았다** — 묶어 뒀더니 apply 프롬프트에서 취소했을 때 백필까지 안 남아 장부가 0행이 됐고(2026-08-06 실측), 그 상태로 적용했으면 `0004` 가 남의 표에 컬럼을 붙일 뻔했다. 적용 여부를 D1 안의
 장부(`d1_migrations`)가 추적하므로, **새 마이그레이션 파일은 `migrations/` 에 추가하면 끝**이고
 시드 체인을 손대지 않는다(체인 갱신을 사람이 기억하다 0004 누락으로 요청 로그가 전량
 유실됐던 실사고의 재발 방지). 전환 이전에 만든 로컬 상태는 시드가 장부를 자동
@@ -218,8 +218,9 @@ API 소비자에게도 닿아야 해서 `/api/v1/catalog` 응답에 `attribution
 
 ## fixtures
 
-`fixtures/seed.sql` 은 커밋되어 있어 토큰 없이 시드 가능. 재생성(팀 D1 읽기,
-`CLOUDFLARE_API_TOKEN` 필요): `python fixtures/build_fixtures.py`. `_catalog` 는
+🔴 **시드 경로는 없어졌다**(#85 — 로컬이 운영 D1 을 본다). 이 디렉토리는 **지우지 않고**
+스키마 참고용으로 남긴다 — 표가 어떤 모양이었는지 찾을 곳이 필요하다.
+재생성(팀 D1 읽기, `CLOUDFLARE_API_TOKEN` 필요): `python fixtures/build_fixtures.py`. `_catalog` 는
 라이브(16컬럼)가 아닌 **계약 v1.1 15컬럼 목표 상태**의 픽스처다(ASAC-DAG#521 참조).
 
 생성기가 알아야 할 것 세 가지:

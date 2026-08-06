@@ -3,15 +3,15 @@
 > **이 문서는 API 담당자와 대시보드 담당자가 함께 관리한다.**
 > 실행·시드·포트·비밀값 규약을 바꾸는 변경은 같은 커밋에서 이 문서를 고치고 상대 담당자에게 알린다.
 
-> 🔴 **2026-08-05 — 두 프로젝트의 실행 절차가 갈라졌다.**
-> 예전에는 로컬에서 **같은 D1 상태를 공유**해서 절차가 하나였다. dev D1 폐기로
-> **콘솔은 운영 D1 에 직접 붙게 됐다**([decision/0015](../ops-dashboard/docs/decision/0015-single-production-d1.md)).
-> 그래서 이 문서는 **절마다 프로젝트를 나눠 적는다.**
-> 게이트웨이 전환은 그쪽 담당자 몫이라 API 절차는 그대로 유효하다(**#85**).
+> 🔴 **2026-08-06 — 두 프로젝트 다 로컬에서 운영 D1 에 붙는다.**
+> 예전에는 로컬에서 **같은 로컬 D1 상태를 공유**했다. dev D1 폐기로
+> **두 프로젝트 다 운영 D1 에 직접 붙는다**([decision/0015](../ops-dashboard/docs/decision/0015-single-production-d1.md) ·
+> 게이트웨이는 **#85** 로 2026-08-06 전환). 그래도 이 문서는 **절마다 프로젝트를 나눠
+> 적는다** — D1 은 같아졌지만 시크릿·명령·배포면이 다르다.
 
 | 담당 | 프로젝트 | 포트 | 무엇을 보나 | 시드 |
 |---|---|---|---|---|
-| API | [marketplace/](../marketplace/) | `:8787` | 로컬 sqlite | `npm run seed` **필요** |
+| API | [marketplace/](../marketplace/) | `:8787` | 🔴 **운영 D1** | **없음** |
 | 대시보드 | [ops-dashboard/](../ops-dashboard/) | `:8788` | 🔴 **운영 D1** | **없음** |
 
 **콘솔 절차의 정본은 [run-prod.md](run-prod.md)** 다. 이 문서에는 OS별 설치·실행까지만 적고,
@@ -25,15 +25,15 @@
 
 | | 게이트웨이 | 콘솔 |
 |---|---|---|
-| 로컬에서 보는 것 | 로컬 sqlite (`--persist-to` 기본값) | 🔴 **운영 D1** (바인딩 `remote = true`) |
-| 로컬 쓰기의 범위 | 내 노트북 안 | **실제 고객 키에 간다** |
-| 설정 | `wrangler.toml` 기본 환경 | 같음 — 다만 기본 환경이 곧 운영이다 |
-| 배포 | 사람이 런북 보고 직접 | `npm run deploy:prod` · `dev` 머지 시 CD 자동 |
+| 로컬에서 보는 것 | 🔴 **운영 D1** (바인딩 `remote = true`) | 🔴 **운영 D1** (같음) |
+| 로컬 쓰기의 범위 | **운영 `_keys`·`_usage`·`_burst` 에 간다** | **실제 고객 키에 간다** |
+| 설정 | `wrangler.toml` 기본 환경 = 운영 | 같음 |
+| 배포 | `npm run deploy:dev` / `deploy:prod` | `npm run deploy:prod` · `dev` 머지 시 CD 자동 |
 | 절차 정본 | 이 문서 + [deploy-runbook](../marketplace/docs/deploy-runbook.md) | [run-prod.md](run-prod.md) |
 
-예전에는 콘솔이 `--persist-to` 로 게이트웨이의 로컬 상태에 붙어 **두 프로젝트가 한 D1 을
-공유**했다. 지금은 서로 다른 DB 를 본다 — **게이트웨이 로컬에서 발급한 키가 콘솔 화면에
-안 보이는 것이 정상이다.** 다시 합쳐지는 시점은 **#85** 다.
+예전에는 콘솔이 `--persist-to` 로 게이트웨이의 로컬 상태에 붙어 두 프로젝트가 한 **로컬**
+D1 을 공유했다. 지금은 둘 다 **운영 D1** 을 직접 본다 — **게이트웨이 로컬에서 발급한 키가
+콘솔 화면에 그대로 보인다.** 쓰고 나면 `DELETE /api/v1/keys?purge=true` 로 지운다.
 
 **환경마다 달라지는 값이 어디에 있는지는 [environments.md](environments.md)가 정본이다** —
 설정 배치, 도메인·D1 값, env 섹션 비상속 함정. 이 문서는 그 구조 위에서
@@ -41,24 +41,25 @@
 
 ## 0. 순서 — **없다**
 
-예전에는 한 D1 을 공유해서 "marketplace 시드 먼저"라는 순서가 있었다. 지금은 아니다.
+예전에는 한 로컬 D1 을 공유해서 "marketplace 시드 먼저"라는 순서가 있었다. 지금은 아니다.
 
 ```text
-게이트웨이   npm run seed  →  npm run dev        (:8787 · 로컬 sqlite)
+게이트웨이   npm run dev                          (:8787 · 🔴 운영 D1)
 콘솔         npm run dev                          (:8788 · 🔴 운영 D1)
 ```
 
-**두 프로젝트가 서로를 기다리지 않는다.** 콘솔은 운영 D1 을 직접 보므로 게이트웨이 로컬
-시드와 무관하다 — 아무 순서로 띄워도 되고, 한쪽만 띄워도 된다.
+**두 프로젝트가 서로를 기다리지 않는다.** 둘 다 운영 D1 을 직접 보므로 시드 단계 자체가
+없다 — 아무 순서로 띄워도 되고, 한쪽만 띄워도 된다.
 
-> ⚠️ **게이트웨이 로컬에서 발급한 키가 콘솔 화면에 안 보이는 것이 정상이다.** 서로 다른 DB 다.
-> 다시 합쳐지는 시점은 **#85**.
+> 🔴 **게이트웨이 로컬에서 발급한 키가 콘솔 화면에 그대로 보인다.** 같은 DB 다(#85).
+> 검증용으로 발급했다면 `DELETE /api/v1/keys?purge=true` 로 지운다.
 
-### 콘솔의 네 탭이 비는 것도 정상이다
+### 콘솔의 네 탭 — 이제 채워진다
 
-응답 상태·이용 행동·API 사용량·이용자 키 — 운영 D1 에 게이트웨이 표(`_keys`·
-`_gateway_request_log` 등)가 **아직 없어서**다(#85). `GET /api/summary` 의 `meta.missing` 에
-비는 **구획** 이름이 실리고(`serving` 등 — 설계상 강등이지 고장이 아니다), 어느 **표**가
+응답 상태·이용 행동·API 사용량·이용자 키. 운영 D1 에 게이트웨이 표(`_keys`·
+`_gateway_request_log` 등)가 **2026-08-06 에 생겼다.** 그 전에는 비는 것이 정상이었지만
+지금은 아니다 — 비면 `npm run migrate:list` 로 적용 상태를 본다. `GET /api/summary` 의
+`meta.missing` 에 비는 **구획** 이름이 실리고(설계상 강등이지 고장이 아니다), 어느 **표**가
 문제인지는 '데이터 준비 상태' 탭의 '데이터 소스 상태'가 `없음`·`구조 다름`으로 알린다.
 
 ## 1. 사전 준비
@@ -97,25 +98,29 @@ npm config get script-shell   # null 이어야 정상 — 아래 6절 참고
 
 **두 프로젝트를 따로 적는다.** 순서 의존이 없으니 필요한 쪽만 보면 된다.
 
-### 2-1. 게이트웨이 (`marketplace`) — 로컬 sqlite
+### 2-1. 🔴 게이트웨이 (`marketplace`) — 운영 D1
 
 ```bash
 # macOS / Linux
 cd marketplace
 cp .dev.vars.example .dev.vars     # ISSUANCE_SALT
+cp .env.example .env               # CLOUDFLARE_API_TOKEN — 원격 바인딩에 필요
 npm install
-npm run seed
-npm run dev                        # http://localhost:8787
+npm run dev                        # http://localhost:8787 · 🔴 운영 D1
 ```
 
 ```powershell
 # Windows (PowerShell)
 cd marketplace
 Copy-Item .dev.vars.example .dev.vars
+Copy-Item .env.example .env
 npm install
-npm run seed
-npm run dev                        # http://localhost:8787
+npm run dev                        # http://localhost:8787 · 🔴 운영 D1
 ```
+
+**`--remote` 플래그를 붙이지 않는다.** 붙이면 바인딩 이름은 맞는데 질의만 비고, 화면은
+그걸 "표가 없습니다"로 표시한다 — 콘솔이 먼저 밟은 함정이다([environments.md §3-4](environments.md)).
+기동 로그에 `Mode: remote` 가 뜨는지로 확인한다.
 
 ### 2-2. 🔴 콘솔 (`ops-dashboard`) — 운영 D1
 
@@ -143,7 +148,7 @@ npm run dev                        # http://localhost:8788  🔴 운영 D1
 
 `&&`는 Windows PowerShell 5.1에서 **파서 오류**다. 명령을 이어 쓸 땐 `;`를 쓰거나 한 줄씩
 실행한다. (`package.json` 안의 `&&`는 npm이 `cmd.exe`로 실행하므로 그대로 동작한다 —
-게이트웨이의 `npm run seed`는 손댈 필요 없다.)
+게이트웨이의 마이그레이션 스크립트는 손댈 필요 없다.)
 
 `npm install` 중 아래 경고가 나오지만 **무시해도 된다** — workerd 실행 파일은 postinstall이
 아니라 플랫폼 optional 의존성(`@cloudflare/workerd-windows-64`)으로 들어오므로
@@ -223,7 +228,7 @@ curl -s "http://localhost:8788/api/summary?days=14" | jq '{env: .meta.env, missi
 |---|---|
 | `env.d1 = "ask-seoul-prod-d1"` | 운영 D1 을 보고 있다 |
 | `runs > 0` | **연결이 실제로 됐다.** 0 이면 조용히 로컬로 떨어진 것 — [run-prod.md §3](run-prod.md) |
-| `missing` 에 `serving` | ⚠️ **정상이다** — 운영에 게이트웨이 표가 아직 없다(#85) |
+| `missing` 에 `serving` | 🔴 **더는 정상이 아니다** — 표는 2026-08-06 에 생겼다. 비면 마이그레이션 미적용을 의심한다 |
 
 > 옛 매뉴얼은 *"`meta.missing` 이 `[]` 면 두 프로젝트가 같은 D1 을 공유하는 것"* 이라고 했다.
 > **더는 성립하지 않는다** — 두 프로젝트는 다른 DB 를 보고, `missing` 은 당분간 비지 않는다.
@@ -290,7 +295,7 @@ curl -s -X POST -H "X-Trino-User: ops" -H "Content-Type: text/plain" \
 | `'node'은(는) 내부 또는 외부 명령...` | 설치 후 PATH 미갱신 | 터미널·IDE 재시작 (1절) |
 | `'openssl'은(는) ... 인식되지 않습니다` | Windows에 openssl 없음 | `node -e` 로 토큰 생성 (3절) |
 | `The token '&&' is not a valid statement separator` | PowerShell 5.1엔 `&&` 없음 | `;` 로 바꾸거나 한 줄씩 (2-3절) |
-| `npm run seed`가 `&&`에서 멈춤 | npm의 script-shell이 PowerShell로 잡힘 | `npm config delete script-shell` |
+| npm 스크립트가 `&&`에서 멈춤 | npm의 script-shell이 PowerShell로 잡힘 | `npm config delete script-shell` |
 | dev 가 `:8789` 등 엉뚱한 포트로 뜸 | 8787/8788 을 이전 프로세스가 쥐고 있음 | 아래 포트 항목 — 포트는 `[dev] port` 로 고정돼 있으나 점유 시 밀린다 |
 | `Address already in use :8787/:8788` | 이전 dev가 살아 있음 | `Get-Process workerd \| Stop-Process -Force` (전부 정리) |
 | 첫 `wrangler dev`에서 방화벽 팝업 | workerd가 포트 대기 | **개인 네트워크만** 허용 |
@@ -299,7 +304,8 @@ curl -s -X POST -H "X-Trino-User: ops" -H "Content-Type: text/plain" \
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
-| 카탈로그가 비었다 | 시드 전 | `npm run seed` |
+| 카탈로그가 비었다 | 운영 D1 에 안 붙었다(조용히 로컬로 떨어짐) | 기동 로그에 `Mode: remote` 가 뜨는지 · `--remote` 를 붙이지 않았는지 |
+| `npm run seed` 가 없다 | ⚠️ **정상** — #85 로 삭제됐다 | 스키마 적용은 `migrate:backfill` → `migrate:apply` |
 | `Catalog '...' not found` | Trino 카탈로그 이름 차이 | `SHOW CATALOGS` 로 확인 (5절은 폐기됨 — 참고만) |
 
 ### 6-3. 🔴 콘솔 (`ops-dashboard`)
@@ -308,7 +314,7 @@ curl -s -X POST -H "X-Trino-User: ops" -H "Content-Type: text/plain" \
 |---|---|---|
 | **아예 안 뜬다** / D1 바인딩 오류 | `.env` 의 `CLOUDFLARE_API_TOKEN` 없음·만료 — 원격 바인딩이라 로컬 사본이 없다 | `cp .env.example .env` 후 채운다 ([run-prod.md §1](run-prod.md)) |
 | 배지는 "운영"인데 **전부 비었다** | 🔴 연결이 조용히 로컬로 떨어졌다 | `remote = true` 인지, `experimental_remote` 오타가 아닌지 ([run-prod.md §3](run-prod.md) 실측표) |
-| `_keys`·`_gateway_request_log` 가 `없음` · 네 탭이 빔 | ⚠️ **정상** — 운영 D1 에 게이트웨이 표가 아직 없다 | 게이트웨이 전환(**#85**) 대기 |
+| `_keys`·`_gateway_request_log` 가 `없음` · 네 탭이 빔 | 🔴 **더는 정상이 아니다** — 표는 2026-08-06 에 생겼다 | 게이트웨이 `npm run migrate:list` 로 적용 상태 확인 |
 | '데이터 준비 상태' 탭이 빔 | ⚠️ **정상** — `_ops_slo` 를 채우는 경로가 아직 없다 | culture DAG export 대기 |
 | `npm run seed` 가 없다 | ⚠️ **정상** — 0015 로 삭제됐다 | 스키마 적용은 `npm run migrate` |
 | 조치만 `503 ops write disabled` | `.dev.vars`가 UTF-16LE | `-Encoding ascii`로 다시 쓰기 (3절) |

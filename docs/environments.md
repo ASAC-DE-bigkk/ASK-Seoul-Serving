@@ -145,8 +145,9 @@ npm run dev      # :8787 — 플래그 없이. 이것만으로 운영 D1 에 붙
 스키마 변경은 마이그레이션으로만 한다. 🔴 **팀 D1 쓰기라 사람이 직접 실행한다.**
 
 ```bash
-npm run migrate:list   # 적용 여부 먼저 본다
-npm run migrate        # 장부 백필 + apply
+npm run migrate:list      # 적용 여부 먼저 본다
+npm run migrate:backfill  # 🔴 장부 백필 — 단독으로 먼저
+npm run migrate:apply     # 그다음 적용
 ```
 
 배포는 **환경을 명시한 스크립트로만** 친다(배포 결정 — agreement §8). env 없는 맨

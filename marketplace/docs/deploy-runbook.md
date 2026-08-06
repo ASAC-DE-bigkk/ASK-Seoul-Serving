@@ -18,7 +18,7 @@ npm run preflight -- <D1이름> [--env production]
 통과한다. route 배포 직전에는 아래 배포 모드로, 필수 Gateway 표가 실제로 존재하는지까지 본다:
 
 ```bash
-npm run preflight -- ask-seoul-dev-d1 --env dev --require-applied
+npm run preflight -- ask-seoul-prod-d1 --env dev --require-applied
 ```
 
 `--require-applied` 에서는 우리 표의 `없음`도 중단이며 `--ack` 로 우회할 수 없다.
@@ -95,7 +95,7 @@ env 없이 실행하면 라우트 없는 워커가 하나 더 생긴다. 두 환
 
 | 환경 | 워커 | 주소 | D1 |
 |---|---|---|---|
-| `dev` | `ask-seoul-gateway-dev` | `https://dev.ask-seoul.kr` | `ask-seoul-dev-d1` |
+| `dev` | `ask-seoul-gateway-dev` | `https://dev.ask-seoul.kr` | `ask-seoul-prod-d1` |
 | `production` | `ask-seoul-gateway` | `https://ask-seoul.kr` | `ask-seoul-prod-d1` |
 
 > ⚠️ **워커 개명(2026-08-04).** env 도입 전 최초 dev 배포가 `ask-seoul-gateway` 이름으로
@@ -107,7 +107,7 @@ env 없이 실행하면 라우트 없는 워커가 하나 더 생긴다. 두 환
 |---|---|---|
 | **배포 승인** | [`../../docs/agreement.md` §8-3](../../docs/agreement.md) | ⚠️ production 은 **승인 주체 미정** — prod D1 은 파이프라인의 DB 다. #476 ① 은 팀 투표였고 이미 통과했으므로 이 자리의 근거가 아니다. dev 는 통과된 ① 로 충분 |
 | **배포 전 검사** | 위 §0 `npm run preflight` | 🔴 **종료 코드 1 이면 배포 금지** |
-| 대상 D1 | `wrangler.toml` 해당 env 의 `d1_databases` | 위 환경 표와 일치 — 기본 환경의 dev D1 바인딩은 로컬 전용이다 |
+| 대상 D1 | `wrangler.toml` 해당 env 의 `d1_databases` | **세 환경 전부 운영 D1** — 갈리는 것은 `ASK_ENV` 값과 주소뿐이다(#85) |
 | Cloudflare 계정 | 팀 계정 로그인 | `npx wrangler whoami` — **publisher 와 같은 계정**이어야 바인딩이 같은 DB 로 풀린다(개인 계정 배포 금지) |
 | 도메인 | zone `ask-seoul.kr` 이 Active | 해당 env 의 `routes` 가 이 zone 을 가리킨다 (2026-08-04 확인) |
 | 코드 | 머지된 `dev` | 로컬 `npm test` · `npm run verify:log` 통과 |
@@ -135,8 +135,8 @@ npm run verify:log  # 요청 로그 유실 검증(C-10)
 
 게이트웨이가 쓰는 `_keys`·`_usage`·`_burst`·`_issuance_log`·`_gateway_request_log` 는
 **원격 D1 에 환경마다 최초 1회 만들어야 한다.** 안 하면 배포해도 키 발급·인증이 전부 죽는다.
-실측(2026-08-04): dev D1 은 `0001~0004` 가 파일 직실행으로 적용된 상태(`0005` 미적용,
-그 과정의 `0004` 오염이 §0 실측의 그것이다) / prod D1 은 우리 표가 하나도 없다.
+✅ **2026-08-06 완료** — 운영 D1 에 `_keys`·`_usage`·`_burst`·`_issuance_log`·
+`_gateway_request_log` 5종이 실측 확인됐다. dev D1 은 폐기됐으므로 만들 대상이 아니다.
 
 > ⚠️ **팀(원격) D1 쓰기다.** 스키마 생성만 하고 기존 표(`_catalog`·제품 테이블)는 건드리지
 > 않지만, 실행 전에 팀에 알린다. 이 명령은 **직접 실행한다** — 에이전트가 대신 돌리지
@@ -146,15 +146,13 @@ npm run verify:log  # 요청 로그 유실 검증(C-10)
 
 ```bash
 cd marketplace
-npx wrangler d1 execute ask-seoul-prod-d1 --remote --env production \
-  --file=scripts/backfill-migrations-ledger.sql
-# dev 도 동일 — 장부 없이 apply 하면 0001~0004 가 재실행돼 남의 표가 또 오염된다:
-npx wrangler d1 execute ask-seoul-dev-d1 --remote --env dev \
-  --file=scripts/backfill-migrations-ledger.sql
+npm run migrate:backfill
 ```
 
-**두 D1 모두 `d1_migrations` 장부가 없다**(2026-08-04 실측, 읽기만). 장부가 없으면 apply 는
-`0001` 부터 전부 재실행하고, 그중 `0004` 는 조건을 달 수 없는
+**대상은 운영 D1 하나뿐이다** — dev D1 은 폐기됐다(#85 · decision/0015). 예전 이 자리에
+`ask-seoul-dev-d1` 줄이 같이 있었는데, 그대로 치면 폐기한 DB 를 다시 만들어 만진다.
+
+장부가 없으면 apply 는 `0001` 부터 전부 재실행하고, 그중 `0004` 는 조건을 달 수 없는
 `ALTER TABLE _request_log ADD COLUMN request_id` 다 — 그 이름의 표는 **남의 것**이라
 (transit 워커, agreement §2) **남의 표에 우리 컬럼이 붙는다.** dev D1 에서 이미 일어난 사고이고,
 백필은 이름이 아니라 `route` 컬럼 유무로 우리 표인지를 가려 그 재연을 막는다(PR #50).
@@ -162,9 +160,13 @@ npx wrangler d1 execute ask-seoul-dev-d1 --remote --env dev \
 ### 1단계 — 적용
 
 ```bash
-npx wrangler d1 migrations apply ask-seoul-prod-d1 --remote --env production   # 운영
-npx wrangler d1 migrations apply ask-seoul-dev-d1 --remote --env dev           # 개발
+npm run migrate:apply
 ```
+
+🔴 **0단계와 한 명령으로 묶지 않는다.** 예전엔 `npm run migrate` 하나가 `백필 && apply` 였는데,
+apply 프롬프트에서 취소하니 **백필까지 안 남아 장부가 0행이 됐다**(2026-08-06 실측). 그 상태로
+적용했으면 `0004` 가 transit `_request_log` 389행에 컬럼을 붙일 뻔했다. 두 단계로 나눠 치고,
+**0단계 뒤에 `npm run migrate:list` 로 장부가 찼는지 확인한 다음** 1단계로 간다.
 
 파일을 나열하지 않는다 — 적용 여부는 D1 안의 장부가 추적하고, **안 된 파일만** 실행된다.
 그래서 여러 번 돌려도 안전하다("이미 적용된 ALTER 실패는 정상" 같은 예외 규칙이 필요 없다).
@@ -233,7 +235,7 @@ dev D1 오염은 2026-08-05 제거됐다(#52). 이제 배포 전에는 ack 가 �
 
 ```bash
 npm test
-npm run preflight -- ask-seoul-dev-d1 --env dev --require-applied
+npm run preflight -- ask-seoul-prod-d1 --env dev --require-applied
 npx wrangler deploy --env dev
 ```
 
