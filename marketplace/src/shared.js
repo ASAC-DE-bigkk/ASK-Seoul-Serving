@@ -197,11 +197,32 @@ export function classifyClient(ua) {
 // 채워 준다(실측 2026-08-04: `country=KR · asn=4766`). 다만 **항상 있다고 가정하지 않는다** —
 // Node 의 Request 에는 없고, 그때 NULL 로 남는 게 맞다. "모른다"를 다른 값으로 꾸미면
 // 배포 후 실측과 섞인다(§4-3).
+// UA 는 **자기 신고**다 — 아무나 `ClaudeBot` 을 적을 수 있고, 진짜 에이전트가 안 밝힐 수도
+// 있다. `cf.verifiedBotCategory` 는 그것과 층위가 다르다: **Cloudflare 가 확인한 값**이다.
+// prod 실측(2026-08-06, `wrangler tail`)에서 이 필드가 실제로 온다는 것을 확인했다
+// (curl 요청이라 값은 `""`). `botManagement`(score·ja3)는 이 플랜에 없다.
+//
+// 🔑 결과가 셋이어야 한다. `"" → 0` 으로 접으면 브라우저·curl 이 전부 "검증 실패"가 되는데,
+// 그들은 애초에 **검증 대상이 아니다**(§3-1 · #78 F-3 — 0 은 "검증 실패"로 읽힌다).
+//
+//   AI 에이전트 + 카테고리 있음  →  1     CF 가 확인했다
+//   AI 에이전트 + ""             →  0     자칭인데 CF 가 확인 못 했다 = 진짜 검증 실패
+//   AI 에이전트가 아님            →  NULL  검증할 것이 없다
+//
+// 필드 자체가 없을 때(`cf` 를 못 받는 환경)도 NULL 이다 — **"봤는데 아니다"(`""`)와
+// "못 물어봤다"(부재)는 다른 사실**이고, 후자를 0 으로 적으면 모른다가 검증 실패로 굳는다.
+export function agentVerified(agentName, category) {
+  if (!agentName) return null;
+  if (typeof category !== "string") return null;
+  return category.trim() ? 1 : 0;
+}
+
 export function clientAxes(request) {
   const cf = request.cf || {};
   const { ua_class, agent_name, agent_mode } = classifyClient(request.headers.get("user-agent"));
   return {
     ua_class, agent_name, agent_mode,
+    agent_verified: agentVerified(agent_name, cf.verifiedBotCategory),
     country: cf.country ?? null,
     // asn 은 숫자로 온다 — 컬럼이 TEXT 라 문자열로 맞춰 넣는다(집계 축이지 산술 대상이 아니다).
     asn: cf.asn == null ? null : String(cf.asn),
