@@ -443,9 +443,11 @@ const routeKo = (r) => ROUTE_KO[r] || String(r == null ? "—" : r);
 const STATE_HELP = {
   // 파이프라인 발행
   "성공": "제품이 D1 에 온전히 올라갔습니다.",
-  "열화": "올라가긴 했지만 온전하지 않습니다 — 행이 빠졌거나 검증을 일부 통과하지 못했습니다. 실패가 아니라 성공률에는 안 잡힙니다.",
+  "열화": "적재 파이프라인이 '온전치 않음'으로 기록한 상태입니다 — 판정 기준은 파이프라인이 정합니다. 다만 원본·발행·D1 행수가 모두 같고 사유가 정상이면 실제로 빠진 데이터는 없습니다. 옆의 '사유'·'행수' 칸을 함께 보세요.",
   "실패": "제품을 D1 에 올리지 못했습니다. 이전 버전이 유지됩니다.",
   "건너뜀(기존 유지)": "새로 올릴 것이 없어 기존 발행분을 그대로 둔 것입니다 — 문제가 아닙니다.",
+  "일치": "원본·발행·D1 세 행수가 같습니다 — 발행 과정에서 빠진 데이터가 없다는 뜻입니다. 결과가 '열화'여도 이 경우 실제 손실은 없습니다.",
+  "불일치": "원본·발행·D1 행수가 서로 다릅니다 — 발행·적재 과정에서 행이 빠졌을 수 있어 확인이 필요합니다.",
   // SLO 캘린더
   "정상 갱신": "그날 예정된 수집·가공이 제때 끝났고 데이터도 받았습니다.",
   "나중에 되살림": "한 번 실패했지만 같은 날 재시도로 되살렸습니다 — 성공률만 보면 안 보이는 열화입니다.",
@@ -1581,14 +1583,23 @@ function renderDrill(d0) {
     { t:"시각", r:true, get:(r) => tOf(r.observed_at) },
   ], d0.fails, ""));
 
-  if (has(d0.publications)) out += sec("발행 문제 — 제품이 D1 에 온전히 오르지 못함", table([
-    { t:"제품", name:true, get:(r) => "<span title='" + esc(r.reason || "사유 기록 없음") + "'>" +
-        esc(r.product_id) + "</span>" },
+  // '열화'는 적재 파이프라인이 매긴 라벨이라, 그 자체로는 뭐가 문제인지 안 보인다(운영 실측:
+  // 열화 483건이 모두 원본=발행=D1·사유 '정상 게시'였다). 그래서 **사유**를 title 에 숨기지 않고
+  // 드러내고, 세 행수가 같은지 콘솔이 직접 **'행수' 판정**을 붙여 실제 손실 여부를 바로 보이게 한다.
+  if (has(d0.publications)) out += sec("발행 점검 — '열화·실패'로 기록됐거나 행수가 어긋난 발행", table([
+    { t:"제품", name:true, get:(r) => esc(r.product_id) },
     { t:"결과", get:(r) => pubPill(r.outcome) },
+    { t:"사유", get:(r) => esc(r.reason || "—"), cls:"desc" },
     { t:"단계", get:(r) => stageKo(r.stage) },
     { t:"원본", r:true, get:(r) => r.source_row_count == null ? "—" : nf.format(r.source_row_count) },
     { t:"발행", r:true, get:(r) => r.published_row_count == null ? "—" : nf.format(r.published_row_count) },
     { t:"D1", r:true, get:(r) => r.d1_row_count == null ? "—" : nf.format(r.d1_row_count) },
+    { t:"행수", get:(r) => {
+        const s = r.source_row_count, p = r.published_row_count, dd = r.d1_row_count;
+        if (s == null || p == null || dd == null) return "<span class='zero'>—</span>";
+        return (s === p && p === dd)
+          ? statePill("ok", "일치")
+          : statePill("bad", "불일치"); } },
     { t:"시각", r:true, get:(r) => tOf(r.attempted_at) },
   ], d0.publications, ""));
 
