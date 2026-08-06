@@ -267,7 +267,9 @@ async function revokeKey(env, keyRow, purge) {
     .bind(keyRow.key_hash).run();
   return json({
     key_prefix: keyRow.key_prefix, revoked: true,
-    note: "이 키는 즉시 무효다. 같은 이메일로 다시 발급하면 새 키를 받는다",
+    // 발급 경로가 환경마다 갈리므로(#110 ②) 한쪽을 단정하지 않는다 — 이메일 폼일 수도,
+    // Google 로그인일 수도 있다. 어느 쪽인지는 카탈로그의 key_issuance 가 말한다.
+    note: "이 키는 즉시 무효다. 같은 주소로 다시 발급받으면 새 키를 받는다 — 발급 방법은 GET /api/v1/catalog 의 key_issuance 참조",
   });
 }
 
