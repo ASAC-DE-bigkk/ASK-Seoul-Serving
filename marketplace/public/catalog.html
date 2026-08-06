@@ -399,6 +399,13 @@
                    title="도메인에 점이 필요합니다 — 예: you@example.com">
             <button class="btn-p" id="issueBtn">발급</button>
           </div>
+          <!-- 배포 환경은 Google 로그인으로만 발급한다(#110 ②) — 어느 쪽인지는 서버가
+               `/api/v1/catalog` 의 key_issuance 로 알려 주므로 화면이 골라 보여준다.
+               둘 다 띄워 두면 이용자가 닫힌 문을 먼저 두드린다. -->
+          <div class="row" id="googleAuth" style="display:none">
+            <a class="btn-p" href="/api/v1/auth/google">Google 계정으로 키 발급</a>
+            <span class="dim" style="font-size:.9rem">이메일 소유 확인을 Google 이 대신합니다</span>
+          </div>
           <div class="reveal" id="keyReveal">
             <div class="k"><code id="keyValue"></code><button class="btn-g btn-sm" id="copyKey">복사</button></div>
             <div class="warn" id="keyNote">이 키는 지금 한 번만 표시됩니다 — 서버에는 해시만 저장됩니다.</div>
@@ -539,7 +546,14 @@ async function boot() {
     fetch("/product-display.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
   ]);
   TITLE_FALLBACK = fbJson || {};
-  PRODUCTS = (await res.json()).products || [];
+  const catalog = await res.json();
+  PRODUCTS = catalog.products || [];
+  // 발급 창구는 환경이 정한다(#110 ②) — 서버가 말해 준 쪽만 띄운다.
+  // 값이 없으면(옛 배포본) 손대지 않는다 — 화면이 비어 버리는 것보다 낫다.
+  if (catalog.key_issuance && catalog.key_issuance.method === "google_oauth") {
+    $("googleAuth").style.display = "";
+    $("email").closest(".row").style.display = "none";
+  }
   // 설명·표시명이 없어도 카탈로그는 그대로 뜬다 — 부가 정보라 실패를 삼킨다
   // 검증된 질의 예시(usage) — 라이브 d1_usage_patterns(commerce) + culture Phase 0 검증분.
   // #600 채택 시 이 정적 자산은 게시 테이블 조회(안 B 번들)로 교체된다.
