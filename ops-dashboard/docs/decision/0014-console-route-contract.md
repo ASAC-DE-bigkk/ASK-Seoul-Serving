@@ -56,6 +56,8 @@
 | `mcp_preview_product` | AI 미리보기 | |
 | `mcp_query_product` | AI 데이터 조회 | **SERVE** |
 | `mcp_check_quota` | AI 사용량 조회 | |
+| `auth_start` | 로그인 시작 | Google OAuth 로 넘기는 302 (#110 ②) |
+| `auth_callback` | 로그인 완료·키 발급 | 확인된 이메일로 키를 발급. **`keys` 를 대체**한다 — 배포 환경에서 `keys` 는 403 으로 닫힌다 |
 
 **이름은 문 단위가 아니라 "무엇을 했나" 단위로 맞춘다.** MCP 로 들어온 호출은 REST 와 하는
 일이 같고 부르는 함수도 같다(#63 실측 표) — 사람에게는 *경로가 다른 같은 일*이라 그렇게

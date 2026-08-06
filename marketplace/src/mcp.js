@@ -199,7 +199,11 @@ export async function handleMcp(request, env, trace, deps) {
       trace.status = error.status;
       return rpcResult(
         id,
-        errText("키가 없거나 유효하지 않습니다 — Authorization: Bearer ask_... 필요(POST /api/v1/keys 발급)."),
+        // 발급 방법은 배포마다 갈린다(#110 ②) — 여기서 한쪽을 단정하면 403 인 문을 가리키게 된다.
+        // MCP 클라이언트는 브라우저를 못 여니 **사람이 받아 설정에 넣는다**는 것까지 말해 준다.
+        errText("키가 없거나 유효하지 않습니다 — Authorization: Bearer ask_... 가 필요합니다. " +
+          "키는 사람이 받아 클라이언트 설정에 넣어야 합니다: GET /api/v1/catalog 의 key_issuance 가 " +
+          "이 서버의 발급 방법(google_oauth 이면 브라우저로 /api/v1/auth/google)을 알려 줍니다."),
       );
     }
     trace.keyHash = keyRow.key_hash;
