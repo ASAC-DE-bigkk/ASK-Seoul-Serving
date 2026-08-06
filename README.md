@@ -50,7 +50,9 @@ dbt manifest·Airflow 메타DB를 직접 읽는 경로는 존재하지 않는다
 
 ## 로컬에서 띄우기
 
-원격 배포 없이 `wrangler dev`(Miniflare 로컬 sqlite D1)로만 돈다. **팀 D1에 쓰지 않는다.**
+🔴 **두 프로젝트 다 `wrangler dev` 가 운영 D1 에 붙는다**(#85 · decision/0015). 예전의
+*"팀 D1에 쓰지 않는다"* 는 더는 성립하지 않는다 — 대신 남은 경계는 **"남의 표 모양은
+바꾸지 않는다"** 다.
 
 두 프로젝트가 같은 D1을 공유하므로 실행 규약은 **API·대시보드 담당자가 함께 관리하는 문서**에 있다.
 
@@ -62,31 +64,35 @@ dbt manifest·Airflow 메타DB를 직접 읽는 경로는 존재하지 않는다
 | [docs/setup.md](docs/setup.md) | 사전 준비(Node 20+)·OS별 설치·증상별 해결 |
 | [docs/environments.md](docs/environments.md) | 환경 **구조** — 설정 배치, local/prod 도메인·D1, 실행 파라미터 배분 |
 
-**환경별 실행 매뉴얼** — 🔴 **2026-08-05 로 두 프로젝트가 갈라져 있다**
-(dev D1 폐기, 콘솔만 전환 — [decision/0015](ops-dashboard/docs/decision/0015-single-production-d1.md) · #85).
+**환경별 실행 매뉴얼** — 🔴 **두 프로젝트 다 띄우면 운영 D1 이다**
+(dev D1 폐기 — [decision/0015](ops-dashboard/docs/decision/0015-single-production-d1.md) · #85,
+게이트웨이도 2026-08-06 에 전환 완료).
 
 | 매뉴얼 | 누구 | D1 | 쓰기 |
 |---|---|---|---|
 | [docs/run-prod.md](docs/run-prod.md) | **콘솔** | **운영** `ask-seoul-prod-d1` | ✅ **열려 있다** |
-| [docs/run-local.md](docs/run-local.md) | **게이트웨이** | 로컬 sqlite | 로컬만 |
+| [docs/run-local.md](docs/run-local.md) | **게이트웨이** | **운영** `ask-seoul-prod-d1` | ✅ **열려 있다** |
 
-🔴 **콘솔은 띄우면 운영이다.** 바인딩에 `remote = true` 가 박혀 있어 **기본값이 운영**이고,
-화면의 조치 한 번이 실제 고객 키에 간다. 예전의 *"플래그가 없으면 언제나 로컬"* 은
-게이트웨이에만 남았다. 남아 있는 잠금은 **스키마 하나**뿐이다 — 남의 표 DDL 은 코드가 막는다.
+🔴 **띄우면 운영이다 — 양쪽 다.** 바인딩에 `remote = true` 가 박혀 있어 **기본값이 운영**이고,
+플래그는 안전장치가 아니다. 콘솔은 화면의 조치 한 번이 실제 고객 키에 가고, 게이트웨이는
+로컬 구동이 운영 `_keys`·`_usage`·`_burst` 를 실제로 건드린다. 남아 있는 잠금은 **스키마
+하나**뿐이다 — 남의 표 DDL 은 코드가 막는다.
 
 ```bash
 # macOS / Linux
-cd marketplace   && npm install && npm run seed && npm run dev   # :8787  로컬 sqlite
-cd ops-dashboard && npm install && npm run dev                   # :8788  🔴 운영 D1
+cd marketplace   && npm install && npm run dev   # :8787  🔴 운영 D1
+cd ops-dashboard && npm install && npm run dev   # :8788  🔴 운영 D1
 ```
 
 ```powershell
 # Windows (PowerShell) — && 는 파서 오류다. 한 줄씩 실행한다.
-cd marketplace   ; npm install ; npm run seed ; npm run dev      # :8787  로컬 sqlite
-cd ops-dashboard ; npm install ; npm run dev                     # :8788  🔴 운영 D1
+cd marketplace   ; npm install ; npm run dev     # :8787  🔴 운영 D1
+cd ops-dashboard ; npm install ; npm run dev     # :8788  🔴 운영 D1
 ```
 
-콘솔에는 `npm run seed` 가 **없다**(스키마 적용은 `npm run migrate`, 대상은 운영 D1).
+**두 프로젝트 다 `npm run seed` 가 없다** — 로컬이 실물을 보므로 픽스처를 넣을 자리가 없다.
+스키마 적용은 양쪽 다 `npm run migrate*` 이고 대상은 운영 D1 이다
+(게이트웨이는 `migrate:backfill` → `migrate:apply` 로 **나눠 친다** — 아래 각 README).
 `.env` 의 `CLOUDFLARE_API_TOKEN` 이 없으면 콘솔은 **아예 뜨지 않는다** — 로컬 사본이 없다.
 각 디렉토리 README에 설계 근거(공개 게이트·키셋 커서·2층 제한·폐기와 삭제의 구분 등)가 있다.
 
@@ -94,4 +100,4 @@ cd ops-dashboard ; npm install ; npm run dev                     # :8788  🔴 �
 
 콘솔은 `ops.ask-seoul.kr` 로 배포된다 — **`dev` 브랜치 머지가 곧 운영 배포다**
 (브랜치 이름과 배포 환경이 다르다). 읽기 경로는 아직 무인증이고 Cloudflare Access 승격
-(#20 B-1)이 남아 있다. 게이트웨이의 운영 D1 전환은 담당자 판단 대기(#85).
+(#20 B-1)이 남아 있다. 게이트웨이도 2026-08-06 에 운영 D1 로 전환됐다(#85) — `dev.ask-seoul.kr` 배포면을 유지할지는 미결.

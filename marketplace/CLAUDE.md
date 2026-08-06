@@ -49,9 +49,12 @@
 + Static Assets (public/)   — run_worker_first = ["/api/v1/*", "/skill/v1/*", "/mcp"], 없는 경로는 404 화면
                               site.css(문서형 공유 뼈대) · theme.js(다크/라이트 토글 배선)
 + partials/                 — nav.html · footer.html. 머리·바닥의 **정본**이다
-+ 로컬 D1 (Miniflare)       — wrangler dev --local. 콘솔(../ops-dashboard)이 같은 상태를 읽는다
++ 운영 D1 (원격)            — 🔴 **로컬 구동도 운영 D1 에 붙는다**(#85 · dev D1 폐기).
+                              바인딩 `remote = true` + 플래그 없는 `wrangler dev`
 + migrations/               — 0001 키·쿼터 · 0002 요청 로그 · 0003 버스트 · 0004 request_id (증분만)
-+ fixtures/                 — seed.sql(카탈로그·제품) · handoff_meta_sample.sql(서빙 메타 4종 미러)
++ fixtures/                 — seed.sql · handoff_meta_sample.sql. **더는 시드하지 않는다** —
+                              로컬이 실물을 보므로 `npm run seed` 를 없앴다. 파일은 스키마
+                              참고용으로 남긴다(지우면 어떤 모양이었는지 못 찾는다)
 ```
 
 **머리·바닥은 partials/ 가 정본이다.** `public/*.html` 의 `<nav class="nav">`·`<footer>`
@@ -70,10 +73,15 @@
   `npm run deploy:prod`(→ ask-seoul.kr, **agreement §8-3 조율 후에만** — prod D1 은
   파이프라인의 DB 다). env 없는 맨 `wrangler deploy` 는 금지 — 기본 환경은 로컬 전용이고
   라우트 없는 워커가 하나 더 생긴다. 절차 정본은 [docs/deploy-runbook.md](docs/deploy-runbook.md).
-- **팀(원격) D1 쓰기는 배포 절차(런북 §0·§1: preflight → 장부 백필 → apply)를 통해서만.**
-  로컬 시드·검증은 전부 `--local`(Miniflare) 상태만 만진다 — 원격 D1 을 향한 임의 파일
-  직실행 금지(0004 가 남의 표를 오염시킨 실사고). 기본 환경의 dev D1 바인딩은 콘솔과
-  로컬 상태를 공유하는 키(database_id)라 **prod 로 바꾸지 않는다**(wrangler.toml 주석).
+- **🔴 스키마 변경은 `migrations/` + `migrate:backfill` → `migrate:apply` 로만.** 원격 D1 을 향한 임의 파일
+  직실행 금지(`0004` 가 남의 표를 오염시킨 실사고). 장부 백필이 먼저다 — 건너뛰면 `0001`
+  부터 재실행돼 조건 없는 `ALTER` 가 남의 표를 또 건드린다.
+  **"팀 D1 에 쓰지 마라"는 걷혔다**(#85 — dev D1 폐기로 로컬이 운영을 본다). 대신 남은
+  경계는 **"남의 표 모양은 바꾸지 마라"** 다: `_request_log`(transit)·`_ops_*`(ASAC-DAG)·
+  `_catalog`·제품 표(도메인 export)에 `DROP`·`ALTER` 를 하지 않는다.
+- **로컬 구동이 운영 데이터를 만진다는 것을 잊지 않는다.** 테스트 키는 운영 `_keys` 에
+  남으므로 `DELETE /api/v1/keys?purge=true` 로 지운다. 요청 로그는 `ASK_ENV="local"` 로
+  찍혀 콘솔이 환경 스코프로 걸러낸다(#64) — 지표에 섞이지는 않는다.
 - **키 원문은 어디에도 저장하지 않는다.** SHA-256 해시 + 표시용 접두 8자만. 발급 응답에서
   한 번 보여주는 게 전부다.
 - **`_gateway_request_log` 에 값을 남기지 않는다** — 필터는 컬럼명만, 식별자는 key_hash 만,
@@ -137,16 +145,18 @@
 
 ## 5. 검증
 
-배포 파이프라인이 없으므로 로컬에서 직접 확인한다.
+로컬에서 직접 확인한다. **시드 단계가 없다** — 로컬이 운영 D1 을 그대로 본다(#85).
 
 ```bash
-npm run seed   # migrations + fixtures → 로컬 D1 (Windows 는 npm 셸을 Git Bash 로: npm_config_script_shell)
-npm run dev    # :8787 — 콘솔(:8788)과 동시 구동 가능
+npm run dev    # :8787 — 운영 D1 에 붙는다. 콘솔(:8788)과 동시 구동 가능
 ```
+
+⚠️ 검증이 운영 데이터를 만든다. 키를 발급했으면 **끝나고 지운다**:
+`curl -X DELETE 'http://localhost:8787/api/v1/keys?purge=true' -H 'Authorization: Bearer ask_…'`
 
 - 발급→조회 한 바퀴: `POST /api/v1/keys` → `GET /api/v1/data/<t>` (Bearer) → `GET /api/v1/me` 로 카운트 확인.
 - 무과금 확인: 400(없는 필터)·404(없는 테이블) 뒤 `/api/v1/me` 카운트가 안 늘었는지.
-- 커서: 재시드 후 이전 커서가 409 `cursor expired` 로 거절되는지.
+- 커서: 재발행 뒤 이전 커서가 409 `cursor expired` 로 거절되는지(`exported_at` 이 바뀐다).
 - 한도: 429 응답에 `Retry-After` / `X-RateLimit-*` 헤더가 있는지.
 - 관측: 요청 후 `_gateway_request_log` 에 행이 실제로 늘었는지 — **조용한 유실 검증, 생략 금지**.
 - 오류 형식: 4xx 본문이 problem+json + `request_id` 인지.

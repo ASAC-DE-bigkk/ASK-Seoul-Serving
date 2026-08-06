@@ -4,16 +4,18 @@
   "type": "module",
   "description": "V1 마켓플레이스 게이트웨이 — 키 발급 + 쿼터 + 6개 도메인 서빙 API (ASK-Seoul#58, dev.ask-seoul.kr)",
   "scripts": {
-    "seed": "wrangler d1 execute ask-seoul-dev-d1 --local --file=scripts/backfill-migrations-ledger.sql && wrangler d1 migrations apply ask-seoul-dev-d1 --local && wrangler d1 execute ask-seoul-dev-d1 --local --file=fixtures/seed.sql && wrangler d1 execute ask-seoul-dev-d1 --local --file=fixtures/handoff_meta_sample.sql",
     "dev": "wrangler dev",
     "sync": "node scripts/sync-partials.mjs",
-    "deploy:dev": "npm test && npm run preflight -- ask-seoul-dev-d1 --env dev --require-applied && wrangler deploy --env dev",
-    "deploy:prod": "npm test && npm run preflight -- ask-seoul-prod-d1 --env production && wrangler deploy --env production",
+    "migrate:list": "wrangler d1 migrations list ask-seoul-prod-d1 --remote",
+    "migrate:backfill": "wrangler d1 execute ask-seoul-prod-d1 --remote --file=scripts/backfill-migrations-ledger.sql",
+    "migrate:apply": "wrangler d1 migrations apply ask-seoul-prod-d1 --remote",
+    "deploy:dev": "npm test && npm run preflight -- ask-seoul-prod-d1 --env dev --require-applied && wrangler deploy --env dev",
+    "deploy:prod": "npm test && npm run preflight -- ask-seoul-prod-d1 --env production --require-applied && wrangler deploy --env production",
     "verify:log": "node scripts/verify-request-log.mjs",
     "preflight": "node scripts/preflight-d1.mjs",
     "smoke": "node scripts/smoke.mjs",
     "test": "node --test \"scripts/*.test.mjs\" && node scripts/sync-partials.mjs --check",
-    "usage": "wrangler d1 execute ask-seoul-dev-d1 --local --file=scripts/usage-report.sql"
+    "usage": "wrangler d1 execute ask-seoul-prod-d1 --remote --file=scripts/usage-report.sql"
   },
   "devDependencies": {
     "wrangler": "^4"

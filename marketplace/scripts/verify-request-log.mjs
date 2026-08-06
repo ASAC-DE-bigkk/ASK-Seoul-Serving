@@ -54,12 +54,12 @@ const { LOG_COLUMNS } = await import("../src/index.js");
 const missing = LOG_COLUMNS.filter((c) => !cols.has(c));
 if (missing.length)
   fail(`_gateway_request_log 에 ${missing.join(", ")} 컬럼이 없다 — 시드 체인에 0005 미적용. ` +
-    "INSERT 가 조용히 전량 실패하는 상태다(실사고 재현). npm run seed 후 재실행할 것");
+    "INSERT 가 조용히 전량 실패하는 상태다(실사고 재현). npm run migrate:apply 후 재실행할 것");
 
 // 2) 실측: 기록 대상 요청 3건 (200 · 200 · 401 — 오류 응답도 기록되는 게 계약이다)
 const before = d1("SELECT COUNT(*) AS n FROM _gateway_request_log")[0].n;
 const table = catalog.products?.[0]?.name;
-if (!table) fail("카탈로그가 비어 있다 — npm run seed 후 재실행할 것");
+if (!table) fail("카탈로그가 비어 있다 — 운영 D1 에 붙었는지(기동 로그의 Mode: remote) 확인할 것");
 await get(`${BASE}/api/v1/catalog`);
 await get(`${BASE}/api/v1/preview/${table}`);
 await get(`${BASE}/api/v1/data/${table}`);              // 키 없음 → 401, 그래도 기록되어야 한다

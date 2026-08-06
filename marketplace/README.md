@@ -1,25 +1,34 @@
 # marketplace — V1 마켓플레이스 프로토타입 (ASK-Seoul#58)
 
-팀 D1 에 적재된 6개 도메인 서빙 제품(등록 62종 중 **공개 59종** — 아래 '공개 게이트' 참고)을
+운영 D1 에 적재된 6개 도메인 서빙 제품(**공개 56종** — 아래 '공개 게이트' 참고)을
 **키 발급 + 일일 쿼터** 게이트 뒤에서 제공하는
 Workers + Static Assets + D1 웹서비스. #476 게이트웨이 역할(키 검증·rate limit·통합
-카탈로그)의 로컬 실물 검증이자, #55 "프로토타입 검증 → 팀 이관" 경로의 산출물.
+카탈로그)의 실물 검증이자, #55 "프로토타입 검증 → 팀 이관" 경로의 산출물.
+
+## 🔴 로컬 구동도 운영 D1 에 붙는다
+
+- `npm run dev` 는 **플래그 없이 운영 D1 을 본다**(#85 — dev D1 폐기). 바인딩에
+  `remote = true` 가 박혀 있어서지 플래그 때문이 아니다. **`--remote` 는 쓰지 않는다**
+  — 붙은 것처럼 보이면서 질의만 비는 폐기 경로다.
+- 대가: 로컬 구동이 운영 `_keys`·`_usage`·`_burst` 를 실제로 건드린다. 테스트 키는
+  `DELETE /api/v1/keys?purge=true` 로 지운다. 요청 로그는 `ASK_ENV="local"` 로 찍혀
+  콘솔이 걸러낸다(#64).
+- 🔴 **남의 표 모양은 바꾸지 않는다** — `_request_log`(transit) · `_ops_*`(ASAC-DAG) ·
+  `_catalog`·제품 표(도메인 export)에 `DROP`·`ALTER` 금지. 스키마 변경은
+  `migrations/` + `npm run migrate:backfill` → `migrate:apply` 로만.
 
 ## ⚠️ 배포는 스크립트로만
 
-- 로컬 구동은 `wrangler dev`(로컬 Miniflare sqlite D1). 배포는 `npm run deploy:dev`
-  (→ `dev.ask-seoul.kr`, 2026-08-04 시행) / `npm run deploy:prod`(→ `ask-seoul.kr`,
-  agreement §8-3 조율 선행) — env 없는 맨 `wrangler deploy` 는 금지, 절차 정본은
-  [docs/deploy-runbook.md](docs/deploy-runbook.md).
-- 팀(원격) D1 쓰기는 런북 절차(preflight → 장부 → apply)를 통해서만. `wrangler.toml`
-  기본 환경의 database_id 는 로컬 모드에서 사용되지 않는다(시드는 전부 `.wrangler/`
-  로컬 상태) — 플래그 없는 명령은 언제나 로컬이다.
+`npm run deploy:dev`(→ `dev.ask-seoul.kr`, 2026-08-04 시행) / `npm run deploy:prod`
+(→ `ask-seoul.kr`, agreement §8-3 조율 선행). env 없는 맨 `wrangler deploy` 는 금지 —
+base 환경은 로컬 전용이라 라우트 없는 워커가 하나 더 생긴다. 절차 정본은
+[docs/deploy-runbook.md](docs/deploy-runbook.md).
 
 ## 실행
 
-**여기가 로컬 D1 상태의 주인이다** — [ops-dashboard](../ops-dashboard/)가 이 디렉토리의
-`.wrangler/state`를 `--persist-to`로 붙어 읽으므로, 두 프로젝트를 다 띄울 땐 **여기를 먼저**
-시드한다. 사전 준비(Node 20+)·OS별 차이·증상별 해결은 **[../docs/setup.md](../docs/setup.md)**,
+**두 프로젝트가 같은 운영 D1 을 본다** — 콘솔([ops-dashboard](../ops-dashboard/))이 이
+디렉토리의 `.wrangler/state` 를 붙어 읽던 구조는 끝났다. 기동 순서를 맞출 필요가 없다.
+사전 준비(Node 20+)·OS별 차이·증상별 해결은 **[../docs/setup.md](../docs/setup.md)**,
 환경별 설정 배치(로컬/운영 도메인·D1·시크릿)는 **[../docs/environments.md](../docs/environments.md)**
 가 정본이고, 둘 다 콘솔 담당자와 함께 관리하는 문서다.
 
@@ -28,8 +37,7 @@ Workers + Static Assets + D1 웹서비스. #476 게이트웨이 역할(키 검�
 cd marketplace
 cp .dev.vars.example .dev.vars   # ISSUANCE_SALT
 npm install          # wrangler
-npm run seed         # migrations(장부 추적) + fixtures/seed.sql → 로컬 D1
-npm run dev          # http://localhost:8787
+npm run dev          # http://localhost:8787 — 🔴 운영 D1 에 붙는다(#85)
 npm run usage        # 사용 리포트 (아래 '사용 계측' 참고)
 ```
 
@@ -38,15 +46,14 @@ npm run usage        # 사용 리포트 (아래 '사용 계측' 참고)
 cd marketplace
 Copy-Item .dev.vars.example .dev.vars
 npm install
-npm run seed
 npm run dev
 ```
 
-`package.json` 안의 `&&`는 npm이 `cmd.exe`로 실행하므로 Windows에서도 그대로 동작한다
-(`npm run seed`를 손댈 필요 없다). `npm config get script-shell`이 `null`이 아니면
-그때만 문제가 된다.
+🔴 **시드 단계가 없어졌다.** dev D1 폐기(#85)로 로컬이 운영 D1 을 그대로 보므로 픽스처를
+넣을 자리가 없다 — `fixtures/` 는 스키마 참고용으로만 남는다. 대신 **검증이 운영 데이터를
+만든다**: 발급한 테스트 키는 `DELETE /api/v1/keys?purge=true` 로 지운다.
 
-시드의 마이그레이션 단계는 `wrangler d1 migrations apply` 다 — 적용 여부를 D1 안의
+스키마를 원격에 적용하는 것은 `npm run migrate:backfill` → `npm run migrate:apply` 다. **한 명령으로 묶지 않았다** — 묶어 뒀더니 apply 프롬프트에서 취소했을 때 백필까지 안 남아 장부가 0행이 됐고(2026-08-06 실측), 그 상태로 적용했으면 `0004` 가 남의 표에 컬럼을 붙일 뻔했다. 적용 여부를 D1 안의
 장부(`d1_migrations`)가 추적하므로, **새 마이그레이션 파일은 `migrations/` 에 추가하면 끝**이고
 시드 체인을 손대지 않는다(체인 갱신을 사람이 기억하다 0004 누락으로 요청 로그가 전량
 유실됐던 실사고의 재발 방지). 전환 이전에 만든 로컬 상태는 시드가 장부를 자동
@@ -211,8 +218,9 @@ API 소비자에게도 닿아야 해서 `/api/v1/catalog` 응답에 `attribution
 
 ## fixtures
 
-`fixtures/seed.sql` 은 커밋되어 있어 토큰 없이 시드 가능. 재생성(팀 D1 읽기,
-`CLOUDFLARE_API_TOKEN` 필요): `python fixtures/build_fixtures.py`. `_catalog` 는
+🔴 **시드 경로는 없어졌다**(#85 — 로컬이 운영 D1 을 본다). 이 디렉토리는 **지우지 않고**
+스키마 참고용으로 남긴다 — 표가 어떤 모양이었는지 찾을 곳이 필요하다.
+재생성(팀 D1 읽기, `CLOUDFLARE_API_TOKEN` 필요): `python fixtures/build_fixtures.py`. `_catalog` 는
 라이브(16컬럼)가 아닌 **계약 v1.1 15컬럼 목표 상태**의 픽스처다(ASAC-DAG#521 참조).
 
 생성기가 알아야 할 것 세 가지:

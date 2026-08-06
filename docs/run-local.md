@@ -1,83 +1,84 @@
-# 로컬에서 돌리기 — **게이트웨이 전용** (Miniflare)
+# 로컬에서 돌리기 — **게이트웨이 전용**
 
-> **환경 매뉴얼.** 콘솔은 [운영 D1](run-prod.md), 구조와 배분은
+> **환경 매뉴얼.** 콘솔은 [run-prod.md](run-prod.md), 구조와 배분은
 > [environments.md](environments.md), OS별 설치는 [setup.md](setup.md), 지도는 [index.md](index.md).
 
-> 🔴 **2026-08-05 — 콘솔에는 이제 로컬 환경이 없다.**
-> dev D1 폐기로 콘솔은 로컬 구동도 운영 D1 에 직접 붙는다
-> ([decision/0015](../ops-dashboard/docs/decision/0015-single-production-d1.md)).
-> **콘솔 작업이면 이 문서가 아니라 [run-prod.md](run-prod.md) 를 본다.**
+> 🔴 **2026-08-06 — 이 문서의 "로컬"은 더는 로컬 DB 가 아니다.**
+> dev D1 폐기(#85 · [decision/0015](../ops-dashboard/docs/decision/0015-single-production-d1.md))로
+> **게이트웨이도 로컬 구동이 운영 D1 에 직접 붙는다.** 로컬인 것은 실행 위치(내 노트북의
+> workerd)뿐이고, **데이터는 운영이다.**
 >
-> 이 문서는 **게이트웨이(marketplace)** 용으로 남는다 — 그쪽은 아직 전환 판단 대기다(**#85**).
-
-**게이트웨이가 평소에 쓰는 환경이다.** 데이터도 실행도 전부 이 노트북 안에 있고,
-팀 DB 에 아무 영향이 없다.
+> 콘솔 작업이면 이 문서가 아니라 [run-prod.md](run-prod.md) 를 본다.
 
 | | |
 |---|---|
-| D1 | 로컬 sqlite (`marketplace/.wrangler/state`) |
-| 플래그 | 없음. **게이트웨이는 기본이 로컬이다** |
-| 쓰기 | ✅ 가능 (로컬 사본에만) |
+| D1 | 🔴 **운영 `ask-seoul-prod-d1`** — 바인딩의 `remote = true` |
+| 플래그 | **없음.** `--remote` 를 붙이지 않는다(아래 §5) |
+| 쓰기 | 🔴 **운영에 그대로 간다** |
 | 주소 | 게이트웨이 `:8787` |
 
-## ⚠️ 두 프로젝트가 더는 같은 DB 를 보지 않는다
+## ⚠️ 대가를 알고 쓴다
 
-예전에는 콘솔이 `--persist-to` 로 게이트웨이의 로컬 상태에 붙어 **한 D1 을 공유**했다.
-지금은 아니다:
+로컬 구동이 운영 `_keys`·`_usage`·`_burst` 를 **실제로 건드린다.**
 
-| | 보는 D1 |
-|---|---|
-| 게이트웨이 로컬 | 로컬 sqlite (이 문서) |
-| **콘솔** | **운영 `ask-seoul-prod-d1`** ([run-prod.md](run-prod.md)) |
+- **테스트 키는 운영 `_keys` 에 남는다** — 쓰고 나면 `DELETE /api/v1/keys?purge=true` 로 지운다.
+- **요청 로그는 섞이지 않는다** — `ASK_ENV="local"` 로 찍혀 콘솔이 환경 스코프로 걸러낸다(#64).
+- **쿼터·버스트는 그 키의 것만** 소모한다.
+- 🔴 **남의 표 모양은 바꾸지 않는다** — `_request_log`(transit) · `_ops_*`(ASAC-DAG) ·
+  `_catalog`·제품 표(도메인 export)에 `DROP`·`ALTER` 금지. 스키마 변경은 §4 로만.
 
-그래서 **게이트웨이 로컬에서 발급한 키가 콘솔 화면에 안 보이는 것이 정상이다.**
-반대로 콘솔의 응답 상태·이용 행동·API 사용량·이용자 키 탭은 운영 D1 에 게이트웨이 표가
-아직 없어서 비어 있다 — 그것도 정상이고, 화면이 "이 환경에 없음"으로 사유를 말한다.
-합쳐지는 시점은 게이트웨이 전환(**#85**) 이후다.
+**왜 이렇게 됐나**: dev D1 이 폐기돼 로컬이 볼 실물이 운영뿐이다. 서빙 메타(권리·컬럼
+설명·활용 예시)가 운영에만 있어서 **로컬 픽스처로는 권리 게이트(#88)·카탈로그 응답을
+검증할 수 없었다.**
 
 ## 1. 준비 (한 번만)
 
 Node 20+ 가 필요하다. 설치·OS별 함정은 [setup.md](setup.md) — 특히 Windows 는
 설치 후 **IDE 를 완전히 껐다 켜야** `npm` 이 PATH 에 잡힌다.
 
-## 2. 시드
-
 ```bash
 cd marketplace
+cp .dev.vars.example .dev.vars   # ISSUANCE_SALT — 발급 기능용
+cp .env.example .env             # CLOUDFLARE_API_TOKEN — 원격 바인딩용. 없으면 D1 이 안 붙는다
 npm install
-npm run seed          # 마이그레이션 + 픽스처 → 표 + 데이터
 ```
 
-`fixtures/seed.sql` 은 `build_fixtures.py` 가 팀 D1 에서 뽑은 **실측의 부분집합**이다
-(제품 62종 · 테이블당 50행). 조작된 값이 아니고, 게이트웨이 운영 표
-(`_keys`·`_usage`·`_burst`·`_gateway_request_log`)는 **건드리지 않는다.**
+시크릿 파일 두 개의 역할 구분은 [environments.md §1-2](environments.md) 가 정본이다.
+토큰 권한은 **필요한 만큼만** 준다 — 보기만 할 거면 `D1:Read` 로 충분하다.
 
-> **콘솔에는 `npm run seed` 가 없다**(0015 로 삭제). 콘솔의 스키마 적용은
-> `npm run migrate` 이고 대상은 운영 D1 이다 — [run-prod.md §5](run-prod.md).
+## 2. 시드 — **없다**
+
+`npm run seed` 를 없앴다. 로컬이 실물을 보므로 픽스처를 넣을 자리가 없고, 넣으면 그게 곧
+운영 오염이다. `fixtures/` 디렉토리는 **지우지 않고 남겼다** — 스키마가 어떤 모양이었는지
+찾을 곳이 필요하다.
 
 ## 3. 띄우기
 
 ```bash
-cd marketplace && npm run dev    # :8787
+cd marketplace && npm run dev    # :8787 · 🔴 운영 D1
 ```
+
+기동 로그에 **`Mode: remote`** 가 뜨는지 본다. 안 뜨면 운영이 아니라 빈 로컬을 보고 있다(§5).
 
 콘솔을 같이 띄우려면 [run-prod.md §2](run-prod.md) 를 따른다(`:8788`, 인스펙터 9230 —
-게이트웨이 기본 9229 와 안 겹친다). **둘은 서로 다른 DB 를 보므로 구동 순서 제약이 없다** —
-공유 sqlite 의 WAL 잠금 충돌이 더는 생기지 않는다.
+게이트웨이 기본 9229 와 안 겹친다). **둘이 같은 D1 을 보므로** 게이트웨이에서 발급한 키가
+콘솔 화면에 그대로 나타난다.
 
-## 4. 확인
+## 4. 스키마 변경 — 사람이 직접 친다
 
-```bash
-curl -s http://localhost:8787/api/v1/catalog | head -c 200
-```
-
-D1 을 직접 들여다볼 때:
+팀 D1 쓰기라 에이전트에 대리 실행시키지 않는다(`0004` 오염이 정확히 그 경로에서 났다).
 
 ```bash
-cd marketplace
-npx wrangler d1 execute ask-seoul-dev-d1 --local \
-  --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+npm run migrate:list      # 적용 여부를 먼저 본다
+npm run migrate:backfill  # 🔴 장부 백필 — 단독으로 먼저 돌린다
+npm run migrate:apply     # 그다음 적용
 ```
+
+**백필을 건너뛰면 `0001` 부터 재실행되고, 그중 `0004` 는 조건을 달 수 없는
+`ALTER TABLE _request_log ADD COLUMN` 이다 — 그 이름의 표는 남의 것이다**(transit 워커).
+백필은 이름이 아니라 `route` 컬럼 유무로 우리 표인지를 가려 그 재연을 막는다.
+
+절차 정본은 [deploy-runbook §0·§1](../marketplace/docs/deploy-runbook.md).
 
 ## 5. 안 될 때
 
@@ -85,8 +86,19 @@ npx wrangler d1 execute ask-seoul-dev-d1 --local \
 |---|---|---|
 | `'npm'은(는) ... 인식되지 않습니다` | 설치 후 PATH 미갱신 | **IDE 를 완전히 종료 후 재시작** ([setup.md](setup.md)) |
 | `npm install` 이 package.json 을 못 찾는다 | 리포 루트에는 없다 | `marketplace/` 로 들어가서 실행 |
-| 콘솔에서 이 로컬 데이터가 안 보인다 | **정상이다** — 다른 DB 다 | 위 ⚠️ 절 · [run-prod.md](run-prod.md) |
-| 콘솔에 `npm run seed` 가 없다 | **정상이다** — 0015 로 삭제됐다 | `npm run migrate` ([run-prod.md §5](run-prod.md)) |
+| **카탈로그가 비었다 · 표가 없다고 나온다** | 🔴 운영이 아니라 빈 로컬을 보고 있다 | 아래 표 |
+| `npm run seed` 가 없다 | **정상이다** — #85 로 삭제됐다 | 스키마 적용은 §4 |
+
+### 원격에 붙는 것은 **설정이지 플래그가 아니다**
+
+| 시도 | 결과 |
+|---|---|
+| **`remote = true` + 플래그 없는 `wrangler dev`** | ✅ **정상** — `Mode: remote` |
+| `wrangler dev --remote` (옛 플래그) | 바인딩 이름·배지는 맞는데 **질의만 빈 결과** |
+| `experimental_remote` | 이 버전(4.115)에 **없는 필드** — 경고만 찍고 local 로 조용히 떨어진다 |
+
+가운데 줄이 특히 위험하다. 빈 결과를 강등 로직이 "표가 없습니다"로 표시해서 **화면만 보면
+운영에 데이터가 없는 것처럼 보인다.** 콘솔이 먼저 밟은 함정이다([environments.md §3-4](environments.md)).
 
 게이트웨이 쪽 자세한 절차는 [marketplace/docs/](../marketplace/docs/),
 콘솔은 [ops-dashboard runbook](../ops-dashboard/docs/runbook.md).

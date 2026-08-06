@@ -4,7 +4,8 @@
     python marketplace/fixtures/build_fixtures.py
 
 산출물 seed.sql·public/product-display.json 은 커밋한다 — 팀원은 토큰 없이
-`npm run seed` 만으로 로컬 D1 이 선다.
+예전에는 `npm run seed` 가 이 산출물로 로컬 D1 을 세웠다 — 그 경로는 #85 로 없어졌고,
+지금 이 파일들은 스키마 참고용이다.
 
 **두 갈래로 수집한다.**
 - 라이브 `_catalog` 에 등록된 제품(타 도메인): 계약값(description·product_question·

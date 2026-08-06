@@ -49,7 +49,7 @@ def fetch(table: str) -> list[dict]:
         raise SystemExit(f"{table}: {url} 호출 실패 — npm run dev 가 떠 있는지 확인 ({exc})")
     rows = body.get("rows") or []
     if not rows:
-        raise SystemExit(f"{table}: 응답에 행이 없다 — npm run seed 로 픽스처를 채울 것")
+        raise SystemExit(f"{table}: 응답에 행이 없다 — 게이트웨이가 운영 D1 에 붙었는지 확인할 것")
     return rows[:ROWS]
 
 
