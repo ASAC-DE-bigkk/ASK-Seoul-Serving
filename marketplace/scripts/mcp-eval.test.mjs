@@ -44,8 +44,10 @@ test("평가 정본 — 6도메인이 정확히 한 번씩, 대상은 검증 번
     assert.ok(bundle.has(c.expect.args.product_id), `${c.id}: '${c.expect.args.product_id}' 는 검증 번들(#4) 밖`);
 });
 
-test("평가 정본 — 음성 케이스(없는 제품·빈 결과)가 행동 계약을 가짐", () => {
+test("평가 정본 — 음성·함정 케이스가 전부 행동 계약을 가짐", () => {
   const negatives = EVAL.cases.filter((c) => !c.expect.tool);
-  assert.equal(negatives.length, 2);
+  assert.ok(negatives.length >= 5, `음성 2 + 함정 3 이상이어야 함 (지금 ${negatives.length})`);
   for (const c of negatives) assert.ok(c.expect.behavior, `${c.id}: behavior 누락`);
+  const traps = negatives.filter((c) => c.id.startsWith("trap-"));
+  assert.ok(traps.length >= 3, "환각 함정 케이스(trap-*)가 3개 이상이어야 함");
 });

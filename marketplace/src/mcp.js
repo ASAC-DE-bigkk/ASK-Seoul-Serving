@@ -9,7 +9,7 @@
 // run_pattern 은 서버 실행계약 확정 후 P1.
 
 import { SKILL_BUNDLE_ID, SKILL_PRODUCT_IDS } from "./skill.js";
-import { burstProblem, normalizeIntent } from "./shared.js";
+import { burstProblem, normalizeIntent, ATTRIBUTION } from "./shared.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "ask-seoul", version: "0.1.0" };
@@ -46,7 +46,7 @@ export const TOOLS = [
   {
     name: "query_product",
     description:
-      "제품 데이터 조회 — 등가 필터·시간범위(from/to)·limit·cursor. sort/join/집계는 불가(서버 결정 순서). 커서로 페이지네이션.",
+      "제품 데이터 조회 — 등가 필터·시간범위(from/to)·limit·cursor. sort/join/집계는 불가(서버 결정 순서). 커서로 페이지네이션. 응답의 data_context(freshness=데이터 기준 시점·caution=주의사항·attribution=출처 표시 의무)를 답변에 반영할 것 — 데이터는 실시간이 아니다.",
     inputSchema: {
       type: "object",
       properties: {
@@ -117,6 +117,35 @@ async function toToolResult(res, trace = {}) {
   return okJson(body);
 }
 
+// 오타·기억 오류로 없는 product_id 를 부르면 비슷한 이름을 제안한다 — AI 가 사용자에게
+// 반문하는 대신 스스로 교정해 재시도할 수 있게 한다(왕복 절약). 404 에서만 카탈로그를 읽는다.
+// bigram 겹침 비율이면 충분하다 — 제품명은 소문자 스네이크라 형태가 균질하다.
+// 임계 0.3: 오타 한두 글자(예: pplnt→ppltn)는 0.5 안팎, 무관한 이름은 0.2 아래로 갈리는
+// 경계 실측값. 상위 3: 안내 문장이 읽히는 상한 — 더 주면 AI 가 고르다 또 헤맨다.
+function similarIds(target, ids, n = 3) {
+  const bigrams = (s) => { const set = new Set(); for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2)); return set; };
+  const t = bigrams(String(target));
+  return ids
+    .map((id) => { const b = bigrams(id); let hit = 0; for (const g of t) if (b.has(g)) hit += 1; return { id, score: hit / Math.max(t.size, b.size) }; })
+    .filter((x) => x.score >= 0.3)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n).map((x) => x.id);
+}
+
+async function notFoundWithSuggestions(env, deps, productId, trace) {
+  trace.status = 404;
+  let hint = "";
+  try {
+    const cat = await deps.handleCatalog(env);
+    if (cat.status < 400) {
+      const { products = [] } = await cat.json();
+      const near = similarIds(productId, products.map((p) => p.product_id));
+      if (near.length) hint = ` 비슷한 제품이 있습니다: ${near.join(" · ")} — 이 중 하나를 의도했다면 그 이름으로 다시 시도하세요.`;
+    }
+  } catch { /* 제안은 덤이다 — 실패해도 404 안내는 나간다 */ }
+  return errText(`없는 제품입니다: ${productId} — list_products 로 확인하세요.${hint}`);
+}
+
 async function callTool(name, args, ctx) {
   const { env, request, keyRow, trace, deps } = ctx;
   args = args || {};
@@ -142,13 +171,19 @@ async function callTool(name, args, ctx) {
   }
   if (name === "describe_product") {
     if (!args.product_id) return errText("product_id 가 필요합니다.");
-    return toToolResult(await deps.handleProductBundle(env, args.product_id, request, trace), trace);
+    const res = await deps.handleProductBundle(env, args.product_id, request, trace);
+    if (res.status === 404) return notFoundWithSuggestions(env, deps, args.product_id, trace);
+    return toToolResult(res, trace);
   }
   if (name === "preview_product" || name === "query_product") {
     if (!args.product_id) return errText("product_id 가 필요합니다.");
     // 식별자 해석은 shared 해석기 한 곳에 맡긴다(decision/0003: product_id 정본, 테이블명은
     // 과도기 별칭). 없는/비공개 제품의 404 는 toToolResult 가 안내 문구로 바꾼다.
-    if (name === "preview_product") return toToolResult(await deps.handlePreview(env, args.product_id, trace), trace);
+    if (name === "preview_product") {
+      const res = await deps.handlePreview(env, args.product_id, trace);
+      if (res.status === 404) return notFoundWithSuggestions(env, deps, args.product_id, trace);
+      return toToolResult(res, trace);
+    }
     // intent 는 관측 축(agreement §3-6) — MCP 클라이언트는 헤더를 질의마다 못 바꾸므로 인자로
     // 받아 trace 로 옮겨 싣는다(데이터 질의에는 미포함 — 필터로 새면 400 이 난다). 슬러그
     // 모양이 아니면 'other' 로 뭉갠다 — 자유 문장이 오면 원문(PII 위험)을 로그에 남기지 않는다.
@@ -161,7 +196,28 @@ async function callTool(name, args, ctx) {
     if (args.to) params.set("to", String(args.to));
     if (args.limit) params.set("limit", String(args.limit));
     if (args.cursor) params.set("cursor", String(args.cursor));
-    return toToolResult(await deps.handleData(env, args.product_id, params, keyRow, trace), trace);
+    const res = await deps.handleData(env, args.product_id, params, keyRow, trace);
+    if (res.status === 404) return notFoundWithSuggestions(env, deps, args.product_id, trace);
+    if (res.status >= 400) return toToolResult(res, trace);
+    const body = await res.json();
+    // 답변 가드레일 — 신선도·출처·주의를 결과에 동봉한다. AI 가 "언제 기준·어디 출처"를
+    // 답변에 실을 수 있어야 오래된 데이터를 현재로 단언하는 환각이 줄어든다. 조회 자체는
+    // 성공했으므로 여기서의 실패는 삼킨다(가드레일은 덤이지 조회의 조건이 아니다).
+    try {
+      const meta = await deps.lookupProduct(env, args.product_id, "description, freshness, serving_status");
+      if (meta) {
+        body.data_context = {
+          freshness: meta.freshness ?? null,          // 이 게시본의 원천 기준 시각 — "지금"이 아니다
+          serving_status: meta.serving_status ?? null,
+          ...(meta.serving_status && meta.serving_status !== "published"
+            ? { warning: `serving_status='${meta.serving_status}' — 원천 수집 지연 등으로 최신성이 보장되지 않는다` }
+            : {}),
+          attribution: ATTRIBUTION,  // 정본 한 벌(shared) — "답변에 반영" 지시는 툴 description 몫
+          caution: meta.description ?? null,          // 제품 주의사항("공식 특보 아님" 등)이 여기 있다
+        };
+      }
+    } catch { /* 메타 실패가 조회 성공을 가리면 안 된다 */ }
+    return okJson(body);
   }
   return errText(`알 수 없는 tool: ${name}`);
 }
