@@ -390,7 +390,13 @@
         <div>
           <h3>API 키 발급</h3>
           <div class="row">
-            <input type="email" id="email" placeholder="you@example.com" autocomplete="email" aria-label="이메일">
+            <!-- pattern 은 type="email" 에 **점 요구 하나만** 더한다(#109). HTML5 의 도메인
+                 규칙(레이블이 영숫자로 시작·끝)은 서버 normalizeEmail 과 이미 같고, 다른 건
+                 HTML5 가 점을 안 요구한다는 것뿐이라 여기서만 보탠다. 규칙 전체를 복제하면
+                 두 곳이 갈린다. -->
+            <input type="email" id="email" placeholder="you@example.com" autocomplete="email" aria-label="이메일"
+                   required pattern="[^@\s]+@[^@\s]+\.[^@\s]+"
+                   title="도메인에 점이 필요합니다 — 예: you@example.com">
             <button class="btn-p" id="issueBtn">발급</button>
           </div>
           <div class="reveal" id="keyReveal">
@@ -854,6 +860,9 @@ function friendly(status, body) {
   if (status === 400 && t === "no time axis")
     return "이 데이터는 시간축이 없어서 기간(from/to) 필터를 지원하지 않아요 — 기간을 비우고 호출해주세요.";
   if (status === 400 && t === "unknown filter") return (body.detail || "") + " — 컬럼 이름 오타를 확인해주세요.";
+  // 화면 검증을 통과해도 서버가 더 좁게 볼 수 있다(API 직접 호출도 이 문구를 본다) — #109
+  if (status === 400 && t === "invalid email")
+    return "이메일 형식을 확인해주세요 — 예: you@example.com";
   return (body && (body.detail || body.title)) || "요청이 실패했어요.";
 }
 function showStatus(code, msg) {
@@ -914,6 +923,14 @@ function resetIssueBtn() {
 }
 $("issueBtn").addEventListener("click", async () => {
   $("issueErr").textContent = "";
+  // 입력칸이 <form> 밖이라 **제약 검증이 저절로 돌지 않는다** — submit·checkValidity() 에서만
+  // 돈다. 안 부르면 type="email" 은 키보드 힌트 역할만 하고 어떤 문자열이든 그대로 나간다(#109).
+  //
+  // 검증 **전에** 서버(shared.js normalizeEmail)와 같은 정규화를 한 번 한다. 후행 점은 DNS
+  // 루트 표기라 서버가 합쳐서 받는데, 그냥 검증하면 화면이 먼저 거절해 판정이 갈린다.
+  const el = $("email");
+  el.value = el.value.trim().replace(/\.+$/, "");
+  if (!el.reportValidity()) return;
   const confirmRotate = $("issueBtn").dataset.confirm === "1";
   const res = await fetch("/api/v1/keys", {
     method: "POST", headers: { "content-type": "application/json" },
