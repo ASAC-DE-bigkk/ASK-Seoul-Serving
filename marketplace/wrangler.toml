@@ -4,7 +4,7 @@
 # 운영에만 있어 로컬 픽스처로는 권리 게이트·카탈로그 응답을 검증할 수 없다.
 # 대가와 안전장치는 아래 [[d1_databases]] 주석에 있다 — **읽고 나서 쓴다.**
 #
-# 배포는 환경을 반드시 지정한다 — `npm run deploy:dev` / `npm run deploy:prod`.
+# 배포는 환경을 반드시 지정한다 — `npm run deploy:prod`(= `--env production`).
 # env 없이 `wrangler deploy` 를 실행하지 않는다: base 는 로컬 전용이고(아래 [vars] 주석),
 # 라우트 없는 워커가 하나 더 생긴다. 절차 정본은 docs/deploy-runbook.md,
 # 남은 배포 결정 상태는 ../docs/agreement.md §8.
@@ -55,50 +55,23 @@ preview_database_id = "59a8409e-3be6-467b-8214-7938c59c8729"
 # 키 이름이 아니라 **값**이 환경을 정한다(ASK-Seoul#78 `Z-7`). 지표가 조용히 섞이는 것을
 # 막는 게 목적이다 — 실측으로 운영 D1 에 `dev` 17건, 개발 D1 에 `prod` 63건이 이미 있다.
 #
-# ⚠️ **base env 는 로컬 전용이다 — 배포하지 않는다.** 여기서 배포하면 dev D1 을 쓰면서
-#    `local` 로 기록돼 값이 실제 배포면을 못 덮는다. 배포는 `--env dev`/`--env production` 만 쓴다.
+# ⚠️ **base env 는 로컬 전용이다 — 배포하지 않는다.** 여기서 배포하면 배포면의 기록이
+#    `local` 로 남아 실제 환경을 못 덮는다. 배포는 `--env production` 만 쓴다.
 [vars]
 ASK_ENV = "local"
 
-# ── 개발 환경 — https://dev.ask-seoul.kr (2026-08-04 배포 시행) ──────────────
-# 바인딩·assets·vars 는 env 에 상속되지 않으므로(wrangler 규칙) 환경마다 다시 선언한다 —
-# 값은 반드시 위 기본(로컬) 블록과 동일하게 유지한다.
-# ⚠️ 워커 이름 개명(2026-08-04): env 도입 전 최초 배포가 `ask-seoul-gateway` 라는 이름으로
-# dev 에 나갔으나, 그 이름은 production 몫이다. dev 는 `-dev` 접미사로 비킨다 —
-# 다음 deploy:dev 때 새 워커가 생기므로 커스텀 도메인 이전과 ISSUANCE_SALT 재설정이
-# 한 번 필요하다(런북 §3 참조).
-[env.dev]
-name = "ask-seoul-gateway-dev"
-workers_dev = false
-routes = [
-  { pattern = "dev.ask-seoul.kr", custom_domain = true }
-]
-
-[env.dev.vars]
-ASK_ENV = "dev"
-
-[env.dev.assets]
-directory = "public"
-run_worker_first = ["/api/v1/*", "/skill/v1/*", "/mcp"]
-not_found_handling = "404-page"
-
-# 🔴 dev 배포도 **운영 D1** 을 본다(#85). dev D1 이 폐기돼 가리킬 DB 가 없다 —
-# 이름만 dev 로 두면 배포는 성공하는데 질의가 전부 비어, "떴는데 데이터가 없는" 상태가 된다.
-# 환경 구분은 D1 이 아니라 `ASK_ENV="dev"` 가 한다(요청 로그의 `env` 컬럼 · #64 스코프).
-#
-# ⚠️ **dev 배포면(dev.ask-seoul.kr) 자체를 유지할지는 아직 미결**이다 — #85 가 연 질문이고,
-#    #4 의 K-Skill 검증이 이 주소를 쓰기로 돼 있어 혼자 정하지 않는다. 접기로 하면
-#    이 블록과 `deploy:dev` 를 함께 지운다.
-[[env.dev.d1_databases]]
-binding = "DB"
-database_name = "ask-seoul-prod-d1"
-database_id = "59a8409e-3be6-467b-8214-7938c59c8729"
+# ── dev 배포면 폐지 (2026-08-06, 팀 합의) ────────────────────────────────────
+# `[env.dev]`(dev.ask-seoul.kr)은 지웠다. D1 이 운영 하나뿐이 된 뒤(decision/0015)
+# dev 배포면은 **같은 운영 데이터를 다른 주소로 한 번 더 보여주는 것**뿐이었고,
+# 그 값에 비해 주소·워커·시크릿·배포 경로를 두 벌 유지하는 비용이 컸다.
+# 남는 환경은 로컬(위 base)과 운영(아래) 둘이며, 브랜치도 그에 맞췄다 —
+# `dev` 는 통합, `main` 이 배포다(.github/workflows/deploy-prod.yml).
 
 # ── 배포 전용 환경 (2026-08-03, ASAC-DAG#668) — https://ask-seoul.kr ─────────
-# 파이프라인이 prod D1(ask-seoul-prod-d1)에 68개 제품을 게시한다. 세 환경(로컬·dev·prod)이
-# 이제 **같은 D1** 을 보고, 갈리는 것은 `ASK_ENV` 값과 배포 주소뿐이다(#85).
-# ⚠️ production 배포 전 선행: prod D1 마이그레이션은 파이프라인 쪽과 조율 후에만
-# (agreement §8-3 — 승인 주체 미정), ISSUANCE_SALT 를 `--env production` 으로 설정.
+# 파이프라인이 prod D1(ask-seoul-prod-d1)에 68개 제품을 게시한다. 두 환경(로컬·prod)이
+# **같은 D1** 을 보고, 갈리는 것은 `ASK_ENV` 값과 배포 주소뿐이다(#85).
+# ⚠️ 선행: prod D1 스키마를 새로 만들 때는 파이프라인 쪽과 조율(agreement §8-3),
+# ISSUANCE_SALT 를 `--env production` 으로 설정(2026-08-06 완료).
 [env.production]
 name = "ask-seoul-gateway"
 workers_dev = false

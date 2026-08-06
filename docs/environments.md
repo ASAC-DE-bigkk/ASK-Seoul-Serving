@@ -112,7 +112,7 @@ Windows 에서 이 파일을 셸로 만들 때 인코딩을 지정하지 않으�
 
 | | local (기본 환경) | dev (`[env.dev]`) | production (`[env.production]`) |
 |---|---|---|---|
-| 호스트 | `http://localhost:8787` | `dev.ask-seoul.kr` | `ask-seoul.kr` |
+| 호스트 | `http://localhost:8787` | — (폐지) | `ask-seoul.kr` |
 | D1 이름 | `ask-seoul-prod-d1` | 같음 | 같음 |
 | D1 id | `59a8409e-…` (+ `preview_database_id` 동일값) | 같음 | 같음 |
 | D1 실제 접속 | **원격** — 바인딩의 `remote = true` | 바인딩으로 붙는다 | 바인딩으로 붙는다 |
@@ -154,7 +154,6 @@ npm run migrate:apply     # 그다음 적용
 `wrangler deploy` 는 금지다 — base 환경은 로컬 전용이라 라우트 없는 워커가 하나 더 생긴다.
 
 ```bash
-npm run deploy:dev     # dev.ask-seoul.kr
 npm run deploy:prod    # ask-seoul.kr
 ```
 
@@ -252,8 +251,9 @@ npm run d1 -- "SELECT …"   # DDL 은 거절된다
 npm run deploy:prod    # → ops.ask-seoul.kr
 ```
 
-`dev` 브랜치 머지 시 CD 가 자동으로 같은 일을 한다(`.github/workflows/deploy-prod.yml`).
-⚠️ **브랜치 이름과 배포 환경이 다르다.** `deploy:dev` 는 없앴다(0015).
+`main` 브랜치 머지 시 CD 가 자동으로 같은 일을 한다(`.github/workflows/deploy-prod.yml`).
+**브랜치와 환경은 이름 그대로다**(2026-08-06 팀 합의) — `dev` 는 통합 브랜치라 배포하지
+않고, `main` 이 배포 브랜치다. `deploy:dev` 는 없앴다.
 
 CD 는 **코드만** 배포한다 — 마이그레이션은 사람이 따로 돌린다. 대신 배포 전에
 `schema-ready` 가 **적용 여부를 읽기로 확인**하고, 미적용분이 있으면 배포를 막는다.
@@ -267,8 +267,8 @@ CD 는 **코드만** 배포한다 — 마이그레이션은 사람이 따로 돌
 | 호스트 | 무엇 | 상태 |
 |---|---|---|
 | `ask-seoul.kr` | 게이트웨이 운영 | 활성 |
-| `dev.ask-seoul.kr` | 게이트웨이 개발 | 활성 |
 | `ops.ask-seoul.kr` | **콘솔 운영** | **활성** |
+| ~~`dev.ask-seoul.kr`~~ | 게이트웨이 개발 | **폐기**(2026-08-06 팀 합의) |
 | ~~`dev-ops.ask-seoul.kr`~~ | 콘솔 개발 | **폐기**(0015 — dev 환경 자체를 접었다) |
 
 zone `ask-seoul.kr` 은 Active 다. zone 이 하나여도 Worker·배포·롤백은 따로다 — 그게 분리의
@@ -287,9 +287,10 @@ zone `ask-seoul.kr` 은 Active 다. zone 이 하나여도 Worker·배포·롤백
 - ~~**운영 D1 에 게이트웨이 표 만들기**~~ — 2026-08-06 완료. `_keys`·`_usage`·`_burst`·
   `_gateway_request_log` 4종 실측 확인.
 - ~~**운영 D1 전환 여부**~~ — 2026-08-06 전환 완료(#85). 세 환경이 같은 D1 을 본다(0절).
-- **`[env.dev]` 배포면의 처분** — `dev.ask-seoul.kr` 을 접을지는 미결이다. D1 이 같아진
-  지금 이 배포면이 남길 것은 `ASK_ENV="dev"` 로 찍히는 요청 로그뿐인데, **#4 의 K-Skill
-  검증이 그 주소를 쓰기로 돼 있어** 혼자 정하지 않는다.
+- ~~**`[env.dev]` 배포면의 처분**~~ — 2026-08-06 팀 합의로 **접었다.** D1 이 같아진 뒤
+  이 배포면이 남길 것은 `ASK_ENV="dev"` 로 찍히는 요청 로그뿐이라 두 벌 유지 비용이 컸다.
+  `[env.dev]`·`deploy:dev`·워커·도메인을 함께 지웠다. #4 의 K-Skill 검증은 `ask-seoul.kr`
+  를 쓴다.
 
 ## 5-2. 콘솔
 

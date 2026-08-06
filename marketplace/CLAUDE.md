@@ -69,10 +69,10 @@
 
 어기는 순간 사고가 되는 것들. 완화하려면 결정 문서 개정이 먼저다.
 
-- **배포는 환경을 지정한 스크립트로만.** `npm run deploy:dev`(→ dev.ask-seoul.kr) /
-  `npm run deploy:prod`(→ ask-seoul.kr, **agreement §8-3 조율 후에만** — prod D1 은
-  파이프라인의 DB 다). env 없는 맨 `wrangler deploy` 는 금지 — 기본 환경은 로컬 전용이고
-  라우트 없는 워커가 하나 더 생긴다. 절차 정본은 [docs/deploy-runbook.md](docs/deploy-runbook.md).
+- **배포는 `npm run deploy:prod`(→ ask-seoul.kr) 하나뿐이다.** `main` 머지 시 CD 가 같은
+  일을 자동으로 한다 — `dev` 는 통합 브랜치라 배포하지 않는다(2026-08-06 팀 합의).
+  env 없는 맨 `wrangler deploy` 는 금지 — 기본 환경은 로컬 전용이고 라우트 없는 워커가
+  하나 더 생긴다. 절차 정본은 [docs/deploy-runbook.md](docs/deploy-runbook.md).
 - **🔴 스키마 변경은 `migrations/` + `migrate:backfill` → `migrate:apply` 로만.** 원격 D1 을 향한 임의 파일
   직실행 금지(`0004` 가 남의 표를 오염시킨 실사고). 장부 백필이 먼저다 — 건너뛰면 `0001`
   부터 재실행돼 조건 없는 `ALTER` 가 남의 표를 또 건드린다.
@@ -168,8 +168,7 @@ npm run dev    # :8787 — 운영 D1 에 붙는다. 콘솔(:8788)과 동시 구�
 바로 구현하지 않는다. 결정 문서(신규 또는 개정)로 사유·비용·단순 대안·롤백을 먼저 적는다.
 
 ```text
-production 배포(ask-seoul.kr 공개)  → 배포 결정(agreement §8, 특히 §8-3 prod D1 조율)
-                                      — dev 는 deploy:dev 로 상시 가능
+배포 대상·주소 변경                  → 팀 합의 (#476 ② URL 변경 = 파손)
 키 상태 모델 확장(2값 초과)          → 콘솔 0006 과 공동 개정
 _gateway_request_log 컬럼 추가       → 새 ALTER 파일 + 시드 체인 + 콘솔 통지, 전부 nullable
 공유 계약(오류·KST·key_hash …) 변경  → decision/0001 개정 + 콘솔 담당 리뷰

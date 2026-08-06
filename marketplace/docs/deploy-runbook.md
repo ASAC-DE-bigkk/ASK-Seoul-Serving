@@ -90,22 +90,21 @@ dev   _keys · _usage · _issuance_log · _burst                          일치
 
 ## 0-1. 전제 확인
 
-배포는 **환경을 반드시 지정한다** — 명령마다 `--env dev` 또는 `--env production`.
-env 없이 실행하면 라우트 없는 워커가 하나 더 생긴다. 두 환경은 `wrangler.toml` 이 정본이다:
+배포는 **환경을 반드시 지정한다** — 언제나 `--env production`.
+env 없이 실행하면 라우트 없는 워커가 하나 더 생긴다. 배포면은 하나이고 `wrangler.toml` 이 정본이다:
 
 | 환경 | 워커 | 주소 | D1 |
 |---|---|---|---|
-| `dev` | `ask-seoul-gateway-dev` | `https://dev.ask-seoul.kr` | `ask-seoul-prod-d1` |
 | `production` | `ask-seoul-gateway` | `https://ask-seoul.kr` | `ask-seoul-prod-d1` |
 
-> ⚠️ **워커 개명(2026-08-04).** env 도입 전 최초 dev 배포가 `ask-seoul-gateway` 이름으로
-> 나갔으나 그 이름은 production 몫이라 dev 가 `-dev` 로 비켰다. 다음 `deploy:dev` 는
-> **새 워커를 만든다** — 구 워커에서 커스텀 도메인을 떼고(§3), `ISSUANCE_SALT` 를
-> 새 워커에 다시 넣은 뒤(§2), 구 워커를 삭제한다.
+> **dev 배포면 폐지(2026-08-06, 팀 합의).** `dev.ask-seoul.kr`·`[env.dev]`·`deploy:dev`·
+> 워커를 함께 지웠다. D1 이 운영 하나뿐이 된 뒤(decision/0015) dev 배포면은 같은 데이터를
+> 다른 주소로 한 번 더 보여주는 것뿐이라 두 벌 유지 비용이 컸다. 브랜치도 그에 맞췄다 —
+> `dev` 는 통합, `main` 이 배포다.
 
 | 항목 | 확인 방법 | 기대 |
 |---|---|---|
-| **배포 승인** | [`../../docs/agreement.md` §8-3](../../docs/agreement.md) | ⚠️ production 은 **승인 주체 미정** — prod D1 은 파이프라인의 DB 다. #476 ① 은 팀 투표였고 이미 통과했으므로 이 자리의 근거가 아니다. dev 는 통과된 ① 로 충분 |
+| **배포 승인** | [`../../docs/agreement.md` §8-3](../../docs/agreement.md) | prod D1 은 파이프라인의 DB 다 — 스키마를 새로 만들 때는 조율이 먼저다(표는 2026-08-06 생성 완료) |
 | **배포 전 검사** | 위 §0 `npm run preflight` | 🔴 **종료 코드 1 이면 배포 금지** |
 | 대상 D1 | `wrangler.toml` 해당 env 의 `d1_databases` | **세 환경 전부 운영 D1** — 갈리는 것은 `ASK_ENV` 값과 주소뿐이다(#85) |
 | Cloudflare 계정 | 팀 계정 로그인 | `npx wrangler whoami` — **publisher 와 같은 계정**이어야 바인딩이 같은 DB 로 풀린다(개인 계정 배포 금지) |
@@ -209,15 +208,15 @@ openssl rand -hex 32 | npx wrangler secret put ISSUANCE_SALT --env production
 
 ```bash
 cd marketplace
-npm run deploy:dev    # 개발 — test·preflight 통과 후 wrangler deploy --env dev
-npm run deploy:prod   # 운영 — test·preflight 통과 후 wrangler deploy --env production
+npm run deploy:prod   # test·preflight 통과 후 wrangler deploy --env production
 ```
 
-**dev 는 자동 배포된다** — dev 브랜치에 머지되면 GitHub Actions
-(`.github/workflows/deploy-dev.yml`)가 테스트 후 두 워커를 `--env dev` 로 배포한다.
+**운영은 자동 배포된다** — **`main`** 브랜치에 머지되면 GitHub Actions
+(`.github/workflows/deploy-prod.yml`)가 테스트 후 게이트웨이·콘솔을 `--env production` 으로
+배포한다. `dev` 머지는 배포하지 않는다(통합 브랜치).
 자동화는 원격 D1 마이그레이션을 실행하지 않고 `--require-applied` 읽기 검사만 한다. 필수
 Gateway 표가 없으면 Gateway·콘솔 두 배포 모두 시작하지 않는다. 원격 D1 마이그레이션(§1)은
-여전히 사람이 직접 실행한다. production 은 자동화 대상이 아니다.
+여전히 사람이 직접 실행한다.
 
 env 플래그 없는 맨 `wrangler deploy` 는 금지다 — 기본 환경은 로컬 전용이고(wrangler.toml
 [vars] 주석), 라우트 없는 워커가 하나 더 생긴다. 각 환경의 `routes`(`custom_domain = true`)가
@@ -225,10 +224,11 @@ DNS·TLS 를 자동 생성하고, `workers_dev = false` 라 workers.dev 주소�
 **주소는 한 번 정해지면 사실상 못 바꾼다**(소비자가 붙으면 변경 = 파손) — #476 ② 결정과
 어긋나지 않는지 배포 전에 다시 확인한다.
 
-**개명 후 첫 `deploy:dev` 절차** (§0-1 참조): 새 워커가 라우트를 잡으려 할 때 구 워커가
-`dev.ask-seoul.kr` 을 물고 있으면 충돌한다 — 대시보드(또는 API)에서 구 워커
-`ask-seoul-gateway` 의 커스텀 도메인을 먼저 떼고 배포한다. 배포 후 §2 시크릿 재설정 →
-§4 스모크 → 구 워커 삭제 순서.
+🔴 **커스텀 도메인이 409 로 실패하면 DNS 레코드 충돌이다.** 에러는
+`code 100117: Hostname 'ask-seoul.kr' already has externally managed DNS records`.
+같은 호스트에 손으로 만든 A/CNAME 레코드가 있으면 워커 커스텀 도메인을 붙이지 못한다 —
+**대시보드 DNS 에서 그 레코드를 지우고 다시 배포**한다(wrangler OAuth 에는 DNS 편집
+스코프가 없어 CLI 로는 못 지운다). 2026-08-06 `ask-seoul.kr` 루트가 이 상태였다.
 
 dev D1 오염은 2026-08-05 제거됐다(#52). 이제 배포 전에는 ack 가 아니라 마이그레이션 완료를
 증명한다:
@@ -329,11 +329,9 @@ rita/sam.ns.cloudflare.com, 공개 DNS 반영 확인). 주소 체계는 4종으�
 
 ## 7. 배포 후 알아둘 것
 
-- **운영 콘솔은 별도 워커로 따로 배포된다** — dev 는 `dev-ops.ask-seoul.kr`
-  (`../ops-dashboard` 에서 `npm run deploy:dev`). 같은 환경의 D1 을 읽으므로 게이트웨이와
-  D1 이 어긋나면 남의 데이터를 보게 된다. 2026-08-04 배포본은 구 코드(`_request_log` 조회)라
-  서빙·키 탭이 강등 상태였다 — **개명(`_gateway_request_log`) 반영 코드로 재배포 + `0005`
-  적용이면 해소된다.**
+- **운영 콘솔은 별도 워커로 따로 배포된다** — `ops.ask-seoul.kr`
+  (`../ops-dashboard` 에서 `npm run deploy:prod`). 같은 D1 을 읽으므로 게이트웨이와
+  D1 이 어긋나면 남의 데이터를 보게 된다. `main` CD 는 둘을 같은 실행에서 배포한다.
 - **키·이메일이 팀 D1 에 쌓인다.** 통합 검증 단계라 팀원 테스트 키뿐이지만, 누군가 그 D1 을
   리셋하면 발급된 키가 같이 사라진다. 정식 공개 전에 prod D1 로 옮기면서 해소한다(#20 결정 A).
   production 은 파이프라인 게시본과 같은 DB 라 리셋 반경이 더 크다(agreement §8-3).

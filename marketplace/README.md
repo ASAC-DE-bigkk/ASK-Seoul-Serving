@@ -19,7 +19,7 @@ Workers + Static Assets + D1 웹서비스. #476 게이트웨이 역할(키 검�
 
 ## ⚠️ 배포는 스크립트로만
 
-`npm run deploy:dev`(→ `dev.ask-seoul.kr`, 2026-08-04 시행) / `npm run deploy:prod`
+`npm run deploy:prod`
 (→ `ask-seoul.kr`, agreement §8-3 조율 선행). env 없는 맨 `wrangler deploy` 는 금지 —
 base 환경은 로컬 전용이라 라우트 없는 워커가 하나 더 생긴다. 절차 정본은
 [docs/deploy-runbook.md](docs/deploy-runbook.md).

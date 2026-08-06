@@ -28,7 +28,7 @@
 | 로컬에서 보는 것 | 🔴 **운영 D1** (바인딩 `remote = true`) | 🔴 **운영 D1** (같음) |
 | 로컬 쓰기의 범위 | **운영 `_keys`·`_usage`·`_burst` 에 간다** | **실제 고객 키에 간다** |
 | 설정 | `wrangler.toml` 기본 환경 = 운영 | 같음 |
-| 배포 | `npm run deploy:dev` / `deploy:prod` | `npm run deploy:prod` · `dev` 머지 시 CD 자동 |
+| 배포 | `npm run deploy:prod` | `npm run deploy:prod` · `main` 머지 시 CD 자동 |
 | 절차 정본 | 이 문서 + [deploy-runbook](../marketplace/docs/deploy-runbook.md) | [run-prod.md](run-prod.md) |
 
 예전에는 콘솔이 `--persist-to` 로 게이트웨이의 로컬 상태에 붙어 두 프로젝트가 한 **로컬**

@@ -518,6 +518,30 @@
   **즉 route 계약은 코드로는 들어갔지만 재검증 경로가 #85 까지 막혀 있다.** 지운 게 아니라
   **못 하게 된 것**이라 여기 적어 둔다 — 게이트웨이가 운영으로 옮기면 그때 §회귀 검증
   (0014 §5)을 다시 돌린다.
+## 2026-08-06
+
+### 브랜치와 환경을 이름 그대로 — main 배포, dev 배포면 폐지
+
+- **작업자**: @codingpoppy94 (+ Claude Code)
+- **의도 · 목표**: 팀 합의. 두 가지가 어긋나 있었다 — ① `dev` 머지가 곧 **운영 배포**라
+  브랜치 이름과 배포 환경이 달랐고(0015 전환의 잔재), ② dev 배포면이 **운영 D1 을 보는
+  두 번째 주소**라 존재 이유가 사라졌는데 주소·워커·시크릿·배포 경로를 두 벌 유지하고 있었다.
+- **조치**:
+  - `dev` → `main` fast-forward 머지(245커밋). **`main` 이 배포 브랜치**가 됐다
+  - `deploy-prod.yml` 트리거 `dev` → `main`, **게이트웨이 잡 추가**(운영 2종 배포).
+    스키마 게이트는 소유대로 갈랐다 — 게이트웨이는 자기 `preflight --require-applied`,
+    콘솔은 자기 장부. `ci.yml` 은 dev·main 양쪽 PR 검증
+  - dev 배포면 폐지: `[env.dev]`·`deploy:dev`·워커 2종(`*-dev`)·`dev.ask-seoul.kr` 삭제.
+    `ISSUANCE_SALT` 를 운영 워커에 설정
+  - 문서 정합: 런북·환경·설정·접근통제·README·CLAUDE.md 에서 dev 배포면 참조 제거
+- **결과**: 워커 3개만 남았다(`ask-seoul-gateway` · `ask-seoul-ops-dashboard` ·
+  transit). 테스트 118/118, prod D1 preflight 통과.
+  - 🔴 **`ask-seoul.kr` 은 아직 안 붙었다** — 커스텀 도메인 등록이 409 로 실패한다:
+    `code 100117: Hostname 'ask-seoul.kr' already has externally managed DNS records`.
+    루트에 손으로 만든 A 레코드 2개(응답 없음)가 자리를 잡고 있다. **대시보드에서 그
+    레코드를 지워야** 붙는다 — wrangler OAuth 에는 DNS 편집 스코프가 없다(실측).
+    워커 스크립트는 업로드돼 있으므로 레코드 삭제 후 재배포만 하면 된다.
+
 ## 2026-08-04
 
 ### CI/CD — dev 머지가 곧 dev 배포가 되게
