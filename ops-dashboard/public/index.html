@@ -357,7 +357,6 @@
         <div class="bd" style="padding-top:0">
           <div class="scroll tall" id="apiTable"></div>
         </div>
-        <div class="detail" id="apiDetail" hidden></div>
       </div>
     </div>
     </section>
@@ -1748,6 +1747,7 @@ function renderApiList() {
     { t:"마지막 요청", r:true, get:(r) => r.last_call ? esc(fmtTs(r.last_call)) : "<span class='zero'>없음</span>" },
     { t:"", r:true, get:(r) => "<button class='kbtn' data-api='" + esc(r.name) + "'>상세보기</button>" },
   ], rows, "조건에 맞는 API가 없습니다");
+  reattachDetail();   // 표를 다시 그렸으니 열려 있던 상세를 되붙인다(캐시 · 재요청 없이)
 }
 
 // 상세 — 값이 아니라 **축**을 보여준다. 요청 값·응답 본문은 애초에 저장하지 않기 때문이고,
@@ -1755,11 +1755,51 @@ function renderApiList() {
 // silent=true 는 자동 새로고침·주소 복원이 부르는 경우다. 이때 scrollIntoView 를 하면
 // **30초마다 화면이 저 혼자 움직인다** — 상세를 연 채로 두면 보던 자리를 계속 잃는다.
 // 스크롤은 사람이 '상세보기'를 눌렀을 때만 한다.
+let DETAIL_HTML = null;   // 마지막으로 그린 상세 HTML — 표를 다시 그려도 재요청 없이 되붙인다
+function apiRowOf(name) {
+  const q = '[data-api="' + String(name).replace(/["\\]/g, "\\$&") + '"]';
+  const btn = $("apiTable").querySelector("button" + q);
+  return btn ? btn.closest("tr") : null;
+}
+function removeDetailRow() {
+  const r = document.getElementById("apiDetRow");
+  if (r) { if (r.previousElementSibling) r.previousElementSibling.classList.remove("expanded"); r.remove(); }
+}
+// 클릭한 API 행 **바로 아래**에 상세 행을 끼운다(.scroll.tall 안). 채울 .detail 요소를 돌려준다.
+function insertDetailRow(name, innerHtml) {
+  removeDetailRow();
+  const row = apiRowOf(name);
+  if (!row) return null;                          // 필터로 안 보이는 행이면 넘어간다
+  row.classList.add("expanded");
+  const tr = document.createElement("tr");
+  tr.id = "apiDetRow";
+  tr.innerHTML = "<td colspan='" + row.children.length + "'>" +
+    "<div class='detail' id='apiDetail'>" + innerHtml + "</div></td>";
+  row.after(tr);
+  const box = tr.querySelector("#apiDetail");
+  // 표가 좌우로 넓어도 상세는 보이는 폭(스크롤 컨테이너 clientWidth)에 맞춰 sticky 로 고정한다.
+  box.style.width = ($("apiTable").clientWidth || 0) + "px";
+  return box;
+}
+function closeDetail() {
+  DETAIL_OPEN = null; DETAIL_HTML = null;
+  removeDetailRow();
+  if (parseHash().pane === "apis") history.replaceState(null, "", "#apis");
+}
+function bindDetClose(el) {
+  const b = el && el.querySelector("#detClose");
+  if (b) b.addEventListener("click", closeDetail);
+}
+// 표를 다시 그린 뒤(검색·필터·자동 새로고침) 열려 있던 상세를 캐시로 즉시 되붙인다 — 재요청 없이.
+function reattachDetail() {
+  if (!DETAIL_OPEN || !DETAIL_HTML) return;
+  bindDetClose(insertDetailRow(DETAIL_OPEN, DETAIL_HTML));
+}
 async function openDetail(name, silent) {
+  // 사람이 열린 같은 행을 다시 누르면 접는다(토글). 자동 새로고침(silent)은 접지 않는다.
+  if (!silent && DETAIL_OPEN === name && document.getElementById("apiDetRow")) { closeDetail(); return; }
   DETAIL_OPEN = name;
-  const el = $("apiDetail");
-  el.hidden = false;
-  el.innerHTML = emptyBox("불러오는 중…");
+  if (!insertDetailRow(name, emptyBox("불러오는 중…"))) return;   // 필터로 안 보이면 조용히
   let d;
   try {
     const res = await fetch("/api/apis/" + encodeURIComponent(name) + "?days=" + $("days").value,
@@ -1767,13 +1807,16 @@ async function openDetail(name, silent) {
     if (!res.ok) throw new Error("HTTP " + res.status);
     d = await res.json();
   } catch (e) {
-    el.innerHTML = emptyBox(["읽지 못함", esc(e.message)]);
+    if (DETAIL_OPEN !== name) return;
+    const box = document.querySelector("#apiDetRow #apiDetail");
+    if (box) box.innerHTML = emptyBox(["읽지 못함", esc(e.message)]);
     return;
   }
+  if (DETAIL_OPEN !== name) return;               // 그새 다른 상세를 열었으면 이 결과는 버린다
   const totalCalls = d.statuses.reduce((a, r) => a + r.calls, 0);
   const okCalls = d.statuses.filter((r) => r.status < 400).reduce((a, r) => a + r.calls, 0);
 
-  el.innerHTML =
+  DETAIL_HTML =
     "<div class='dhd'><h4>" + esc(d.api.name) + "</h4>" +
     "<span class='pill dim'>" + esc(domLabel(d.api.domain)) + "</span>" +
     "<span style='font-size:11.5px;color:var(--muted)'>전체 " + nf.format(d.api.row_count || 0) + "건 보유</span>" +
@@ -1824,13 +1867,13 @@ async function openDetail(name, silent) {
       ], d.recent, "이 기간에 요청이 없습니다") + "</div></div>" +
     "</div>";
 
-  $("detClose").addEventListener("click", () => {
-    DETAIL_OPEN = null; el.hidden = true;
-    history.replaceState(null, "", "#apis");
-  });
+  const el = document.querySelector("#apiDetRow #apiDetail");
+  if (!el) return;                                // 그새 닫혔으면
+  el.innerHTML = DETAIL_HTML;
+  bindDetClose(el);
   if (decodeURIComponent(location.hash.slice(1)) !== "apis/" + name)
     history.replaceState(null, "", "#" + encodeURI("apis/" + name));
-  if (!silent) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  if (!silent) { const tr = document.getElementById("apiDetRow"); if (tr) tr.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
 }
 
 // 이용 행동의 퍼널 숫자 → 키 목록. 앵커라 주소가 바뀌고 hashchange 가 나머지를 한다.

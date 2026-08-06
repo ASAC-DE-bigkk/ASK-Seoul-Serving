@@ -408,6 +408,15 @@ p.hint b { color:var(--muted); }
 .detail .box .scroll { max-height:230px; }
 .detail .box .scroll thead th { background:var(--panel); }
 
+/* 🔴 상세를 표 바깥 패널이 아니라 **그 행 안에서** 펼친다(#apis · .scroll.tall 안) —
+   클릭한 자리에서 문맥을 잃지 않게, 행 바로 아래 colspan 셀로 끼운다. */
+tr#apiDetRow > td { padding:0; }
+/* 표가 열 수 때문에 가로로 넓어 좌우 스크롤이 생겨도, 상세는 **보이는 폭에 고정**해서
+   왼쪽으로 잘려 나가지 않게 한다(sticky left:0 · 폭은 ui.js 가 컨테이너 clientWidth 로). */
+tr#apiDetRow .detail { position:sticky; left:0; box-sizing:border-box; }
+tbody tr.expanded > td { background:var(--accent-soft); }
+tbody tr.expanded td.name { color:var(--accent-deep); font-weight:600; }
+
 /* ── 요청 추적 ─────────────────────────────────────────────────────────────── */
 .trace-row { display:flex; gap:8px; margin:4px 0 10px; flex-wrap:wrap; }
 .trace-row input { flex:1; min-width:200px; max-width:340px; font-family:var(--mono); font-size:12.5px;
