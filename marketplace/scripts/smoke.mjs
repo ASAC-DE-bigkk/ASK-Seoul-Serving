@@ -123,11 +123,11 @@ await check("MCP initialize", async () => {
   must(j.result?.serverInfo?.name === "ask-seoul", "serverInfo 누락/불일치");
   return `protocol ${j.result.protocolVersion}`;
 });
-await check("MCP tools/list 5툴", async () => {
+await check("MCP tools/list 6툴", async () => {
   const r = await mcpRpc("tools/list", 2);
   must(r.ok, `status ${r.status}`);
   const j = await r.json();
-  must(Array.isArray(j.result?.tools) && j.result.tools.length === 5, `tools ${j.result?.tools?.length ?? "없음"}`);
+  must(Array.isArray(j.result?.tools) && j.result.tools.length === 6, `tools ${j.result?.tools?.length ?? "없음"}`);
   return j.result.tools.map((t) => t.name).join(",");
 });
 

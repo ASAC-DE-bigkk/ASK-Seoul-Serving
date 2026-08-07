@@ -22,7 +22,7 @@ const mkDeps = (over = {}) => ({
   handleProductBundle: async (_e, pid) => jsonRes({ product_id: pid, columns: [], usage_patterns: [] }),
   handlePreview: async (_e, id) => jsonRes({ id, preview: true, rows: [{ a: 1 }] }),
   handleData: async (_e, id) => jsonRes({ id, rows: [] }),
-  lookupProduct: async () => null,
+  handleRunPattern: async (_e, pid, pat) => jsonRes({ product_id: pid, pattern_id: pat, rows: [{ a: 1 }], row_count: 1 }),
   ...over,
 });
 
@@ -35,11 +35,11 @@ test("initialize — 데이터/인증 없이 서버정보", async () => {
   assert.ok(body.result.capabilities.tools);
 });
 
-test("tools/list — P0 5개 툴", async () => {
+test("tools/list — 6개 툴", async () => {
   const res = await handleMcp(rpc("tools/list"), {}, {}, mkDeps());
   const body = await res.json();
   const names = body.result.tools.map((t) => t.name);
-  assert.deepEqual(names, ["list_products", "describe_product", "preview_product", "query_product", "check_quota"]);
+  assert.deepEqual(names, ["list_products", "describe_product", "preview_product", "query_product", "run_pattern", "check_quota"]);
   for (const t of body.result.tools) assert.ok(t.inputSchema && t.description);
 });
 
@@ -246,7 +246,10 @@ test("버스트로 거부돼도 route 는 mcp_<툴명> — 거부분이 SERVE �
 
 test("query_product 성공 응답에 data_context 동봉 — 신선도·경고·출처·주의", async () => {
   const deps = mkDeps({
-    lookupProduct: async () => ({ description: "공식 특보 아님", freshness: "2026-08-04T00:00:00Z", serving_status: "degraded" }),
+    handleData: async (_e, id, _p, _k, _t, opts) => jsonRes({
+      id, rows: [],
+      ...(opts?.includeMeta ? { product_meta: { description: "공식 특보 아님", freshness: "2026-08-04T00:00:00Z", serving_status: "degraded" } } : {}),
+    }),
   });
   const res = await handleMcp(
     rpc("tools/call", { name: "query_product", arguments: { product_id: "p" } }), {}, {}, deps);
@@ -257,12 +260,14 @@ test("query_product 성공 응답에 data_context 동봉 — 신선도·경고·
   assert.equal(payload.data_context.caution, "공식 특보 아님");
 });
 
-test("data_context 조회가 실패해도 데이터 응답은 그대로 나간다 — 가드레일은 덤", async () => {
-  const deps = mkDeps({ lookupProduct: async () => { throw new Error("boom"); } });
+test("product_meta 가 없으면 data_context 없이 데이터만 나간다 — 가드레일은 덤", async () => {
   const res = await handleMcp(
-    rpc("tools/call", { name: "query_product", arguments: { product_id: "p" } }), {}, {}, deps);
+    rpc("tools/call", { name: "query_product", arguments: { product_id: "p" } }), {}, {}, mkDeps());
   const body = await res.json();
   assert.equal(body.result.isError, undefined);
+  const payload = JSON.parse(body.result.content[0].text);
+  assert.equal(payload.data_context, undefined);
+  assert.equal(payload.product_meta, undefined);   // 운반용 필드가 밖으로 새지 않는다
 });
 
 test("없는 제품 404 — 카탈로그에서 비슷한 이름을 제안한다", async () => {
@@ -299,4 +304,23 @@ test("describe_product 404 도 유사 제품을 제안한다 — 세 경로 공�
   const res = await handleMcp(
     rpc("tools/call", { name: "describe_product", arguments: { product_id: "culture_activity_dong" } }), {}, {}, deps);
   assert.match((await res.json()).result.content[0].text, /culture_activity_by_dong/);
+});
+
+
+test("run_pattern — deps 로 위임, route 는 mcp_run_pattern", async () => {
+  const trace = {};
+  const res = await handleMcp(
+    rpc("tools/call", { name: "run_pattern", arguments: { product_id: "p", pattern_id: "top", params: { n: 5 } } }),
+    {}, trace, mkDeps());
+  const payload = JSON.parse((await res.json()).result.content[0].text);
+  assert.equal(payload.pattern_id, "top");
+  assert.equal(trace.route, "mcp_run_pattern");
+});
+
+test("run_pattern — 필수 인자 없으면 안내", async () => {
+  const res = await handleMcp(
+    rpc("tools/call", { name: "run_pattern", arguments: { product_id: "p" } }), {}, {}, mkDeps());
+  const body = await res.json();
+  assert.equal(body.result.isError, true);
+  assert.match(body.result.content[0].text, /pattern_id/);
 });

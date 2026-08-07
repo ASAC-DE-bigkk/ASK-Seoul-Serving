@@ -154,7 +154,7 @@
       <div class="card wide">
         <div class="hd">
           <h3>분야별 발행</h3>
-          <p>제품을 D1 에 올리는 시도의 결과입니다 — 성공만 세면 열화·실패가 안 보입니다</p>
+          <p>제품을 D1 에 올리는 시도의 결과입니다 — 성공만 세면 품질 주의·실패가 안 보입니다</p>
         </div>
         <div class="bd"><div class="scroll" id="pubDomains"></div></div>
       </div>
@@ -168,7 +168,7 @@
       <div class="card">
         <div class="hd">
           <h3>문제가 몰린 제품</h3>
-          <p>실패·열화가 잦은 순서입니다 — 사유는 줄에 마우스를 올리면 나옵니다</p>
+          <p>실패·품질 주의가 잦은 순서입니다 — 사유는 줄에 마우스를 올리면 나옵니다</p>
         </div>
         <div class="bd"><div class="scroll" id="pubWorst"></div></div>
       </div>
@@ -444,15 +444,15 @@ const routeKo = (r) => ROUTE_KO[r] || String(r == null ? "—" : r);
 // 여기 없는 상태는 툴팁 없이 그냥 배지만 뜬다(지어내지 않는다).
 const STATE_HELP = {
   // 파이프라인 발행
-  "성공": "제품이 D1 에 온전히 올라갔습니다.",
-  "열화": "적재 파이프라인이 '온전치 않음'으로 기록한 상태입니다 — 판정 기준은 파이프라인이 정합니다. 다만 원본·발행·D1 행수가 모두 같고 사유가 정상이면 실제로 빠진 데이터는 없습니다. 옆의 '사유'·'행수' 칸을 함께 보세요.",
-  "실패": "제품을 D1 에 올리지 못했습니다. 이전 버전이 유지됩니다.",
-  "건너뜀(기존 유지)": "새로 올릴 것이 없어 기존 발행분을 그대로 둔 것입니다 — 문제가 아닙니다.",
-  "일치": "원본·발행·D1 세 행수가 같습니다 — 발행 과정에서 빠진 데이터가 없다는 뜻입니다. 결과가 '열화'여도 이 경우 실제 손실은 없습니다.",
+  "게시 성공": "제품이 D1 에 온전히 올라갔습니다.",
+  "품질 주의": "게시는 정상인데 표본 수가 기준보다 적어 파이프라인이 신뢰도 주의를 표시한 것입니다(flag_degraded 정책) — 행은 버리지 않고 그대로 올렸습니다(원본=발행=D1). 게시 실패가 아닙니다. 옆의 '사유'·'행수' 칸을 함께 보세요.",
+  "게시 실패": "제품을 D1 에 올리지 못했습니다. 이전 버전이 유지됩니다.",
+  "기존 발행 유지": "새로 올릴 것이 없어 기존 발행분을 그대로 둔 것입니다 — 문제가 아닙니다.",
+  "일치": "원본·발행·D1 세 행수가 같습니다 — 발행 과정에서 빠진 데이터가 없다는 뜻입니다. 결과가 '품질 주의'여도 이 경우 실제 손실은 없습니다.",
   "불일치": "원본·발행·D1 행수가 서로 다릅니다 — 발행·적재 과정에서 행이 빠졌을 수 있어 확인이 필요합니다.",
   // SLO 캘린더
   "정상 갱신": "그날 예정된 수집·가공이 제때 끝났고 데이터도 받았습니다.",
-  "나중에 되살림": "한 번 실패했지만 같은 날 재시도로 되살렸습니다 — 성공률만 보면 안 보이는 열화입니다.",
+  "나중에 되살림": "한 번 실패했지만 같은 날 재시도로 되살렸습니다 — 성공률만 보면 안 보이는 불안정입니다.",
   "그날 데이터를 못 받음": "예정된 갱신이 그날 안에 성공하지 못했습니다.",
   // 실행 기록 판정
   "멈춤 후보": "마지막 기록 이후 침묵 시간이 그 DAG 의 한도(max_delay_minutes)를 넘었습니다 — 멈췄을 가능성이 있어 확인이 필요합니다.",
@@ -597,10 +597,12 @@ function fillDays(rows, days, keyOf, zero) {
 }
 
 // ── 발행·단계·소요 표기 — 요약(render)과 드릴다운이 같은 번역을 쓴다 ────────────────
-const pubPill = (o) => o === "published" ? statePill("ok", "성공")
-  : o === "degraded" ? statePill("warn", "열화")
-  : o === "failed" ? statePill("bad", "실패")
-  : o === "skipped_retained" ? statePill("dim", "건너뜀(기존 유지)")
+// #119: degraded 는 '게시 실패'가 아니라 '표본 부족(게시 정상)' 품질 표식이다(flag_degraded 정책).
+// '열화'로 표기하면 실패로 오인되므로 '품질 주의'로 바꾸고, 노란색(주의)은 그대로 둔다.
+const pubPill = (o) => o === "published" ? statePill("ok", "게시 성공")
+  : o === "degraded" ? statePill("warn", "품질 주의")
+  : o === "failed" ? statePill("bad", "게시 실패")
+  : o === "skipped_retained" ? statePill("dim", "기존 발행 유지")
   : "<span class='pill dim'>" + esc(o || "—") + "</span>";
 // 단계는 내부 값이라 사람 말로 옮긴다(화면 문구 규약). 모르는 값은 원문 그대로 둔다 —
 // 지어내는 것보다 낫고, 새 단계가 생기면 여기 추가하라는 신호가 된다.
@@ -815,8 +817,8 @@ function render(d) {
   // 발행이 깨지고 있으면 이 탭에서 먼저 보여야 한다 — 성공률만 보면 안 보이는 축이다.
   if (pTot.failed > 0 || pTot.mismatch > 0)
     N.pipeline.push(note("warn", "발행 문제 " + nf.format(pTot.failed + pTot.mismatch) + "건",
-      "실패 <b>" + nf.format(pTot.failed) + "</b> · 열화 <b>" + nf.format(pTot.degraded) +
-      "</b> · 행수 안 맞음 <b>" + nf.format(pTot.mismatch) + "</b>. " +
+      "실패 <b>" + nf.format(pTot.failed) + "</b> · 행수 안 맞음 <b>" + nf.format(pTot.mismatch) + "</b>. " +
+      (pTot.degraded ? "품질 주의 " + nf.format(pTot.degraded) + "건은 게시 정상·표본 부족이라 문제로 세지 않습니다. " : "") +
       "어느 분야에 몰렸는지는 아래 '분야별 발행'에서 봅니다."));
 
   // 섞임은 **걸렀나 안 걸렀나**로 갈린다 — 운영자가 할 일이 다르다.
@@ -1049,8 +1051,8 @@ function render(d) {
     ["발행 성공", pTot.attempts ? Math.round(pTot.published / pTot.attempts * 100) + "%" : "—",
      pTot.attempts ? nf.format(pTot.published) + "/" + nf.format(pTot.attempts) + " 시도" : "기록 없음",
      pTot.attempts && pTot.published / pTot.attempts < 0.95 ? "bad" : "good"],
-    // 열화 = 올라가긴 했는데 온전하지 않다. 실패가 아니라서 성공률에 안 잡힌다.
-    ["열화", nf.format(pTot.degraded), "올라갔지만 온전하지 않음", pTot.degraded > 0 ? "bad" : "good"],
+    // 품질 주의(#119) = 게시는 정상인데 표본이 부족한 것(flag_degraded). 실패가 아니라 노란 주의로 센다.
+    ["품질 주의", nf.format(pTot.degraded), "게시는 정상, 표본 부족", pTot.degraded > 0 ? "warn" : "good"],
     ["실패", nf.format(pTot.failed), "올리지 못함", pTot.failed > 0 ? "bad" : "good"],
     // 세 숫자가 어긋난 건 "성공"으로 기록돼 있어 더 안 보인다.
     ["행수 안 맞음", nf.format(pTot.mismatch), "원본·발행·D1 이 다름", pTot.mismatch > 0 ? "bad" : "good"],
@@ -1067,7 +1069,7 @@ function render(d) {
     { t:"제품", r:true, get:(r) => r.products },
     { t:"시도", r:true, get:(r) => nf.format(r.attempts) },
     { t:"성공", r:true, get:(r) => nf.format(r.published) },
-    { t:"열화", r:true, get:(r) => r.degraded ? "<span class='pill warn'>" + nf.format(r.degraded) + "</span>" : num(0) },
+    { t:"품질 주의", r:true, get:(r) => r.degraded ? "<span class='pill warn'>" + nf.format(r.degraded) + "</span>" : num(0) },
     { t:"실패", r:true, get:(r) => r.failed ? "<span class='pill bad'>" + nf.format(r.failed) + "</span>" : num(0) },
     { t:"건너뜀", r:true, get:(r) => num(r.skipped) },
     { t:"행수 안 맞음", r:true, get:(r) => r.row_mismatch ? "<span class='pill warn'>" + nf.format(r.row_mismatch) + "</span>" : num(0) },
@@ -1129,7 +1131,7 @@ function render(d) {
     ["성공", judged ? Math.round(rTot.ok / judged * 100) + "%" : "—",
      judged ? rTot.ok + "/" + judged + " 기록 단위 (skip 제외)" : "집계 없음",
      judged && rTot.ok / judged < 0.9 ? "bad" : "good"],
-    ["재시도로 살림", nf.format(rTot.retried), "성공률이 가리는 열화", rTot.retried > 0 ? "bad" : "good"],
+    ["재시도로 살림", nf.format(rTot.retried), "성공률이 가리는 불안정", rTot.retried > 0 ? "bad" : "good"],
     ["빈 실행", nf.format(rTot.empty), "성공인데 실측 0행 — 초록 위장", rTot.empty > 0 ? "bad" : "good"],
     ["행수 미측정", nf.format(rTot.unk), "측정 " + nf.format(rTot.obs) + "건 · 모른다 ≠ 0", ""],
     // 아래 둘은 #78 D-7 이 요구한 '적재 건수 추이'·'단계별 소요시간'의 합계다.
@@ -1202,9 +1204,9 @@ function render(d) {
           : sev === "warn" ? (c.empty + c.deg + c.retried + c.pubDeg + c.pubMis) : "";
         const tip = esc(dom) + " " + esc(md(day)) +
           (c.ev ? "&#10;실행 " + nf.format(c.ev) + " · 실패 " + c.fail + " · 빈 " + c.empty +
-            " · 재시도로 살림 " + c.retried + " · 열화 " + c.deg : "") +
+            " · 재시도로 살림 " + c.retried + " · 품질 주의 " + c.deg : "") +
           (c.pubTry ? "&#10;발행 " + nf.format(c.pubTry) + " · 실패 " + c.pubFail +
-            " · 열화 " + c.pubDeg + " · 행수 불일치 " + c.pubMis : "") +
+            " · 품질 주의 " + c.pubDeg + " · 행수 불일치 " + c.pubMis : "") +
           "&#10;누르면 이날 어떤 작업이 문제였는지 폅니다";
         const sel = DRILL && DRILL.domain === dom && DRILL.day === day ? " sel" : "";
         return "<td><span class='cell click " + sev + sel + "' data-drill='" +
@@ -1215,7 +1217,7 @@ function render(d) {
     }).join("");
     return "<table class='hm'><thead>" + head + "</thead><tbody>" + body + "</tbody></table>" +
       "<div class='cal-legend'><span><span class='pill bad'>빨강</span> 실패 — 숫자는 그날 실패 건수</span>" +
-      "<span><span class='pill warn'>노랑</span> 빈 실행·열화·재시도·행수 불일치</span>" +
+      "<span><span class='pill warn'>노랑</span> 빈 실행·품질 주의·재시도·행수 불일치</span>" +
       "<span><span class='pill ok'>초록</span> 문제 없음</span>" +
       "<span><span class='pill dim'>빈 칸</span> 기록 없음 = 관측 공백</span></div>";
   })() : emptyBox(["데이터 없음", "실행 집계·발행 대장이 채워지면 나타납니다"]);
@@ -1233,12 +1235,12 @@ function render(d) {
         const cls = a.fail > 0 ? "bad" : (a.empty > 0 || a.deg > 0) ? "warn" : "ok";
         // 칸을 늘리는 대신 title 로 얹는다. D-7 의 '단계별 소요·적재 건수'를 매트릭스 위에서 읽게 한다.
         return "<td class='r'><span class='pill " + cls + "' title='성공 " + a.ok + " · 실패 " + a.fail +
-          " · 빈 실행 " + a.empty + " · 재시도로 살림 " + a.retried + " · 열화 " + a.deg +
+          " · 빈 실행 " + a.empty + " · 재시도로 살림 " + a.retried + " · 품질 주의 " + a.deg +
           "\n소요 " + hrs(a.dur) + " · 적재 " + nf.format(a.rows) + "행" +
           (a.api ? " · API " + nf.format(a.api) + "회" : "") + "'>" + a.ok + "/" + a.ev + "</span></td>";
       }).join("") + "</tr>").join("") + "</tbody></table>" +
       "<div class='cal-legend'><span><span class='pill ok'>성공/전체</span> 그 칸의 성공 수 / 기록 수</span>" +
-      "<span><span class='pill warn'>노랑</span> 빈 실행·열화 포함</span>" +
+      "<span><span class='pill warn'>노랑</span> 빈 실행·품질 주의 포함</span>" +
       "<span><span class='pill bad'>빨강</span> 실패 포함</span>" +
       "<span><span class='pill dim'>—</span> 기록 없음 = 관측 공백</span></div>" +
       (R.load ? "<p class='hint' style='margin-top:10px'>기록 " +
@@ -1588,7 +1590,7 @@ function renderDrill(d0) {
   // '열화'는 적재 파이프라인이 매긴 라벨이라, 그 자체로는 뭐가 문제인지 안 보인다(운영 실측:
   // 열화 483건이 모두 원본=발행=D1·사유 '정상 게시'였다). 그래서 **사유**를 title 에 숨기지 않고
   // 드러내고, 세 행수가 같은지 콘솔이 직접 **'행수' 판정**을 붙여 실제 손실 여부를 바로 보이게 한다.
-  if (has(d0.publications)) out += sec("발행 점검 — '열화·실패'로 기록됐거나 행수가 어긋난 발행", table([
+  if (has(d0.publications)) out += sec("발행 점검 — '품질 주의·실패'로 기록됐거나 행수가 어긋난 발행", table([
     { t:"제품", name:true, get:(r) => esc(r.product_id) },
     { t:"결과", get:(r) => pubPill(r.outcome) },
     { t:"사유", get:(r) => esc(r.reason || "—"), cls:"desc" },
@@ -1612,7 +1614,7 @@ function renderDrill(d0) {
     { t:"시각", r:true, get:(r) => tOf(r.observed_at) },
   ], d0.empty_runs, ""));
 
-  if (has(d0.retried)) out += sec("재시도 끝에 성공 — 성공률이 가리는 열화", table([
+  if (has(d0.retried)) out += sec("재시도 끝에 성공 — 성공률이 가리는 불안정", table([
     { t:"dag · task", name:true, get:(r) => esc((r.dag_id || "—") + " · " + (r.task_id || "—")) },
     { t:"단계", get:(r) => r.layer ? esc(layerKo(r.layer)) : "<span class='pill dim'>미상</span>" },
     { t:"재시도", r:true, get:(r) => "<span class='pill warn'>" + r.retry_count + "회</span>" },
@@ -1631,7 +1633,7 @@ function renderDrill(d0) {
     { t:"실행", r:true, get:(r) => nf.format(r.event_count) },
     { t:"성공", r:true, get:(r) => nf.format(r.success_count) },
     { t:"실패", r:true, get:(r) => r.failed_count ? "<span class='pill bad'>" + r.failed_count + "</span>" : num(0) },
-    { t:"열화", r:true, get:(r) => r.degraded_count ? "<span class='pill warn'>" + r.degraded_count + "</span>" : num(0) },
+    { t:"품질 주의", r:true, get:(r) => r.degraded_count ? "<span class='pill warn'>" + r.degraded_count + "</span>" : num(0) },
     { t:"재시도로 살림", r:true, get:(r) => num(r.retried_run_count) },
     { t:"빈 실행", r:true, get:(r) => num(r.empty_run_count) },
     { t:"소요", r:true, get:(r) => hrs(r.duration_s_sum || 0) },

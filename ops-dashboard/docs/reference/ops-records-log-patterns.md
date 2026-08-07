@@ -63,7 +63,7 @@ vs `rows_unknown_count`(모른다 ≠ 0)가 관측 신뢰도를 같이 싣는다
 | # | 질문 | 축 | 출처 |
 |---|---|---|---|
 | I-1 | 어제(이 기간) 파이프라인이 잘 돌았나 | 날짜×도메인×단계 성공/실패 | `_ops_daily_metric` |
-| I-2 | 성공률 뒤에 숨은 열화 — **재시도로 살아난 실행**이 얼마나 되나 | `retried_run_count` | `_ops_daily_metric` |
+| I-2 | 성공률 뒤에 숨은 **불안정** — **재시도로 살아난 실행**이 얼마나 되나 (화면 문구도 '불안정' — 발행 원장의 '품질 주의'와 다른 것이다, #119) | `retried_run_count` | `_ops_daily_metric` |
 | I-3 | **빈 실행(초록 위장 일반화)** — 성공인데 0행인 실행 | `empty_run_count` · `status='success' AND row_count=0` | 두 표 |
 | I-4 | **모른다 ≠ 0** — 행수를 못 잰 기록이 얼마나 되나, 왜 못 쟀나 | `rows_unknown_count` · `rows_source` | 두 표 |
 | I-5 | **멈춘 파이프라인** — 기대 주기를 넘겨 조용한 DAG | expectation × state + `max_delay_minutes` | 기대치·상태 표 |

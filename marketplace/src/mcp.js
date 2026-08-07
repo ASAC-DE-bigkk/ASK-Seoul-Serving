@@ -5,8 +5,8 @@
 // product_id 로 통일하고, 물리 테이블명 해석은 shared 해석기(decision/0003)에 맡긴다.
 // stateless — 세션 상태 없음(과거 SSE 재접속 폭주 위험 회피).
 //
-// P0 툴(5): list_products · describe_product · preview_product · query_product · check_quota.
-// run_pattern 은 서버 실행계약 확정 후 P1.
+// 툴(6): list_products · describe_product · preview_product · query_product · run_pattern ·
+// check_quota. run_pattern 은 #118 실행 계약(2026-08-07 확정)으로 P1 에서 승격.
 
 import { SKILL_BUNDLE_ID, SKILL_PRODUCT_IDS } from "./skill.js";
 import { burstProblem, normalizeIntent, ATTRIBUTION } from "./shared.js";
@@ -67,6 +67,25 @@ export const TOOLS = [
         },
       },
       required: ["product_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "run_pattern",
+    description:
+      "검증된 질의 패턴 실행(권장 경로) — describe_product 의 usage_patterns 에서 pattern_id 를 고르고, SQL 의 :파라미터 값을 params 로 넘긴다. 도메인 오너가 검증한 SQL 만 서버가 실행하므로 필터를 직접 조립하는 것보다 정확하다. 쿼터 1회 차감, 응답의 insight_sample_ko(해석 예시)를 참고해 답변을 구성할 것.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        product_id: { type: "string" },
+        pattern_id: { type: "string", description: "describe_product 응답 usage_patterns 의 pattern_id" },
+        params: {
+          type: "object",
+          description: "패턴 SQL 의 :이름 파라미터 값 — 선언된 이름만 받는다(모자라면/넘치면 400 에 목록 안내)",
+          additionalProperties: { type: ["string", "number"] },
+        },
+      },
+      required: ["product_id", "pattern_id"],
       additionalProperties: false,
     },
   },
@@ -196,28 +215,41 @@ async function callTool(name, args, ctx) {
     if (args.to) params.set("to", String(args.to));
     if (args.limit) params.set("limit", String(args.limit));
     if (args.cursor) params.set("cursor", String(args.cursor));
-    const res = await deps.handleData(env, args.product_id, params, keyRow, trace);
+    const res = await deps.handleData(env, args.product_id, params, keyRow, trace, { includeMeta: true });
     if (res.status === 404) return notFoundWithSuggestions(env, deps, args.product_id, trace);
     if (res.status >= 400) return toToolResult(res, trace);
     const body = await res.json();
     // 답변 가드레일 — 신선도·출처·주의를 결과에 동봉한다. AI 가 "언제 기준·어디 출처"를
-    // 답변에 실을 수 있어야 오래된 데이터를 현재로 단언하는 환각이 줄어든다. 조회 자체는
-    // 성공했으므로 여기서의 실패는 삼킨다(가드레일은 덤이지 조회의 조건이 아니다).
-    try {
-      const meta = await deps.lookupProduct(env, args.product_id, "description, freshness, serving_status");
-      if (meta) {
-        body.data_context = {
-          freshness: meta.freshness ?? null,          // 이 게시본의 원천 기준 시각 — "지금"이 아니다
-          serving_status: meta.serving_status ?? null,
-          ...(meta.serving_status && meta.serving_status !== "published"
-            ? { warning: `serving_status='${meta.serving_status}' — 원천 수집 지연 등으로 최신성이 보장되지 않는다` }
-            : {}),
-          attribution: ATTRIBUTION,  // 정본 한 벌(shared) — "답변에 반영" 지시는 툴 description 몫
-          caution: meta.description ?? null,          // 제품 주의사항("공식 특보 아님" 등)이 여기 있다
-        };
-      }
-    } catch { /* 메타 실패가 조회 성공을 가리면 안 된다 */ }
+    // 답변에 실을 수 있어야 오래된 데이터를 현재로 단언하는 환각이 줄어든다.
+    // 메타는 handleData 가 같은 행에서 이미 읽은 것을 재사용한다(#118 리뷰 ② — 핫패스에
+    // D1 왕복을 안 늘린다). product_meta 는 운반용이라 밖으로는 data_context 로만 나간다.
+    const meta = body.product_meta;
+    delete body.product_meta;
+    if (meta) {
+      body.data_context = {
+        freshness: meta.freshness ?? null,          // 이 게시본의 원천 기준 시각 — "지금"이 아니다
+        serving_status: meta.serving_status ?? null,
+        ...(meta.serving_status && meta.serving_status !== "published"
+          ? { warning: `serving_status='${meta.serving_status}' — 원천 수집 지연 등으로 최신성이 보장되지 않는다` }
+          : {}),
+        attribution: ATTRIBUTION,  // 정본 한 벌(shared) — "답변에 반영" 지시는 툴 description 몫
+        caution: meta.description ?? null,          // 제품 주의사항("공식 특보 아님" 등)이 여기 있다
+      };
+    }
     return okJson(body);
+  }
+  if (name === "run_pattern") {
+    if (!args.product_id || !args.pattern_id) return errText("product_id 와 pattern_id 가 필요합니다.");
+    if (args.intent) trace.intent = normalizeIntent(args.intent) ?? trace.intent ?? null;
+    const res = await deps.handleRunPattern(env, args.product_id, args.pattern_id, args.params || {}, keyRow, trace);
+    if (res.status === 404) {
+      // 제품 오타일 수도, 패턴 오타일 수도 있다 — 본문 detail 이 구분해 주므로 그대로 전달하되
+      // 제품 쪽이면 유사 이름 제안이 붙는다.
+      const body = await res.clone().json().catch(() => null);
+      if (body && /서빙 카탈로그에 없다/.test(body.detail || "")) return notFoundWithSuggestions(env, deps, args.product_id, trace);
+      return toToolResult(res, trace);
+    }
+    return toToolResult(res, trace);
   }
   return errText(`알 수 없는 tool: ${name}`);
 }
