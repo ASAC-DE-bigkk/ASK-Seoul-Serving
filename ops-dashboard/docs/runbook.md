@@ -98,7 +98,7 @@ curl -s -H "$AUTH" "$BASE/api/trace?request_id=$RID" | jq '{found, rows}'
 
 # ⑥ route 계약 — 무엇을 '데이터 서빙'으로 셌고, 무엇을 못 셌나 (decision/0014)
 curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{serve: .meta.serve_routes, mcp: .meta.mcp}'
-#   serve = ["data","skill_data","mcp_query_product"]  ← 질의 조건과 같은 배열에서 나온다
+#   serve = ["data","skill_data","mcp_query_product","mcp_run_pattern"]  ← 질의 조건과 같은 배열에서 나온다
 #   mcp.unsplit    > 0 이면 화면에 "거부된 AI 호출은 못 가름" 안내가 뜬다
 #   mcp.pre_split  = true 면 창 앞부분이 '가르기 전' 기록이다(기간을 좁히면 사라진다)
 
