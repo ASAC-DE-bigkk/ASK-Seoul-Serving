@@ -426,6 +426,9 @@ const ROUTE_KO = {
   mcp:"AI 연결 준비",
   mcp_list_products:"AI 목록 조회", mcp_describe_product:"AI 제품 안내",
   mcp_preview_product:"AI 미리보기", mcp_query_product:"AI 데이터 조회",
+  // 검증된 질의 패턴 실행(Serving#118 · PR#132) — 데이터를 돌려주고 쿼터를 차감하므로
+  // `mcp_query_product` 와 같은 부류다. 문구도 "무엇을 했나" 단위로 맞춘다(§1).
+  mcp_run_pattern:"AI 패턴 조회",
   mcp_check_quota:"AI 사용량 조회",
   // Google OAuth 발급(#110 ②) — 배포 환경에서는 `keys` 대신 이 둘이 뜬다
   auth_start:"로그인 시작", auth_callback:"로그인 완료·키 발급",
@@ -506,13 +509,60 @@ const domLabel = (d) => DOM_LABEL[d] || d;
 let DOMSCOPE = "";
 // 제품 식별자(product_id·table_name)의 앞부분이 도메인이다(commerce_age_band → commerce).
 // 서버 DOMAIN_EXPR 과 같은 규약 — 파이프라인이 그렇게 발행한다.
-const domOf = (v) => (v ? String(v).split("_")[0] : "");
+// 🔴 **밑줄이 없으면 분야가 아니다.** `split("_")[0]` 만 쓰면 밑줄 없는 값이 통째로 '분야'가
+// 된다 — 실제로 K-Skill 번들(`seoul-urban-analytics`)과 스모크 테스트 값
+// (`not-a-v1-product`)이 **분야 드롭다운에 항목으로 떴다**(#162). 서버 `GW_DOM` 과 같은 규약
+// 으로 맞춘다: 접두사가 있을 때만 분야, 아니면 빈 값(= 분야 미상)이다.
+const domOf = (v) => {
+  const s = v ? String(v) : "";
+  const i = s.indexOf("_");
+  return i > 0 ? s.slice(0, i) : "";
+};
 // 배열에서 현재 스코프에 해당하는 행만 남긴다. keyFn 은 그 행의 도메인을 뽑는 함수.
 // 스코프가 비면(전체) 원본을 그대로 돌려준다 — 필터를 거는 비용조차 없다.
 const scoped = (rows, keyFn) => (!DOMSCOPE || !Array.isArray(rows))
   ? rows : rows.filter((r) => keyFn(r) === DOMSCOPE);
 const byDomain = (rows) => scoped(rows, (r) => r.domain);
 const byProduct = (rows) => scoped(rows, (r) => domOf(r.product_id || r.table_name || r.product_key));
+
+// ── 서빙 지표의 분야 축 (#156) ───────────────────────────────────────────────────
+//
+// 서버가 `domain` 을 실어서 준다. 세 값뿐이다:
+//   '<분야>'  그 분야 · null  **분야 미상** · '*'  전 분야 합계
+//
+// '분야 미상'은 제품에 안 묶이는 요청이다 — API 목록·인증·키 발급처럼 애초에 제품이 없는
+// 라우트, 그리고 접두사 없는 스킬 키(`seoul-urban-analytics`). **아무 분야에도 안 끼운다.**
+// 끼우면 그 분야 수치가 부풀고, 빼고 말 안 하면 분야 합이 전체와 안 맞는데 화면은 맞는 척한다.
+//
+// 🔴 예전에는 이 축이 아예 없었다. 날짜별·요청 종류·이용자 카드는 **분야를 바꿔도 그대로**였고,
+//    화면은 그걸 "분야 축이 없는 지표"라고 적었다 — 축이 없던 게 아니라 **안 실었던 것**이다.
+//    실패 목록은 더 나빴다: `table_name` 접두사로 걸렀는데 그건 등급이라
+//    (`gold_transit_…` → 'gold') 어느 분야를 골라도 안 걸렸다.
+const servRows = (rows) => (rows || []).filter((r) =>
+  DOMSCOPE ? r.domain === DOMSCOPE : r.domain !== "*");
+// 더할 수 없는 값(DISTINCT 세기)이 있는 목록은 서버가 '*' 합계 행을 따로 준다.
+const servStar = (rows) => (rows || []).filter((r) => r.domain === (DOMSCOPE || "*"));
+// 지금 스코프의 합계 한 줄. 목록을 더해서 만들지 않는다 — 목록은 상위 N 이라 합이 전체가 아니다.
+const servTotal = (rows) => (rows || []).find((r) => r.domain === (DOMSCOPE || "*"))
+  || { calls: 0, errors: 0, users: 0 };
+
+// 분야별로 쪼개진 행을 하나로 합친다(전체 화면). 더할 수 있는 값만 더하고, 평균은
+// 건수로 가중한다 — 평균의 평균을 내면 적게 불린 쪽이 과대 대표된다.
+function mergeRows(rows, keyOf, sumKeys, baseOf, avgKey) {
+  const m = new Map();
+  for (const r of rows) {
+    const k = keyOf(r);
+    if (!m.has(k)) m.set(k, { ...baseOf(r), ...Object.fromEntries(sumKeys.map((f) => [f, 0])), _w: 0 });
+    const t = m.get(k);
+    for (const f of sumKeys) t[f] += (r[f] || 0);
+    if (avgKey && r[avgKey] != null) t._w += r[avgKey] * (r.calls || 0);
+  }
+  for (const t of m.values()) {
+    if (avgKey) t[avgKey] = t.calls ? Math.round(t._w / t.calls * 10) / 10 : null;
+    delete t._w;
+  }
+  return [...m.values()];
+}
 
 // ── 빈 칸 표기 ────────────────────────────────────────────────────────────────
 // **짧게 쓴다.** 사유를 문단으로 적으면 표보다 설명이 길어져 화면이 안내문이 되고,
@@ -681,9 +731,25 @@ function syncScopeBar(domains) {
   updateScopeVisible();
 }
 function updateScopeVisible() {
-  const pane = ($("tab-pipeline") && parseHash().pane) || "pipeline";
+  // 🔴 **주소가 아니라 지금 열린 탭을 본다.** `showTab` 이 이 함수를 부른 뒤에 주소를 쓰므로,
+  //    여기서 주소를 읽으면 **직전 탭**이 잡힌다 — 스코프바가 한 탭씩 밀려서 '이용 행동'·
+  //    '이용자 키'에는 뜨고 'API 사용량'에는 안 뜨는, 정확히 반대인 상태였다.
+  //    키 탭은 아예 주소를 안 써서(showTab 의 early return) 더 어긋났다.
+  //    `SCOPED_PANES` 설정이 되돌려진 게 아니라 **이 한 줄이 그 설정을 무력화하고 있었다.**
+  const pane = activePane() || parseHash().pane || PANES[0];
   $("scopeBar").hidden = !SCOPED_PANES.includes(pane);
 }
+
+// 지금 열려 있는 탭. **주소가 아니라 화면 상태가 정본이다.**
+//
+// 자동 새로고침(30초)은 데이터만 갱신해야 하고 사람을 이동시키면 안 되는데, `render()` 가
+// 끝에서 주소를 읽어 탭을 다시 고르고 있었다. 대부분의 탭은 `showTab` 이 주소를 같이
+// 갱신하니 값이 같아 표가 안 났는데, **'이용자 키' 탭만 주소를 안 쓴다**(아래 early return —
+// 조건은 `syncKeyHash()` 가 관리한다). 그래서 키 탭을 **클릭으로** 열면 주소가 이전 탭
+// (`#apis` 등)에 머물렀고, 30초 뒤 새로고침이 그 주소대로 사람을 API 사용량 탭으로
+// 끌고 갔다. 딥링크(`#keys?filter=…`)로 들어온 경우엔 주소가 맞아서 안 났다 — 클릭으로
+// 연 경우에만 났고, 그래서 재현 조건이 헷갈렸다.
+const activePane = () => PANES.find((p) => $("tab-" + p).getAttribute("aria-selected") === "true");
 
 function showTab(name) {
   if (!PANES.includes(name)) name = PANES[0];
@@ -714,13 +780,19 @@ function showTab(name) {
   if (decodeURIComponent(location.hash.slice(1)) !== want)
     history.replaceState(null, "", "#" + encodeURI(want).replace("%3F", "?").replace("%3D", "="));
 }
+// 사람이 탭을 고른 경우엔 키 탭도 주소를 맞춘다 — 새로고침·링크 공유가 유지되고,
+// 주소와 화면이 어긋난 채로 남지 않는다. **`showTab` 안에서 하면 안 된다**: 주소로
+// 들어온 경우(`hashchange`)엔 `applyKeyHash` 보다 먼저 돌아 아직 옛 `KEYQ` 를 주소에
+// 써 버리고, 그러면 필터를 걸고 넘어온 링크가 그 즉시 '전체'로 되돌아간다(위 주석).
+// 클릭·키보드는 사람이 지금 보고 있는 조건이 곧 `KEYQ` 라 그 위험이 없다.
+const gotoTab = (p) => { showTab(p); if (p === "keys") syncKeyHash(); };
 for (const p of PANES) {
-  $("tab-" + p).addEventListener("click", () => showTab(p));
+  $("tab-" + p).addEventListener("click", () => gotoTab(p));
   $("tab-" + p).addEventListener("keydown", (e) => {   // 좌우 화살표로 탭 이동(WAI-ARIA 관행)
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
     e.preventDefault();
     const next = PANES[(PANES.indexOf(p) + (e.key === "ArrowRight" ? 1 : PANES.length - 1)) % PANES.length];
-    showTab(next); $("tab-" + next).focus();
+    gotoTab(next); $("tab-" + next).focus();
   });
 }
 addEventListener("hashchange", () => {
@@ -741,7 +813,11 @@ function setScope(dom) {
   if (dom === DOMSCOPE) return;
   DOMSCOPE = dom;
   if (LAST_DATA) render(LAST_DATA);   // render 가 끝에서 showTab → 주소까지 갱신한다
-  if (USE) renderApiList();           // apis 목록은 render 밖(USE)이라 여기서 따로 스코프 반영(#3)
+  // 🔴 API 사용량 탭은 `render()` 밖(`USE`)이라 여기서 따로 다시 그린다. 예전에는
+  //    `renderApiList()` 만 불러서 **목록만 걸리고 KPI·분야별 비중·분야 선택은 전체 그대로**
+  //    였다 — 스코프를 바꿔도 화면 대부분이 안 바뀌니 "안 먹는다"로 읽혔다.
+  //    탭 하나는 통째로 같이 움직여야 한다.
+  if (USE) renderApis(USE);
 }
 $("domScope").addEventListener("change", (e) => setScope(e.target.value));
 $("scopeClear").addEventListener("click", () => setScope(""));
@@ -861,11 +937,21 @@ function render(d) {
   // 조용히 전체를 보여주면 "이 분야 것만 보는 줄" 알고 오독한다.
   if (DOMSCOPE) {
     const dl = "<b>" + esc(domLabel(DOMSCOPE)) + "</b>";
+    // 이 탭은 이제 **여섯 카드 전부** 좁혀진다(#156). 예전 문구는 "요청 종류·날짜별 요청·
+    // 이용자 재방문은 분야 축이 없다"고 했는데 사실이 아니었다 — 축은 로그에 있었고
+    // 서버가 안 실었을 뿐이다. 대신 **제품에 안 묶이는 요청**이 빠진다는 것을 밝힌다.
+    const unk = (d.serving.totals || []).find((r) => r.domain === null);
     N.serving.push(note("info", dl + " 분야만",
-      "제품·실패·0건 응답은 이 분야로 좁혔습니다. 다만 <b>요청 종류·날짜별 요청·이용자 재방문</b>은 " +
-      "분야 축이 없는 지표라 전체 그대로입니다."));
+      "KPI·날짜별 요청·요청 종류·제품·실패·0건 응답·이용자까지 <b>이 화면 전부</b>를 이 분야로 좁혔습니다.<br>" +
+      "다만 <b>제품에 안 묶이는 요청</b>은 어느 분야에도 안 들어갑니다 — API 목록·인증·키 발급처럼 " +
+      "애초에 제품이 없는 요청입니다" +
+      (unk && unk.calls ? " (이 기간 <b>" + nf.format(unk.calls) + "건</b>)" : "") +
+      ". 그래서 <b>분야별 요청을 다 더해도 '전체'보다 작습니다.</b> 빠진 게 아니라 셀 분야가 없는 것입니다.<br>" +
+      "이용자는 여러 분야를 쓰므로 <b>여기 요청 수는 이 분야에 보낸 것만</b>입니다."));
     N.usage.push(note("info", dl + " 분야만", "AI 수요는 이 분야로 좁혔습니다. 여정·손님 구성·추적은 분야 축이 없어 전체입니다."));
-    N.apis.push(note("info", dl + " 분야만", "이 탭은 아래 '분야별 비중'과 목록 필터로 이미 분야를 고를 수 있어, 스코프와 별개로 봅니다."));
+    N.apis.push(note("info", dl + " 분야만",
+      "KPI·분야별 비중·API 목록까지 <b>이 화면 전부</b>를 이 분야로 좁혔습니다. " +
+      "카드 안의 '분야 선택'도 같은 분야로 맞춰집니다 — 두 곳이 서로 다른 말을 하지 않게."));
     N.keys.push(note("info", "분야 스코프 없음", "이용자 키는 분야 축이 없습니다 — 스코프와 무관하게 전체 키를 보여줍니다."));
   }
 
@@ -1365,20 +1451,37 @@ function render(d) {
   ], R.environments, "데이터 없음");
 
   // ── 서빙
-  // 도메인 축이 있는 것(제품·실패·0건)만 스코프를 건다(#3). routes·daily·keys 는 분야
-  // 무관(요청 종류·날짜·이용자)이라 전체를 유지한다 — 그 사실을 스코프 배너가 밝힌다.
+  // **여섯 카드 전부 스코프를 건다**(#156). 예전에는 제품·실패·0건 셋만 걸고 나머지는
+  // "분야 축이 없는 지표"라며 전체를 뒀는데, 축이 없던 게 아니라 서버가 **안 실었던 것**이다.
+  // 이제 서버가 `domain` 을 실어 주므로 화면은 버킷을 고르기만 한다(servRows/servStar).
   const s0 = d.serving;
-  const s = { ...s0, products: byProduct(s0.products),
-              failures: byProduct(s0.failures), empty: byProduct(s0.empty) };
-  const calls = s.routes.reduce((a, r) => a + r.calls, 0);
-  const errs = s.routes.reduce((a, r) => a + (r.errors || 0), 0);
+  const scopeLabel = DOMSCOPE ? domLabel(DOMSCOPE) : "전체";
+  const s = {
+    ...s0,
+    // 하나의 행이 한 분야에 속하는 목록 — 고르고, 보여줄 만큼만 자른다.
+    // 서버가 **분야마다** 상위 N 을 뽑아 주므로(topPerDomain) 잘라도 그 분야의 진짜 상위다.
+    products: servRows(s0.products).sort((a, b) => b.calls - a.calls || b.previews - a.previews).slice(0, 12),
+    failures: servRows(s0.failures).sort((a, b) => b.hits - a.hits).slice(0, 10),
+    empty: servRows(s0.empty).sort((a, b) => b.empty_responses - a.empty_responses).slice(0, 10),
+    keys: servStar(s0.keys).sort((a, b) => b.calls - a.calls).slice(0, 10),
+    // 날짜·요청 종류는 분야별로 쪼개져 오므로 전체 화면에선 합친다(더할 수 있는 값들이다).
+    daily: mergeRows(servRows(s0.daily), (r) => r.day, ["calls", "errors"], (r) => ({ day: r.day })),
+    routes: mergeRows(servRows(s0.routes), (r) => r.route, ["calls", "errors"],
+                      (r) => ({ route: r.route }), "avg_ms"),
+  };
+  // 🔴 KPI 는 **목록을 더해서 만들지 않는다.** 목록은 상위 N 이라 합이 전체가 아니고
+  //    ('사용 중인 이용자'는 `keys` 목록 길이를 세는 바람에 **10에서 멈춰 있었다**),
+  //    예전에는 전체값(routes)과 분야값(empty)이 한 줄에 섞여 있었다. 서버 합계를 쓴다.
+  const T = servTotal(s0.totals);
+  const calls = T.calls, errs = T.errors || 0;
   const emptyN = s.empty.reduce((a, r) => a + r.empty_responses, 0);
   const errPct = calls ? errs / calls * 100 : 0;
+  const kSuffix = DOMSCOPE ? " · " + scopeLabel : "";
   kpis("servKpis", [
-    ["전체 요청", nf.format(calls), "최근 " + d.window_days + "일 합계", ""],
-    ["실패율", errPct.toFixed(1) + "%", errs + "건이 답을 받지 못함", errPct >= 5 ? "bad" : ""],
-    ["결과 0건", nf.format(emptyN), "오류는 아니나 보여줄 게 없던 요청", emptyN > 0 ? "bad" : ""],
-    ["사용 중인 이용자", nf.format(s.keys.length), "이 기간에 요청을 보낸 키 수", ""],
+    ["전체 요청", nf.format(calls), "최근 " + d.window_days + "일 합계" + kSuffix, ""],
+    ["실패율", errPct.toFixed(1) + "%", errs + "건이 답을 받지 못함" + kSuffix, errPct >= 5 ? "bad" : ""],
+    ["결과 0건", nf.format(emptyN), "오류는 아니나 보여줄 게 없던 요청" + kSuffix, emptyN > 0 ? "bad" : ""],
+    ["사용 중인 이용자", nf.format(T.users || 0), "이 기간에 요청을 보낸 키 수" + kSuffix, ""],
   ]);
 
   // 창 전체를 칸으로 깐다 — 빈 날이 보여야 "이 기간에 거의 안 왔다"가 읽힌다
@@ -1535,10 +1638,17 @@ function render(d) {
   $("dot-serving").className = "dot " + (calls ? (servBad ? "bad" : "ok") : "");
   // 이용 행동은 아직 경고 규칙이 없다(정보 탭) — 데이터 유무만 알린다
   $("dot-usage").className = "dot " + (uTotal || (f && f.issued) ? "ok" : "");
-  // 🔴 여기서 `location.hash.slice(1)` 을 쓰면 안 된다. `#apis/d1_age_band` 는 그대로
-  //    "apis/d1_age_band" 가 되어 PANES 에 없고, showTab 이 첫 탭으로 되돌린다 —
-  //    **30초 자동 새로고침마다 보던 화면에서 튕겨 나갔다.** pane 만 떼서 넘긴다.
-  showTab(parseHash().pane || PANES[0]);   // 알림 칩 가시성도 여기서 맞춰진다
+  // 🔴 **여기서 탭을 다시 고르지 않는다 — 지금 열린 탭을 그대로 다시 적용할 뿐이다.**
+  //    `showTab` 을 부르는 이유는 이동이 아니라 **알림 칩 가시성**이다(배너를 render 가
+  //    새로 만들므로 자기 탭 것만 남기는 처리를 다시 걸어야 한다).
+  //
+  //    예전에는 주소에서 탭을 읽었는데(`parseHash().pane`), 그러면 자동 새로고침이
+  //    **사람을 옮긴다.** 키 탭은 주소를 안 쓰기 때문에(showTab 의 early return) 클릭으로
+  //    열면 주소가 이전 탭에 머물고, 30초 뒤 그 주소대로 끌려갔다. 화면 상태가 정본이다.
+  //
+  //    딥링크(`#keys`·`#apis/<이름>`)는 첫 그리기 **전에** 부트에서 이미 반영된다(맨 아래).
+  //    `activePane()` 이 비는 경우는 없지만, 있더라도 주소 → 첫 탭 순으로 물러난다.
+  showTab(activePane() || parseHash().pane || PANES[0]);
 }
 
 // 표 하나하나의 상태를 지표로 낸다. **읽힘 / 구조 다름 / 없음** 세 갈래로 가르는 게 핵심 —
@@ -1651,18 +1761,29 @@ function renderDrill(d0) {
   el.innerHTML = "<div class='drill'>" + out + "</div>";
 }
 
+// 닫는 길은 **한 곳**이다 — 칸을 다시 누르든 '닫기'를 누르든 같은 함수를 지난다.
+// 두 벌로 두면 한쪽만 고쳐져 선택 표시(`sel`)가 남는 식으로 어긋난다.
+function closeDrill() {
+  DRILL = null;
+  $("runsDrillWrap").hidden = true;
+  for (const el of document.querySelectorAll("#runsTrend .cell.sel")) el.classList.remove("sel");
+}
+
 // 히트맵은 매 렌더마다 innerHTML 로 다시 그려진다 — 리스너는 **바깥 컨테이너에 한 번만** 단다.
 $("runsTrend").addEventListener("click", (e) => {
   const t = e.target.closest("[data-drill]");
   if (!t) return;
   const [dom, day] = t.dataset.drill.split("|");
+  // 🔴 **연 것을 다시 누르면 닫는다**(§5 토글 규약). 예전에는 같은 칸을 다시 눌러도 아무
+  //    일도 안 일어나 보였다 — 실제로는 같은 내용을 **다시 받아** 그리고 있었다(불필요한
+  //    왕복). 사람은 "닫으려고" 누르는데 화면이 안 바뀌니 고장으로 읽힌다.
+  //    자동 새로고침은 이 경로로 안 온다(`DRILL` 은 선택 표시용) — silent 구분이 필요 없다.
+  if (DRILL && DRILL.domain === dom && DRILL.day === day) { closeDrill(); return; }
   openDrill(dom, day);
 });
 $("runsDrill").addEventListener("click", (e) => {
   if (!e.target.closest("[data-drill-close]")) return;
-  DRILL = null;
-  $("runsDrillWrap").hidden = true;
-  for (const el of document.querySelectorAll("#runsTrend .cell.sel")) el.classList.remove("sel");
+  closeDrill();
 });
 
 function renderSources(rows) {
@@ -1692,6 +1813,9 @@ let USE = null;             // 서버 응답 원본
 // 주소로 바로 들어온 경우(#apis/<API>)를 **여기서** 잡는다. showTab 이 loadApis 보다 먼저
 // 돌면서 해시를 정규화하므로, 그 전에 값을 확보해 두지 않으면 딥링크가 지워진다.
 let DETAIL_OPEN = parseHash().pane === "apis" ? parseHash().api : null;
+// 카드 안 '분야 선택'이 **스코프가 넣어 준 값인지, 사람이 고른 값인지**. 스코프가 풀릴 때
+// 돌려줄지를 이걸로 가른다 — 없으면 스코프를 푼 뒤에도 그 카드만 한 분야에 남는다.
+let PICK_BY_SCOPE = false;
 
 // ── 제품의 사람 이름 (ASAC-DAG#706) ──────────────────────────────────────────────
 //
@@ -1725,21 +1849,29 @@ const apiHay = (a) => (a.name + " " + (a.product_id || "") + " " + (a.descriptio
 
 function renderApis(u) {
   USE = u;
-  const totalCalls = u.domains.reduce((a, r) => a + r.calls, 0);
-  const usedApis = u.apis.filter((a) => a.calls > 0).length;
-  const errs = u.domains.reduce((a, r) => a + r.errors, 0);
+  // 🔴 **이 탭도 '보는 분야'를 탄다.** 예전에는 목록(`renderApiList`)만 걸리고 KPI·분야별
+  //    비중·분야 선택은 전체 그대로였다 — 스코프를 걸어도 **화면 대부분이 안 바뀌어**
+  //    "고장났나"로 읽혔다. 스코프를 노출했으면(`SCOPED_PANES`) **화면 전부가 따라야 한다.**
+  //    한 화면에서 어떤 칸은 걸리고 어떤 칸은 안 걸리는 게 제일 나쁘다.
+  const uDomains = DOMSCOPE ? u.domains.filter((r) => r.domain === DOMSCOPE) : u.domains;
+  const uApis = DOMSCOPE ? u.apis.filter((a) => a.domain === DOMSCOPE) : u.apis;
+  const scopeSuffix = DOMSCOPE ? " · " + domLabel(DOMSCOPE) : "";
+
+  const totalCalls = uDomains.reduce((a, r) => a + r.calls, 0);
+  const usedApis = uApis.filter((a) => a.calls > 0).length;
+  const errs = uDomains.reduce((a, r) => a + r.errors, 0);
   kpis("useKpis", [
-    ["등록된 API", nf.format(u.apis.length), "외부에 열려 있는 전체", ""],
-    ["실제 쓰인 API", usedApis + " / " + u.apis.length,
-     "최근 " + u.window_days + "일 기준", usedApis === 0 ? "bad" : ""],
-    ["전체 요청", nf.format(totalCalls), "API 조회 요청만 (목록·사용량 조회 제외)", ""],
-    ["실패", nf.format(errs), "답을 받지 못한 요청", errs > 0 ? "bad" : ""],
+    ["등록된 API", nf.format(uApis.length), "외부에 열려 있는 전체" + scopeSuffix, ""],
+    ["실제 쓰인 API", usedApis + " / " + uApis.length,
+     "최근 " + u.window_days + "일 기준" + scopeSuffix, usedApis === 0 ? "bad" : ""],
+    ["전체 요청", nf.format(totalCalls), "API 조회 요청만 (목록·사용량 조회 제외)" + scopeSuffix, ""],
+    ["실패", nf.format(errs), "답을 받지 못한 요청" + scopeSuffix, errs > 0 ? "bad" : ""],
   ]);
 
   // 분야별 비중 — 가로 막대. 요청이 0 인 분야도 남겨 둔다("안 쓰인다"가 정보다)
-  const max = Math.max(1, ...u.domains.map((r) => r.calls));
-  $("domShare").innerHTML = u.domains.length
-    ? "<div class='share'>" + u.domains.map((r) => {
+  const max = Math.max(1, ...uDomains.map((r) => r.calls));
+  $("domShare").innerHTML = uDomains.length
+    ? "<div class='share'>" + uDomains.map((r) => {
         const pct = totalCalls ? (r.calls / totalCalls * 100) : 0;
         return "<div class='row'><div class='nm'>" + esc(domLabel(r.domain)) +
           "<small>API " + r.apis_used + "/" + r.api_count + "개 사용</small></div>" +
@@ -1751,13 +1883,22 @@ function renderApis(u) {
       "분야는 제품 이름 앞부분으로 나뉩니다. API 목록·내 사용량처럼 특정 데이터에 속하지 않는 요청은 여기 포함되지 않습니다.</p>"
     : emptyBox("읽지 못함");
 
-  // 분야 선택 드롭다운 두 개(비중 카드 옆 · 목록 필터) — 값은 서로 독립이다
-  const opts = (all) => (all ? "<option value=''>전체 분야</option>" : "") +
-    u.domains.map((r) => "<option value='" + esc(r.domain) + "'>" + esc(domLabel(r.domain)) +
+  // 분야 선택 드롭다운 — **'전체 통합'을 맨 위에 둔다.** 예전에는 분야만 나열해서
+  // "전체로 되돌리는 길"이 없었다. 고른 뒤 되돌릴 수 없는 선택지는 함정이다.
+  // 목록은 지금 스코프 안에서만 뽑는다 — 스코프가 걸렸는데 그 밖 분야를 고를 수 있으면
+  // 화면 두 곳이 서로 다른 말을 한다.
+  const opts = () => "<option value=''>전체 통합</option>" +
+    uDomains.map((r) => "<option value='" + esc(r.domain) + "'>" + esc(domLabel(r.domain)) +
       " (" + r.calls + ")</option>").join("");
   const keepPick = $("domPick").value;
-  $("domPick").innerHTML = opts(false);
-  $("domPick").value = keepPick || (u.domains[0] && u.domains[0].domain) || "";
+  $("domPick").innerHTML = opts();
+  // 스코프가 걸린 동안은 **스코프가 이 선택을 소유한다** — 풀리면 '전체 통합'으로 돌려준다.
+  // 사람이 직접 고른 값은 자동 새로고침을 넘어 유지되지만(PICK_BY_SCOPE=false),
+  // 스코프가 강제한 값은 스코프가 사라질 때 같이 사라져야 한다. 안 그러면 스코프를 풀었는데
+  // 카드 하나만 그 분야에 남아 **화면 두 곳이 서로 다른 말을 한다.**
+  $("domPick").value = DOMSCOPE ? DOMSCOPE
+    : (PICK_BY_SCOPE ? "" : (uDomains.some((r) => r.domain === keepPick) ? keepPick : ""));
+  PICK_BY_SCOPE = Boolean(DOMSCOPE);
 
   // 표시명이 없는 제품이 왜 표 이름으로 보이는지 — 원인이 둘이고 조치가 다르다.
   //   표를 못 읽음  → 콘솔·발행 쪽 문제. 전 제품이 한꺼번에 표명으로 떨어진다
@@ -1781,11 +1922,15 @@ function renderApis(u) {
 function renderDomApis() {
   if (!USE) return;
   const dom = $("domPick").value;
-  const rows = USE.apis.filter((a) => a.domain === dom);
+  // 값이 비면 '전체 통합' — 지금 스코프 안의 전부다. 스코프도 없으면 진짜 전체.
+  const inScope = (a) => !DOMSCOPE || a.domain === DOMSCOPE;
+  const rows = USE.apis.filter((a) => inScope(a) && (!dom || a.domain === dom))
+    .sort((a, b) => b.calls - a.calls);
   const tot = rows.reduce((a, r) => a + r.calls, 0);
+  const what = dom ? domLabel(dom) + " 분야" : (DOMSCOPE ? domLabel(DOMSCOPE) + " 분야" : "전체");
   $("domPickNote").textContent = tot
-    ? domLabel(dom) + " 분야 요청 " + nf.format(tot) + "건을 API별로 나눈 것입니다"
-    : domLabel(dom) + " 분야는 이 기간에 요청이 없습니다";
+    ? what + " 요청 " + nf.format(tot) + "건을 API별로 나눈 것입니다"
+    : what + "는 이 기간에 요청이 없습니다";
   $("domApis").innerHTML = table([
     { t:"API", get:(r) => apiNameCell(r), name:true },
     { t:"요청", r:true, get:(r) => num(r.calls) },
@@ -1973,7 +2118,7 @@ $("apiTable").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-api]");
   if (b) openDetail(b.dataset.api);
 });
-$("domPick").addEventListener("change", renderDomApis);
+$("domPick").addEventListener("change", () => { PICK_BY_SCOPE = false; renderDomApis(); });
 $("apiUsedOnly").addEventListener("change", renderApiList);
 $("apiQ").addEventListener("input", renderApiList);
 
@@ -2352,6 +2497,17 @@ addEventListener("visibilitychange", () => {
 syncAuto();
 
 $("days").addEventListener("change", load);
+// 딥링크는 **여기서 한 번** 반영한다. `hashchange` 는 최초 진입에 안 뜨고, 예전에는
+// `render()` 끝의 `showTab(parseHash().pane)` 이 그 몫까지 겸했다 — 그런데 그 자리는
+// 30초마다 다시 도는 자리라, 겸하는 동안 자동 새로고침이 사람을 옮기는 부작용이 붙어
+// 있었다. 최초 1회(부트)와 매 갱신(render)을 갈라 둔다.
+//
+// 🔴 분야 스코프를 **showTab 보다 먼저** 세운다. `showTab` 은 지금 `DOMSCOPE` 로 주소를
+//    다시 쓰므로(`domQ`), 뒤에 읽으면 `?dom=` 은 이미 지워진 뒤다 — 공유 링크의 스코프가
+//    조용히 무시되던 원인이고, 이 순서가 아니면 `load()` 안에서 읽어도 늦다.
+DOMSCOPE = parseHash().q.get("dom") || "";
+showTab(parseHash().pane || PANES[0]);
+
 load();   // 토큰 없이도 뜬다 — 막는 문이 아니라 여는 문이다
 </script>
 </div><!-- /.main -->

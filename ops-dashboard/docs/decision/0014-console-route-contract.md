@@ -55,6 +55,7 @@
 | `mcp_describe_product` | AI 제품 안내 | |
 | `mcp_preview_product` | AI 미리보기 | |
 | `mcp_query_product` | AI 데이터 조회 | **SERVE** |
+| `mcp_run_pattern` | AI 패턴 조회 | **SERVE** — 검증된 패턴 SQL 실행(Serving#118 · PR#132) |
 | `mcp_check_quota` | AI 사용량 조회 | |
 | `auth_start` | 로그인 시작 | Google OAuth 로 넘기는 302 (#110 ②) |
 | `auth_callback` | 로그인 완료·키 발급 | 확인된 이메일로 키를 발급. **`keys` 를 대체**한다 — 배포 환경에서 `keys` 는 403 으로 닫힌다 |
@@ -90,9 +91,13 @@
 ## 2. `SERVE` — 무엇을 "데이터를 서빙한 호출"로 세나
 
 ```js
-const SERVE_ROUTES = ["data", "skill_data", "mcp_query_product"];
+const SERVE_ROUTES = ["data", "skill_data", "mcp_query_product", "mcp_run_pattern"];
 const SERVE = "route IN (" + SERVE_ROUTES.map((r) => "'" + r + "'").join(", ") + ")";
 ```
+
+**판정 기준은 "데이터를 돌려주는가"이지 문이 아니다.** `mcp_run_pattern` 이 여기 들어간 것도
+새 판단이 아니라 이 기준의 적용이다 — 검증된 패턴 SQL 을 서버가 돌려 **행을 반환하고 쿼터를
+1회 차감한다.** 툴이 늘 때마다 이 문단이 답을 준다.
 
 **배열이 정본이고 SQL 은 거기서 만든다.** 화면에 알리는 `meta.serve_routes` 와 질의 조건을
 따로 적으면 언젠가 어긋나고, 그때 화면은 "이렇게 셌습니다"라고 **틀린 말**을 하게 된다.
@@ -188,8 +193,8 @@ pre_split      = 둘 다 있고  mcp_bare_first < mcp_split_from
 
 | 확인 | 통과 기준 |
 |---|---|
-| 화면의 내부 슬러그 노출 | 17종 다 태운 뒤 **0개** |
-| `mcp_query_product` 가 `SERVE` 에 | 제품별 수요·키 활성화에 반영됨 |
+| 화면의 내부 슬러그 노출 | 18종 다 태운 뒤 **0개** (`mcp_run_pattern` 추가) |
+| `mcp_query_product`·`mcp_run_pattern` 이 `SERVE` 에 | 제품별 수요·키 활성화에 반영됨 |
 | 거부된 MCP 호출 | 집계에서 빠지고, **빠졌다고 화면이 말함** |
 | `meta.serve_routes` | 질의 조건과 **같은 배열**에서 나옴 |
 
