@@ -24,7 +24,7 @@ export const TOOLS = [
   {
     name: "describe_product",
     description:
-      "제품 상세 — 컬럼 설명·grain·PK·시간축·usage_patterns·출처/신선도. 데이터 조회 전 스키마와 필터 가능 컬럼을 파악한다.",
+      "제품 상세 — 컬럼 설명·grain·PK·시간축·usage_patterns·출처/신선도. 데이터 조회 전 스키마와 필터 가능 컬럼을 파악한다. usage_patterns 각 항목의 runnable=true 인 것만 run_pattern 으로 실행할 수 있다.",
     inputSchema: {
       type: "object",
       properties: { product_id: { type: "string", description: "예: citydata_ppltn_dow_hour" } },
@@ -73,7 +73,7 @@ export const TOOLS = [
   {
     name: "run_pattern",
     description:
-      "검증된 질의 패턴 실행(권장 경로) — describe_product 의 usage_patterns 에서 pattern_id 를 고르고, SQL 의 :파라미터 값을 params 로 넘긴다. 도메인 오너가 검증한 SQL 만 서버가 실행하므로 필터를 직접 조립하는 것보다 정확하다. 쿼터 1회 차감, 응답의 insight_sample_ko(해석 예시)를 참고해 답변을 구성할 것.",
+      "검증된 질의 패턴 실행(권장 경로) — describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고, SQL 의 :파라미터 값을 params 로 넘긴다. 도메인 오너가 검증한 SQL 만 서버가 실행하므로 필터를 직접 조립하는 것보다 정확하다. 쿼터 1회 차감, 응답의 insight_sample_ko(해석 예시)를 참고해 답변을 구성할 것.",
     inputSchema: {
       type: "object",
       properties: {
