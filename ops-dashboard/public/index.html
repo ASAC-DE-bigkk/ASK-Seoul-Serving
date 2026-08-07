@@ -420,6 +420,10 @@ const ROUTE_KO = {
   me:"내 사용량", keys:"키 발급", revoke:"키 폐기",
   // `/v1` 을 흡수하며 개명됐다(ea28bcc, #67) — `v1_product`·`v1_glossary` 아니다
   product:"제품 번들", glossary:"용어 사전",
+  // 검증 패턴의 **사람용 문**(Serving PR#175, 2026-08-07). 아래 `mcp_run_pattern` 과 같은
+  // 함수·같은 쿼터이고 문만 다르다 — 그래서 문구도 "AI " 접두만 빼고 짝을 맞춘다
+  // (`data` ↔ `mcp_query_product` 와 같은 규칙).
+  run_pattern:"패턴 조회",
   skill_bundle:"스킬 묶음", skill_data:"스킬 데이터 조회", skill_product:"스킬 제품 안내",
   // 맨 `mcp` 는 이제 **연결 절차만** 뜻한다 — 기능 호출은 아래로 갈렸다(#63 결정 A).
   // 예전 문구 "AI 연결(MCP)" 를 그대로 두면 기능 호출까지 품는 말이 되어 틀린다.

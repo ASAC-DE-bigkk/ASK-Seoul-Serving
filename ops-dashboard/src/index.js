@@ -23,7 +23,7 @@
 //
 // 게이트웨이가 내보내는 값 전수 17종(`marketplace/src/index.js` 의 `trace.route` 대입 자리
 // 12종 + `mcp.js` 의 툴별 세분화 5종과 1:1):
-//   catalog · preview · data · me · keys · revoke · product · glossary
+//   catalog · preview · data · me · keys · revoke · product · glossary · run_pattern
 //   skill_bundle · skill_data · skill_product
 //   mcp · mcp_list_products · mcp_describe_product · mcp_preview_product
 //       · mcp_query_product · mcp_run_pattern · mcp_check_quota
@@ -37,7 +37,9 @@
 //
 // **배열이 정본이고 SQL 은 거기서 만든다.** 화면에 알리는 `meta.serve_routes` 와 질의 조건을
 // 따로 적으면 언젠가 어긋나고, 그때 화면은 "이렇게 셌습니다"라고 **틀린 말**을 하게 된다.
-const SERVE_ROUTES = ["data", "skill_data", "mcp_query_product", "mcp_run_pattern"];
+// `run_pattern`(2026-08-07 신설, Serving PR#175) — 검증 패턴에 **사람용 문**이 생겼다.
+// `mcp_run_pattern` 과 같은 함수를 부르고 같은 쿼터를 깎는다. 문만 둘이다.
+const SERVE_ROUTES = ["data", "skill_data", "mcp_query_product", "mcp_run_pattern", "run_pattern"];
 const SERVE = "route IN (" + SERVE_ROUTES.map((r) => "'" + r + "'").join(", ") + ")";
 
 // ── MCP 를 어떻게 셀 것인가 (#63 결정 A) ──────────────────────────────────────
