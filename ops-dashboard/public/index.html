@@ -352,6 +352,9 @@
           <input id="apiQ" type="search" placeholder="API 이름이나 설명으로 검색 (예: 상권, 날씨, 인구)" aria-label="API 검색">
           <label><input type="checkbox" id="apiUsedOnly"> 요청이 있었던 것만</label>
           <span class="hint" id="apiCount"></span>
+          <!-- 이름이 표 이름으로 보이는 제품이 왜 그런지를 화면이 말한다 — 조용히 두면
+               "콘솔이 이름을 잃었다"로 읽힌다(decision/0012: 거른 것은 걸렀다고 말한다). -->
+          <span class="hint" id="apiDispNote"></span>
         </div>
         <div class="bd" style="padding-top:0">
           <div class="scroll tall" id="apiTable"></div>
@@ -636,10 +639,15 @@ const parseHash = () => {
 // '보는 분야'가 실제로 걸러지는 탭만 넣는다. usage(이용 행동)는 분야 축이 아니라 주체(사람·AI)
 // 축이라 스코프가 무의미했다(걸어도 값이 안 바뀜) → 뺀다. apis(사용량)는 분야로 걸러진다 → 넣는다.
 const SCOPED_PANES = ["pipeline", "runs", "serving", "apis"];
-// 드롭다운에 넣을 '집계 가능한 분야'를 등록부(_ops_domain)가 아니라 **실제 적재된 데이터**에서
-// 뽑는다. 운영 실측(2026-08-06) _ops_domain 은 0행이라, 등록부만 보면 드롭다운이 '전체'뿐이다.
-// 발행·SLO·실행·서빙 데이터에 실제로 나타난 분야를 모아 쓴다(스코프 필터가 거르는 축과 같다).
+// 드롭다운에 넣을 '집계 가능한 분야'를 등록부(_ops_domain) **하나만** 보고 뽑지 않는다.
+// 발행·SLO·실행·서빙 데이터에 실제로 나타난 분야를 함께 모은다(스코프 필터가 거르는 축과 같다).
 // 라벨은 등록부가 있으면 그 값(정본), 없으면 분야 코드를 그대로 — 화면에서 라벨을 지어내지 않는다.
+//
+// 원래 이 합집합은 **등록부가 0행이라 드롭다운이 '전체'뿐이던 것**의 우회로였다(운영 실측
+// 2026-08-06). 2026-08-07 에 `fixtures/ops_domain.sql` 로 등록부를 채웠지만 **합집합은 그대로
+// 둔다** — 데이터에는 있는데 등록부에 없는 분야가 생기면 드롭다운에서 조용히 사라지기
+// 때문이다. 등록이 늦어도 화면은 그 분야를 보여주고, 다만 라벨이 코드로 보인다.
+// 그 자리가 곧 "등록부에 아직 없다"는 신호다(라벨을 지어내는 것보다 낫다).
 function collectScopeDomains(d) {
   const seen = new Map();
   const add = (dom, label) => {
@@ -985,7 +993,7 @@ function render(d) {
   // 분야 한글명은 **스코프 전 전체 목록**에서 채운다 — 스코프를 걸어도 드롭다운·라벨이
   // 전 분야를 알아야 하기 때문이다. 그 다음 표시용 slo·doms 에만 스코프를 건다.
   for (const x of d.pipeline.domains) DOM_LABEL[x.domain] = x.label;   // 라벨 정본(등록부)
-  syncScopeBar(collectScopeDomains(d));   // 드롭다운은 실제 적재된 데이터의 분야로 채운다(#3 · _ops_domain 0행 대응)
+  syncScopeBar(collectScopeDomains(d));   // 드롭다운은 등록부 ∪ 실제 적재된 데이터의 분야다(#3)
   const slo = byDomain(d.pipeline.slo);
   const doms = byDomain(d.pipeline.domains);
   const withSlo = doms.filter((x) => x.has_slo).length;
@@ -1685,6 +1693,36 @@ let USE = null;             // 서버 응답 원본
 // 돌면서 해시를 정규화하므로, 그 전에 값을 확보해 두지 않으면 딥링크가 지워진다.
 let DETAIL_OPEN = parseHash().pane === "apis" ? parseHash().api : null;
 
+// ── 제품의 사람 이름 (ASAC-DAG#706) ──────────────────────────────────────────────
+//
+// 서버가 `display`(제목·요약·주의·활용예)를 실어 준다. 정본은 dbt 의 `meta.serving.display`
+// 선언이고 발행을 타고 `d1_catalog_display` 로 온다 — **여기에 번역표를 두지 않는다.**
+// ROUTE_KO·STATUS_KO 처럼 화면이 들고 있는 번역표는 값이 열몇 개로 닫혀 있어서 되는 것이고,
+// 제품은 56종이 계속 늘고 줄어서 손 사본이 반드시 어긋난다(마켓플레이스가 그걸로 세 번 겪었다).
+//
+// 미선언 제품은 `display: null` 이다. 그때는 표명(`name`)으로 내려앉는데, **그게 정상이다** —
+// 계약이 optional 이라 선언 없이도 발행이 되고, 화면의 그 자리가 곧 "아직 선언 안 한 도메인"의
+// 신호다. 빈 제목을 만들어 채우지 않는다(화면이 "이름이 있는 척"한다).
+const dispOf = (r) => (r && r.display) || null;
+const apiTitle = (r) => (dispOf(r) && dispOf(r).title) || null;
+// 설명도 게시본이 먼저다. `_catalog.description` 은 API 소비자·기계용 서술이라 도메인마다
+// 내부 참조가 그대로 들어 있다(운영 실측: "grain (admin_dong_code, hour_at)" ·
+// "no-hindsight KMA 예보 맥락을 left join"). 사람이 읽는 요약이 있으면 그쪽을 쓴다.
+const apiSummary = (r) => (dispOf(r) && dispOf(r).summary) || r.description || "";
+// 이름 칸 — 사람 이름이 먼저, 표명은 옆에 코드로 남긴다(CLAUDE.md §5 "한글 옆 pill dim").
+// 표명을 지우면 로그·SQL 과 대조할 길이 끊긴다. 상세 요청 키도 여전히 표명이다.
+const apiNameCell = (r) => {
+  const t = apiTitle(r);
+  return t
+    ? "<span class='namecell'><b>" + esc(t) + "</b>" +
+      "<span class='pill dim'>" + esc(r.name) + "</span></span>"
+    : esc(r.name);
+};
+// 검색은 사람 이름으로도 걸려야 한다 — 화면에 한글이 떴는데 그 말로 못 찾으면 어긋난다.
+// 표명·product_id 도 그대로 둔다(로그에서 슬러그를 복사해 오는 사람이 있다).
+const apiHay = (a) => (a.name + " " + (a.product_id || "") + " " + (a.description || "") + " " +
+  (apiTitle(a) || "") + " " + ((dispOf(a) && dispOf(a).summary) || "")).toLowerCase();
+
 function renderApis(u) {
   USE = u;
   const totalCalls = u.domains.reduce((a, r) => a + r.calls, 0);
@@ -1721,6 +1759,17 @@ function renderApis(u) {
   $("domPick").innerHTML = opts(false);
   $("domPick").value = keepPick || (u.domains[0] && u.domains[0].domain) || "";
 
+  // 표시명이 없는 제품이 왜 표 이름으로 보이는지 — 원인이 둘이고 조치가 다르다.
+  //   표를 못 읽음  → 콘솔·발행 쪽 문제. 전 제품이 한꺼번에 표명으로 떨어진다
+  //   미선언        → 도메인이 아직 `meta.serving.display` 를 안 적은 것. 정상 상태다(계약이 optional)
+  const miss = (u.meta && u.meta.missing) || [];
+  const undecl = (u.meta && u.meta.display_undeclared) || 0;
+  $("apiDispNote").innerHTML = miss.includes("display")
+    ? "<span style='color:var(--amber-ink)'>표시명을 읽지 못해 전부 표 이름으로 보입니다</span>"
+    : (undecl
+        ? undecl + "개는 표시명이 아직 등록되지 않아 표 이름으로 보입니다"
+        : "");
+
   renderDomApis();
   renderApiList();
   // 이 탭의 점: 등록만 되고 아무도 안 쓰는 API 가 절반을 넘으면 알린다(수요 신호)
@@ -1738,7 +1787,7 @@ function renderDomApis() {
     ? domLabel(dom) + " 분야 요청 " + nf.format(tot) + "건을 API별로 나눈 것입니다"
     : domLabel(dom) + " 분야는 이 기간에 요청이 없습니다";
   $("domApis").innerHTML = table([
-    { t:"API", get:(r) => esc(r.name), name:true },
+    { t:"API", get:(r) => apiNameCell(r), name:true },
     { t:"요청", r:true, get:(r) => num(r.calls) },
     { t:"비중", r:true, get:(r) => tot ? (r.calls / tot * 100).toFixed(1) + "%" : "—" },
   ], rows, "데이터 없음");
@@ -1751,12 +1800,12 @@ function renderApiList() {
   const rows = USE.apis.filter((a) =>
     (!DOMSCOPE || a.domain === DOMSCOPE) &&   // '보는 분야'(#3) 전역 스코프로 거른다
     (!usedOnly || a.calls > 0) &&
-    (!q || (a.name + " " + (a.product_id || "") + " " + (a.description || "")).toLowerCase().includes(q)));
+    (!q || apiHay(a).includes(q)));
   $("apiCount").textContent = rows.length + " / " + USE.apis.length + "개 표시";
   $("apiTable").innerHTML = table([
-    { t:"API", get:(r) => esc(r.name), name:true },
+    { t:"API", get:(r) => apiNameCell(r), name:true },
     { t:"분야", get:(r) => "<span class='pill dim'>" + esc(domLabel(r.domain)) + "</span>" },
-    { t:"설명", get:(r) => esc(r.description || "—"), cls:"desc" },
+    { t:"설명", get:(r) => esc(apiSummary(r) || "—"), cls:"desc" },
     { t:"요청", r:true, get:(r) => num(r.calls) },
     { t:"미리보기", r:true, get:(r) => num(r.previews) },
     { t:"실제 조회", r:true, get:(r) => num(r.data_calls) },
@@ -1836,12 +1885,24 @@ async function openDetail(name, silent) {
   const totalCalls = d.statuses.reduce((a, r) => a + r.calls, 0);
   const okCalls = d.statuses.filter((r) => r.status < 400).reduce((a, r) => a + r.calls, 0);
 
+  // 머리도 목록과 같은 규약 — 사람 이름이 먼저, 표명은 코드로 옆에. 미선언이면 표명이
+  // 제목 자리에 그대로 오고, 그때는 mono 를 유지한다(식별자니까 세로가 맞는 편이 낫다).
+  const dTitle = apiTitle(d.api);
+  const dCaveat = dispOf(d.api) && dispOf(d.api).caveat;
+  const dUses = (dispOf(d.api) && dispOf(d.api).use_cases) || [];
+
   DETAIL_HTML =
-    "<div class='dhd'><h4>" + esc(d.api.name) + "</h4>" +
+    "<div class='dhd'><h4" + (dTitle ? " class='human'" : "") + ">" + esc(dTitle || d.api.name) + "</h4>" +
+    (dTitle ? "<span class='pill dim'>" + esc(d.api.name) + "</span>" : "") +
     "<span class='pill dim'>" + esc(domLabel(d.api.domain)) + "</span>" +
     "<span style='font-size:11.5px;color:var(--muted)'>전체 " + nf.format(d.api.row_count || 0) + "건 보유</span>" +
     "<button class='kbtn close' id='detClose'>닫기</button></div>" +
-    "<div class='dsc'>" + esc(d.api.description || "설명이 등록되어 있지 않습니다") + "</div>" +
+    // 주의·활용예는 선언한 제품에만 있다(계약상 선택 항목). 상세에만 싣는 이유는 운영자가
+    // "이 API 가 왜 0건인가"를 볼 때 **원래 무엇에 쓰는 것인지**가 그 판단의 맥락이라서다.
+    "<div class='dsc'>" + esc(apiSummary(d.api) || "설명이 등록되어 있지 않습니다") +
+      (dCaveat ? "<br><span style='color:var(--amber-ink)'>주의 — " + esc(dCaveat) + "</span>" : "") +
+      (dUses.length ? "<br>활용 — " + dUses.map((s) => esc(s)).join(" · ") : "") +
+    "</div>" +
     (totalCalls === 0 ? "<div class='empty' style='margin:2px 0 12px'>이 기간에 이 API로 들어온 요청이 없어 표시할 상세가 없습니다.</div>" : "") +
     "<div class='dgrid'>" +
       "<div class='box'><h5>요청 결과</h5>" +

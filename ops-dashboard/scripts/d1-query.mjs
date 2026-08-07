@@ -49,7 +49,7 @@ const FOREIGN = {
   "마켓플레이스": ["_keys", "_usage", "_burst", "_gateway_request_log"],
   "파이프라인(ASAC-DAG)": ["_ops_run_event", "_ops_daily_metric",
                            "_ops_pipeline_state", "_ops_pipeline_expectation"],
-  "도메인 export(dbt)": ["_catalog", "_publication_ledger"],
+  "도메인 export(dbt)": ["_catalog", "_publication_ledger", "d1_catalog_display"],
 };
 
 const die = (msg) => { console.error("d1: " + msg); process.exit(1); };

@@ -374,6 +374,14 @@ npx wrangler d1 execute <D1> --remote [--env production] --command \
 | `_ops_run_event` · `_ops_daily_metric` · `_ops_pipeline_state` · `_ops_pipeline_expectation` | **ASAC-DAG** | — | 읽기 전용 |
 | `_publication_ledger` · `_publication_log` | **ASAC-DAG** | — | 읽기 전용 |
 | `_catalog` · 제품 표 `d1_*` · `d1_usage_patterns` | 도메인 export | 읽기 전용 | 읽기 전용 |
+| **`d1_catalog_display`** (제품의 사람 이름 — 제목·요약·주의·활용예) | 도메인 export (dbt `meta.serving.display` → ASAC-DAG#706) | 읽기 전용 | 읽기 전용 |
+
+> **손 사본은 만들지 않는다 — 세 번 겪었다.** `column-docs.json`·`usage-patterns.json` 이
+> 게시본과 어긋나 퇴역했고, `product-display.json` 이 세 번째였다. 원천은 언제나 dbt yml
+> 인데 생성기를 사람이 돌리는 구조라, 발행이 앞서가면 사본이 뒤에 남는다. **양쪽 화면 모두
+> 게시본에서 읽고, 없으면 `product_id`·표명으로 내려앉는다** — 빈 값으로 꾸미지 않는다
+> (꾸미면 화면이 "이름이 있는 척"한다). 계약이 optional 이라 미선언 도메인은 행이 없고
+> 그 상태가 정상이다.
 
 ### 5-1. 마이그레이션은 증분 — DROP 금지
 

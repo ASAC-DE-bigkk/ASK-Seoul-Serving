@@ -44,8 +44,8 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
 - `describe_product(product_id)` — 컬럼·grain·PK·시간축·usage_patterns·출처/신선도.
 - `preview_product(product_id)` — 5행 미리보기(쿼터 무과금).
 - `query_product(product_id, filters, from, to, limit, cursor, intent)` — 데이터 조회.
-- `run_pattern(product_id, pattern_id, params)` — **검증된 질의 패턴 실행(권장)**. describe 의
-  usage_patterns 에서 **`runnable=true` 인 것**을 고르고 :파라미터 값만 넘긴다 — 저장·검증된 SQL 만 돌므로 필터 조립보다 정확하다.
+- `run_pattern(product_id, pattern_id, params)` — **동작이 확인된 질의 패턴 실행(우선 사용)**. describe 의
+  usage_patterns 에서 **`runnable=true` 인 것**을 고르고 :파라미터 값만 넘긴다 — 실제 게시본에 실행해 동작을 확인한 저장 SQL 만 돈다.
 - `check_quota` — 남은 일일 쿼터.
 
 `query_product` 응답에는 `data_context` 가 동봉된다 — `freshness`(이 게시본의 기준 시점) ·
@@ -74,7 +74,8 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
 1. `GET /api/v1/catalog` — 제품 목록. 인증 불필요. 각 제품의 `product_question`(자연어 질문)으로
    사용자 질문과 매칭해 제품을 고른다. `description` = 그레인·주의사항, `columns` = 스키마.
 2. `GET /api/v1/preview/<product_id>` — 샘플 5행(최신 구간). 인증·쿼터 없음. 스키마·실값 확인용.
-3. 키 발급 — **방법이 배포 환경마다 다르다.** 추측하지 말고 1번 응답의 `key_issuance` 를 볼 것.
+3. 키 발급 — 방법은 **Google 로그인 하나**다(2026-08-07 이메일 발급 폐지). 추측하지 말고
+   1번 응답의 `key_issuance` 를 볼 것 — 늘 그 필드가 정본이다.
    - `{"method":"google_oauth","start":"/api/v1/auth/google"}` — **사람이 브라우저로** 그 주소를
      열어 Google 로 로그인해야 한다. 이메일 소유를 Google 이 확인해 주는 경로라 **자동화로는
      받을 수 없다.** 에이전트라면 운영자에게 키를 받아 설정에 넣는 것이 정상 경로다.

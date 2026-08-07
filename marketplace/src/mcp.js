@@ -18,13 +18,13 @@ export const TOOLS = [
   {
     name: "list_products",
     description:
-      "공개 서빙 제품 목록 — product_id·대표질문(product_question)·조인키·설명. 어느 제품이 사용자 질문에 맞는지 고를 때 먼저 부른다. verified=true 는 출처·품질 증거까지 닫힌 검증 번들(seoul-urban-analytics) 제품이고, 나머지는 일반 카탈로그다.",
+      "조회 가능한 서울 데이터 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 어떤 데이터가 질문에 맞는지 고를 때 가장 먼저 호출하세요. verified=true 는 출처·품질 증거까지 검증된 제품입니다.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "describe_product",
     description:
-      "제품 상세 — 컬럼 설명·grain·PK·시간축·usage_patterns·출처/신선도. 데이터 조회 전 스키마와 필터 가능 컬럼을 파악한다. usage_patterns 각 항목의 runnable=true 인 것만 run_pattern 으로 실행할 수 있다.",
+      "선택한 데이터의 컬럼 설명·기준(grain)·시간축·질의 패턴(usage_patterns)을 보여줍니다. 조회 전에 스키마와 필터 가능한 컬럼을 확인하세요. usage_patterns 중 runnable=true 인 것만 run_pattern 으로 실행할 수 있습니다.",
     inputSchema: {
       type: "object",
       properties: { product_id: { type: "string", description: "예: citydata_ppltn_dow_hour" } },
@@ -35,7 +35,7 @@ export const TOOLS = [
   {
     name: "preview_product",
     description:
-      "제품 5행 미리보기(쿼터 무과금) — 실물이 쓸만한지, 등가 필터에 넣을 값 예시(장소명·코드 등)를 확인한다.",
+      "데이터 5행을 미리 봅니다(일일 한도 무차감). 필터에 넣을 실제 값(장소명·코드 등)을 확인할 때 사용하세요.",
     inputSchema: {
       type: "object",
       properties: { product_id: { type: "string" } },
@@ -46,7 +46,7 @@ export const TOOLS = [
   {
     name: "query_product",
     description:
-      "제품 데이터 조회 — 등가 필터·시간범위(from/to)·limit·cursor. sort/join/집계는 불가(서버 결정 순서). 커서로 페이지네이션. 응답의 data_context(freshness=데이터 기준 시점·caution=주의사항·attribution=출처 표시 의무)를 답변에 반영할 것 — 데이터는 실시간이 아니다.",
+      "지역·기간·등가 필터로 데이터를 조회합니다(sort/join/집계 불가, 커서로 페이지네이션). 응답의 data_context 에 집계 기준 시점(freshness)·출처(attribution)·주의사항(caution)이 함께 담깁니다.",
     inputSchema: {
       type: "object",
       properties: {
@@ -73,7 +73,7 @@ export const TOOLS = [
   {
     name: "run_pattern",
     description:
-      "검증된 질의 패턴 실행(권장 경로) — describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고, SQL 의 :파라미터 값을 params 로 넘긴다. 도메인 오너가 검증한 SQL 만 서버가 실행하므로 필터를 직접 조립하는 것보다 정확하다. 쿼터 1회 차감, 응답의 insight_sample_ko(해석 예시)를 참고해 답변을 구성할 것.",
+      "실제 데이터에 실행해 동작이 확인된 질의 패턴을 실행합니다. 질문에 맞는 패턴이 있으면 필터를 직접 조립하기보다 이 도구를 우선 사용하세요. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. 응답에는 insight_sample_ko(해석 예시)가 함께 제공됩니다.",
     inputSchema: {
       type: "object",
       properties: {
@@ -91,7 +91,7 @@ export const TOOLS = [
   },
   {
     name: "check_quota",
-    description: "내 키의 남은 일일 쿼터 확인(used/quota/exceeded).",
+    description: "내 API 키의 오늘 사용량과 남은 일일 한도를 확인합니다.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
 ];

@@ -5,16 +5,14 @@
 -- 있고 UI 는 그걸 읽어 '샘플' 배지를 띄운다 — 이 데이터로 운영 판단을 하면 안 된다.
 -- 실적재 경로가 붙으면 이 파일은 지운다.
 
-DELETE FROM _ops_slo;
-DELETE FROM _ops_domain;
+-- 🔴 **운영 D1 에 돌리지 않는다.** D1 이 운영 하나뿐이라(0015) 이 합성 14일치를 넣으면
+-- 그게 곧 운영 오염이다. 화면은 `is_sample=1` 행을 질의에서 아예 뺀다.
 
--- 도메인 등록부 — has_slo 는 실측이다(ASAC-DBT 에서 *_slo_daily 검색: culture 만 존재)
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('culture','문화·행사',1,NULL);
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('citydata','인구·도시',0,'품질 측정 기준이 아직 없음');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('transit','대중교통',0,'품질 측정 기준이 아직 없음');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('commerce','상권',0,'품질 측정 기준이 아직 없음');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('weather','날씨',0,'품질 측정 기준이 아직 없음');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('traffic','교통',0,'품질 측정 기준이 아직 없음');
+DELETE FROM _ops_slo;
+
+-- 분야 등록부는 여기 없다 — `fixtures/ops_domain.sql` 이 정본이고, **그건 합성이 아니라
+-- 참조 내용이라 운영에 돌려도 된다.** 예전에는 이 파일이 등록부까지 들고 있어서 둘이 묶여
+-- 있었고, 그래서 운영 등록부가 0행으로 남았다(라벨이 전부 영문 코드로 노출).
 
 -- culture 14일치 (합성). 7/22 정기런 실패·7/25 부분 실패를 넣어 화면의 경고 경로를 확인한다
 INSERT INTO _ops_slo (domain,event_date,scheduled_slo_passed,eod_slo_passed,best_coverage_pct,failed_dataset_count,violation_count,total_rows,ingest_duration_min,transform_runs,transform_all_success,is_sample) VALUES ('culture','2026-07-15',1,1,99.5,0,0,41900,4.1,1,1,1);
