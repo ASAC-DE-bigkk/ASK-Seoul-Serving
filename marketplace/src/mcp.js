@@ -24,7 +24,7 @@ export const TOOLS = [
   {
     name: "describe_product",
     description:
-      "선택한 데이터의 컬럼 설명·기준(grain)·시간축·검증된 질의 패턴(usage_patterns)을 보여줍니다. 조회 전에 스키마와 필터 가능한 컬럼을 확인하세요. usage_patterns 중 runnable=true 인 것만 run_pattern 으로 실행할 수 있습니다.",
+      "선택한 데이터의 컬럼 설명·기준(grain)·시간축·질의 패턴(usage_patterns)을 보여줍니다. 조회 전에 스키마와 필터 가능한 컬럼을 확인하세요. usage_patterns 중 runnable=true 인 것만 run_pattern 으로 실행할 수 있습니다.",
     inputSchema: {
       type: "object",
       properties: { product_id: { type: "string", description: "예: citydata_ppltn_dow_hour" } },
@@ -46,7 +46,7 @@ export const TOOLS = [
   {
     name: "query_product",
     description:
-      "지역·기간·등가 필터로 데이터를 조회합니다(sort/join/집계 불가, 커서로 페이지네이션). 응답의 data_context(freshness=기준 시점·caution=주의사항·attribution=출처 표시 의무)를 답변에 반영하세요 — 데이터는 실시간이 아닙니다.",
+      "지역·기간·등가 필터로 데이터를 조회합니다(sort/join/집계 불가, 커서로 페이지네이션). 응답의 data_context 에 담긴 집계 기준 시점(freshness)·출처(attribution)·주의사항(caution)을 답변에 명시하세요.",
     inputSchema: {
       type: "object",
       properties: {
@@ -73,7 +73,7 @@ export const TOOLS = [
   {
     name: "run_pattern",
     description:
-      "도메인 전문가가 검증한 질의 패턴을 실행합니다 — 가장 정확한 조회 경로입니다. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. 응답의 insight_sample_ko(해석 예시)를 답변 구성에 참고하세요.",
+      "실제 데이터에 실행해 동작이 확인된 질의 패턴을 실행합니다. 질문에 맞는 패턴이 있으면 필터를 직접 조립하기보다 이 도구를 우선 사용하세요. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. 응답의 insight_sample_ko(해석 예시)를 답변 구성에 참고하세요.",
     inputSchema: {
       type: "object",
       properties: {
