@@ -423,6 +423,9 @@ const ROUTE_KO = {
   mcp:"AI 연결 준비",
   mcp_list_products:"AI 목록 조회", mcp_describe_product:"AI 제품 안내",
   mcp_preview_product:"AI 미리보기", mcp_query_product:"AI 데이터 조회",
+  // 검증된 질의 패턴 실행(Serving#118 · PR#132) — 데이터를 돌려주고 쿼터를 차감하므로
+  // `mcp_query_product` 와 같은 부류다. 문구도 "무엇을 했나" 단위로 맞춘다(§1).
+  mcp_run_pattern:"AI 패턴 조회",
   mcp_check_quota:"AI 사용량 조회",
   // Google OAuth 발급(#110 ②) — 배포 환경에서는 `keys` 대신 이 둘이 뜬다
   auth_start:"로그인 시작", auth_callback:"로그인 완료·키 발급",

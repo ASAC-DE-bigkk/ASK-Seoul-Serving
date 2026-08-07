@@ -25,7 +25,7 @@
 //   catalog · preview · data · me · keys · revoke · product · glossary
 //   skill_bundle · skill_data · skill_product
 //   mcp · mcp_list_products · mcp_describe_product · mcp_preview_product
-//       · mcp_query_product · mcp_check_quota
+//       · mcp_query_product · mcp_run_pattern · mcp_check_quota
 //
 // ⚠️ `product`·`glossary` 는 한때 `v1_product`·`v1_glossary` 였다 — ea28bcc(#67)가 `/v1` 을
 // 삭제가 아니라 **흡수**로 바꾸면서 개명했다. 옛 이름으로 번역표를 채우면 화면에 슬러그가 샌다.
@@ -36,14 +36,18 @@
 //
 // **배열이 정본이고 SQL 은 거기서 만든다.** 화면에 알리는 `meta.serve_routes` 와 질의 조건을
 // 따로 적으면 언젠가 어긋나고, 그때 화면은 "이렇게 셌습니다"라고 **틀린 말**을 하게 된다.
-const SERVE_ROUTES = ["data", "skill_data", "mcp_query_product"];
+const SERVE_ROUTES = ["data", "skill_data", "mcp_query_product", "mcp_run_pattern"];
 const SERVE = "route IN (" + SERVE_ROUTES.map((r) => "'" + r + "'").join(", ") + ")";
 
 // ── MCP 를 어떻게 셀 것인가 (#63 결정 A) ──────────────────────────────────────
 //
 // 예전에는 `route='mcp'` 한 값이라 `query_product`(데이터)와 `list_products`(목록)가 갈리지
 // 않아 **통째로 뺐다.** 게이트웨이가 툴별로 가르면서(01106fb) 그 전제가 끝났다 — 이제
-// `mcp_query_product` 만 SERVE 에 들고, 나머지 툴은 각자 이름으로 남는다.
+// **데이터를 돌려주는 툴만** SERVE 에 들고, 나머지 툴은 각자 이름으로 남는다.
+//
+// 그 기준으로 `mcp_run_pattern`(Serving#118 · PR#132)도 SERVE 다 — 검증된 패턴 SQL 을 서버가
+// 돌려 **행을 반환하고 쿼터를 1회 차감한다.** 소비자에게는 `query_product` 와 같은 일이고,
+// 빼 두면 제품별 수요·키 활성화가 #63 이 잡은 그 방식으로 다시 낮아진다.
 //
 // 남은 맨 `mcp` 에는 **두 가지가 섞여 있고, 가르는 건 status 다**:
 //
