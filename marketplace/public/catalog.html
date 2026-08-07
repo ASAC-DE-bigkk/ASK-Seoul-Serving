@@ -374,7 +374,10 @@
   .pick.empty { color:var(--muted); background:var(--panel); border-style:dashed; }
   .pick .qq { font-weight:600; color:var(--ink); display:block; margin-bottom:3px; }
   .pick .pp { font-size:12px; color:var(--muted); }
-  .pick .pp code { font-family:var(--mono); font-size:11.5px; }
+  /* 본문이 `word-break:keep-all`(한글용)이라 **라틴 식별자는 안 끊긴다** —
+     `gold_citydata_ppltn_x_culture_daily` 가 카드를 8px 넘겼다. 스키마 표의 컬럼명이
+     이미 `break-all` 인 것과 같은 처방이다. */
+  .pick .pp code { font-family:var(--mono); font-size:11.5px; word-break:break-all; }
   .pick .kind { display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.04em;
                 padding:1px 6px; border-radius:3px; margin-bottom:6px;
                 background:var(--accent-soft); color:var(--accent-deep); border:1px solid var(--accent-line); }
@@ -384,6 +387,22 @@
      서버가 아는 것도 이름뿐이고, 없는 뜻을 화면이 만들면 그게 곧 거짓말이 된다. */
   .param label code { font-family:var(--mono); font-size:12px; color:var(--ink); }
   .param .hint { font-weight:400; letter-spacing:0; color:var(--faint); margin-left:6px; }
+  /* 필터 행 — 컬럼 고르기 + 값. `min-width:0` 이 있어야 긴 컬럼명이 칸을 밀지 않는다
+     (이 페이지에서 세 번 겪은 그 함정이다 — scripts/responsive-audit.js). */
+  .lnote { font-weight:400; letter-spacing:0; color:var(--faint); text-transform:none; }
+  .frow { display:flex; gap:6px; margin-bottom:6px; align-items:center; }
+  .frow select { flex:1 1 45%; min-width:0; }
+  .frow input { flex:1 1 55%; min-width:0; }
+  .frow .del { flex:none; width:28px; height:30px; padding:0; font-size:15px; line-height:1;
+               color:var(--muted); background:var(--panel); border:1px solid var(--line-strong); }
+  .frow .del:hover { color:var(--red-ink); border-color:var(--red-ink); }
+  #addFilter { width:100%; }
+  /* 복사 버튼은 어두운 명령창 위에 얹힌다 — 본문 토큰(밝은 판)을 쓰면 안 보인다 */
+  .endpoint-wrap { position:relative; }
+  .endpoint-wrap .endpoint { padding-right:56px; }
+  .copybtn { position:absolute; top:8px; right:8px; font-size:11.5px; padding:3px 9px;
+             background:rgba(255,255,255,.12); color:#e4e9f1; border:1px solid rgba(255,255,255,.22); }
+  .copybtn:hover { background:rgba(255,255,255,.2); }
   .resp-head { display:flex; align-items:center; gap:10px; margin:14px 0 8px; }
   .status { font-family:var(--mono); font-size:12px; font-weight:700; padding:2px 9px; border-radius:4px;
             display:none; }
@@ -514,14 +533,29 @@
               <input type="text" id="pFrom" placeholder="from · YYYY-MM-DD" style="margin-bottom:6px">
               <input type="text" id="pTo" placeholder="to · YYYY-MM-DD">
             </div>
+            <!-- 필터 — 조작부에 행 수밖에 없어서 "조합으로 조회"가 화면에서 성립하지 않았다.
+                 ⚠️ 할 수 있는 것을 **정직하게** 보여야 한다: API 는 **일치(=)만**, 조합은
+                 **AND 만**이다. 범위·포함·정렬·집계는 없다 — 그게 검증 패턴이 따로 있는 이유라
+                 안내문에서 그쪽으로 길을 낸다. 없는 기능을 UI 가 암시하면 400 을 받고서야 안다. -->
+            <div class="field" id="filterField" style="display:none">
+              <label>필터 <span class="lnote">일치(=)만 · 여러 개는 모두 만족(AND)</span></label>
+              <div id="filterRows"></div>
+              <button class="btn-g btn-sm" id="addFilter" type="button">+ 조건 추가</button>
+            </div>
             <button class="btn-p" id="runBtn" style="width:100%">호출</button>
           </div>
           <div>
-            <div class="endpoint" id="reqPreview"><span class="m">GET</span> /api/v1/data/&lt;table&gt;?limit=10</div>
+            <div class="endpoint-wrap">
+              <div class="endpoint" id="reqPreview"><span class="m">GET</span> /api/v1/data/&lt;table&gt;?limit=10</div>
+              <!-- 붙여넣기 한 번에 끝나야 "먼저 만져보세요"가 성립한다. 여태 손으로 긁어야 했다 -->
+              <button class="copybtn" id="copyCurl" type="button" title="curl 명령 복사">복사</button>
+            </div>
             <div class="resp-head">
               <span class="status" id="respStatus"></span>
               <span class="resp-meta" id="respMeta"></span>
               <span style="flex:1"></span>
+              <button class="toggle-raw" id="dlCsv" style="display:none">CSV 내려받기</button>
+              <button class="toggle-raw" id="copyJson" style="display:none">JSON 복사</button>
               <button class="toggle-raw" id="toggleRaw" style="display:none">JSON 원문</button>
             </div>
             <div class="table-scroll" id="tableWrap" style="display:none"><table class="data" id="respTable"></table></div>
@@ -914,6 +948,7 @@ function renderPick() {
     box.textContent = "아직 고르지 않았습니다 — 위 목록에서 「써보기」나 「이 질문 돌려보기」를 누르세요.";
     $("limitField").style.display = "none";
     $("rangeField").style.display = "none";
+    $("filterField").style.display = "none";
     $("runBtn").disabled = true;
     return;
   }
@@ -932,6 +967,7 @@ function renderPick() {
     // (선언 밖 파라미터). 그래서 칸 자체를 감춘다.
     $("limitField").style.display = "none";
     $("rangeField").style.display = "none";
+    $("filterField").style.display = "none";   // 패턴은 자기 WHERE 를 갖고 있다
     for (const nm of patternParams(u.sql)) {
       const f = document.createElement("div");
       f.className = "field param";
@@ -946,6 +982,32 @@ function renderPick() {
   $("limitField").style.display = "block";
   $("rangeField").style.display = p.time_axis ? "block" : "none";
   $("axisName").textContent = p.time_axis || "";
+  $("filterField").style.display = "block";
+  $("filterRows").innerHTML = "";   // 제품이 바뀌면 컬럼 목록이 달라진다 — 이전 조건은 버린다
+}
+
+// 서버가 제어용으로 먼저 읽는 이름들. 같은 이름의 컬럼이 있어도 필터로는 못 보낸다
+// (쿼리스트링에서 구분이 안 된다). 목록에서 빼서 **고를 수 없게** 한다 — 고르게 두면
+// 눌러 놓고 왜 안 걸리는지 모른다.
+const RESERVED_Q = new Set(["limit", "from", "to", "cursor"]);
+
+function addFilterRow() {
+  const p = PICK && PICK.product;
+  if (!p) return;
+  const cols = (p.columns || []).filter((c) => !RESERVED_Q.has(c.name));
+  const row = document.createElement("div");
+  row.className = "frow";
+  row.innerHTML =
+    "<select data-fcol>" +
+    cols.map((c) => "<option value='" + esc(c.name) + "' title='" + esc(c.description || "") + "'>" +
+      esc(c.name) + "</option>").join("") +
+    "</select><input data-fval placeholder='값' autocomplete='off'>" +
+    "<button class='del' type='button' title='이 조건 지우기' aria-label='이 조건 지우기'>×</button>";
+  $("filterRows").appendChild(row);
+  row.querySelector(".del").addEventListener("click", () => { row.remove(); resetPaging(); updatePreview(); });
+  for (const el of row.querySelectorAll("select, input"))
+    el.addEventListener("input", () => { resetPaging(); updatePreview(); });
+  updatePreview();
 }
 
 function buildPath() {
@@ -959,6 +1021,14 @@ function buildPath() {
       if (el.value.trim()) q.set(el.dataset.prm, el.value.trim());
     const qs = q.toString();
     return "/api/v1/patterns/" + p.product_id + "/" + u.pattern_id + (qs ? "?" + qs : "");
+  }
+  // 필터를 **먼저** 싣는다 — 뒤의 제어 파라미터(limit·from·to)가 같은 이름을 덮게 두려는
+  // 것이 아니라, 읽는 사람에게 조건이 앞에 오는 편이 자연스러워서다. 이름 충돌 자체는
+  // `RESERVED_Q` 가 목록에서 빼 막는다.
+  for (const r of $("filterRows").querySelectorAll(".frow")) {
+    const col = r.querySelector("[data-fcol]").value;
+    const val = r.querySelector("[data-fval]").value.trim();
+    if (col && val) q.set(col, val);   // 값이 빈 조건은 안 싣는다 — 빈 문자열도 값이다
   }
   q.set("limit", $("pLimit").value || "10");
   if (p.time_axis && $("pFrom").value.trim()) q.set("from", $("pFrom").value.trim());
@@ -986,7 +1056,11 @@ async function refreshQuota() {
     $("quotaWho").textContent = b.email + " · " + b.day;
   } catch {}
 }
+// 마지막 응답의 행. 표는 15행만 그리지만 **내려받기는 받은 전부**를 준다 —
+// 화면에 보이는 것만 주면 "limit 500 으로 받았는데 15줄"이 되어 조용히 틀린다.
+let LAST_ROWS = [];
 function renderRows(rows) {
+  LAST_ROWS = rows || [];
   const tbl = $("respTable");
   tbl.innerHTML = "";
   if (!rows.length) { $("tableWrap").style.display = "none"; return; }
@@ -1065,6 +1139,9 @@ async function run(useCursor) {
     if (res.ok) {
       renderRows(body.rows || []);
       $("rawJson").style.display = "none";
+      const has = (body.rows || []).length > 0;
+      $("dlCsv").style.display = has ? "inline" : "none";
+      $("copyJson").style.display = "inline";
       // 질문 실행과 직접 조회는 **응답 모양이 다르다.** 패턴에는 limit·커서·시간축이 없다
       // (그 셋을 정하는 게 패턴 SQL 자신이다). 한 벌로 찍으면 `limit undefined` 가 나간다.
       if (PICK && PICK.pattern) {
@@ -1091,6 +1168,8 @@ async function run(useCursor) {
       }
     } else {
       showStatus(res.status, friendly(res.status, body));
+      $("dlCsv").style.display = "none";
+      $("copyJson").style.display = "none";
       $("tableWrap").style.display = "none";
       $("rawJson").style.display = "block";
       if (res.status === 409) resetPaging();   // 재발행 — 커서를 들고 있어도 의미가 없다
@@ -1161,6 +1240,40 @@ $("revokeBtn").addEventListener("click", () => {
 $("purgeBtn").addEventListener("click", () => callRevoke(true));
 
 // run(useCursor) 이라 이벤트 객체를 그대로 넘기면 안 된다 — 클릭 이벤트는 truthy 다
+// ── 가져가기 ─────────────────────────────────────────────────────────────────
+async function copyText(text, btn, done) {
+  const old = btn.textContent;
+  try { await navigator.clipboard.writeText(text); btn.textContent = done; }
+  catch { btn.textContent = "복사 실패 — 직접 선택해 주세요"; }
+  setTimeout(() => { btn.textContent = old; }, 1600);
+}
+// CSV 는 규격(RFC 4180)대로 감싼다. 공공 원천 텍스트에 쉼표·따옴표·줄바꿈이 실제로 들어 있다
+// (행사 제목이 대표적이다) — 안 감싸면 열이 밀려 **조용히 어긋난 표**가 나간다.
+function toCsv(rows) {
+  if (!rows.length) return "";
+  const cols = Object.keys(rows[0]);
+  const cell = (v) => {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  return [cols.join(","), ...rows.map((r) => cols.map((c) => cell(r[c])).join(","))].join("\r\n");
+}
+$("copyCurl").addEventListener("click", (e) => copyText($("reqPreview").textContent.trim(), e.currentTarget, "복사됨"));
+$("copyJson").addEventListener("click", (e) =>
+  copyText($("rawJson").textContent, e.currentTarget, "복사됨 ✓"));
+$("dlCsv").addEventListener("click", () => {
+  if (!LAST_ROWS.length) return;
+  // BOM 을 앞에 붙인다 — 없으면 Excel 이 UTF-8 을 못 알아보고 한글이 깨진다
+  const blob = new Blob(["\uFEFF" + toCsv(LAST_ROWS)], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  const base = PICK ? (PICK.pattern ? PICK.product.product_id + "_" + PICK.pattern.pattern_id : PICK.product.name) : "ask-seoul";
+  a.href = URL.createObjectURL(blob);
+  a.download = base + ".csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$("addFilter").addEventListener("click", addFilterRow);
 $("runBtn").addEventListener("click", () => run(false));
 $("nextPageBtn").addEventListener("click", () => run(true));
 $("meBtn").addEventListener("click", () => { updatePreview(); refreshQuota(); });
