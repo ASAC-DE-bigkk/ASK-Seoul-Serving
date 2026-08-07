@@ -181,11 +181,19 @@ _gateway_request_log 컬럼 추가       → 새 ALTER 파일 + 시드 체인 + 
 > 컬럼을 늘릴 때 **대상은 `_gateway_request_log` 다.** `_request_log` 에 `ALTER` 를 얹으면
 > 남의 표를 건드리게 된다(§4).
 >
-> **`0005` 의 22종 중 셋은 아직 NULL 이고, 그게 맞다**(agreement §4-3 — 모른다 ≠ 0):
-> `agent_verified` 는 검증 수단이 없어 **NULL 로 시작**이 스펙이고(0 은 "검증 실패"로 읽힌다),
-> `page_path` 는 정적 페이지가 `run_worker_first` 밖이라 워커에 닿지 않으며(§3-4 의 6경로를
-> 통과시키는 결정이 먼저), `pattern_id` 는 패턴 실행 API 가 아직 없다.
-> **`LOG_COLUMNS` 에 넣지 않는 방식으로** 비워 둔다 — 넣고 `undefined` 를 실으면 0·'' 로 굳는다.
+> **`0005` 의 22종 중 아직 안 실리는 것들**(agreement §4-3 — 모른다 ≠ 0). 비우는 방식은
+> **`LOG_COLUMNS` 에 넣지 않는 것**이다 — 넣고 `undefined` 를 실으면 0·'' 로 굳는다.
+>
+> | 컬럼 | 상태 |
+> |---|---|
+> | `agent_verified` | ✅ **배선됨**(#111, 2026-08-06). prod 실측으로 0·NULL 확정, `1` 은 검증된 크롤러 도착 시 |
+> | `pattern_id` | 🔵 **막힘이 풀렸다** — "패턴 실행 API 가 아직 없다"가 미룬 이유였는데 `run_pattern` 이 배포됐다(#132). 배선하면 `(product_id, pattern_id, publication_id)` 로깅 키가 완성된다(ASAC-DAG#642) |
+> | `page_path` | ⏸ 정적 페이지가 `run_worker_first` 밖이라 워커에 닿지 않는다 — §3-4 의 6경로를 통과시키는 결정이 먼저 |
+>
+> **`agent_name`·`agent_mode` 는 UA 말고 두 번째 출처가 생겼다**(#111 후속) — MCP `initialize`
+> 의 `clientInfo` 다. 출처는 `agent_mode` 가 말한다(`crawler`·`on_demand` = UA / `mcp_client`
+> = 프로토콜). **`ua_class` 와 `agent_verified` 는 그때도 안 건드린다** — 전송 계층 자기 신고와
+> CF 검증은 각각 다른 축이고, 섞으면 #112 가 갈라 놓은 것이 도로 뭉개진다.
 
 ## 7. 완료 기준
 

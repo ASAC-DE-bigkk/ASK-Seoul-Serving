@@ -267,6 +267,28 @@ export function normalizeIntent(raw) {
   return INTENT_RE.test(value) ? value : "other";
 }
 
+// ── MCP 클라이언트 이름 (#111 후속) ──────────────────────────────────────────
+// **전송 계층 UA 로는 MCP 클라이언트를 못 잡는다.** 크롤러는 `ClaudeBot` 처럼 공개된 UA
+// 규약이 있지만 MCP 클라이언트는 앱·라이브러리라 그런 게 없다 — 정규식을 늘려도 다음
+// 클라이언트에서 또 뚫린다(prod 실측: MCP 호출 95건이 전부 `unknown`, 즉 UA 는 왔는데
+// 목록에 없었다).
+//
+// 🔑 그런데 MCP 스펙이 `initialize` 에 `clientInfo{name, version}` 을 **필수로** 요구한다.
+// **이게 MCP 판 User-Agent 다** — 규격이 보장하니 뚫리지 않는다. 우리는 그동안 `params` 를
+// 받아 놓고 안 읽었다.
+//
+// 정규화 규칙은 `normalizeIntent` 와 같은 철학이다 — **안 보냄은 NULL, 못 알아봄은 `other`.**
+// 자유 문자열을 그대로 실으면 클라이언트가 로그에 아무 문장이나 쓸 수 있고, 같은 행의
+// `key_hash` 가 이메일과 1:1 이라 그건 값-최소화 원칙(0001 §값-최소화)을 깨는 길이다.
+const MCP_CLIENT_RE = /^[a-z0-9][a-z0-9._-]{0,39}$/;
+export function normalizeMcpClient(raw) {
+  // 공백은 하이픈으로 접는다 — "Example Client" 처럼 띄어 쓰는 구현이 흔하고, 그걸
+  // `other` 로 버리면 정작 알고 싶은 이름을 잃는다.
+  const value = String(raw ?? "").trim().toLowerCase().replace(/\s+/g, "-");
+  if (!value) return null;
+  return MCP_CLIENT_RE.test(value) ? value : "other";
+}
+
 // ── 발급 이메일 정규화 (#109) ────────────────────────────────────────────────
 // `_keys.email UNIQUE` 가 "이메일당 1키"를 지키는 **유일한 실질 장치**다. 그래서 같은
 // 메일함을 가리키는 두 문자열이 들어오면 그 제약이 조용히 통과된다 — prod 에서 실제로

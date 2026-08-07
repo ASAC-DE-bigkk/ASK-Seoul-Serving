@@ -9,7 +9,7 @@
 // check_quota. run_pattern 은 #118 실행 계약(2026-08-07 확정)으로 P1 에서 승격.
 
 import { SKILL_BUNDLE_ID, SKILL_PRODUCT_IDS } from "./skill.js";
-import { burstProblem, normalizeIntent, ATTRIBUTION } from "./shared.js";
+import { burstProblem, normalizeIntent, normalizeMcpClient, ATTRIBUTION } from "./shared.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "ask-seoul", version: "0.1.0" };
@@ -270,12 +270,29 @@ export async function handleMcp(request, env, trace, deps) {
   const { id = null, method, params } = msg || {};
 
   // 발견 단계 — 데이터·쿼터 미소모(masondev 완료기준). 로드용이라 인증 요구 안 함.
-  if (method === "initialize")
+  if (method === "initialize") {
+    // 🔑 `clientInfo` 는 **MCP 판 User-Agent** 다(#111 후속). UA 로는 MCP 클라이언트를 못
+    // 잡아 prod 호출 95건이 전부 `ua_class='unknown'` 이었는데, 그 이름이 프로토콜 규격
+    // 안에 이미 있었다. `intent` 가 만든 선례와 같은 방식으로 trace 를 덮어쓴다.
+    //
+    // ⚠️ `agent_verified` 는 **건드리지 않는다.** clientInfo 도 자기 신고라 Cloudflare
+    //    검증 대상이 아니고, `clientAxes` 가 이미 넣은 NULL 이 맞는 값이다("검증할 것이
+    //    없다"). 여기서 0 을 쓰면 스펙이 경고한 "검증 실패" 오독이 된다.
+    //
+    // ⚠️ `ua_class` 도 그대로 둔다 — 그건 **전송 계층 자기 신고**의 분류이고, UA 를 진짜
+    //    못 알아본 것은 사실이다. 프로토콜 사실로 덮으면 #112 가 갈라 놓은 축이 도로 뭉개진다.
+    const client = normalizeMcpClient(params?.clientInfo?.name);
+    if (client) {
+      trace.agentName = client;
+      // 출처를 이 값이 말한다 — UA 에서 온 이름(crawler·on_demand)과 섞이지 않게.
+      trace.agentMode = "mcp_client";
+    }
     return rpcResult(id, {
       protocolVersion: PROTOCOL_VERSION,
       serverInfo: SERVER_INFO,
       capabilities: { tools: {} },
     });
+  }
   if (method === "notifications/initialized" || method === "notifications/cancelled")
     return new Response(null, { status: 202 });
   if (method === "tools/list") return rpcResult(id, { tools: TOOLS });

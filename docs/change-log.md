@@ -40,6 +40,44 @@
 
 ## 2026-08-07
 
+### MCP `clientInfo` 를 관측 축으로 — UA 로는 못 잡는 클라이언트를 프로토콜이 알려준다
+
+- **작업자**: @yooseongjin527
+- **의도 · 목표**: prod MCP 호출 **95건이 전부 `ua_class='unknown'`** 이었다. #112 가 고친
+  "UA 를 안 보냄"(`no_ua`)이 아니라 **UA 는 왔는데 목록에 없는** 경우다(UA 헤더를 지우고
+  보내 `no_ua` 가 정상 작동함을 먼저 확인했다). 근본 원인은 **전송 계층 UA 로는 MCP
+  클라이언트를 못 잡는다**는 것이다 — 크롤러는 `ClaudeBot` 같은 공개 규약이 있지만 MCP
+  클라이언트는 앱·라이브러리라 그런 게 없어 정규식을 늘려도 다음 클라이언트에서 또 뚫린다.
+  게다가 **원문 UA 를 저장하지 않는 설계**라 무엇이 왔는지 소급 확인도 불가능하다.
+- **조치** — 🔑 **이름은 프로토콜 규격 안에 이미 있었다.** MCP 스펙은 `initialize` 에
+  `clientInfo{name, version}` 을 **필수로** 요구한다. 우리는 `params` 를 구조분해해 놓고
+  `initialize` 에서 쓰지 않았다(`grep clientInfo src/mcp.js` → 0건).
+  - `normalizeMcpClient()` 신설 — `normalizeIntent` 와 같은 3분기(**안 보냄 NULL / 못 알아봄
+    `other` / 통과**). 공백은 하이픈으로 접는다(`"Example Client"` → `example-client`, 띄어
+    쓰는 구현이 흔해 버리면 정작 알고 싶은 이름을 잃는다). 40자 상한 — 자유 문자열을 로그에
+    그대로 실으면 값-최소화(0001)를 깬다.
+  - `initialize` 가 `trace.agentName`·`trace.agentMode` 를 덮어쓴다. **`intent` 가 만든
+    선례와 같은 방식**이다(*"MCP 는 툴 인자로 받아 이 값을 덮어쓴다"*).
+  - **마이그레이션 없음** — `agent_mode` 는 TEXT 라 값 집합만 는다(`no_ua` 때와 같은 방식).
+    출처는 이 값이 말한다: `crawler`·`on_demand` = UA / **`mcp_client` = 프로토콜**.
+  - 🔴 **안 건드린 것 둘**: `agent_verified` 는 clientInfo 도 자기 신고라 CF 검증 대상이
+    아니어서 `clientAxes` 가 넣은 **NULL 이 맞는 값**이다(0 을 쓰면 스펙이 경고한 "검증 실패"
+    오독). `ua_class` 도 그대로 — UA 를 진짜 못 알아본 것은 **사실**이고, 프로토콜 사실로
+    덮으면 #112 가 갈라 놓은 축이 도로 뭉개진다.
+- **결과**: `npm test` **184 PASS**(172 → 신규 12). 로컬 실물 검증에서
+  `agent_name=claude-desktop · agent_mode=mcp_client · agent_verified=NULL · ua_class=cli(불변)`
+  확인, 대조군(clientInfo 없음)은 전부 NULL.
+  ⚠️ **한계 — stateless 라 `initialize` 행에만 남는다.** 후속 `tools/call` 로는 안 이어지므로
+  *"누가 연결했나"* 는 알아도 *"이 호출이 누구 것인가"* 는 모른다. 세션을 두면 이어지지만
+  그건 stateless 결정(SSE 재접속 폭주 회피)을 뒤집는 것이라 대가가 훨씬 크다.
+  🔔 **PlayMCP 등록 전에 넣어야 하는 이유**: 원문 UA 를 안 남기는 설계라 **그 시점에 기록
+  하지 않으면 첫 연결의 정체가 영구히 사라진다**(#112 본문과 같은 논리). 등록은 우리가 정하는
+  일정이므로 그 앞에 끼워 넣을 수 있다.
+  🔵 **곁다리 정정**: PR#132 리뷰에서 *"`pattern_id` 는 컬럼 자체가 없어 별도 마이그레이션
+  건"* 이라고 했는데 **틀렸다** — `0005` 에 있고 prod 22컬럼에도 있다. `LOG_COLUMNS` 에 없을
+  뿐이고, CLAUDE.md §6 이 미룬 이유("패턴 실행 API 가 아직 없다")는 `run_pattern` 배포로
+  해소됐다. 배선은 별건.
+
 ### '열화'를 '품질 주의(표본 부족 · 게시 정상)'로 — 스펙 확정 반영 (#119 완결)
 
 - **작업자**: @Exisign
