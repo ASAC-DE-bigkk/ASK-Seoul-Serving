@@ -591,7 +591,10 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
   ).bind(productId, patternId).first();
   if (!pattern)
     return problem(404, "unknown pattern",
-      `'${patternId}' 는 '${productId}' 의 패턴에 없다 — describe_product 의 usage_patterns 에서 고를 것`);
+      // 문구가 **두 독자를 겸한다** — MCP 로 오는 AI 와, `/api/v1/patterns` 로 오는 사람.
+      // 전에는 `describe_product`(MCP 툴 이름)를 가리켰는데, 사람 쪽에는 그런 버튼이 없어
+      // 막다른 길이었다. 둘 다 결국 **카탈로그의 usage_patterns** 를 보므로 그걸 가리킨다.
+      `'${patternId}' 는 '${productId}' 의 패턴에 없다 — 카탈로그의 usage_patterns 에서 runnable 인 것을 고를 것`);
   // 미검증 패턴 실행은 "환각을 서버가 대행"하는 꼴이다(#118 ②) — 검증되면 저절로 열린다
   if (!pattern.verified_at)
     return problem(409, "pattern not verified",
@@ -649,7 +652,7 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
     // 패턴 SQL 이 게시본과 어긋난 경우(드리프트) — 소비자 잘못이 아니므로 그렇게 말한다
     trace.status = 500;
     return problem(500, "pattern execution failed",
-      "패턴이 현재 게시본과 어긋난다(드리프트) — 도메인 검증 사이클에서 잡힐 문제이니 다른 패턴이나 query_product 를 쓸 것");
+      "패턴이 현재 게시본과 어긋난다(드리프트) — 도메인 검증 사이클에서 잡힐 문제이니 다른 패턴이나 일반 데이터 조회를 쓸 것");
   }
   const rows = results.length > MAX_LIMIT ? results.slice(0, MAX_LIMIT) : results;
   trace.rows = rows.length;
