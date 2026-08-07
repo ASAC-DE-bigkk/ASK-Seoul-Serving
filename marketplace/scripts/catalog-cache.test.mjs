@@ -286,36 +286,37 @@ test("만료돼도 응답은 갱신을 **기다리지 않는다** — 갱신이 
   });
 });
 
-// ── 정책 전환이 캐시에 갇히지 않는다 (#110 ②) ────────────────────────────────
+// ── 응답 본문에 든 값은 캐시 키에도 있어야 한다 (#110 ② 의 잔상) ─────────────
 //
-// 🐛 실측으로 걸린 버그다(2026-08-06). 응답 본문에 `key_issuance` 가 들어 있는데 캐시 키에는
-// 발급 방식이 안 섞여 있어서, Google 발급을 켠 직후에도 캐시가 옛 값("email")을 최대 10분간
-// 줬다. 그 사이 화면은 이메일 폼을 띄우고 제출은 403 을 받는다 — **엣지 캐시는 배포를 넘어
-// 살아남으므로 prod 에서 그대로 재현될 문제였다.**
+// 🐛 2026-08-06 실측 사고. 응답 본문에 `key_issuance` 가 들어 있는데 캐시 키에는 발급 방식이
+// 안 섞여 있어서, Google 발급을 켠 직후에도 캐시가 옛 값("email")을 최대 10분간 줬다.
+// 그 사이 화면은 이메일 폼을 띄우고 제출은 403 을 받았다 — **엣지 캐시는 배포를 넘어
+// 살아남으므로** 배포만으로는 안 풀리는 문제였다. 고친 방식은 캐시를 지우는 게 아니라
+// **키를 가르는 것**이었다.
 //
-// 고친 방식은 캐시를 지우는 게 아니라 **키를 가르는 것**이다. 이 테스트가 지키는 건
-// "정책이 다르면 다른 칸을 본다" 하나다.
-test("발급 방식이 바뀌면 캐시 칸도 바뀐다 — 정책 전환이 캐시에 갇히지 않는다", () => {
-  const email = catalogCacheKey({});
-  const oauth = catalogCacheKey({ GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret" });
-  assert.notEqual(email, oauth);
-  // 반쪽 설정은 미설정과 같은 칸이다 — isConfigured 가 둘 다 요구한다
-  assert.equal(catalogCacheKey({ GOOGLE_CLIENT_ID: "id" }), email);
+// 2026-08-07 이메일 발급을 폐지하면서 그 축은 **상수**가 됐다(발급 방식이 하나뿐이다).
+// 가를 것이 없어 키에서 뺐고, 그래서 "정책이 다르면 다른 칸" 테스트도 지웠다.
+// **대신 원인을 지키는 테스트를 남긴다** — 캐시된 응답이 환경값에 따라 달라지면 안 된다.
+// 이게 깨지면 그때 캐시 키에 그 축을 되살려야 한다.
+test("캐시 키는 환경에 따라 갈리지 않는다 — 응답 본문이 환경값을 안 담기 때문이다", () => {
+  const bare = catalogCacheKey({});
+  assert.equal(catalogCacheKey({ GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret" }), bare);
+  assert.equal(catalogCacheKey({ ASK_ENV: "prod" }), bare);
 });
 
-test("옛 방식으로 캐시된 사본을 새 방식이 이어받지 않는다", async () => {
-  const stub = stubCaches();
-  await withCaches(stub, async () => {
-    // 이메일 발급 시절의 신선한 사본을 심는다
-    await seedAged(stub, 1, { products: [{ product_id: "before_oauth" }] }, {});
-    const db = stubDb();
-    const oauthEnv = { DB: db, ASK_ENV: "dev", GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret" };
-    const res = await worker.fetch(
-      new Request("https://marketplace.example.test/api/v1/catalog"), oauthEnv,
-      { waitUntil: () => {} });
-    const body = await res.json();
-    // 옛 사본을 물었다면 before_oauth 가 나오고 key_issuance 도 email 이었을 것이다
-    assert.notEqual(body.products?.[0]?.product_id, "before_oauth");
-    assert.equal(body.key_issuance.method, "google_oauth");
-  });
+test("발급 방식은 환경과 무관하게 google_oauth 하나다", async () => {
+  // ⚠️ 여기서 옛 사본을 심어 두고 "안 물어야 한다"고 쓰면 안 된다 — 캐시 칸이 하나가 된 뒤로는
+  //    **무는 것이 정상**이다(그게 캐시다). 확인할 것은 "새로 만든 응답이 환경과 무관하게
+  //    같은 발급 방식을 말하는가" 하나다.
+  for (const env of [{ ASK_ENV: "dev" }, { ASK_ENV: "prod", GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "s" }]) {
+    const stub = stubCaches();
+    await withCaches(stub, async () => {
+      const res = await worker.fetch(
+        new Request("https://marketplace.example.test/api/v1/catalog"),
+        { DB: stubDb(), ...env }, { waitUntil: () => {} });
+      const body = await res.json();
+      assert.equal(body.key_issuance.method, "google_oauth");
+      assert.equal(body.key_issuance.start, "/api/v1/auth/google");
+    });
+  }
 });
