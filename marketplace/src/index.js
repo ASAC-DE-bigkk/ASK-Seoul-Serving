@@ -634,6 +634,92 @@ async function handleData(env, id, params, keyRow, trace = {}, opts = {}) {
   }, 200, quotaHeaders(usage.used, usage.quota));
 }
 
+// 검증된 질의 패턴 실행 (#118 run_pattern — MCP P1). AI 가 필터를 조립하는 대신 도메인
+// 오너가 게시·검증한 SQL(d1_usage_patterns)을 서버가 실행한다 — 질의를 "짓는" 여지가 없다.
+//
+// 계약(#118 4항): ① 바인딩은 SQL 의 :이름 자리만(선언 밖 파라미터는 400) ② verified_* 있는
+// 패턴만 실행 ③ 과금은 query_product 와 동일(쿼터 1회·상한 MAX_LIMIT·권리 게이트 상속,
+// 버스트는 tools/call 공통) ④ 응답에 insight_sample_ko(해석 예시) 동봉.
+export async function handleRunPattern(env, productId, patternId, userParams, keyRow, trace = {}) {
+  trace.productId = productId;
+  if (!/^[a-z0-9_]+$/.test(String(productId)) || !/^[a-z0-9_]+$/.test(String(patternId)))
+    return problem(400, "invalid id", "product_id·pattern_id 형식이 아니다");
+  const pattern = await env.DB.prepare(
+    "SELECT sql, question_ko, verified_rows, verified_at, allow_empty, insight_sample_ko " +
+    "FROM d1_usage_patterns WHERE product_id = ? AND pattern_id = ?"
+  ).bind(productId, patternId).first();
+  if (!pattern)
+    return problem(404, "unknown pattern",
+      `'${patternId}' 는 '${productId}' 의 패턴에 없다 — describe_product 의 usage_patterns 에서 고를 것`);
+  // 미검증 패턴 실행은 "환각을 서버가 대행"하는 꼴이다(#118 ②) — 검증되면 저절로 열린다
+  if (!pattern.verified_at)
+    return problem(409, "pattern not verified",
+      "아직 검증(verified_*)되지 않은 패턴이라 실행하지 않는다 — 도메인 검증 사이클 후 열린다");
+
+  // 재배포 권리 게이트(#88) — handleData 와 같은 자리·같은 판정. 차단은 무과금.
+  const rights = await loadRedistributionRights(env, productId);
+  const rightsBlockers = redistributionBlockers(rights);
+  if (rightsBlockers.length) {
+    trace.status = 503;
+    return rightsBlockedProblem(productId, null, rightsBlockers);
+  }
+
+  // 저장된 SQL 만, 그리고 읽기만 — 검증기(serving_verify)와 같은 원칙이다.
+  // 주석을 먼저 벗긴다: 패턴 SQL 은 주석에 예시값(-- :n=10)을 적는 관례라, 안 벗기면
+  // 주석 속 :이름까지 자리로 세어 바인딩 개수가 어긋난다.
+  const sqlBody = String(pattern.sql).replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "").trim();
+  if (!/^(select|with)\b/i.test(sqlBody))
+    return problem(400, "pattern not runnable", "SELECT/WITH 패턴만 실행한다");
+
+  // :이름 자리를 등장 순서대로 ? 로 바꾸고, 값은 사용자 params 에서만 받는다.
+  const binds = [];
+  const converted = sqlBody.replace(/:([a-z_][a-z0-9_]*)/gi, (_, nm) => { binds.push(nm); return "?"; });
+  const declared = [...new Set(binds)];
+  const supplied = userParams && typeof userParams === "object" ? userParams : {};
+  const extra = Object.keys(supplied).filter((k) => !declared.includes(k));
+  if (extra.length)
+    return problem(400, "unknown parameter", `선언되지 않은 파라미터: ${extra.join(", ")} — 이 패턴의 파라미터는 [${declared.join(", ")}] 뿐이다`);
+  const values = [];
+  for (const nm of binds) {
+    let v = supplied[nm];
+    if (v === undefined || v === null)
+      return problem(400, "missing parameter", `파라미터 :${nm} 값이 필요하다 — 이 패턴의 파라미터: [${declared.join(", ")}]`);
+    if (typeof v !== "string" && typeof v !== "number")
+      return problem(400, "invalid parameter", `:${nm} 은 문자열/숫자만 받는다`);
+    // 행수 파라미터는 서빙 상한을 넘지 못한다 — 상한은 query_product 와 같은 값 하나뿐이다
+    if (typeof v === "number" && /^(n|limit|top_n)$/.test(nm)) v = Math.min(v, MAX_LIMIT);
+    values.push(v);
+  }
+
+  // 쿼터는 유효한 실행 직전만 소모 — 400/404/409 는 무과금 (query_product 와 같은 규약)
+  const usage = await countUsage(env, keyRow);
+  if (usage.exceeded) return quotaExceededProblem(usage.used, usage.quota);
+
+  let results;
+  try {
+    ({ results } = await env.DB.prepare(converted).bind(...values).all());
+  } catch (e) {
+    // 패턴 SQL 이 게시본과 어긋난 경우(드리프트) — 소비자 잘못이 아니므로 그렇게 말한다
+    trace.status = 500;
+    return problem(500, "pattern execution failed",
+      "패턴이 현재 게시본과 어긋난다(드리프트) — 도메인 검증 사이클에서 잡힐 문제이니 다른 패턴이나 query_product 를 쓸 것");
+  }
+  const rows = results.length > MAX_LIMIT ? results.slice(0, MAX_LIMIT) : results;
+  trace.rows = rows.length;
+  return json({
+    product_id: productId,
+    pattern_id: patternId,
+    question_ko: pattern.question_ko ?? null,
+    row_count: rows.length,
+    rows,
+    // 0행 해석까지 계약이다 — allow_empty 패턴은 빈 결과가 정상 상태다(#638)
+    ...(rows.length === 0 ? { empty_note: pattern.allow_empty ? "이 패턴은 빈 결과가 정상일 수 있다(allow_empty)" : "0행 — 조건에 맞는 데이터가 없다(실패 아님)" } : {}),
+    insight_sample_ko: pattern.insight_sample_ko ?? null,
+    verified: { rows: pattern.verified_rows ?? null, at: pattern.verified_at },
+    usage: { used: usage.used, daily_quota: usage.quota },
+  }, 200, quotaHeaders(usage.used, usage.quota));
+}
+
 async function handleMe(env, keyRow) {
   const day = kstDay();
   const row = await env.DB.prepare(
@@ -752,7 +838,7 @@ async function route(request, env, url, trace, ctx) {
       // ctx 를 물려 SWR 캐시가 살게 한다(#118 리뷰 ③) — 안 물리면 404 제안 경로의 캐시
       // 미스가 오류 경로에서 동기 D1 5회가 된다.
       handleCatalog: (e) => handleCatalog(e, ctx),
-      handlePreview, handleData, handleMe, handleProductBundle,
+      handlePreview, handleData, handleMe, handleProductBundle, handleRunPattern,
     });
   }
   if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/v1/keys)");

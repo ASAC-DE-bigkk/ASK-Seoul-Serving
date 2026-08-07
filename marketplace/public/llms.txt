@@ -44,6 +44,8 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
 - `describe_product(product_id)` — 컬럼·grain·PK·시간축·usage_patterns·출처/신선도.
 - `preview_product(product_id)` — 5행 미리보기(쿼터 무과금).
 - `query_product(product_id, filters, from, to, limit, cursor, intent)` — 데이터 조회.
+- `run_pattern(product_id, pattern_id, params)` — **검증된 질의 패턴 실행(권장)**. describe 의
+  usage_patterns 에서 고르고 :파라미터 값만 넘긴다 — 저장·검증된 SQL 만 돌므로 필터 조립보다 정확하다.
 - `check_quota` — 남은 일일 쿼터.
 
 `query_product` 응답에는 `data_context` 가 동봉된다 — `freshness`(이 게시본의 기준 시점) ·
@@ -57,7 +59,7 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
 
 **한도는 REST 와 같은 키 버킷을 쓴다** — 분당 60회를 넘으면 JSON-RPC 봉투가 아니라
 **HTTP 429 + `Retry-After`** 가 온다. 그 시간만큼 기다렸다 재시도한다. 일일 쿼터는
-`query_product` 만 소모한다.
+`query_product`·`run_pattern` 이 소모한다.
 
 툴 실패는 봉투 안 `isError: true` + 안내 문구로 온다(HTTP 는 200). 없는 제품·만료된 커서·
 쿼터 초과가 전부 이 형태이므로, **내용을 읽고 그대로 따른다** — 임의 재시도나 다른 제품으로의
