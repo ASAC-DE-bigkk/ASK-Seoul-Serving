@@ -6,7 +6,8 @@
 //                       ASK-Seoul#78 규약 — 정본 스키마는 ASAC-DAG, 여기는 읽기 전용. decision/0009)
 //   · 응답 상태       — 외부에 잘 나가고 있나 (_gateway_request_log, 게이트웨이가 쌓는다)
 //   · 이용 행동       — **누가** 쓰나: 사람·AI·여정 (decision/0010)
-//   · API 사용량      — **무엇이** 얼마나 쓰이나: API별·분야별 (_gateway_request_log + _catalog)
+//   · API 사용량      — **무엇이** 얼마나 쓰이나: API별·분야별 (_gateway_request_log + _catalog
+//                       + d1_catalog_display — 제품의 사람 이름. ASAC-DAG#706, DISPLAY_COLS 참고)
 //   · 이용자 키       — 발급된 키의 상태·쿼터
 // 전부 같은 D1 을 읽는다. 마켓플레이스와는 **다른 Worker · 다른 호스트**다 — 청중이 다르고,
 // 배포 단위가 갈려야 사고 반경도 갈린다.
@@ -511,6 +512,11 @@ const SOURCES = [
     need: ["key_hash", "email", "status", "daily_quota"], used: "이용자 키" },
   { table: "_catalog", owner: "도메인 export", home: "both", pane: ["apis"],
     need: ["name", "product_id", "external"], used: "API 사용량" },
+  // 표시 메타(ASAC-DAG#706). 없어도 탭은 살아 있고 제품이 표명으로 보일 뿐이라
+  // `absent` 가 곧 사고는 아니다 — 그래도 진단에 넣는 이유는 "제목이 다 사라졌다"의
+  // 원인이 표 부재인지 도메인 미선언인지를 화면에서 갈라야 하기 때문이다.
+  { table: "d1_catalog_display", owner: "도메인 export", home: "both", pane: ["apis"],
+    need: ["product_id", "title", "summary"], used: "API 사용량(표시명)" },
   { table: "_ops_slo", owner: "콘솔", home: "both", pane: ["pipeline"],
     need: ["domain", "event_date"], used: "품질 기준(SLO)" },
   { table: "_ops_domain", owner: "콘솔", home: "both", pane: ["pipeline"],
@@ -785,6 +791,48 @@ async function domainDay(env, params) {
 // 도메인 컬럼을 새로 만들거나 매핑 테이블을 두지 않는 이유다.
 const DOMAIN_EXPR = "substr(c.product_id, 1, instr(c.product_id, '_') - 1)";
 
+// ── 제품의 사람 이름 (ASAC-DAG#706) ───────────────────────────────────────────────
+//
+// 콘솔은 지금까지 제품을 `_catalog.name`(= 물리 표명)으로만 불렀다. 화면에 `d1_age_band`·
+// `gold_transit_dong_hourly` 가 그대로 찍힌다는 뜻이고, 그건 **CLAUDE.md §5 위반**이다
+// ("화면 문구에 내부 용어를 쓰지 않는다"). 고칠 방법이 없어서가 아니라 **번역할 정본이
+// 없어서** 방치돼 있었다 — 손으로 번역표를 들면 마켓플레이스가 겪은 손 사본 어긋남
+// (`product-display.json` 62키 대 카탈로그 56종)을 콘솔에 하나 더 만드는 꼴이다.
+//
+// #706 이 그 정본을 만들었다: dbt 의 `meta.serving.display` 선언 → 발행 → `d1_catalog_display`.
+// 마켓플레이스가 손 사본을 지우고 읽는 표와 **같은 표·같은 D1** 이라, 콘솔은 읽기만 하면 된다
+// (#706 §3-3 이 "콘솔도 같은 값을 받는다"고 적은 자리가 여기다).
+//
+// 🔴 **`_catalog` 에 LEFT JOIN 하지 않는다.** 조인하면 표가 없거나 못 읽을 때 질의가 통째로
+// 실패해 **API 사용량 탭 전체가 빈다.** 표시명이 없는 것(제품이 표명으로 보임)과 사용량을
+// 못 읽는 것(탭이 죽음)은 심각도가 다르다 — §5 "부분 실패는 강등" 이 이 경우다.
+// 따로 읽어서 응답에서 붙이고, 못 읽으면 `meta.missing` 에 적고 화면이 표명으로 내려앉는다.
+//
+// 🔴 **미선언을 빈 값으로 꾸미지 않는다.** 선언이 없으면 `display: null` 이고, 화면은 표명을
+// 쓴다. 빈 문자열로 채우면 화면이 "제목이 있는 척"한다(#706 이 못 박은 규약).
+// 지금 운영 실측은 56종 중 31종 선언 — 나머지가 표명으로 보이는 건 정상이고, 그 자리가
+// 곧 "아직 선언 안 한 도메인"의 신호다(optional 계약이라 발행은 안 막힌다).
+const DISPLAY_COLS = "product_id, title, summary, caveat, use_cases";
+
+/** 게시본의 JSON 배열 문자열. 깨진 값 하나가 탭을 죽이지 않게 배열이 아니면 버린다. */
+function parseList(s) {
+  try { const v = JSON.parse(s); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
+const displayOf = (r) => ({
+  title: r.title ?? null,
+  summary: r.summary ?? null,
+  caveat: r.caveat ?? null,
+  use_cases: parseList(r.use_cases),
+});
+
+async function displayMap(env) {
+  const got = await safeRows(env, `SELECT ${DISPLAY_COLS} FROM d1_catalog_display`);
+  const map = new Map();
+  for (const r of got.rows) map.set(r.product_id, displayOf(r));
+  return { map, ok: got.ok };
+}
+
 // 카탈로그를 왼쪽에 둔다 — **호출이 0인 API 도 목록에 나와야** "전체 리스트"가 된다.
 // 한 번도 안 불린 제품이야말로 알아야 하는 정보다.
 async function usage(env, params) {
@@ -793,7 +841,7 @@ async function usage(env, params) {
   // 별칭 붙은 질의라 `_R` 을 쓴다(#64).
   const gwWR = gwWhereR(env);
 
-  const [apis, domains, monthly] = await Promise.all([
+  const [apis, domains, monthly, disp] = await Promise.all([
     safeRows(env,
       "SELECT c.name, c.product_id, " + DOMAIN_EXPR + " AS domain, c.description, c.row_count AS rows_total, " +
       "COUNT(r.rowid) AS calls, " +
@@ -821,20 +869,30 @@ async function usage(env, params) {
       "FROM _gateway_request_log r JOIN _catalog c ON " + CATALOG_JOIN + " " +
       "WHERE r.ts >= datetime('now', ?)" + gwWR +
       " GROUP BY month, domain ORDER BY month, calls DESC", since),
+    displayMap(env),
   ]);
+
+  // 표시 메타는 조인이 아니라 여기서 붙인다(DISPLAY_COLS 주석). 미선언은 null 그대로 간다.
+  const apiRows = apis.rows.map((r) => ({ ...r, display: disp.map.get(r.product_id) || null }));
+  const undeclared = apiRows.filter((r) => !r.display).length;
 
   return json({
     window_days: days,
     generated_at: new Date().toISOString(),
     meta: {
-      missing: apis.ok ? [] : ["usage"],
+      // 표시명을 못 읽은 것과 사용량을 못 읽은 것을 **가른다** — 조치가 다르다.
+      missing: [...(apis.ok ? [] : ["usage"]), ...(disp.ok ? [] : ["display"])],
+      // 거른 것은 걸렀다고 말한다(0012). 표명으로 보이는 제품이 몇 개인지 화면이 밝혀야
+      // 운영자가 "콘솔이 이름을 잃었다"와 "도메인이 아직 선언을 안 했다"를 가른다.
+      display_declared: apiRows.length - undeclared,
+      display_undeclared: undeclared,
       // 요청 값·응답 본문은 애초에 저장하지 않는다(수집 원칙 ①·②). 화면이 "없는 게 아니라
       // 안 남긴 것"이라고 말할 수 있도록 서버가 명시한다 — 사용자가 버그로 오해하지 않게.
       detail_scope: "filters_axis_only",
       log_retention_days: 30,
     },
     domains: domains.rows,
-    apis: apis.rows,
+    apis: apiRows,
     monthly: monthly.rows,
   });
 }
@@ -860,6 +918,12 @@ async function usageDetail(env, name, params) {
   const KEY_W = gwWhere(env) + " AND (table_name = ? OR product_id = ?) ";
   const K = [name, product.product_id || name];
 
+  // 표시 메타는 한 행만 읽는다 — 목록과 **같은 표·같은 규약**이고, 여기서도 조인하지 않는다
+  // (DISPLAY_COLS 주석). 못 읽으면 상세 머리가 표명으로 내려앉을 뿐 상세는 그대로 열린다.
+  const dispRow = await safeRows(env,
+    `SELECT ${DISPLAY_COLS} FROM d1_catalog_display WHERE product_id = ?`,
+    product.product_id || name);
+
   const [daily, filters, statuses, recent] = await Promise.all([
     safeRows(env, "SELECT substr(ts,1,10) AS day, COUNT(*) AS calls, " +
       "SUM(status >= 400) AS errors, ROUND(AVG(row_count),1) AS avg_rows " +
@@ -882,7 +946,11 @@ async function usageDetail(env, name, params) {
     window_days: days,
     generated_at: new Date().toISOString(),
     // columns 는 카탈로그가 가진 '이 제품이 어떤 컬럼을 가졌나'다 — 필터 축을 읽을 때의 사전.
-    api: { ...product, domain: String(product.product_id || "").split("_")[0] },
+    api: {
+      ...product,
+      domain: String(product.product_id || "").split("_")[0],
+      display: dispRow.rows[0] ? displayOf(dispRow.rows[0]) : null,
+    },
     meta: { detail_scope: "filters_axis_only", log_retention_days: 30 },
     daily: daily.rows, filters: filters.rows, statuses: statuses.rows, recent: recent.rows,
   });

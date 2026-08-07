@@ -27,6 +27,10 @@
   고치지 않는다. 항목 추가는 허용, **삭제·이름 변경은 금지**(#78 D-3).
 - **내용물 리프레시는 마이그레이션이 아니라 픽스처의 몫**이다 — 이미 그렇게 돼 있다
   (`slo_sample.sql`·`ops_records_sample.sql` 모두 자기 범위를 DELETE 하고 다시 넣는다).
+  ⚠️ **그 규칙이 안 맞는 픽스처가 하나 있다**: `ops_domain.sql`(분야 등록부)은 표본이 아니라
+  **참조 내용**이고 운영에 돌리는 파일이라, `DELETE` 없이 `INSERT OR REPLACE` 로 겹쳐 쓴다 —
+  지웠다 넣는 사이 운영 화면이 라벨을 잃고, 퇴역한 분야의 라벨도 남겨야 하기 때문이다
+  (2026-08-07 · [manual-steps §4-1](../../../docs/manual-steps.md)).
 - 로컬에서 스키마를 통째로 리셋하고 싶으면 마이그레이션에 DROP 을 넣는 게 아니라
   **로컬 상태를 지운다**: `rm -rf ../marketplace/.wrangler/state` 후 양쪽 재시드.
 - **적용 여부는 D1 안의 장부가 추적한다** — `wrangler d1 migrations apply`. 사람이
@@ -49,7 +53,7 @@
 | `_ops_slo` · `_ops_domain` | **콘솔** (`migrations/0001`) | 스키마·내용 모두 |
 | `_ops_run_event` · `_ops_daily_metric` · `_ops_pipeline_state` · `_ops_pipeline_expectation` | ASAC-DAG (`common/ops/d1_ops.py`, `ops-d1/v1`) | **읽기 전용** |
 | `_keys` · `_usage` · `_burst` · `_request_log` | 게이트웨이 (`../marketplace/migrations/`) | 읽기 + 정해진 키 조치만([0006](0006-key-hash-identifier.md)) |
-| `_catalog` · 제품 표 (`d1_*`) | 도메인 export (`meta.serving` 계약) | **읽기 전용** |
+| `_catalog` · `d1_catalog_display` · 제품 표 (`d1_*`) | 도메인 export (`meta.serving` 계약) | **읽기 전용** |
 
 - 콘솔 `migrations/` 에 **남의 표 이름이 등장하면 원칙적으로 위반**이다(생성·삭제·ALTER 전부).
 - **유일한 예외가 `migrations/0002` 다** — 조회 DB 4종의 **로컬 미러**. 원격 없이 화면을
