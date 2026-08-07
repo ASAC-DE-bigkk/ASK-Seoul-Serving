@@ -75,7 +75,10 @@ export const PUBLIC = "external = 1";
 export async function authenticate(env, request, { allowRevoked = false } = {}) {
   const auth = request.headers.get("authorization") || "";
   const m = auth.match(/^Bearer\s+(ask_[0-9a-f]{32})$/i);
-  if (!m) return { error: problem(401, "missing api key", "Authorization: Bearer ask_… 헤더가 필요하다 — POST /api/v1/keys 로 발급") };
+  // ⚠️ 안내가 **폐지된 경로**를 가르치고 있었다 — `POST /api/v1/keys` 는 2026-08-07 에
+  //    없앴고 지금은 403 을 준다. 401 을 받은 사람이 그대로 따라가면 또 막힌다.
+  //    발급은 사람이 브라우저로 여는 Google 로그인 하나뿐이라 그 주소를 준다.
+  if (!m) return { error: problem(401, "missing api key", "Authorization: Bearer ask_… 헤더가 필요하다 — 키 발급은 브라우저로 GET /api/v1/auth/google") };
   const hash = await sha256hex(m[1]);
   const row = await env.DB.prepare(
     "SELECT key_hash, key_prefix, email, status, daily_quota FROM _keys WHERE key_hash = ?"
