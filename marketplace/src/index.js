@@ -817,7 +817,7 @@ async function route(request, env, url, trace, ctx) {
     return handleData(env, decodeURIComponent(dataMatch[1]), url.searchParams, keyRow, trace);
   }
 
-  // ── /skill/v1 — seoul-urban-analytics K-Skill 전용 API ──────────────────────
+  // ── /skill/v1 — seoul-weather-risk K-Skill 전용 API ──────────────────────
   // 제품 선택·응답 계약은 `/api/v1` 과 분리하지만, 키·버스트·오류·로그 정책은
   // 공유한다. K-Skill 신규 경로는 전부 Bearer 인증이며 메타 조회는 쿼터를 소모하지 않는다.
   if (path.startsWith("/skill/v1/")) {
@@ -868,7 +868,7 @@ async function route(request, env, url, trace, ctx) {
   return problem(404, "not found",
     "GET /api/v1/catalog · /api/v1/preview/<table> · /api/v1/data/<table> · /api/v1/me · " +
     "/api/v1/products/<product_id> · /api/v1/glossary, POST·DELETE /api/v1/keys · " +
-    "GET /skill/v1/bundles/seoul-urban-analytics, POST /mcp — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
+    "GET /skill/v1/bundles/seoul-weather-risk, POST /mcp — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
 }
 
 /**

@@ -813,7 +813,11 @@ function setScope(dom) {
   if (dom === DOMSCOPE) return;
   DOMSCOPE = dom;
   if (LAST_DATA) render(LAST_DATA);   // render 가 끝에서 showTab → 주소까지 갱신한다
-  if (USE) renderApiList();           // apis 목록은 render 밖(USE)이라 여기서 따로 스코프 반영(#3)
+  // 🔴 API 사용량 탭은 `render()` 밖(`USE`)이라 여기서 따로 다시 그린다. 예전에는
+  //    `renderApiList()` 만 불러서 **목록만 걸리고 KPI·분야별 비중·분야 선택은 전체 그대로**
+  //    였다 — 스코프를 바꿔도 화면 대부분이 안 바뀌니 "안 먹는다"로 읽혔다.
+  //    탭 하나는 통째로 같이 움직여야 한다.
+  if (USE) renderApis(USE);
 }
 $("domScope").addEventListener("change", (e) => setScope(e.target.value));
 $("scopeClear").addEventListener("click", () => setScope(""));
@@ -945,7 +949,9 @@ function render(d) {
       ". 그래서 <b>분야별 요청을 다 더해도 '전체'보다 작습니다.</b> 빠진 게 아니라 셀 분야가 없는 것입니다.<br>" +
       "이용자는 여러 분야를 쓰므로 <b>여기 요청 수는 이 분야에 보낸 것만</b>입니다."));
     N.usage.push(note("info", dl + " 분야만", "AI 수요는 이 분야로 좁혔습니다. 여정·손님 구성·추적은 분야 축이 없어 전체입니다."));
-    N.apis.push(note("info", dl + " 분야만", "이 탭은 아래 '분야별 비중'과 목록 필터로 이미 분야를 고를 수 있어, 스코프와 별개로 봅니다."));
+    N.apis.push(note("info", dl + " 분야만",
+      "KPI·분야별 비중·API 목록까지 <b>이 화면 전부</b>를 이 분야로 좁혔습니다. " +
+      "카드 안의 '분야 선택'도 같은 분야로 맞춰집니다 — 두 곳이 서로 다른 말을 하지 않게."));
     N.keys.push(note("info", "분야 스코프 없음", "이용자 키는 분야 축이 없습니다 — 스코프와 무관하게 전체 키를 보여줍니다."));
   }
 
@@ -1807,6 +1813,9 @@ let USE = null;             // 서버 응답 원본
 // 주소로 바로 들어온 경우(#apis/<API>)를 **여기서** 잡는다. showTab 이 loadApis 보다 먼저
 // 돌면서 해시를 정규화하므로, 그 전에 값을 확보해 두지 않으면 딥링크가 지워진다.
 let DETAIL_OPEN = parseHash().pane === "apis" ? parseHash().api : null;
+// 카드 안 '분야 선택'이 **스코프가 넣어 준 값인지, 사람이 고른 값인지**. 스코프가 풀릴 때
+// 돌려줄지를 이걸로 가른다 — 없으면 스코프를 푼 뒤에도 그 카드만 한 분야에 남는다.
+let PICK_BY_SCOPE = false;
 
 // ── 제품의 사람 이름 (ASAC-DAG#706) ──────────────────────────────────────────────
 //
@@ -1840,21 +1849,29 @@ const apiHay = (a) => (a.name + " " + (a.product_id || "") + " " + (a.descriptio
 
 function renderApis(u) {
   USE = u;
-  const totalCalls = u.domains.reduce((a, r) => a + r.calls, 0);
-  const usedApis = u.apis.filter((a) => a.calls > 0).length;
-  const errs = u.domains.reduce((a, r) => a + r.errors, 0);
+  // 🔴 **이 탭도 '보는 분야'를 탄다.** 예전에는 목록(`renderApiList`)만 걸리고 KPI·분야별
+  //    비중·분야 선택은 전체 그대로였다 — 스코프를 걸어도 **화면 대부분이 안 바뀌어**
+  //    "고장났나"로 읽혔다. 스코프를 노출했으면(`SCOPED_PANES`) **화면 전부가 따라야 한다.**
+  //    한 화면에서 어떤 칸은 걸리고 어떤 칸은 안 걸리는 게 제일 나쁘다.
+  const uDomains = DOMSCOPE ? u.domains.filter((r) => r.domain === DOMSCOPE) : u.domains;
+  const uApis = DOMSCOPE ? u.apis.filter((a) => a.domain === DOMSCOPE) : u.apis;
+  const scopeSuffix = DOMSCOPE ? " · " + domLabel(DOMSCOPE) : "";
+
+  const totalCalls = uDomains.reduce((a, r) => a + r.calls, 0);
+  const usedApis = uApis.filter((a) => a.calls > 0).length;
+  const errs = uDomains.reduce((a, r) => a + r.errors, 0);
   kpis("useKpis", [
-    ["등록된 API", nf.format(u.apis.length), "외부에 열려 있는 전체", ""],
-    ["실제 쓰인 API", usedApis + " / " + u.apis.length,
-     "최근 " + u.window_days + "일 기준", usedApis === 0 ? "bad" : ""],
-    ["전체 요청", nf.format(totalCalls), "API 조회 요청만 (목록·사용량 조회 제외)", ""],
-    ["실패", nf.format(errs), "답을 받지 못한 요청", errs > 0 ? "bad" : ""],
+    ["등록된 API", nf.format(uApis.length), "외부에 열려 있는 전체" + scopeSuffix, ""],
+    ["실제 쓰인 API", usedApis + " / " + uApis.length,
+     "최근 " + u.window_days + "일 기준" + scopeSuffix, usedApis === 0 ? "bad" : ""],
+    ["전체 요청", nf.format(totalCalls), "API 조회 요청만 (목록·사용량 조회 제외)" + scopeSuffix, ""],
+    ["실패", nf.format(errs), "답을 받지 못한 요청" + scopeSuffix, errs > 0 ? "bad" : ""],
   ]);
 
   // 분야별 비중 — 가로 막대. 요청이 0 인 분야도 남겨 둔다("안 쓰인다"가 정보다)
-  const max = Math.max(1, ...u.domains.map((r) => r.calls));
-  $("domShare").innerHTML = u.domains.length
-    ? "<div class='share'>" + u.domains.map((r) => {
+  const max = Math.max(1, ...uDomains.map((r) => r.calls));
+  $("domShare").innerHTML = uDomains.length
+    ? "<div class='share'>" + uDomains.map((r) => {
         const pct = totalCalls ? (r.calls / totalCalls * 100) : 0;
         return "<div class='row'><div class='nm'>" + esc(domLabel(r.domain)) +
           "<small>API " + r.apis_used + "/" + r.api_count + "개 사용</small></div>" +
@@ -1866,13 +1883,22 @@ function renderApis(u) {
       "분야는 제품 이름 앞부분으로 나뉩니다. API 목록·내 사용량처럼 특정 데이터에 속하지 않는 요청은 여기 포함되지 않습니다.</p>"
     : emptyBox("읽지 못함");
 
-  // 분야 선택 드롭다운 두 개(비중 카드 옆 · 목록 필터) — 값은 서로 독립이다
-  const opts = (all) => (all ? "<option value=''>전체 분야</option>" : "") +
-    u.domains.map((r) => "<option value='" + esc(r.domain) + "'>" + esc(domLabel(r.domain)) +
+  // 분야 선택 드롭다운 — **'전체 통합'을 맨 위에 둔다.** 예전에는 분야만 나열해서
+  // "전체로 되돌리는 길"이 없었다. 고른 뒤 되돌릴 수 없는 선택지는 함정이다.
+  // 목록은 지금 스코프 안에서만 뽑는다 — 스코프가 걸렸는데 그 밖 분야를 고를 수 있으면
+  // 화면 두 곳이 서로 다른 말을 한다.
+  const opts = () => "<option value=''>전체 통합</option>" +
+    uDomains.map((r) => "<option value='" + esc(r.domain) + "'>" + esc(domLabel(r.domain)) +
       " (" + r.calls + ")</option>").join("");
   const keepPick = $("domPick").value;
-  $("domPick").innerHTML = opts(false);
-  $("domPick").value = keepPick || (u.domains[0] && u.domains[0].domain) || "";
+  $("domPick").innerHTML = opts();
+  // 스코프가 걸린 동안은 **스코프가 이 선택을 소유한다** — 풀리면 '전체 통합'으로 돌려준다.
+  // 사람이 직접 고른 값은 자동 새로고침을 넘어 유지되지만(PICK_BY_SCOPE=false),
+  // 스코프가 강제한 값은 스코프가 사라질 때 같이 사라져야 한다. 안 그러면 스코프를 풀었는데
+  // 카드 하나만 그 분야에 남아 **화면 두 곳이 서로 다른 말을 한다.**
+  $("domPick").value = DOMSCOPE ? DOMSCOPE
+    : (PICK_BY_SCOPE ? "" : (uDomains.some((r) => r.domain === keepPick) ? keepPick : ""));
+  PICK_BY_SCOPE = Boolean(DOMSCOPE);
 
   // 표시명이 없는 제품이 왜 표 이름으로 보이는지 — 원인이 둘이고 조치가 다르다.
   //   표를 못 읽음  → 콘솔·발행 쪽 문제. 전 제품이 한꺼번에 표명으로 떨어진다
@@ -1896,11 +1922,15 @@ function renderApis(u) {
 function renderDomApis() {
   if (!USE) return;
   const dom = $("domPick").value;
-  const rows = USE.apis.filter((a) => a.domain === dom);
+  // 값이 비면 '전체 통합' — 지금 스코프 안의 전부다. 스코프도 없으면 진짜 전체.
+  const inScope = (a) => !DOMSCOPE || a.domain === DOMSCOPE;
+  const rows = USE.apis.filter((a) => inScope(a) && (!dom || a.domain === dom))
+    .sort((a, b) => b.calls - a.calls);
   const tot = rows.reduce((a, r) => a + r.calls, 0);
+  const what = dom ? domLabel(dom) + " 분야" : (DOMSCOPE ? domLabel(DOMSCOPE) + " 분야" : "전체");
   $("domPickNote").textContent = tot
-    ? domLabel(dom) + " 분야 요청 " + nf.format(tot) + "건을 API별로 나눈 것입니다"
-    : domLabel(dom) + " 분야는 이 기간에 요청이 없습니다";
+    ? what + " 요청 " + nf.format(tot) + "건을 API별로 나눈 것입니다"
+    : what + "는 이 기간에 요청이 없습니다";
   $("domApis").innerHTML = table([
     { t:"API", get:(r) => apiNameCell(r), name:true },
     { t:"요청", r:true, get:(r) => num(r.calls) },
@@ -2088,7 +2118,7 @@ $("apiTable").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-api]");
   if (b) openDetail(b.dataset.api);
 });
-$("domPick").addEventListener("change", renderDomApis);
+$("domPick").addEventListener("change", () => { PICK_BY_SCOPE = false; renderDomApis(); });
 $("apiUsedOnly").addEventListener("change", renderApiList);
 $("apiQ").addEventListener("input", renderApiList);
 

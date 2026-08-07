@@ -13,12 +13,7 @@ import {
 } from "../src/skill.js";
 
 const EXPECTED_PRODUCTS = [
-  "weather_place_forecast_change_daily",
-  "traffic_incident_x_weather_current_hourly",
-  "citydata_purchasing_power_daily",
-  "commerce_flow_monthly",
-  "culture_activity_by_dong",
-  "transit_parking_full_risk",
+  "weather_place_risk_window",
 ];
 
 const OTHER_PUBLIC_PRODUCT = "culture_event_schedule";
@@ -163,13 +158,13 @@ async function fetchWorker(path, db) {
   return response;
 }
 
-test("skill bundle preserves the exact six-product set and exposes blocked readiness", async () => {
+test("skill bundle preserves the exact single-product allowlist and exposes blocked readiness", async () => {
   const response = await handleSkillBundle({ DB: fixtureDb() });
   const body = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(body.bundle_id, "seoul-urban-analytics");
-  assert.equal(SKILL_BUNDLE_ID, "seoul-urban-analytics");
+  assert.equal(body.bundle_id, "seoul-weather-risk");
+  assert.equal(SKILL_BUNDLE_ID, "seoul-weather-risk");
   assert.deepEqual(SKILL_PRODUCT_IDS, EXPECTED_PRODUCTS);
   assert.deepEqual(body.products.map((product) => product.product_id), EXPECTED_PRODUCTS);
   assert.equal(body.registration_ready, false);
@@ -178,7 +173,7 @@ test("skill bundle preserves the exact six-product set and exposes blocked readi
     product.blockers.includes("source_rights_metadata_contract_unavailable")));
 });
 
-test("skill OpenAPI product enum stays identical to the server exact-six allowlist", async () => {
+test("skill OpenAPI product enum stays identical to the server single-product allowlist", async () => {
   const openapi = JSON.parse(await readFile(
     new URL("../public/skill-openapi.json", import.meta.url),
     "utf8",
@@ -221,12 +216,12 @@ test("the shared key can read another Marketplace product but skill routes rejec
 test("skill product marks a publisher-classified previous metadata publication without treating it as an error", async () => {
   const response = await handleSkillProduct(
     { DB: fixtureDb({ metadataPublicationId: "previous-publication" }) },
-    "commerce_flow_monthly",
+    "weather_place_risk_window",
   );
   const body = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(body.product_id, "commerce_flow_monthly");
+  assert.equal(body.product_id, "weather_place_risk_window");
   assert.equal(body.publication_id, "active-publication");
   assert.equal(body.metadata.publication_id, "previous-publication");
   assert.equal(body.metadata.meta_of, "previous_publication");
@@ -236,7 +231,7 @@ test("skill product marks a publisher-classified previous metadata publication w
 test("skill data fails closed while required product evidence is unavailable", async () => {
   const response = await handleSkillData(
     { DB: fixtureDb() },
-    "weather_place_forecast_change_daily",
+    "weather_place_risk_window",
     new URLSearchParams(),
     { key_hash: "test-key", daily_quota: 1000 },
   );
@@ -244,14 +239,14 @@ test("skill data fails closed while required product evidence is unavailable", a
 
   assert.equal(response.status, 503);
   assert.equal(body.code, "product_not_ready");
-  assert.equal(body.product_id, "weather_place_forecast_change_daily");
+  assert.equal(body.product_id, "weather_place_risk_window");
   assert.ok(body.blockers.includes("source_rights_metadata_contract_unavailable"));
 });
 
 test("skill product becomes registration-ready only when publication-bound source and quality evidence pass", async () => {
   const response = await handleSkillProduct(
     { DB: fixtureDb({ evidence: true }) },
-    "weather_place_forecast_change_daily",
+    "weather_place_risk_window",
   );
   const body = await response.json();
 
@@ -280,7 +275,7 @@ test("skill product blocks complete but wall-clock-stale freshness evidence", as
   const staleAsOf = new Date(Date.now() - 241 * 60_000).toISOString();
   const response = await handleSkillProduct(
     { DB: fixtureDb({ evidence: true, freshnessAsOf: staleAsOf, freshnessSloMinutes: 240 }) },
-    "weather_place_forecast_change_daily",
+    "weather_place_risk_window",
   );
   const body = await response.json();
 
@@ -297,11 +292,11 @@ test("skill product accepts explicit not-applicable coverage with a reason", asy
         evidence: true,
         coverage: {
           status: "not_applicable",
-          reason: "최근 24시간 유효 관측 주차장 집합이 매 게시마다 변동",
+          reason: "최근 24시간 유효 관측 지점 집합이 매 게시마다 변동",
         },
       }),
     },
-    "transit_parking_full_risk",
+    "weather_place_risk_window",
   );
   const body = await response.json();
 
@@ -319,7 +314,7 @@ test("skill product rejects not-applicable coverage without a reason", async () 
         coverage: { status: "not_applicable", reason: "" },
       }),
     },
-    "transit_parking_full_risk",
+    "weather_place_risk_window",
   );
   const body = await response.json();
 
@@ -330,7 +325,7 @@ test("skill product rejects not-applicable coverage without a reason", async () 
 test("skill data serves only declared public columns with a publication-bound cursor after readiness passes", async () => {
   const response = await handleSkillData(
     { DB: fixtureDb({ evidence: true }) },
-    "weather_place_forecast_change_daily",
+    "weather_place_risk_window",
     new URLSearchParams("admin_dong_code=1111051500&limit=1"),
     { key_hash: "test-key", daily_quota: 1000 },
   );
@@ -348,7 +343,7 @@ test("skill data serves only declared public columns with a publication-bound cu
 test("skill product stays blocked when even one source evidence row belongs to another publication", async () => {
   const response = await handleSkillProduct(
     { DB: fixtureDb({ evidence: true, sourcePublicationId: "previous-publication" }) },
-    "weather_place_forecast_change_daily",
+    "weather_place_risk_window",
   );
   const body = await response.json();
 
@@ -361,7 +356,7 @@ test("skill data rejects a cursor from a prior publication before consuming quot
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const response = await handleSkillData(
     { DB: fixtureDb({ evidence: true }) },
-    "weather_place_forecast_change_daily",
+    "weather_place_risk_window",
     new URLSearchParams(`cursor=${staleCursor}`),
     { key_hash: "test-key", daily_quota: 1000 },
   );
