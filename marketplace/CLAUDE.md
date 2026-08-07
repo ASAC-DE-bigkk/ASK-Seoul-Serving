@@ -187,8 +187,8 @@ _gateway_request_log 컬럼 추가       → 새 ALTER 파일 + 시드 체인 + 
 > | 컬럼 | 상태 |
 > |---|---|
 > | `agent_verified` | ✅ **배선됨**(#111, 2026-08-06). prod 실측으로 0·NULL 확정, `1` 은 검증된 크롤러 도착 시 |
-> | `pattern_id` | 🔵 **막힘이 풀렸다** — "패턴 실행 API 가 아직 없다"가 미룬 이유였는데 `run_pattern` 이 배포됐다(#132). 배선하면 `(product_id, pattern_id, publication_id)` 로깅 키가 완성된다(ASAC-DAG#642) |
-> | `page_path` | ⏸ 정적 페이지가 `run_worker_first` 밖이라 워커에 닿지 않는다 — §3-4 의 6경로를 통과시키는 결정이 먼저 |
+> | `pattern_id` | ✅ **배선됨** — `run_pattern`(#132)이 소비자다. `(product_id, pattern_id, publication_id)` 로깅 키 세 축이 한 행에 모였다(ASAC-DAG#642). 400 은 안 남기고(형식 검사 통과 뒤에 넣는다) **404·409 는 남긴다** — 무슨 패턴을 부르다 막혔나가 곧 수요 신호다 |
+> | `page_path` | ⏸ 정적 페이지가 `run_worker_first` 밖이라 워커에 닿지 않는다 — §3-4 의 6경로를 통과시키는 결정이 먼저. **이제 이것만 남았다** |
 >
 > **`agent_name`·`agent_mode` 는 UA 말고 두 번째 출처가 생겼다**(#111 후속) — MCP `initialize`
 > 의 `clientInfo` 다. 출처는 `agent_mode` 가 말한다(`crawler`·`on_demand` = UA / `mcp_client`
