@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ASK: SEOUL — 서울 데이터 API 허브</title>
-<meta name="description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 매일 쌓아 시계열·공간계열 데이터로 제공하는 API 허브. 미리보기는 키 없이, 키 발급은 이메일만.">
+<meta name="description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 쌓아 시계열·공간계열 데이터로 제공하는 API 허브. 미리보기는 키 없이, 키 발급은 Google 로그인으로.">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0d1211" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ASK: SEOUL">
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
-<meta property="og:description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 매일 쌓아 시계열·공간계열 데이터로 제공합니다.">
+<meta property="og:description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 쌓아 시계열·공간계열 데이터로 제공합니다.">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
 <script>
@@ -330,9 +330,10 @@
   .fcol span { color:var(--faint); }
   .fcol a { color:var(--muted); }
   .fcol a:hover { color:var(--accent-deep); text-decoration:underline; text-underline-offset:3px; }
+  /* 구분선 없음 — `footer` 가 이미 `border-top` 으로 본문과 갈린다. 한 줄짜리 저작권을
+     또 한 번 선으로 가르면 빈 띠처럼 보인다(site.css 의 같은 규칙과 맞춰 둔다). */
   .foot-btm { display:flex; flex-wrap:wrap; gap:8px 18px; max-width:1140px; margin:0 auto;
-              padding:14px 24px 22px; border-top:1px solid var(--line);
-              font-size:12px; color:var(--faint); }
+              padding:0 24px 24px; font-size:12px; color:var(--faint); }
   .foot-btm .r { margin-left:auto; }
   @media (max-width:640px){ .foot-btm .r { margin-left:0; } }
 
@@ -382,10 +383,14 @@
            결과물의 이름으로 요약한다 — 시계열·공간계열. 축 이름과 조작 방법은 카탈로그와
            문서가 말할 자리이고, 히어로는 무엇을 얻는지만 말하면 된다.
            ⚠️ "연속 적재"로 쓰지 않았다. 이 사이트가 다른 데서 정면으로 부인한다:
-           guide FAQ "실시간 데이터인가요? 아닙니다 … 발행 시점의 스냅샷입니다. 매일 1회 발행",
-           status "실시간이 아닙니다", docs "제품은 매일 통째로 재발행되고".
-           실측도 같다 — 62종의 exported_at 이 단일 배치 하나다(2026-08-03).
-           히어로만 "연속"이라고 하면 FAQ 를 여는 순간 배신이 되므로 "매일"로 적는다.
+           guide FAQ "실시간 데이터인가요? 아닙니다 … 발행 시점의 스냅샷입니다",
+           status "실시간이 아닙니다", docs "제품은 발행 때마다 통째로 다시 쓰인다".
+           히어로만 "연속"이라고 하면 FAQ 를 여는 순간 배신이 된다.
+           ⚠️ 2026-08-07 정정 — "매일"도 뺐다. **발행 주기가 도메인마다 다르다**(DAG 스케줄
+           실측: citydata `15 * * * *` · transit `40 * * * *` · traffic 시간당 vs culture
+           `30 4 * * *` 매일). 히어로에서 주기를 단정하면 매시간 도메인 이용자에게 틀린 말이
+           되고, 그렇다고 "매시간~매일"은 첫 화면에 넣을 말이 아니라 **주기를 아예 안 쓴다** —
+           주기는 guide·status 가 도메인별로 말할 자리다.
 
            커버리지 단서("커버리지는 도메인마다 다르고…")는 히어로에서 뺐다 — 첫 화면에서
            할 말이 아니라는 판단(오너 결정, 2026-08-03). 감춘 건 아니고 자리를 옮긴 것이다:
@@ -398,20 +403,31 @@
            아니라 도메인 자체로 읽힌다.
            교통은 대중교통과 도로 소통 둘을 덮는 말이다. 수를 말하지 않으므로(전에는 헤드라인이
            "여섯"이라고 세서 목록도 여섯이어야 했다) 이렇게 묶어도 아래 도메인 격자와 어긋나지 않는다. -->
-      <p class="sub"><b>문화·인구·교통·상권·날씨</b> 데이터를 시간과 공간 두 축으로 <b>매일</b> 쌓아
+      <p class="sub"><b>문화·인구·교통·상권·날씨</b> 데이터를 시간과 공간 두 축으로 쌓아
          <b>시계열·공간계열</b> 데이터로 제공합니다.</p>
       <form class="search-hero" id="heroSearch">
         <div class="box">
           <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span>
-          <input type="search" id="heroQ" placeholder="행사, 혼잡, 박스오피스…" aria-label="데이터 검색">
+          <!-- ⚠️ placeholder 의 예시어는 **실제로 결과가 나오는 말**이어야 한다. 예전엔
+               "박스오피스"를 권했는데 카탈로그 검색 결과가 0건이었다 — 제품 이름이
+               "공연 예매 랭킹"이라 그 낱말이 어디에도 없었다(2026-08-07 실측). -->
+          <input type="search" id="heroQ" placeholder="행사, 혼잡, 상권, 날씨…" aria-label="데이터 검색">
         </div>
         <button type="submit">검색</button>
       </form>
+      <!-- 🔴 칩은 **라벨이 약속한 것과 결과가 맞아야** 한다. 2026-08-07 실측으로 둘을 갈았다:
+             "박스오피스"(q=박스오피스) → **0건**. 제품명이 "공연 예매 랭킹"이라 그 낱말이
+                 제목·요약·질문·설명·활용예시 어디에도 없었다.
+             "동네 상권"(q=외식) → 1건, 그것도 commerce 가 아니라 culture 제품이었다.
+                 라벨은 상권 22종을 기대하게 하는데 결과가 딴판이다.
+           지금 넷은 결과 수와 도메인 분포를 함께 보고 골랐다 — 넷을 누르면 6개 도메인이
+           모두 한 번씩 나온다(예전엔 전체의 40%인 commerce 가 한 번도 안 나왔다).
+           ⚠️ 검색어를 바꿀 때는 **결과가 0 이 아닌지 먼저 확인**한다. -->
       <div class="hot">
         <a href="/catalog?q=행사">행사 일정</a>
-        <a href="/catalog?q=혼잡">혼잡 패턴</a>
-        <a href="/catalog?q=박스오피스">박스오피스</a>
-        <a href="/catalog?q=외식">동네 상권</a>
+        <a href="/catalog?q=혼잡">동네 혼잡</a>
+        <a href="/catalog?q=폐업">상권 변화</a>
+        <a href="/catalog?q=날씨">날씨 영향</a>
       </div>
     </div>
   </div>
@@ -515,7 +531,11 @@
   <div class="foot-in">
     <div class="fcol">
       <b>ASK: SEOUL</b>
-      <span>서울 공공데이터를 행정동 코드 하나로 붙여 쓰는 API 허브</span>
+      <!-- ⚠️ "행정동 코드 하나로"라고 쓰지 않는다(2026-08-07 정정). 실측: 공개 55종 중
+           행정동 축은 23종(42%)뿐이고 자치구 축이 32종(58%)으로 더 많으며, 21종(38%)은
+           조인 축이 아예 없다. 축이 셋인데 하나처럼 말하면 카탈로그를 여는 순간 어긋난다.
+           시간 축도 빼지 않는다 — 히어로가 "시간과 공간 두 축"이라고 말한다. -->
+      <span>서울 공공데이터를 시간·공간 같은 축 위에 올린 API 허브</span>
     </div>
     <div class="fcol">
       <b>서비스</b>
@@ -531,14 +551,13 @@
     </div>
     <div class="fcol">
       <b>정책</b>
-      <a href="/legal#attribution">데이터 출처</a>
-      <a href="/legal#terms">이용약관</a>
-      <a href="/legal#privacy">개인정보 처리방침</a>
+      <a href="/attribution">데이터 출처</a>
+      <a href="/terms">이용약관</a>
+      <a href="/privacy">개인정보 처리방침</a>
     </div>
   </div>
   <div class="foot-btm">
     <span>© 2026 ASK: SEOUL</span>
-    <span class="r">가용성을 보장하지 않습니다</span>
   </div>
 </footer>
 
