@@ -32,18 +32,27 @@
     §4-3 "모른다 ≠ 0" 을 스스로 어긴다.
 - `agent_name`: `openai`(GPTBot·ChatGPT-User) · `anthropic`(ClaudeBot·Claude-User) ·
   `perplexity` · `google` · `meta` · … 소문자 정규화, 열린 집합
-- `agent_mode`: `crawler`(사전 수집) | `on_demand`(사용자 질문 대행). 자율 실행(autonomous)은
-  저장하지 않는 **파생 지표** — MCP·에이전트 툴은 대개 `python-httpx` 같은 `cli` 얼굴로 오므로,
-  판정은 여정(llms.txt/openapi.json → 발급 → 호출 사슬)에서 한다.
+- `agent_mode`: `crawler`(사전 수집) | `on_demand`(사용자 질문 대행) | **`mcp_client`**(MCP 연결).
+  앞의 둘은 UA 에서, `mcp_client` 는 **프로토콜에서** 온다 — 이 값이 곧 `agent_name` 의 출처다.
+  - **2026-08-07 갱신**: 이 항목은 원래 *"MCP·에이전트 툴은 대개 `python-httpx` 같은 `cli`
+    얼굴로 오므로 판정은 여정(llms.txt → 발급 → 호출 사슬)에서 한다"* 였다. **여정 추론은
+    더 이상 유일한 수단이 아니다** — MCP 스펙이 `initialize` 에 `clientInfo{name, version}` 을
+    필수로 요구하고, 게이트웨이가 그걸 읽는다(#111 후속). prod 실측에서 MCP 호출 95건이
+    전부 `ua_class='unknown'`(UA 는 왔는데 목록에 없음) 이었던 것이 착수 계기다 — 크롤러와
+    달리 MCP 클라이언트는 공개 UA 규약이 없어 정규식으로는 못 잡는다.
+  - ⚠️ **stateless 라 `initialize` 행에만 남는다.** 후속 `tools/call` 로는 안 이어지므로
+    *"누가 연결했나"* 는 알아도 *"이 호출이 누구 것인가"* 는 모른다. 여정 추론은 그 빈칸을
+    메우는 보조로 여전히 유효하다.
+  - 자율 실행(autonomous)은 저장하지 않는 **파생 지표**로 남는다.
 
 ## 필드 v0 확정 — `_gateway_request_log` 컬럼 8종 + intent (전부 nullable · 추가만 · 기존 불변)
 
 | 컬럼 | 값 | 비고 |
 |---|---|---|
 | `ua_class` | 위 7값 | `no_ua` 는 2026-08-06 추가(#112) — 마이그레이션 없음(TEXT 값 집합만 확장) |
-| `agent_name` | 정규화 이름 | AI 아니면 NULL |
-| `agent_mode` | crawler / on_demand | |
-| `agent_verified` | 1/0/NULL | ④ **재결정 완료(2026-08-06, #111)** — 아래 참조. 배선됨 |
+| `agent_name` | 정규화 이름 | AI 아니면 NULL. **출처 둘** — UA(크롤러) 또는 MCP `clientInfo`(2026-08-07 추가) |
+| `agent_mode` | crawler / on_demand / **mcp_client** | `mcp_client` 는 프로토콜에서 온 이름임을 뜻한다 — 위 분류 절 참조 |
+| `agent_verified` | 1/0/NULL | ④ **재결정 완료(2026-08-06) · prod 실측 확정(2026-08-07, #111 종결)** — 0·NULL 관측됨, `1` 은 관측 대기. 아래 참조 |
 | `country` | ISO-3166 alpha-2 | `cf.country` |
 | `asn` | INTEGER | IP 없이도 남용·집중 축 — ① 의 갈음 축 |
 | `referer_host` | 호스트만 | 전체 URL 금지 |
@@ -73,9 +82,25 @@
   필드 자체가 없을 때(`cf` 를 못 받는 환경)도 NULL 이다 — **"봤는데 아니다"(`""`)와
   "못 물어봤다"(부재)는 다른 사실**이다.
 
-  ⚠️ **아직 확정되지 않은 것**: 잰 요청이 curl 이라 `""` 였고, **진짜 검증된 크롤러가 왔을 때
-  1 로 찍히는지는 확인하지 못했다.** 검증된 봇을 흉내낼 수 없다는 게 이 필드의 존재 이유라,
-  실제 크롤러 도착 전엔 확정되지 않는다(#111 을 그래서 닫지 않았다).
+  **prod 실측으로 두 분기가 확정됐다 (2026-08-07, #111 종결).**
+
+  ```
+  NULL   307건   비-에이전트 요청 전부. 0 으로 뭉개지지 않았다
+   0       3건   ClaudeBot·Claude-User·GPTBot UA 를 직접 보내 확인
+                 (KT 회선 asn=4766 → CF 가 확인 못 함 = 자칭. 정확히 0 이 맞다)
+   1       0건   ← 관측 대기
+  ```
+
+  같은 `clientAxes()` 가 만드는 `ua_class`·`country`·`asn` 이 307/307 채워지므로 **배선은
+  살아 있고**, `agent_name` 이 NULL 이라 3분기 규칙대로 `agent_verified` 도 NULL 인 것이다.
+
+  ⚠️ **`1` 은 자가 검증이 불가능하다.** UA 는 아무나 적을 수 있지만 `verifiedBotCategory` 는
+  Cloudflare 가 역방향 DNS·공개 IP 대역으로 독립 확인한 봇에만 붙는다 — **흉내낼 수 있으면
+  그 필드는 쓸모가 없다.** 그래서 이 항목은 *검증*이 아니라 *관측* 대기이고, 통제할 수 없는
+  외부 사건을 기다리며 이슈를 열어 두지 않기로 했다(#111 종결 판단).
+
+  **진짜 검증된 크롤러가 도착하면 그때 이 표의 `1` 줄을 채운다.** 그 전까지 1 분기는
+  코드·테스트로만 보증된다(`classify.test.mjs` 의 `agentVerified("openai","Search Engine Crawler") === 1`).
 
 - **`ip_hash` 는 미채택** (① 확정: **(A) 미저장** — 빈 컬럼을 만들지 않는다). "asn 으로 못 잡는
   남용"이 실측되면 일 회전 해시로 승격(증분 규약상 ALTER 한 줄).

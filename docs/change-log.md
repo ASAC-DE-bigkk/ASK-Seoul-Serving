@@ -103,6 +103,31 @@
   건"* 이라고 했는데 **틀렸다** — `0005` 에 있고 prod 22컬럼에도 있다. `LOG_COLUMNS` 에 없을
   뿐이고, CLAUDE.md §6 이 미룬 이유("패턴 실행 API 가 아직 없다")는 `run_pattern` 배포로
   해소됐다. 배선은 별건.
+### `agent_verified` 3분기를 prod 실측으로 확정 — `1` 은 관측 대기로 남기고 #111 종결
+
+- **작업자**: @yooseongjin527
+- **의도 · 목표**: #111 은 완료 조건 다섯 중 **④ "검증된 크롤러가 왔을 때 1 로 찍히는지"**
+  하나 때문에 열려 있었다. 그런데 prod 로그를 보니 `agent_name` 이 **307건 전부 NULL** 이라
+  0 분기조차 한 번도 안 찍혔다 — **분류 경로 전체가 운영에서 미검증**이었다. 배선이 죽은
+  것인지 진짜 에이전트가 안 온 것인지부터 갈라야 했다.
+- **조치**
+  - 같은 `clientAxes()` 가 만드는 옆 컬럼과 대조 → `ua_class`·`country`·`asn` 이 **307/307**
+    채워짐을 확인. **배선은 살아 있고 NULL 이 규칙대로 나온 것**이다(`agent_name` NULL →
+    `agent_verified` NULL).
+  - `ClaudeBot` · `Claude-User` · `GPTBot` UA 로 `ask-seoul.kr` 에 직접 3건 전송.
+    결과 `ai_crawler/anthropic/crawler` · `ai_agent/anthropic/on_demand` ·
+    `ai_crawler/openai/crawler` 로 정확히 분류되고 **`agent_verified = 0`**.
+  - 🔑 **`1` 은 자가 검증이 원리적으로 불가능하다** — `verifiedBotCategory` 는 Cloudflare 가
+    역방향 DNS·공개 IP 대역으로 독립 확인한 봇에만 붙는다. **흉내낼 수 있으면 그 필드는
+    쓸모가 없다.** 이슈 본문이 이미 그렇게 적어 뒀다.
+  - `behavior-log-spec-draft.md` ④ 의 *"#111 을 그래서 닫지 않았다"* 를 실측 결과로 교체.
+- **결과**: 3분기 중 **0·NULL 이 운영 데이터로 확정**. 특히 스펙이 경고한 `"" → 0` 뭉개짐이
+  일어나지 않았음을 **코드가 아니라 로그로** 확인했다. `1` 은 *검증*이 아니라 *관측* 대기라,
+  통제할 수 없는 외부 사건을 기다리며 이슈를 열어 두지 않기로 하고 **#111 종결**.
+  도착하면 스펙 표의 `1` 줄을 채운다.
+  ⚠️ 곁다리 발견 — **MCP 호출 31건이 `ua_class='unknown'`**(`mcp` 18 · `mcp_run_pattern` 13).
+  #112 가 잡는 문제이고, **④ 가 열리려면 이게 먼저 풀려야 한다**(`agent_name` 이 NULL 이면
+  `verifiedBotCategory` 가 뭐가 와도 `agent_verified` 는 NULL).
 
 ### '열화'를 '품질 주의(표본 부족 · 게시 정상)'로 — 스펙 확정 반영 (#119 완결)
 
