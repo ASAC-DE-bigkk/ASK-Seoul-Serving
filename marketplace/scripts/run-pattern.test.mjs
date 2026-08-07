@@ -32,9 +32,14 @@ const keyRow = { key_hash: "h", daily_quota: 1000 };
 // run() 이 필요하다: 위 fake 에 없으면 실패한다. countUsage 경로까지 감당하도록 보강한다.
 function fullEnv(patternRow, dataRows) {
   const env = fakeEnv(patternRow, dataRows);
+  env.catalogMeta = { name: "t", product_id: "p", publication_id: "pub1", exported_at: "s1" };
   const base = env.DB.prepare.bind(env.DB);
   env.DB.prepare = (sql) => {
     if (sql.includes("d1_usage_patterns")) return base(sql);   // "_usage" 부분일치 함정 회피
+    if (sql.includes("_catalog")) {
+      // 카탈로그 게이트(#132 사후 리뷰 ①) — catalogMeta 를 null 로 두면 "없는 제품"이 된다
+      return { bind: () => ({ first: async () => env.catalogMeta }) };
+    }
     if (sql.includes("_usage")) {
       return { bind: () => ({ run: async () => ({}), first: async () => ({ count: 1 }) }) };
     }
@@ -102,4 +107,32 @@ test("0행 + allow_empty=1 이면 '정상일 수 있다' 를 말한다", async (
   const env = fullEnv({ ...PATTERN, sql: "SELECT a FROM t", allow_empty: 1 }, []);
   const body = await (await handleRunPattern(env, "p", "pat", {}, keyRow, {})).json();
   assert.match(body.empty_note, /정상/);
+});
+
+
+test("서빙 카탈로그에 없는 제품은 카탈로그 404 — 패턴 404 와 구분된다 (#132 리뷰 ①)", async () => {
+  const env = fullEnv(PATTERN);
+  env.catalogMeta = null;
+  const res = await handleRunPattern(env, "nope", "pat", {}, keyRow, {});
+  assert.equal(res.status, 404);
+  assert.match((await res.json()).detail, /서빙 카탈로그에 없다/);   // mcp 유사 제안 분기가 무는 문구
+});
+
+test("카탈로그 통과 시 trace 에 table·publication_id 가 남는다 (#132 리뷰 ①-d)", async () => {
+  const env = fullEnv(PATTERN);
+  const trace = {};
+  await handleRunPattern(env, "p", "pat", { gu: "x", n: 1 }, keyRow, trace);
+  assert.equal(trace.table, "t");
+  assert.equal(trace.publicationId, "pub1");
+});
+
+test("행수 상한은 문자열로도 못 넘는다 — '999999' → 5000 (#132 리뷰 ②)", async () => {
+  const env = fullEnv(PATTERN);
+  await handleRunPattern(env, "p", "pat", { gu: "x", n: "999999" }, keyRow, {});
+  assert.equal(env.seen.binds[1], 5000);
+});
+
+test("행수 파라미터에 숫자 아닌 값은 400", async () => {
+  const res = await handleRunPattern(fullEnv(PATTERN), "p", "pat", { gu: "x", n: "abc" }, keyRow, {});
+  assert.equal(res.status, 400);
 });
