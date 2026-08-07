@@ -202,6 +202,9 @@
   .sec-title { display:flex; align-items:baseline; gap:10px; margin:4px 0 10px; }
   .sec-title h2 { font-size:15px; font-weight:700; letter-spacing:-.01em; }
   .sec-title .hint { font-size:12px; color:var(--faint); }
+  /* 검색 범위 안내 — 목록 바로 위. 제목줄(.sec-title)의 margin-bottom 을 이 줄이 대신 진다. */
+  .searchhint { font-size:12.5px; color:var(--muted); margin:-4px 0 10px; line-height:1.6; }
+  .searchhint b { color:var(--ink); font-weight:600; }
 
   .plist { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden;
            margin-bottom:30px; box-shadow:var(--shadow-xs); }
@@ -365,8 +368,8 @@
     </ul>
     <!-- 개발자용 페이지라 오류 형식(RFC 7807)은 남긴다 — 그건 붙일 때 실제로 필요한 정보다.
          반면 내부 계약 버전·배치 시각·이슈 번호는 이용자가 알 일이 아니라 뺐다. -->
-    <div class="foot">매일 1회 갱신<br>오류 응답 <code>RFC 7807</code><br>가용성 무보장
-      <br><a href="/legal#attribution">데이터 출처</a> · <a href="/legal#terms">이용약관</a> · <a href="/legal#privacy">개인정보</a>
+    <div class="foot">매시간~매일 갱신<br>오류 응답 <code>RFC 7807</code>
+      <br><a href="/attribution">데이터 출처</a> · <a href="/terms">이용약관</a> · <a href="/privacy">개인정보</a>
       <br>© 2026 ASK: SEOUL</div>
   </aside>
 
@@ -412,7 +415,7 @@
           </div>
           <div class="ferr" id="issueErr"></div>
           <!-- 고지는 수집 지점에 있어야 의미가 있다 — 이메일을 실제로 받는 곳이 여기다 -->
-          <div class="consent">발급하면 <a href="/legal#terms">이용약관</a>과 <a href="/legal#privacy">개인정보 처리방침</a>에 동의하는 것으로 봅니다.
+          <div class="consent">발급하면 <a href="/terms">이용약관</a>과 <a href="/privacy">개인정보 처리방침</a>에 동의하는 것으로 봅니다.
             이메일은 <b>이메일당 1키 식별</b>에만 쓰고, 키 원문은 저장하지 않습니다.</div>
         </div>
         <div class="usage">
@@ -430,6 +433,12 @@
       </div>
 
       <div class="sec-title" id="catalog"><h2 id="listTitle">전체 제품</h2><span class="hint" id="listHint"></span></div>
+      <!-- 검색이 무엇을 뒤지는지 알린다. `visible()` 은 제품명·설명뿐 아니라 **활용 예시의
+           질문(usage_patterns.question_ko)까지** 훑는데, 사람들은 보통 제품명만 찾는다고
+           생각해 짧은 질문을 넣어 볼 생각을 못 한다. 실측: "비" 한 글자가 6개 도메인 35종에
+           걸린다. 칩을 또 두는 것보다 이 한 줄이 값이 크다(2026-08-07). -->
+      <p class="searchhint">제품 이름과 설명은 물론 <b>활용 예시의 질문까지</b> 함께 찾습니다.
+        <b>“행사 혼잡”</b>처럼 낱말을 띄어 쓰면 <b>모두 포함한 제품</b>만 남아, 도메인을 엮어 볼 때 좋습니다.</p>
       <div class="plist">
         <div class="phead"><span>제품명</span><span>제품 설명</span><span>활용 예시</span><span></span></div>
         <div id="plistBody"></div>
@@ -605,7 +614,7 @@ function renderStart() {
     step(3, "바로 호출하기", "curl 한 줄 · JSON 응답", "#playground");
   $("terms").innerHTML =
     "<span>키당 하루 <b>1,000회</b> · 분당 <b>60회</b></span>" +
-    "<span>매일 1회 갱신</span>" +
+    "<span>매시간~매일 갱신</span>" +
     "<span>REST · JSON 표준</span>";
 }
 function fmtFresh(iso) {
@@ -617,14 +626,20 @@ function fmtFresh(iso) {
 }
 
 function visible() {
+  // 띄어쓴 낱말은 **모두 포함**(AND)으로 본다. 예전엔 질의 전체를 한 덩어리로 부분일치시켜서
+  // "행사 혼잡" 같은 자연스러운 입력이 전부 0건이었다 — 저장된 문장과 어순·조사까지 똑같아야
+  // 걸렸기 때문이다(2026-08-07 실측: "비 오는 날" 0건 · "문화 상권" 0건).
+  // AND 로 바꾸면 **여러 도메인을 엮는 검색이 처음으로 동작한다**("행사 혼잡" 2건 ·
+  // "지하철 혼잡" 2건). 낱말 하나만 넣는 경우의 결과는 이전과 같다.
+  const terms = query ? query.split(/\s+/).filter(Boolean) : [];
   return PRODUCTS.filter((p) => {
     if (activeDomain !== "all" && domainOf(p) !== activeDomain) return false;
-    if (!query) return true;
+    if (!terms.length) return true;
     // 검색 표면: 표시명·기술명·설명(쉬운 문장 + 계약 원문) + usage 질문들
     const uq = (p.usage_patterns || []).map((u) => u.question_ko).join(" ");
     const hay = (titleOf(p) + " " + ((p.display || {}).summary || fb(p).desc || "") + " " +
       (p.product_question || "") + " " + (p.description || "") + " " + uq + " " + p.name).toLowerCase();
-    return hay.includes(query);
+    return terms.every((t) => hay.includes(t));
   });
 }
 

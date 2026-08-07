@@ -38,6 +38,11 @@ const PAGES = {
   "status.html":  { navIn: "nav-in",      active: "/status", keep: [],           cta: null },
   "support.html": { navIn: "nav-in",      active: null,      keep: [],           cta: null },
   "legal.html":   { navIn: "nav-in",      active: null,      keep: [],           cta: null },
+  // 정책 3종은 각각 한 화면이다(2026-08-07). `legal.html` 은 옛 `/legal#…` 링크가 착지할
+  // 안내 페이지로 남는다 — 프래그먼트는 서버로 안 가서 리다이렉트로는 셋을 못 가른다.
+  "attribution.html": { navIn: "nav-in",  active: null,      keep: [],           cta: null },
+  "terms.html":   { navIn: "nav-in",      active: null,      keep: [],           cta: null },
+  "privacy.html": { navIn: "nav-in",      active: null,      keep: [],           cta: null },
   "404.html":     { navIn: "nav-in",      active: null,      keep: [],           cta: null },
 };
 
