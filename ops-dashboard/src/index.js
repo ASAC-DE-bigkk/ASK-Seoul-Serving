@@ -99,6 +99,32 @@ const envScope = (env) => SCOPES[String(env.ENV_SCOPE || "").trim()] || null;
 const gwWhere = (env) => { const c = envScope(env); return c ? ` AND env = '${c}'` : ""; };
 const gwWhereR = (env) => { const c = envScope(env); return c ? ` AND r.env = '${c}'` : ""; };
 
+// ── 서빙 로그의 분야 축 (#156) ─────────────────────────────────────────────────
+//
+// 🔴 **`product_id` 접두사 하나만 분야로 인정한다.** `table_name` 은 물리명이라 접두사가
+// 분야가 아니라 **등급**이다 — `gold_transit_dong_hourly` 의 앞부분은 'transit' 이 아니라
+// 'gold' 다. 그걸 분야로 세면 'gold'·'common' 같은 가짜 분야가 생기고(#63 실측),
+// 진짜 분야로 거를 때는 **어느 것도 안 걸린다.** 화면 쪽 `SCOPE` 규약과 같은 판단이다.
+//
+// 값이 없거나(로그에 product_id 가 안 남은 옛 행·제품 없는 라우트) 접두사가 없는 값
+// (`seoul-urban-analytics` 같은 스킬 키 — 운영 실측 39건)은 **NULL** 로 둔다.
+// 🔴 NULL 을 아무 분야에나 끼워 넣지 않는다. '분야 미상'이고, **화면이 그 몫을 밝힌다** —
+// 조용히 빼면 분야 합이 전체와 안 맞는데 화면은 맞는 척한다(0012: 거른 것은 걸렀다고 말한다).
+const GW_DOM = "CASE WHEN instr(COALESCE(product_id, ''), '_') > 1 " +
+               "THEN substr(product_id, 1, instr(product_id, '_') - 1) END";
+
+/**
+ * 상위 N 을 **분야마다** 뽑는다. 목록성 질의는 LIMIT 을 둬야 하는데(§5), 전체 상위 N 을
+ * 뽑아 놓고 화면에서 분야로 거르면 **상위 N 밖의 분야가 0건으로 보인다** — 있는 것을
+ * 없다고 말하는 쪽이라 그냥 잘리는 것보다 나쁘다.
+ *
+ * 전체 상위 N 은 분야별 상위 N 의 **부분집합**이므로(정렬 기준이 같다) 이 결과 하나로
+ * '전체' 화면과 '분야별' 화면을 모두 정확히 그린다. 행 수는 (분야 수+1) × N 로 묶인다.
+ */
+const topPerDomain = (sql, order, n) =>
+  "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY domain ORDER BY " + order +
+  ") AS rn FROM (" + sql + ")) WHERE rn <= " + n + " ORDER BY " + order;
+
 const DEFAULT_DAYS = 14;
 const MAX_DAYS = 90;
 
@@ -289,36 +315,75 @@ async function summary(env, params, writable = false) {
   // 파이프라인에서 이미 배운 것이다.
   const gwW = gwWhere(env);
   const routes = await safeRows(env,
-    "SELECT route, COUNT(*) AS calls, SUM(status >= 400) AS errors, ROUND(AVG(ms),1) AS avg_ms " +
+    "SELECT route, " + GW_DOM + " AS domain, COUNT(*) AS calls, SUM(status >= 400) AS errors, " +
+    "ROUND(AVG(ms),1) AS avg_ms " +
     "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW +
-    " GROUP BY route ORDER BY calls DESC", since);
+    " GROUP BY route, domain ORDER BY calls DESC", since);
   if (!routes.ok) missing.push("serving");
-  const [daily, products, failures, empty, keys] = await Promise.all([
-    safeRows(env, "SELECT substr(ts,1,10) AS day, COUNT(*) AS calls, COUNT(DISTINCT key_hash) AS keys_used " +
+  const [daily, products, failures, empty, keys, servTotals] = await Promise.all([
+    // `keys_used`(COUNT DISTINCT)는 뺐다 — 화면이 한 번도 안 읽었고, 분야 축이 붙은 뒤로는
+    // **분야별로 더할 수 없는 값**이라(같은 키가 두 분야에 있으면 중복) 있으면 오히려 위험하다.
+    // `errors` 를 대신 싣는다: 막대 툴팁이 `x.errors` 를 읽고 있는데 질의에 없어서 **실패 수가
+    // 한 번도 안 뜨고 있었다.**
+    safeRows(env, "SELECT substr(ts,1,10) AS day, " + GW_DOM + " AS domain, COUNT(*) AS calls, " +
+      "SUM(status >= 400) AS errors " +
       "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW +
-      " GROUP BY day ORDER BY day", since),
+      " GROUP BY day, domain ORDER BY day", since),
     // 축은 product_id 가 정본, 표명은 폴백. 화면에는 사람이 아는 이름을 내보내야 하므로
     // 표명도 같이 싣는다 — 없으면 화면이 식별자를 그대로 보여준다.
-    safeRows(env, "SELECT " + PRODUCT_KEY + " AS product_key, MAX(table_name) AS table_name, " +
-      "MAX(product_id) AS product_id, SUM(route = 'preview') AS previews, " +
+    //
+    // 🔴 상위 N 을 **분야마다** 뽑는다(`topPerDomain`). 예전에는 전체 상위 12 를 뽑아 놓고
+    //    화면에서 분야로 걸렀는데, 그러면 상위 12 밖에 있는 분야는 **0건으로 보인다** —
+    //    "이 분야는 조회가 없다"는 틀린 결론이 나온다. 전체 상위 N 은 분야별 상위 N 의
+    //    부분집합이라(같은 정렬 기준) 이 방식이 두 화면을 모두 정확히 덮는다.
+    safeRows(env, topPerDomain(
+      "SELECT " + PRODUCT_KEY + " AS product_key, MAX(table_name) AS table_name, " +
+      "MAX(product_id) AS product_id, " + GW_DOM + " AS domain, SUM(route = 'preview') AS previews, " +
       // 못 가른 MCP 는 여기서 셀 수 없다 — 버스트에 막힌 요청은 핸들러에 못 가서 제품을
       // 안 남긴다. 제품별로 세면 언제나 0이라 "이 제품은 괜찮다"는 **틀린 안심**이 된다.
       // 그래서 제품 축이 아니라 창 전체(meta.mcp)에서만 말한다.
       "SUM(" + SERVE + ") AS calls, " +
       "ROUND(AVG(row_count),1) AS avg_rows FROM _gateway_request_log " +
       "WHERE " + PRODUCT_KEY + " IS NOT NULL AND ts >= datetime('now', ?)" + gwW + " " +
-      "GROUP BY product_key ORDER BY calls DESC, previews DESC LIMIT 12", since),
-    safeRows(env, "SELECT status, route, table_name, COUNT(*) AS hits FROM _gateway_request_log " +
-      "WHERE status >= 400 AND ts >= datetime('now', ?)" + gwW + " GROUP BY status, route, table_name " +
-      "ORDER BY hits DESC LIMIT 10", since),
-    safeRows(env, "SELECT " + PRODUCT_KEY + " AS product_key, MAX(table_name) AS table_name, " +
-      "filters, COUNT(*) AS empty_responses FROM _gateway_request_log " +
+      "GROUP BY product_key", "calls DESC, previews DESC", 12), since),
+    // 🔴 실패 목록의 분야도 `product_id` 에서 뽑는다. 예전에는 화면이 `table_name` 접두사로
+    //    걸렀는데 그건 **등급**이다 — `gold_traffic_flow_anomaly_current` 의 접두사는 'gold'
+    //    라 어느 분야를 골라도 안 걸렸다(운영 실측). 게다가 `table_name` 이 NULL 인 행이
+    //    최다인데(실측 43건 — 표를 못 찾은 4xx) 그건 조용히 사라졌다.
+    //    이제 분야 미상은 `domain: null` 로 남고, 화면이 그 몫을 따로 밝힌다.
+    safeRows(env, topPerDomain(
+      "SELECT status, route, table_name, " + GW_DOM + " AS domain, COUNT(*) AS hits " +
+      "FROM _gateway_request_log " +
+      "WHERE status >= 400 AND ts >= datetime('now', ?)" + gwW + " " +
+      "GROUP BY status, route, table_name, domain", "hits DESC", 10), since),
+    safeRows(env, topPerDomain(
+      "SELECT " + PRODUCT_KEY + " AS product_key, MAX(table_name) AS table_name, " +
+      GW_DOM + " AS domain, filters, COUNT(*) AS empty_responses FROM _gateway_request_log " +
       "WHERE status = 200 AND row_count = 0 AND ts >= datetime('now', ?)" + gwW + " " +
-      "GROUP BY product_key, filters ORDER BY empty_responses DESC LIMIT 10", since),
-    safeRows(env, "SELECT substr(key_hash,1,8) AS key_id, COUNT(*) AS calls, " +
+      "GROUP BY product_key, filters", "empty_responses DESC", 10), since),
+    // 이용자는 **분야에 속하지 않는다** — 한 키가 여러 분야를 쓴다. 그래서 분야별 행과
+    // 전체 행(`domain='*'`)을 **둘 다** 싣는다. `active_days`(DISTINCT 날짜)는 분야별 값을
+    // 더할 수 없어서(같은 날 두 분야를 쓰면 중복) 전체를 따로 세는 수밖에 없다.
+    safeRows(env, topPerDomain(
+      "SELECT substr(key_hash,1,8) AS key_id, " + GW_DOM + " AS domain, COUNT(*) AS calls, " +
       "COUNT(DISTINCT substr(ts,1,10)) AS active_days FROM _gateway_request_log " +
-      "WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?)" + gwW + " GROUP BY key_hash " +
-      "ORDER BY calls DESC LIMIT 10", since),
+      "WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?)" + gwW + " GROUP BY key_hash, domain" +
+      " UNION ALL " +
+      "SELECT substr(key_hash,1,8), '*', COUNT(*), COUNT(DISTINCT substr(ts,1,10)) " +
+      "FROM _gateway_request_log " +
+      "WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?)" + gwW + " GROUP BY key_hash",
+      "calls DESC", 10), since, since),
+    // KPI 타일 전용 합계. **목록에서 더해 쓰지 않는다** — 목록은 상위 N 이라 합이 전체가
+    // 아니고(특히 '사용 중인 이용자'는 `keys` 목록 길이를 세는 바람에 **10에서 멈춰 있었다**),
+    // `COUNT(DISTINCT key_hash)` 는 분야별 값을 더할 수도 없다. 분야별 행과 전체 행을
+    // 같이 실어 화면이 **고르기만** 하게 한다.
+    safeRows(env,
+      "SELECT " + GW_DOM + " AS domain, COUNT(*) AS calls, SUM(status >= 400) AS errors, " +
+      "COUNT(DISTINCT key_hash) AS users FROM _gateway_request_log " +
+      "WHERE ts >= datetime('now', ?)" + gwW + " GROUP BY domain" +
+      " UNION ALL " +
+      "SELECT '*', COUNT(*), SUM(status >= 400), COUNT(DISTINCT key_hash) " +
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW, since, since),
   ]);
 
   // 화면이 "왜 비었나"에 답할 수 있어야 한다.
@@ -456,8 +521,12 @@ async function summary(env, params, writable = false) {
     runs: { daily: rdaily.rows, expectations: rexp.rows, failures: rfail.rows,
             empty_runs: rempty.rows, environments: renv.rows, slowest: rslow.rows,
             load: rload.rows[0] || null },
+    // 분야 축이 붙은 형태다(#156). 각 목록의 `domain` 은 셋 중 하나다:
+    //   '<분야>'  그 분야 · null  분야 미상(제품에 안 묶이는 요청) · '*'  전 분야 합계
+    // 화면은 지금 스코프에 맞는 버킷을 **고르기만** 한다 — 서버가 이미 갈라 놨다.
     serving: { routes: routes.rows, daily: daily.rows, products: products.rows,
-               failures: failures.rows, empty: empty.rows, keys: keys.rows },
+               failures: failures.rows, empty: empty.rows, keys: keys.rows,
+               totals: servTotals.rows },
     usage: { funnel: funnel.ok ? funnel.rows[0] : null, daily: udaily.rows,
              // pending — 컬럼 자체가 없다(질의 실패). unfilled — 컬럼은 있는데 게이트웨이가
              // 아직 안 싣는다. 둘을 뭉치면 "곧 온다"와 "안 온다"가 구분되지 않는다.
