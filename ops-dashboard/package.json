@@ -7,7 +7,8 @@
     "migrate": "wrangler d1 execute ask-seoul-prod-d1 --remote --file=scripts/backfill-migrations-ledger.sql && wrangler d1 migrations apply ask-seoul-prod-d1 --remote",
     "migrate:list": "wrangler d1 migrations list ask-seoul-prod-d1 --remote",
     "d1": "node scripts/d1-query.mjs",
-    "deploy:prod": "wrangler deploy --env production"
+    "deploy:prod": "wrangler deploy --env production",
+    "check:hidden": "node scripts/check-hidden.mjs"
   },
   "devDependencies": {
     "wrangler": "^4"
