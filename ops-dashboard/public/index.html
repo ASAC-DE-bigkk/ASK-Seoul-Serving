@@ -828,6 +828,48 @@ $("runsLayers").addEventListener("click", (e) => {
   renderLayers();
 });
 
+// ── 긴 표는 스크롤로 이어 받는다 ────────────────────────────────────────────────
+//
+// 행이 수십·수백이면 ① 한 번에 다 그리느라 렌더가 무겁고 ② 카드가 세로로 끝없이 늘어나
+// **다른 카드가 화면 밖으로 밀린다.** 이 화면의 일은 "지금 무엇이 문제인가"를 한눈에
+// 보여주는 것인데, 표 하나가 그 한눈을 잡아먹는다.
+//
+// 그래서 **20행이 한 쪽**이다. 첫 쪽만 그리고, 상자가 바닥에 닿으면 다음 쪽을 잇는다.
+// 스크롤 감지·상자 만들기·다시 그린 뒤 재연결은 `ui.js` 의 `UIPage` 가 맡는다 —
+// 여기(앱)는 **무엇을 붙일지**만 안다. 그 경계를 지키면 페이징이 이 화면 전용이 안 된다(§5).
+//
+// 🔴 **20행 이하면 예전과 완전히 같다** — 상자도 안 만들고 표시도 안 붙는다. 짧은 표까지
+//    스크롤 상자에 가두면 두 줄짜리 표가 괜히 잘려 보인다.
+//
+// ⚠️ **선언 위치가 여기인 이유** — 아래 `USHOWN` 이 `PAGE_ROWS` 로 초기화된다. `table()`
+//    같은 함수 선언은 끌어올려지지만 `const` 는 아니라서, 이 블록이 뒤에 있으면 최상위
+//    실행 순간 TDZ 로 죽는다. `node --check` 는 그걸 통과시킨다(§7 — 띄워서 확인할 것).
+const PAGE_ROWS = 20;
+// id → { cols, rows, shown }. 다음 쪽을 그릴 재료다.
+// ⚠️ 표는 매 렌더마다 다시 그려지므로 이 맵은 **가만 두면 자란다.** 죽은 항목(그 id 를 단
+//    표가 문서에 없는 것)은 아래 `sweepPaged()` 가 걷어낸다.
+const PAGED = new Map();
+let pagedSeq = 0;
+
+function sweepPaged() {
+  if (PAGED.size < 120) return;
+  for (const id of [...PAGED.keys()])
+    if (!document.querySelector('table[data-page="' + id + '"]')) PAGED.delete(id);
+}
+
+/** 한 행. 첫 쪽과 이어 받는 쪽이 **같은 함수**를 쓴다 — 두 벌이면 한쪽만 고쳐진다. */
+const rowHtml = (cols, r) => "<tr>" +
+  cols.map((c) => "<td class='" + (c.name ? "name " : "") + (c.cls ? c.cls + " " : "") +
+    (c.r ? "r" : "") + "'>" + (c.get(r) ?? "—") + "</td>").join("") + "</tr>";
+
+/** "20 / 58" — 지금 몇 개를 보고 있나. 침묵하면 잘린 표를 전부로 읽는다(0012). */
+const pageFoot = (id, shown, total) =>
+  "<div class='pagefoot' data-page-foot='" + id + "'>" +
+  (shown >= total
+    ? "<b>" + nf.format(total) + "개</b> 전부 불러왔습니다"
+    : "<b>" + nf.format(shown) + " / " + nf.format(total) + "</b> · 스크롤하면 이어집니다") +
+  "</div>";
+
 // ── 이용자별 통계 ────────────────────────────────────────────────────────────────
 //
 // 여태 이 콘솔은 이용자를 **비율로만** 말했다('익명 비중' KPI). 비율은 "얼마나 많나"에는
@@ -841,6 +883,7 @@ $("runsLayers").addEventListener("click", (e) => {
 //    CSS 의 `display` 규칙에 지는 계열이고(§5), 생성된 마크업이라 `check:hidden` 이
 //    잡지도 못한다. 없는 문제를 만들지 않는다.
 let UKEY = null;   // 지금 펴 놓은 이용자(키 앞 8자). 자동 새로고침은 이 값을 안 건드린다.
+let USHOWN = PAGE_ROWS;   // 이 표에 지금 몇 명까지 그려 뒀나(스크롤로 늘어난다)
 
 function renderUserStats(U, days) {
   const el = $("userStats");
@@ -875,18 +918,28 @@ function renderUserStats(U, days) {
     { t:"방문한 날", r:true, get:(r) => r.active_days + "일" },
     { t:"마지막", r:true, get:(r) => fmtTs(r.last_call) },
   ];
-  const body = rows.map((r) => {
+  // 🔴 이 표만 `table()` 의 페이징을 못 쓴다 — 펼친 줄 **바로 밑에** 상세 행이 끼어 들어가서
+  //    "행을 뒤에 덧붙이기"로는 못 그린다. 그래서 보여줄 수(`USHOWN`)를 밖에 두고 통째로
+  //    다시 그린다. 행이 50 이하라 다시 그려도 싸고, **펼친 상세가 살아남는다**(덧붙이기로
+  //    했다면 뒷쪽을 열 때 앞이 다시 그려지며 접혔다).
+  const view = typeof UIPage === "undefined" ? rows : rows.slice(0, USHOWN);
+  const body = view.map((r) => {
     const open = UKEY === r.key_id;
     const tr = "<tr class='urow" + (open ? " sel" : "") + "' data-user='" + esc(r.key_id) + "'>" +
       cols.map((c) => "<td class='" + (c.name ? "name " : "") + (c.r ? "r" : "") + "'>" +
         (c.get(r) ?? "—") + "</td>").join("") + "</tr>";
     return open ? tr + userApisRow(U, r, cols.length) : tr;
   }).join("");
+  // `table()` 과 같은 판단 — 엔진이 없으면 자르지 않는다(잘린 줄 모르는 쪽이 더 나쁘다).
+  const more = rows.length > view.length && typeof UIPage !== "undefined";
 
   el.innerHTML = head +
-    "<div class='tscroll' style='margin-top:12px'><table><thead><tr>" +
+    "<div class='tscroll scroll' style='margin-top:12px'><table" +
+    (more ? " data-page='userstats'" : "") + "><thead><tr>" +
     cols.map((c) => "<th class='" + (c.name ? "name " : "") + (c.r ? "r" : "") + "'>" + esc(c.t) + "</th>").join("") +
-    "</tr></thead><tbody>" + body + "</tbody></table></div>" +
+    "</tr></thead><tbody>" + body + "</tbody></table>" +
+    (rows.length > PAGE_ROWS && typeof UIPage !== "undefined"
+      ? pageFoot("userstats", view.length, rows.length) : "") + "</div>" +
     (rows.length >= 50 ? "<p class='hint' style='margin-top:8px'>요청이 많은 순으로 <b>50명</b>까지만 보여줍니다.</p>" : "");
 }
 
@@ -929,6 +982,15 @@ function closeUserApis() {
   if (LAST_DATA) renderUserStats(LAST_DATA.usage || {}, LAST_DATA.window_days);
 }
 
+// 이 표는 통째로 다시 그리는 방식이라, 일반 `ui:page` 처리(뒤에 덧붙이기)를 안 탄다.
+document.addEventListener("ui:page", (e) => {
+  if (e.target.dataset.page !== "userstats") return;
+  const total = ((LAST_DATA && LAST_DATA.usage && LAST_DATA.usage.by_key) || []).length;
+  if (USHOWN >= total) { e.target.dataset.pageDone = "1"; return; }
+  USHOWN += PAGE_ROWS;
+  renderUserStats(LAST_DATA.usage, LAST_DATA.window_days);
+});
+
 // 표는 매 렌더마다 다시 그려진다 — 리스너는 **바깥 컨테이너에 한 번만** 단다.
 $("userStats").addEventListener("click", (e) => {
   if (e.target.closest("[data-user-close]")) { closeUserApis(); return; }
@@ -959,14 +1021,42 @@ function emptyBox(e) {
 
 function table(cols, rows, empty) {
   if (!rows || !rows.length) return emptyBox(empty);
-  return "<table><thead><tr>" +
+  // 🔴 **엔진이 없으면 자르지 않는다.** `ui.js` 를 못 받은 화면에서 첫 20행만 그리면
+  //    이어 받을 길이 없어 표가 **영구히 잘린다** — 잘린 줄도 모르는 쪽이 무거운 것보다
+  //    나쁘다. 없으면 예전처럼 전부 그린다(느려도 사실은 다 보인다).
+  const paged = rows.length > PAGE_ROWS && typeof UIPage !== "undefined";
+  let id = "";
+  if (paged) {
+    id = "pg" + (++pagedSeq);
+    PAGED.set(id, { cols, rows, shown: PAGE_ROWS });
+    sweepPaged();
+  }
+  const shown = paged ? rows.slice(0, PAGE_ROWS) : rows;
+  return "<table" + (paged ? " data-page='" + id + "'" : "") + "><thead><tr>" +
     cols.map((c) => "<th class='" + (c.name ? "name " : "") + (c.r ? "r" : "") + "'>" +
       esc(c.t) + "</th>").join("") +
-    "</tr></thead><tbody>" + rows.map((r) => "<tr>" +
-      cols.map((c) => "<td class='" + (c.name ? "name " : "") + (c.cls ? c.cls + " " : "") +
-        (c.r ? "r" : "") + "'>" + (c.get(r) ?? "—") + "</td>").join("") + "</tr>").join("") +
-    "</tbody></table>";
+    "</tr></thead><tbody>" + shown.map((r) => rowHtml(cols, r)).join("") +
+    "</tbody></table>" +
+    (paged ? pageFoot(id, PAGE_ROWS, rows.length) : "");
 }
+
+// 다음 쪽을 잇는다. `UIPage` 가 "바닥에 닿았다"고 알려 주면 여기서 재료를 꺼내 붙인다.
+// 🔴 리스너는 **문서 한 곳**이다 — 표마다 달면 다시 그릴 때마다 끊긴다.
+document.addEventListener("ui:page", (e) => {
+  const t = e.target;
+  if (!t || t.tagName !== "TABLE") return;
+  // 재료가 없으면 **남이 맡은 표**다(예: `userstats` — 통째로 다시 그린다). 손대지 않는다.
+  // 여기서 `data-page-done` 을 박으면 그 표의 페이징을 **이 리스너가 꺼 버린다.**
+  const st = PAGED.get(t.dataset.page);
+  if (!st) return;
+  const next = st.rows.slice(st.shown, st.shown + PAGE_ROWS);
+  if (!next.length) { t.dataset.pageDone = "1"; return; }
+  t.tBodies[0].insertAdjacentHTML("beforeend", next.map((r) => rowHtml(st.cols, r)).join(""));
+  st.shown += next.length;
+  if (st.shown >= st.rows.length) t.dataset.pageDone = "1";
+  const foot = document.querySelector('[data-page-foot="' + t.dataset.page + '"]');
+  if (foot) foot.outerHTML = pageFoot(t.dataset.page, st.shown, st.rows.length);
+});
 // 시각은 초·밀리초까지 필요 없다 — "언제쯤"이면 충분하고, 짧을수록 표가 읽힌다
 const fmtTs = (s) => (s ? String(s).slice(0, 16).replace("T", " ") : null);
 // 응답 시간 — DB 가 `17.717784881591797` 같은 부동소수를 그대로 준다. 소수 15자리는
