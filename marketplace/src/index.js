@@ -644,6 +644,16 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
   trace.productId = productId;
   if (!/^[a-z0-9_]+$/.test(String(productId)) || !/^[a-z0-9_]+$/.test(String(patternId)))
     return problem(400, "invalid id", "product_id·pattern_id 형식이 아니다");
+  // 카탈로그를 먼저 통과한다(#132 사후 리뷰 ①) — 조회 4경로가 전부 같은 문(external=1)을
+  // 지나야 한다. 지금은 publisher 가 비공개 제품에 패턴을 안 실어 우연히 안전하지만,
+  // 코드가 지키지 않으면 그 우연이 깨지는 날 열린다. 부수로 404 구분(제품/패턴)·
+  // 유사 제품 제안·요청 로그(table·publication_id)가 같이 닫힌다.
+  const meta = await lookupProduct(env, productId, "*");
+  if (!meta)
+    return problem(404, "unknown product", `'${productId}' 은 서빙 카탈로그에 없다 — GET /api/v1/catalog 참조`);
+  trace.table = meta.name;
+  trace.productId = meta.product_id;
+  trace.publicationId = meta.publication_id ?? null;
   const pattern = await env.DB.prepare(
     "SELECT sql, question_ko, verified_rows, verified_at, allow_empty, insight_sample_ko " +
     "FROM d1_usage_patterns WHERE product_id = ? AND pattern_id = ?"
@@ -686,8 +696,14 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
       return problem(400, "missing parameter", `파라미터 :${nm} 값이 필요하다 — 이 패턴의 파라미터: [${declared.join(", ")}]`);
     if (typeof v !== "string" && typeof v !== "number")
       return problem(400, "invalid parameter", `:${nm} 은 문자열/숫자만 받는다`);
-    // 행수 파라미터는 서빙 상한을 넘지 못한다 — 상한은 query_product 와 같은 값 하나뿐이다
-    if (typeof v === "number" && /^(n|limit|top_n)$/.test(nm)) v = Math.min(v, MAX_LIMIT);
+    // 행수 파라미터는 서빙 상한을 넘지 못한다 — 상한은 query_product 와 같은 값 하나뿐이다.
+    // 문자열 "999999" 도 SQLite LIMIT 이 받아 D1 이 실제로 읽으므로(#132 사후 리뷰 ②)
+    // 타입과 무관하게 숫자로 강제한 뒤 눌러야 상한이 상한이다.
+    if (/^(n|limit|top_n)$/.test(nm)) {
+      const num = Number(v);
+      if (!Number.isFinite(num)) return problem(400, "invalid parameter", `:${nm} 은 숫자여야 한다`);
+      v = Math.min(num, MAX_LIMIT);
+    }
     values.push(v);
   }
 
