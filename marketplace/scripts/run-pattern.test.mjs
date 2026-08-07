@@ -136,3 +136,30 @@ test("행수 파라미터에 숫자 아닌 값은 400", async () => {
   const res = await handleRunPattern(fullEnv(PATTERN), "p", "pat", { gu: "x", n: "abc" }, keyRow, {});
   assert.equal(res.status, 400);
 });
+
+// ── 관측 (ASAC-DAG#642 로깅 키) ──────────────────────────────────────────────
+test("성공하면 trace 에 pattern_id 가 남는다", async () => {
+  const trace = {};
+  await handleRunPattern(fullEnv(PATTERN), "p", "top_dong", { gu: "x", n: 10 }, keyRow, trace);
+  assert.equal(trace.patternId, "top_dong");
+  assert.equal(trace.productId, "p");
+});
+
+// 🔴 막힌 요청이야말로 수요 신호다 — "무슨 패턴을 부르다 막혔나"를 못 남기면
+// 미검증 패턴(409)이 얼마나 요청되는지 알 수 없어 검증 우선순위를 못 정한다.
+test("404·409 로 끝나도 무엇을 부르려 했는지는 남는다", async () => {
+  const t404 = {};
+  await handleRunPattern(fullEnv(null), "p", "nope", {}, keyRow, t404);
+  assert.equal(t404.patternId, "nope");
+
+  const t409 = {};
+  await handleRunPattern(fullEnv({ ...PATTERN, verified_at: null }), "p", "unverified", {}, keyRow, t409);
+  assert.equal(t409.patternId, "unverified");
+});
+
+test("형식이 틀린 pattern_id 는 남기지 않는다 — 아무 문자열이나 로그에 싣지 않는다", async () => {
+  const trace = {};
+  const res = await handleRunPattern(fullEnv(PATTERN), "p", "DROP TABLE x", {}, keyRow, trace);
+  assert.equal(res.status, 400);
+  assert.equal(trace.patternId, undefined);
+});

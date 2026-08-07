@@ -67,6 +67,25 @@ test("ASK_ENV 가 없으면 env 는 NULL — '모른다'를 'local' 로 꾸미�
   assert.equal(values[LOG_COLUMNS.indexOf("env")], null);
 });
 
+// ── pattern_id (ASAC-DAG#642 로깅 키) ────────────────────────────────────────
+// `run_pattern`(#132)이 소비자로 생기면서 배선됐다. 세 축이 한 행에 모여야
+// "어느 게시본의 어느 제품을, 어느 검증 패턴으로" 가 답해진다.
+test("run_pattern 만 pattern_id 를 채운다 — 나머지 경로는 개념 자체가 없어 NULL", NEEDS_SQLITE, () => {
+  const ran = logValues({ ...TRACE, patternId: "top_dong_by_events" }, { ASK_ENV: "prod" });
+  assert.equal(ran[LOG_COLUMNS.indexOf("pattern_id")], "top_dong_by_events");
+  // 일반 데이터 조회는 patternId 를 안 만든다 → NULL 이어야 한다(0·'' 로 굳지 않게)
+  assert.equal(logValues(TRACE, { ASK_ENV: "prod" })[LOG_COLUMNS.indexOf("pattern_id")], null);
+});
+
+test("로깅 키 세 축이 한 행에 모인다 — (product_id, pattern_id, publication_id)", NEEDS_SQLITE, () => {
+  const values = logValues(
+    { ...TRACE, patternId: "top_dong_by_events", publicationId: "pub_2026_08_07" },
+    { ASK_ENV: "prod" });
+  assert.equal(values[LOG_COLUMNS.indexOf("product_id")], "culture_activity_by_dong");
+  assert.equal(values[LOG_COLUMNS.indexOf("pattern_id")], "top_dong_by_events");
+  assert.equal(values[LOG_COLUMNS.indexOf("publication_id")], "pub_2026_08_07");
+});
+
 test("제품을 해석하기 전에 끝난 요청은 product_id 가 NULL 이다 (400·404)", NEEDS_SQLITE, () => {
   // 요청 문자열은 물리명 별칭일 수도 있어 해석 전에는 공개 식별자를 알 수 없다.
   // 억지로 채우면 존재하지 않는 제품의 호출이 집계에 생긴다.
@@ -109,11 +128,14 @@ test("요청 축이 제자리에 들어간다 — 목록과 값 순서가 어긋
     assert.equal(row.publication_id, "pub_2026_08_04");
   });
 
-test("배선하지 않은 둘은 NULL 로 남는다 — 0 은 '검증 실패'로 읽힌다", NEEDS_SQLITE, () => {
-  // page_path·pattern_id 는 값을 만들 곳이 아직 없다. 목록에 넣어 두고 undefined 를 실으면
-  // 0/'' 로 굳는다. agent_verified 는 #111 에서 배선했다 — 아래 테스트가 그 경계를 지킨다.
-  for (const c of ["page_path", "pattern_id"])
-    assert.ok(!LOG_COLUMNS.includes(c), `${c} 는 아직 채울 값이 없다 — 목록에 넣지 않는다`);
+test("배선하지 않은 하나는 NULL 로 남는다 — 0 은 '검증 실패'로 읽힌다", NEEDS_SQLITE, () => {
+  // page_path 는 값을 만들 곳이 아직 없다(정적 페이지가 run_worker_first 밖). 목록에 넣어
+  // 두고 undefined 를 실으면 0/'' 로 굳는다.
+  //
+  // ⚠️ `pattern_id` 는 여기서 빠졌다 — `run_pattern`(#132)이 소비자로 생겨 배선했다.
+  //    **이 목록이 줄어드는 것이 정상 진행**이고, 줄어들 때마다 그 컬럼을 채우는 테스트가
+  //    아래에 하나씩 생긴다(agent_verified → #111, pattern_id → ASAC-DAG#642).
+  assert.ok(!LOG_COLUMNS.includes("page_path"), "page_path 는 아직 채울 값이 없다 — 목록에 넣지 않는다");
 
   const db = migratedDb();
   const sql = `INSERT INTO _gateway_request_log (${LOG_COLUMNS.join(", ")}) ` +
@@ -121,6 +143,7 @@ test("배선하지 않은 둘은 NULL 로 남는다 — 0 은 '검증 실패'로
   db.prepare(sql).run(...logValues(TRACE, { ASK_ENV: "local" }));
   const row = db.prepare("SELECT * FROM _gateway_request_log").get();
   assert.equal(row.page_path, null);
+  // 배선했어도 patternId 를 안 만든 경로(일반 데이터 조회)는 NULL 이어야 한다
   assert.equal(row.pattern_id, null);
 });
 
