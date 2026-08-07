@@ -250,6 +250,14 @@ tbody tr:hover { background:var(--hover); }
 tbody tr:hover td.name { color:var(--ink); }
 td.desc { white-space:normal; color:var(--muted); font-size:11.5px; max-width:330px; }
 
+/* 이름 칸에 **사람 이름 + 식별자**를 같이 둔다. 사람이 읽는 이름이 먼저고 코드는 옆에
+   작게 남는다 — 코드로 검색·대조하는 사람이 있으므로 지우지는 않는다.
+   td.name 이 mono·nowrap 이라 여기서 되돌린다: 한글이 mono 스택으로 떨어지면 서체가
+   폴백으로 갈려 자간이 들쭉날쭉해지고, nowrap 이면 좁은 폭에서 코드가 표를 민다. */
+.namecell { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; white-space:normal; }
+.namecell > b { font-family:var(--sans); font-size:12.5px; font-weight:600; color:var(--ink); }
+.namecell > .pill { flex:none; }
+
 .pill { font-family:var(--mono); font-size:10px; font-weight:600; padding:1px 7px;
         border-radius:4px; white-space:nowrap; }
 .pill.bad { background:var(--red-soft); color:var(--red-ink); }
@@ -398,6 +406,9 @@ p.hint b { color:var(--muted); }
 .detail .dhd { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
 .detail .dhd h4 { font-size:13.5px; font-weight:700; font-family:var(--mono);
                   overflow-wrap:anywhere; min-width:0; }
+/* 상세 머리의 제목이 식별자일 때도, 사람 문구일 때도 있다. 사람 문구면 본문 서체로 둔다 —
+   mono 는 식별자를 세로로 맞춰 주는 게 값어치인데 문장에는 그 값어치가 없다. */
+.detail .dhd h4.human { font-family:var(--sans); font-size:14px; }
 .detail .dhd .close { margin-left:auto; }
 .detail .dsc { font-size:12px; color:var(--muted); margin:4px 0 12px; }
 .detail .dgrid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }

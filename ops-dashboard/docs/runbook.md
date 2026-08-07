@@ -44,44 +44,59 @@ CD 는 **코드만** 배포한다. 마이그레이션이 자동으로 돌면 운
 
 화면 없이 curl 로 확인한다. `jq` 가 있으면 편하다.
 
+🔴 **읽기도 토큰이 필요하다**([0004](decision/0004-read-open-write-token.md) 2026-08-06 개정 —
+읽기 문이 fail-closed 로 닫혔다). 헤더 없이 부르면 전부 **401** 이고, 그건 고장이 아니라
+설계다. 아래 예시는 `$AUTH` 를 달고 도는 것을 전제로 한다.
+
 ```bash
 BASE=http://localhost:8788
+# 토큰은 .dev.vars 에서 읽는다 — 셸 히스토리·문서에 값을 남기지 않는다.
+# §1 이 만드는 형식(따옴표 없는 한 줄) 기준이고, `tr -d '\r'` 은 Windows 줄끝 대비다.
+AUTH="Authorization: Bearer $(sed -n 's/^OPS_TOKEN=//p' .dev.vars | tr -d '\r')"
 
 # ① 요약 — 네 섹션이 다 있는지, 뭐가 비었는지(meta.missing), 샘플인지
-curl -s "$BASE/api/summary?days=14" | jq '{missing: .meta.missing,
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{missing: .meta.missing,
   pipeline_sample: .meta.pipeline_is_sample, runs_sample: .meta.runs_is_sample,
   slo_days: (.pipeline.slo|length), runs_daily: (.runs.daily|length),
   monitored_dags: (.runs.expectations|length), serving_calls: (.serving.routes|length)}'
 
 # ② 실행 기록 상세 — 멈춤 후보 재료(기대×상태)와 실패 목록
-curl -s "$BASE/api/summary?days=14" | jq '.runs.expectations[] |
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.runs.expectations[] |
   {dag: .dag_id, last: .last_observed_at, limit_min: .max_delay_minutes, obs: .observation_state}'
-curl -s "$BASE/api/summary?days=14" | jq '.runs | {failures, empty_runs, environments}'
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.runs | {failures, empty_runs, environments}'
 
 # ③ 키 목록 — 이메일이 마스킹돼 나오는지 (email 원문 키가 없어야 정상)
-curl -s "$BASE/api/keys" | jq '.keys[0]'
+curl -s -H "$AUTH" "$BASE/api/keys" | jq '.keys[0]'
 
 # ④ 이용 행동 — 여정(즉시)과 스펙 종속 축('수집 전') 구분
-curl -s "$BASE/api/summary?days=14" | jq '{spec_pending: .meta.usage_spec_pending,
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{spec_pending: .meta.usage_spec_pending,
   funnel: .usage.funnel, clients_pending: .usage.clients.pending}'
+
+# ④-1 제품 표시명 — 게시본(d1_catalog_display)에서 몇 종이 왔나 (ASAC-DAG#706)
+curl -s -H "$AUTH" "$BASE/api/apis?days=14" | jq '{missing: .meta.missing,
+  declared: .meta.display_declared, undeclared: .meta.display_undeclared}'
+#   missing 에 "display" → 표를 못 읽었다. 전 제품이 표명으로 떨어진다
+#   undeclared > 0       → 그 도메인이 아직 meta.serving.display 를 선언 안 한 것. **정상이다**
+curl -s -H "$AUTH" "$BASE/api/apis?days=14" | jq -r '.apis[] | select(.display == null) | .product_id' | head
+#   미선언 제품의 product_id — 어느 도메인이 남았는지 여기서 본다
 
 # ⑤ 요청 추적 — 게이트웨이 응답 헤더 X-Request-Id 값으로 그 요청 한 건을 특정
 RID=$(curl -si http://localhost:8787/api/catalog | tr -d '\r' | awk -F': ' '/^x-request-id/{print $2}')
-curl -s "$BASE/api/trace?request_id=$RID" | jq '{found, rows}'
+curl -s -H "$AUTH" "$BASE/api/trace?request_id=$RID" | jq '{found, rows}'
 
 # ⑥ route 계약 — 무엇을 '데이터 서빙'으로 셌고, 무엇을 못 셌나 (decision/0014)
-curl -s "$BASE/api/summary?days=14" | jq '{serve: .meta.serve_routes, mcp: .meta.mcp}'
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{serve: .meta.serve_routes, mcp: .meta.mcp}'
 #   serve = ["data","skill_data","mcp_query_product"]  ← 질의 조건과 같은 배열에서 나온다
 #   mcp.unsplit    > 0 이면 화면에 "거부된 AI 호출은 못 가름" 안내가 뜬다
 #   mcp.pre_split  = true 면 창 앞부분이 '가르기 전' 기록이다(기간을 좁히면 사라진다)
 
 # ⑥-a 화면에 내부 슬러그가 새는지 — 번역표에 없는 route 값을 골라낸다 (리포 루트에서, 통과 기준: 0줄)
-curl -s "$BASE/api/summary?days=14" | jq -r '.serving.routes[].route' | sort -u | while read r; do
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq -r '.serving.routes[].route' | sort -u | while read r; do
   grep -q "\b$r:" ops-dashboard/public/index.html || echo "MISSING in ROUTE_KO: $r"
 done
 
 # ⑦ 환경 스코프 — 서빙 수치가 한 환경의 것인가, 무엇을 뺐나 (#64)
-curl -s "$BASE/api/summary?days=14" | jq '{scope: .meta.serving_env_scope,
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{scope: .meta.serving_env_scope,
   mix: .meta.serving_env_mix, excluded: .meta.serving_env_excluded,
   unknown: .meta.serving_env_unknown}'
 #   scope    = "prod"  ← null 이면 안 좁히고 있다는 뜻이다(ENV_SCOPE 확인)
@@ -90,7 +105,7 @@ curl -s "$BASE/api/summary?days=14" | jq '{scope: .meta.serving_env_scope,
 #   unknown  = env IS NULL 건수 — **운영으로 채우지 않는다**(ASAC-DAG#692)
 
 # ⑦-a 합이 맞는가 — 스코프 적용분 + 제외분 = 전체
-curl -s "$BASE/api/summary?days=14" | jq '
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '
   (.serving.routes | map(.calls) | add // 0) as $scoped
   | (.meta.serving_env_mix | map(.calls) | add // 0) as $all
   | {scoped: $scoped, excluded: .meta.serving_env_excluded, all: $all,
@@ -116,7 +131,7 @@ curl -si -X POST "$BASE/api/keys" -H "authorization: Bearer $TOKEN" \
 
 ```bash
 # 게이트웨이를 시드하지 않은(또는 상태를 지운) 상태에서
-curl -s "$BASE/api/summary" | jq '.meta.missing'   # ["serving"] 등 — 500 이 아니라 빈 섹션
+curl -s -H "$AUTH" "$BASE/api/summary" | jq '.meta.missing'   # ["serving"] 등 — 500 이 아니라 빈 섹션
 ```
 
 ## 3. 실행 기록 탭 — 샘플에 박힌 검증 시나리오
@@ -150,6 +165,23 @@ curl -s "$BASE/api/summary" | jq '.meta.missing'   # ["serving"] 등 — 500 이
 저절로 사라진다. 웨어하우스를 콘솔이 직접 훑던 임시 로더는 폐기했다
 ([0005](decision/0005-slo-snapshot-to-d1.md)) — 실측 파이프라인 상태는 **실행 기록 탭**이
 조회 DB 4종에서 직접 읽는다.
+
+### 4-1-1. 분야 등록부 (`_ops_domain`) — **이건 돌린다**
+
+바로 위와 헷갈리지 않는다. `_ops_slo` 는 파이프라인이 넣는 **측정값**이라 콘솔이 손대지
+않지만, `_ops_domain` 은 콘솔 소유의 **참조 내용**(분야 코드 → 한글 이름)이다.
+마이그레이션은 표만 만들고 내용은 안 넣으므로 **한 번 돌려야 한다.**
+
+```bash
+npm run d1 -- --file=fixtures/ops_domain.sql     # INSERT OR REPLACE — 다시 돌려도 안전
+npm run d1 -- "SELECT domain,label,has_slo FROM _ops_domain ORDER BY domain"
+```
+
+안 하면 화면이 분야를 `culture`·`commerce`·`common` 으로 부른다 — `domLabel()` 이 등록부에
+없으면 코드를 그대로 쓰기 때문이다(**화면은 라벨을 지어내지 않는다**). 실제로 운영 등록부가
+0행이었고, 원인은 이 내용이 `slo_live.sql`·`slo_sample.sql` 안에 있었던 것이다 — 둘 다
+`DELETE FROM _ops_slo` 로 시작해서 **등록부만 채울 방법이 없었다.**
+2026-08-07 에 자기 파일로 분리했다(manual-steps §4-1).
 
 ### 4-2. 운영 기록 (조회 DB 4종)
 
@@ -197,7 +229,7 @@ npm run migrate               # 새 파일까지 적용 (운영 D1)
 |---|---|
 | `_keys`·`_usage`·`_burst`·`_gateway_request_log` | `../../marketplace/migrations/` |
 | `_ops_run_event` 외 3종 | ASAC-DAG `common/ops/d1_ops.py` |
-| `_catalog`·`_publication_ledger` | 도메인 export(dbt) |
+| `_catalog`·`_publication_ledger`·`d1_catalog_display` | 도메인 export(dbt) |
 
 정본이 바뀌면 미러(`migrations/0002`)를 **따라** 고치고, 임의로 컬럼을 더하지 않는다.
 손으로 치는 DDL 은 `npm run d1` 이 막는다 — 장부를 안 거친 스키마 변경은 다음 사람의
@@ -240,6 +272,9 @@ curl -s -X POST "$BASE/api/keys" -H "authorization: Bearer $TOKEN" \
 | 조치 버튼이 안 보인다 | 토큰 미입력 | 상단 잠금 해제 (`.dev.vars` 의 `OPS_TOKEN`) |
 | 조치가 503 | `OPS_TOKEN` 미설정 | `.dev.vars` 작성 후 `npm run dev` 재시작 |
 | `npm run d1` 이 DDL 을 거부 | 의도된 동작 | 스키마는 `migrations/` + `npm run migrate`. 남의 표면 소유자에게 |
+| 분야가 **영문 코드**로 뜬다 (`culture`·`commerce`·`common`) | `_ops_domain` 등록부가 비었다 — `domLabel()` 은 라벨을 지어내지 않는다 | `npm run d1 -- --file=fixtures/ops_domain.sql` (§4-1-1) |
+| API 목록에 제품이 **표 이름**으로 뜬다 (`gold_…`·`d1_…`) | 그 제품이 `meta.serving.display` 를 아직 선언 안 했다 — **정상**(계약이 optional, ASAC-DAG#706) | 콘솔에서 고칠 게 없다. 이름이 필요하면 **도메인 오너**가 dbt yml 에 선언하고 `<domain>_serving_export` 를 돌린다 |
+| 제품이 **전부** 표 이름으로 뜬다 | `d1_catalog_display` 를 못 읽었다(표 부재·발행 전) — 목록 위 안내가 그렇게 말한다 | 데이터 준비 상태 탭의 '데이터 소스 상태'에서 그 표의 상태를 본다(`absent`/`mismatch`) |
 | :8788 충돌 | 다른 프로세스 | `lsof -i :8788` 로 확인 후 정리 |
 
 ## 7. 하지 말 것 (요약)

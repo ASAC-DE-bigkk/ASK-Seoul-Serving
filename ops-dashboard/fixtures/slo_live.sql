@@ -1,16 +1,18 @@
--- 실적재 SLO — scripts/load_slo.py 가 Trino 에서 생성한다. 손으로 고치지 말 것.
+-- 실적재 SLO — 한때 `scripts/load_slo.py` 가 Trino 에서 생성했다.
 -- 출처: iceberg_dev.culture.gold_culture_slo_daily
 -- is_sample=0 — 화면의 '합성 샘플' 배너는 이 데이터가 들어오면 사라진다.
+--
+-- ⚠️ **생성기는 없다.** Trino 직결 복사 경로는 [0005](../docs/decision/0005-slo-snapshot-to-d1.md)
+-- 로 폐기되며 `load_slo.py` 가 삭제됐다 — 이 파일은 그때 남은 **기록**이다. 다시 생성되지
+-- 않으므로 손으로 고쳐도 덮이지 않지만, 애초에 되살릴 파일이 아니다.
+-- 🔴 **운영 D1 에 그냥 돌리지 않는다** — 발행 실측을 콘솔이 손으로 싣는 것이 0005 가 폐기한
+-- 그 경로다. 실측 SLO 는 culture DAG 의 export task 가 넣는다.
 
 DELETE FROM _ops_slo;
-DELETE FROM _ops_domain;
 
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('culture','문화·행사',1,NULL);
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('citydata','인구·도시',0,'품질 측정 기준이 아직 없음');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('transit','대중교통',0,'품질 측정 기준이 아직 없음');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('commerce','상권',0,'품질 측정 기준이 아직 없음');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('weather','날씨',0,'품질 측정 기준이 아직 없음');
-INSERT INTO _ops_domain (domain,label,has_slo,note) VALUES ('traffic','교통',0,'품질 측정 기준이 아직 없음');
+-- 분야 등록부는 여기 없다 — `fixtures/ops_domain.sql` 이 정본이다.
+-- 예전에는 이 파일이 `DELETE FROM _ops_domain` + INSERT 로 같이 들고 있었는데, 그래서
+-- **등록부만 채우려 해도 `_ops_slo` 를 건드려야 했고** 운영 등록부가 0행으로 남았다.
 
 INSERT INTO _ops_slo (domain,event_date,scheduled_slo_passed,eod_slo_passed,best_coverage_pct,failed_dataset_count,violation_count,total_rows,ingest_duration_min,transform_runs,transform_all_success,maintenance_ran,green_disguise_runs,is_sample) VALUES ('culture','2026-06-30',0,1,100.0,0,0,1005,0.0,0,0,0,1,0);
 INSERT INTO _ops_slo (domain,event_date,scheduled_slo_passed,eod_slo_passed,best_coverage_pct,failed_dataset_count,violation_count,total_rows,ingest_duration_min,transform_runs,transform_all_success,maintenance_ran,green_disguise_runs,is_sample) VALUES ('culture','2026-07-01',1,1,100.0,0,0,27772,0.0,0,0,0,0,0);
