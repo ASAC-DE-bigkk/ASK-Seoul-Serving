@@ -44,8 +44,8 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
 - `describe_product(product_id)` — 컬럼·grain·PK·시간축·usage_patterns·출처/신선도.
 - `preview_product(product_id)` — 5행 미리보기(쿼터 무과금).
 - `query_product(product_id, filters, from, to, limit, cursor, intent)` — 데이터 조회.
-- `run_pattern(product_id, pattern_id, params)` — **검증된 질의 패턴 실행(권장)**. describe 의
-  usage_patterns 에서 **`runnable=true` 인 것**을 고르고 :파라미터 값만 넘긴다 — 저장·검증된 SQL 만 돌므로 필터 조립보다 정확하다.
+- `run_pattern(product_id, pattern_id, params)` — **동작이 확인된 질의 패턴 실행(우선 사용)**. describe 의
+  usage_patterns 에서 **`runnable=true` 인 것**을 고르고 :파라미터 값만 넘긴다 — 실제 게시본에 실행해 동작을 확인한 저장 SQL 만 돈다.
 - `check_quota` — 남은 일일 쿼터.
 
 `query_product` 응답에는 `data_context` 가 동봉된다 — `freshness`(이 게시본의 기준 시점) ·
