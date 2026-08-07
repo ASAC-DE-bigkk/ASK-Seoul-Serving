@@ -1755,18 +1755,29 @@ function renderDrill(d0) {
   el.innerHTML = "<div class='drill'>" + out + "</div>";
 }
 
+// 닫는 길은 **한 곳**이다 — 칸을 다시 누르든 '닫기'를 누르든 같은 함수를 지난다.
+// 두 벌로 두면 한쪽만 고쳐져 선택 표시(`sel`)가 남는 식으로 어긋난다.
+function closeDrill() {
+  DRILL = null;
+  $("runsDrillWrap").hidden = true;
+  for (const el of document.querySelectorAll("#runsTrend .cell.sel")) el.classList.remove("sel");
+}
+
 // 히트맵은 매 렌더마다 innerHTML 로 다시 그려진다 — 리스너는 **바깥 컨테이너에 한 번만** 단다.
 $("runsTrend").addEventListener("click", (e) => {
   const t = e.target.closest("[data-drill]");
   if (!t) return;
   const [dom, day] = t.dataset.drill.split("|");
+  // 🔴 **연 것을 다시 누르면 닫는다**(§5 토글 규약). 예전에는 같은 칸을 다시 눌러도 아무
+  //    일도 안 일어나 보였다 — 실제로는 같은 내용을 **다시 받아** 그리고 있었다(불필요한
+  //    왕복). 사람은 "닫으려고" 누르는데 화면이 안 바뀌니 고장으로 읽힌다.
+  //    자동 새로고침은 이 경로로 안 온다(`DRILL` 은 선택 표시용) — silent 구분이 필요 없다.
+  if (DRILL && DRILL.domain === dom && DRILL.day === day) { closeDrill(); return; }
   openDrill(dom, day);
 });
 $("runsDrill").addEventListener("click", (e) => {
   if (!e.target.closest("[data-drill-close]")) return;
-  DRILL = null;
-  $("runsDrillWrap").hidden = true;
-  for (const el of document.querySelectorAll("#runsTrend .cell.sel")) el.classList.remove("sel");
+  closeDrill();
 });
 
 function renderSources(rows) {
