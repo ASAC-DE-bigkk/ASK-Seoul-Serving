@@ -243,6 +243,13 @@
           <h3>단계별 소요와 적재량</h3>
           <p>어느 단계가 시간을 먹고 어디서 행이 쌓이나 — 수집(raw) → 적재(bronze) → 정제(silver) → 집계(gold) → 게시(d1)</p>
         </div>
+        <!-- 세부 보기 — 같은 데이터를 세 각도로 본다. 창 전체 합(전체) / 하루치 평균(평균) /
+             하루씩(날짜별). 날짜별에서 각 날은 **기간 평균 대비**로 적·황·녹이 매겨진다. -->
+        <div class="segbar" id="layerModes" role="tablist" aria-label="단계별 보기">
+          <button type="button" role="tab" data-mode="all" aria-selected="true">전체</button>
+          <button type="button" role="tab" data-mode="avg" aria-selected="false">평균</button>
+          <button type="button" role="tab" data-mode="day" aria-selected="false">날짜별</button>
+        </div>
         <div class="bd"><div id="runsLayers"></div></div>
       </div>
       <div class="card">
@@ -290,10 +297,6 @@
         <div class="hd"><h3>요청 종류별</h3><p>미리보기 · 데이터 조회 · 목록 등</p></div>
         <div class="bd" id="routes"></div>
       </div>
-      <div class="card">
-        <div class="hd"><h3>이용자별 재방문</h3><p>이용자 식별은 키 앞 8자로만 합니다</p></div>
-        <div class="bd" id="keys"></div>
-      </div>
     </div>
     </section>
 
@@ -306,6 +309,18 @@
       <div class="card wide">
         <div class="hd"><h3>일자별 손님</h3><p>막대 = 호출 수 — 툴팁에 인증/익명 구분</p></div>
         <div class="bd" id="usageDaily"></div>
+      </div>
+      <!-- 이용자별 통계 — '누가 쓰나'에 답하는 카드. 익명은 신원 축이 없어 목록에 못 나오므로
+           맨 위에서 **키 있는 쪽과 없는 쪽의 몫**을 먼저 밝힌다(decision/0012).
+           줄을 누르면 그 이용자가 무엇을 많이 썼는지 내림차순으로 펴진다 — 다시 누르면 접힌다. -->
+      <div class="card wide">
+        <div class="hd"><h3>이용자별 통계</h3>
+          <p>키를 발급받아 <b>식별된</b> 이용자만 나옵니다 — 줄을 누르면 그 사람이 무엇을 많이 썼는지 펴집니다 · 식별은 키 앞 8자로만</p></div>
+        <div class="bd" id="userStats"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>이용자별 재방문</h3><p>얼마나 자주 다시 오나 — 이용자 식별은 키 앞 8자로만 합니다</p></div>
+        <div class="bd" id="keys"></div>
       </div>
       <div class="card">
         <div class="hd"><h3>손님 구성</h3><p>사람 / AI 대행 / AI 크롤러 / CLI — 원문 UA 는 저장하지 않고 분류만</p></div>
@@ -550,8 +565,10 @@ const byProduct = (rows) => scoped(rows, (r) => domOf(r.product_id || r.table_na
 //    (`gold_transit_…` → 'gold') 어느 분야를 골라도 안 걸렸다.
 const servRows = (rows) => (rows || []).filter((r) =>
   DOMSCOPE ? r.domain === DOMSCOPE : r.domain !== "*");
-// 더할 수 없는 값(DISTINCT 세기)이 있는 목록은 서버가 '*' 합계 행을 따로 준다.
-const servStar = (rows) => (rows || []).filter((r) => r.domain === (DOMSCOPE || "*"));
+// ⚠️ 예전에 `servStar()`(스코프 버킷 그대로 고르기)가 여기 있었다. 유일한 사용처가
+//    '이용자별 재방문' 카드였는데 그 카드가 **이용 행동 탭으로 옮겨 가면서** 쓰는 곳이
+//    없어졌다 — 이용자는 여러 분야를 쓰므로 저쪽은 언제나 '*' 버킷이다. 안 쓰는 헬퍼를
+//    남겨 두면 다음 사람이 "스코프를 걸어야 하나" 하고 되묻게 되어 지웠다.
 // 지금 스코프의 합계 한 줄. 목록을 더해서 만들지 않는다 — 목록은 상위 N 이라 합이 전체가 아니다.
 const servTotal = (rows) => (rows || []).find((r) => r.domain === (DOMSCOPE || "*"))
   || { calls: 0, errors: 0, users: 0 };
@@ -637,6 +654,291 @@ function renderAxis(s0) {
     "🔴 <b>이 카드만 전체 기준입니다</b> — '분야 합이 왜 전체보다 작은가'에 답하는 카드라, " +
     "분야를 좁히면 질문 자체가 사라집니다.</p>";
 }
+
+// ── 단계별 소요와 적재량 — 같은 데이터를 세 각도로 ────────────────────────────────
+//
+// '전체' 하나만 있을 때 이 카드는 **창을 한 덩어리로 접어** 놓고 있었다. "어느 단계가
+// 무겁나"에는 답했지만 **"언제 튀었나"에는 답하지 못한다** — 하루가 통째로 이상해도
+// 14일 합에 묻힌다. 그래서 셋으로 가른다:
+//   전체    창 전체의 합 (지금까지의 화면)
+//   평균    **하루치** 평균 — 크기 감각의 기준선
+//   날짜별  하루씩. 각 날은 **기간 평균 대비**로 색이 매겨진다
+//
+// 🔴 색 규약(요청 사양): **초과 > 미달 > 정상** 순으로 센다.
+//   빨강  기간 평균을 넘은 인자가 하나라도 있다
+//   노랑  (초과 없음) 기간 평균에 못 미친 인자가 하나라도 있다
+//   초록  모든 인자가 평균 ±10% 안에 있다
+// '인자'는 **단계 × 지표**이고 지표는 이 카드가 보여주는 둘 — 소요·적재 행수다.
+//
+// 🔴 **그날 기록이 없는 단계는 0으로 세지 않는다.** 0으로 세면 사흘에 한 번 도는 단계가
+//    안 도는 날마다 '미달'을 찍어 화면이 온통 노랑이 된다. 기록 없음은 미달과 **다른
+//    사실**이라 색이 아니라 글로 따로 말한다(agreement §4 모른다 ≠ 0).
+const LAYER_BAND = 0.10;                 // 평균 ±10% 는 정상으로 본다
+let LAYER_DATA = null;                   // render() 가 채운다
+let LAYERMODE = "all";                   // all | avg | day
+let LAYERDAY = null;                     // 날짜별에서 펴 놓은 날. 다시 누르면 접힌다
+
+/** 하루가 기간 평균에 견줘 어떤가. 초과 > 미달 > 정상. */
+function layerVerdict(day) {
+  const { layerDays, layerAvg } = LAYER_DATA;
+  const per = layerDays[day] || {};
+  const over = [], under = [], missing = [];
+  for (const [k, lab] of LAYERS) {
+    const a = layerAvg[k];
+    if (!a) continue;                    // 창 안에 이 단계 기록이 아예 없다 — 견줄 기준이 없다
+    const v = per[k];
+    if (!v) { missing.push(lab); continue; }
+    for (const [f, fl] of [["dur", "소요"], ["rows", "적재 행수"]]) {
+      if (!a[f]) continue;               // 평균이 0 이면 비율을 못 낸다(나눌 수 없다)
+      const ratio = v[f] / a[f];
+      if (ratio > 1 + LAYER_BAND) over.push({ lab, fl, ratio });
+      else if (ratio < 1 - LAYER_BAND) under.push({ lab, fl, ratio });
+    }
+  }
+  return { cls: over.length ? "bad" : under.length ? "warn" : "ok", over, under, missing };
+}
+
+/** 단계 막대 두 줄(소요·적재). 세 보기가 같은 그림을 쓴다 — 눈이 옮겨 다니지 않게. */
+function layerBars(rows, durOf, rowOf, subOf) {
+  const maxD = Math.max(1, ...rows.map(durOf));
+  const maxR = Math.max(1, ...rows.map(rowOf));
+  return "<div class='share'>" + rows.map((x) => {
+    const d0 = durOf(x), r0 = rowOf(x);
+    return "<div class='row'><div class='nm'>" + esc(x.label) +
+        "<small>" + subOf(x) + "</small></div>" +
+      "<div class='track' title='소요 " + hrs(d0) + "'>" +
+        "<div class='fill' style='width:" + Math.round(d0 / maxD * 100) + "%'></div></div>" +
+      "<div class='num'><b>" + hrs(d0) + "</b></div></div>" +
+      "<div class='row'><div class='nm'><small>적재 행수</small></div>" +
+      "<div class='track' title='" + nf.format(Math.round(r0)) + "행'>" +
+        "<div class='fill dim' style='width:" + Math.round(r0 / maxR * 100) + "%'></div></div>" +
+      "<div class='num'><small>" + nf.format(Math.round(r0)) + "행</small></div></div>";
+  }).join("") + "</div>";
+}
+
+function renderLayers() {
+  const el = $("runsLayers");
+  if (!LAYER_DATA) return;
+  const { byLayer, layerDays, dayList, layerAvg } = LAYER_DATA;
+  for (const b of $("layerModes").querySelectorAll("button"))
+    b.setAttribute("aria-selected", String(b.dataset.mode === LAYERMODE));
+
+  if (!byLayer.length) { el.innerHTML = emptyBox(["데이터 없음", "집계표가 채워지면 나타납니다"]); return; }
+
+  if (LAYERMODE === "all") {
+    el.innerHTML = layerBars(byLayer, (x) => x.dur, (x) => x.rows,
+        (x) => esc(x.key) + " · 분야 " + x.doms) +
+      "<p class='hint' style='margin-top:10px'>막대는 단계끼리의 상대 크기입니다 · " +
+      "소요는 그 단계 전 분야 실행 시간의 <b>합</b>입니다 — 하루치 기준은 '평균'에서 봅니다</p>";
+    return;
+  }
+
+  if (LAYERMODE === "avg") {
+    const rows = LAYERS.filter(([k]) => layerAvg[k])
+      .map(([k, lab]) => ({ key:k, label:lab, ...layerAvg[k] }));
+    el.innerHTML = layerBars(rows, (x) => x.dur, (x) => x.rows,
+        (x) => esc(x.key) + " · 기록 있던 날 " + x.days + "일") +
+      "<p class='hint' style='margin-top:10px'>🔴 분모는 <b>그 단계 기록이 있던 날</b>입니다 — " +
+      "창 전체 날수로 나누면 가끔 도는 단계가 실제보다 가벼워 보이고, 정상인 날이 모두 " +
+      "'초과'로 뜹니다(없는 날을 0으로 세지 않습니다). 아래 '날짜별'의 색이 이 값을 기준으로 매겨집니다.</p>";
+    return;
+  }
+
+  // 날짜별 — 칩 한 줄 + (고른 날이 있으면) 그날의 단계별 비교
+  const chips = dayList.map((day) => {
+    const v = layerVerdict(day);
+    const tip = [md(day),
+      v.over.length ? "평균 초과 " + v.over.length : "",
+      v.under.length ? "평균 미달 " + v.under.length : "",
+      (!v.over.length && !v.under.length) ? "평균 ±10% 안" : "",
+      v.missing.length ? "기록 없는 단계 " + v.missing.join("·") : ""].filter(Boolean).join(" · ");
+    return "<button type='button' class='daychip " + v.cls + (LAYERDAY === day ? " sel" : "") +
+      "' data-layer-day='" + esc(day) + "' title='" + esc(tip) + "'>" + esc(md(day)) + "</button>";
+  }).join("");
+
+  const legend = "<div class='cal-legend' style='margin-top:10px'>" +
+    "<span><span class='pill bad'>빨강</span> 평균을 <b>넘은</b> 인자 1개 이상</span>" +
+    "<span><span class='pill warn'>노랑</span> (초과 없음) 평균에 <b>못 미친</b> 인자 1개 이상</span>" +
+    "<span><span class='pill ok'>초록</span> 모든 인자가 평균 <b>±10%</b> 안</span></div>" +
+    "<p class='hint' style='margin-top:8px'>인자는 <b>단계 × 지표</b>이고 지표는 소요·적재 행수 둘입니다. " +
+    "그날 <b>기록이 없는 단계는 색에 안 넣습니다</b> — 미달과 다른 사실이라 아래에 글로 적습니다. " +
+    "날을 누르면 펴지고, 다시 누르면 접힙니다.</p>";
+
+  el.innerHTML = "<div class='daychips'>" + chips + "</div>" + legend +
+    (LAYERDAY && layerDays[LAYERDAY] ? layerDayDetail(LAYERDAY) : "");
+}
+
+/** 고른 날의 단계별 값과 기간 평균의 차. 무엇 때문에 그 색인지 눈으로 잇게 한다. */
+function layerDayDetail(day) {
+  const { layerDays, layerAvg } = LAYER_DATA;
+  const per = layerDays[day] || {};
+  const v = layerVerdict(day);
+  const mark = (val, avg) => {
+    if (!avg) return "<span class='zero'>기준 없음</span>";
+    const r = val / avg;
+    const pctTxt = (r >= 1 ? "+" : "") + Math.round((r - 1) * 100) + "%";
+    return r > 1 + LAYER_BAND ? "<span class='pill bad'>▲ " + pctTxt + "</span>"
+      : r < 1 - LAYER_BAND ? "<span class='pill warn'>▼ " + pctTxt + "</span>"
+      : "<span class='pill ok'>= " + pctTxt + "</span>";
+  };
+  const rows = LAYERS.filter(([k]) => layerAvg[k] || per[k])
+    .map(([k, lab]) => ({ key:k, label:lab, cur:per[k] || null, avg:layerAvg[k] || null }));
+  const body = table([
+    { t:"단계", name:true, get:(r) => esc(r.label) + " <span class='pill dim'>" + esc(r.key) + "</span>" },
+    { t:"소요", r:true, get:(r) => r.cur ? hrs(r.cur.dur) : "<span class='zero'>기록 없음</span>" },
+    { t:"평균 대비", r:true, get:(r) => r.cur && r.avg ? mark(r.cur.dur, r.avg.dur) : "—" },
+    { t:"적재 행수", r:true, get:(r) => r.cur ? nf.format(r.cur.rows) + "행" : "<span class='zero'>기록 없음</span>" },
+    { t:"평균 대비", r:true, get:(r) => r.cur && r.avg ? mark(r.cur.rows, r.avg.rows) : "—" },
+    { t:"실행", r:true, get:(r) => r.cur ? nf.format(r.cur.ev) : "—" },
+  ], rows, "이 날의 단계 기록이 없습니다");
+
+  const why = v.over.length ? "평균을 넘은 인자: <b>" + v.over.map((x) => esc(x.lab + " " + x.fl)).join(" · ") + "</b>"
+    : v.under.length ? "평균에 못 미친 인자: <b>" + v.under.map((x) => esc(x.lab + " " + x.fl)).join(" · ") + "</b>"
+    : "모든 인자가 평균 ±10% 안입니다.";
+  return "<div class='drill' style='margin-top:12px'>" +
+    "<div class='drill-hd'><b>" + esc(md(day)) + "</b>" +
+    "<span class='pill " + v.cls + "'>" +
+      (v.cls === "bad" ? "평균 초과" : v.cls === "warn" ? "평균 미달" : "평균 범위") + "</span>" +
+    "<span class='sub'>" + why + "</span>" +
+    "<button class='kbtn' data-layer-close style='margin-left:auto'>닫기</button></div>" +
+    "<div class='tscroll'>" + body + "</div>" +
+    (v.missing.length
+      ? "<p class='hint' style='margin-top:8px'>이 날 <b>기록이 없는 단계</b>: " +
+        esc(v.missing.join(" · ")) + " — 0 이 아니라 <b>모르는 것</b>이라 색에 안 넣었습니다.</p>"
+      : "");
+}
+
+// 닫는 길은 **한 곳**이다 — 칩을 다시 누르든 '닫기'를 누르든 같은 함수를 지난다(§5).
+function closeLayerDay() { LAYERDAY = null; renderLayers(); }
+
+$("layerModes").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-mode]");
+  if (!b) return;
+  // 보기를 바꾸면 펴 둔 날은 접는다 — '전체'로 갔다 돌아왔을 때 옛 선택이 남아 있으면
+  // 어느 날을 보는 중인지 화면과 머릿속이 어긋난다.
+  if (LAYERMODE !== b.dataset.mode) { LAYERMODE = b.dataset.mode; LAYERDAY = null; }
+  renderLayers();
+});
+$("runsLayers").addEventListener("click", (e) => {
+  if (e.target.closest("[data-layer-close]")) { closeLayerDay(); return; }
+  const c = e.target.closest("[data-layer-day]");
+  if (!c) return;
+  // 🔴 **연 것을 다시 누르면 닫는다**(§5 토글 규약). 자동 새로고침은 이 경로로 안 온다.
+  LAYERDAY = LAYERDAY === c.dataset.layerDay ? null : c.dataset.layerDay;
+  renderLayers();
+});
+
+// ── 이용자별 통계 ────────────────────────────────────────────────────────────────
+//
+// 여태 이 콘솔은 이용자를 **비율로만** 말했다('익명 비중' KPI). 비율은 "얼마나 많나"에는
+// 답하지만 **"누가, 무엇을 쓰나"에는 답하지 못한다.** 그래서 두 가지를 같이 놓는다:
+//   ① 키를 받은 쪽과 아닌 쪽의 몫 — 아래 목록이 전체의 어디를 덮는지
+//   ② 이용자 한 사람이 한 줄, 누르면 그 사람이 많이 쓴 것부터 펴진다
+//
+// 🔴 **익명은 목록에 못 나온다.** 키가 없어 신원 축 자체가 없다 — 빠뜨린 게 아니라 **셀
+//    사람이 없는 것**이고, 그 사실을 맨 위에서 직접 말한다(decision/0012).
+// 🔴 상세는 `hidden` 토글이 아니라 **선택된 줄만 그린다.** 표 행에 `hidden` 을 걸면
+//    CSS 의 `display` 규칙에 지는 계열이고(§5), 생성된 마크업이라 `check:hidden` 이
+//    잡지도 못한다. 없는 문제를 만들지 않는다.
+let UKEY = null;   // 지금 펴 놓은 이용자(키 앞 8자). 자동 새로고침은 이 값을 안 건드린다.
+
+function renderUserStats(U, days) {
+  const el = $("userStats");
+  const id = U.identity, rows = U.by_key || [];
+  if (!id || !id.calls) { el.innerHTML = emptyBox(["데이터 없음", "최근 " + days + "일에 요청이 없습니다"]); return; }
+
+  // ① 키 있는 쪽 / 없는 쪽. 막대 하나로 붙여 두면 몫이 눈에 바로 들어온다.
+  const pct = (n) => id.calls ? (n / id.calls * 100) : 0;
+  const head =
+    "<div class='share'>" +
+    "<div class='row'><div class='nm'>식별된 이용자<small>키를 발급받아 인증한 요청</small></div>" +
+      "<div class='track'><div class='fill' style='width:" + Math.max(id.keyed ? 2 : 0, pct(id.keyed)) + "%'></div></div>" +
+      "<div class='num'><b>" + nf.format(id.keyed || 0) + "</b> <small>" + pct(id.keyed).toFixed(1) + "%</small></div></div>" +
+    "<div class='row'><div class='nm'>익명<small>키 없이 온 요청 — 신원 축이 없습니다</small></div>" +
+      "<div class='track'><div class='fill dim' style='width:" + Math.max(id.anon ? 2 : 0, pct(id.anon)) + "%'></div></div>" +
+      "<div class='num'><b>" + nf.format(id.anon || 0) + "</b> <small>" + pct(id.anon).toFixed(1) + "%</small></div></div>" +
+    "</div>" +
+    "<p class='hint' style='margin-top:10px'>이 기간에 <b>" + nf.format(id.keys_used || 0) + "명</b>이 키로 요청했습니다. " +
+    "아래 목록은 <b>식별된 요청만</b> 셉니다 — 익명은 누가 보냈는지 알 수 없어 셀 사람이 없습니다.</p>";
+
+  if (!rows.length) { el.innerHTML = head + emptyBox(["데이터 없음", "키를 쓴 요청이 없습니다"]); return; }
+
+  // ② 이용자 한 사람이 한 줄. 누른 줄 **바로 밑에** 상세를 끼운다 — 카드 밖으로 내보내면
+  //    어느 줄을 편 것인지 눈으로 못 잇는다.
+  const cols = [
+    { t:"이용자", name:true, get:(r) => "<span class='pill dim'>" + esc(r.key_id) + "</span>" +
+        (UKEY === r.key_id ? " <span class='pill ok'>펼침</span>" : "") },
+    { t:"요청 수", r:true, get:(r) => nf.format(r.calls) },
+    { t:"데이터 조회", r:true, get:(r) => nf.format(r.data_calls || 0) },
+    { t:"쓴 API", r:true, get:(r) => r.apis },
+    { t:"실패", r:true, get:(r) => r.errors ? "<span class='pill bad'>" + r.errors + "</span>" : num(0) },
+    { t:"방문한 날", r:true, get:(r) => r.active_days + "일" },
+    { t:"마지막", r:true, get:(r) => fmtTs(r.last_call) },
+  ];
+  const body = rows.map((r) => {
+    const open = UKEY === r.key_id;
+    const tr = "<tr class='urow" + (open ? " sel" : "") + "' data-user='" + esc(r.key_id) + "'>" +
+      cols.map((c) => "<td class='" + (c.name ? "name " : "") + (c.r ? "r" : "") + "'>" +
+        (c.get(r) ?? "—") + "</td>").join("") + "</tr>";
+    return open ? tr + userApisRow(U, r, cols.length) : tr;
+  }).join("");
+
+  el.innerHTML = head +
+    "<div class='tscroll' style='margin-top:12px'><table><thead><tr>" +
+    cols.map((c) => "<th class='" + (c.name ? "name " : "") + (c.r ? "r" : "") + "'>" + esc(c.t) + "</th>").join("") +
+    "</tr></thead><tbody>" + body + "</tbody></table></div>" +
+    (rows.length >= 50 ? "<p class='hint' style='margin-top:8px'>요청이 많은 순으로 <b>50명</b>까지만 보여줍니다.</p>" : "");
+}
+
+/** 펼친 이용자의 '무엇을 많이 썼나' — 내림차순. 표 안에 한 줄로 끼운다. */
+function userApisRow(U, keyRow, span) {
+  const mine = (U.by_key_api || []).filter((r) => r.key_id === keyRow.key_id)
+    .sort((a, b) => b.calls - a.calls);
+  // 목록 합과 그 사람의 요청 수가 다를 수 있다(상위 20 만 싣는다) — 다르면 그렇다고 말한다.
+  const shown = mine.reduce((a, r) => a + r.calls, 0);
+  const rest = (keyRow.calls || 0) - shown;
+  const inner = mine.length
+    ? table([
+        // 제품은 **사람 이름**이 정본이다(#706). 없으면 표명 → 식별자 순으로 내려앉고,
+        // 제품이 없는 요청(목록·인증·키 발급)은 요청 종류로 부른다 — 버리지 않는다.
+        { t:"무엇을 썼나", name:true, get:(r) => r.target
+            ? (r.display_title
+                ? esc(r.display_title) + " <span class='pill dim'>" + esc(r.table_name || r.target) + "</span>"
+                : esc(r.table_name || r.target))
+            : "<span class='pill dim'>" + esc(ROUTE_KO[r.route] || r.route || "—") + "</span>" },
+        { t:"요청 수", r:true, get:(r) => nf.format(r.calls) },
+        { t:"실패", r:true, get:(r) => r.errors ? "<span class='pill bad'>" + r.errors + "</span>" : num(0) },
+        { t:"마지막", r:true, get:(r) => fmtTs(r.last_call) },
+      ], mine, "")
+    : emptyBox(["데이터 없음", "이 이용자의 요청 내역이 없습니다"]);
+  return "<tr class='udet'><td colspan='" + span + "'>" +
+    "<div class='drill-hd'><b>" + esc(keyRow.key_id) + "</b>" +
+    "<span class='sub'>많이 쓴 순서 · 최근 " + nf.format(shown) + "건</span>" +
+    "<button class='kbtn' data-user-close style='margin-left:auto'>닫기</button></div>" +
+    "<div class='tscroll'>" + inner + "</div>" +
+    (rest > 0
+      ? "<p class='hint' style='margin-top:8px'>상위 20개만 보여줍니다 — 나머지 <b>" +
+        nf.format(rest) + "건</b>은 이 목록 밖입니다.</p>"
+      : "") +
+    "</td></tr>";
+}
+
+// 닫는 길은 **한 곳**이다 — 줄을 다시 누르든 '닫기'를 누르든 같은 함수를 지난다(§5 토글 규약).
+function closeUserApis() {
+  UKEY = null;
+  if (LAST_DATA) renderUserStats(LAST_DATA.usage || {}, LAST_DATA.window_days);
+}
+
+// 표는 매 렌더마다 다시 그려진다 — 리스너는 **바깥 컨테이너에 한 번만** 단다.
+$("userStats").addEventListener("click", (e) => {
+  if (e.target.closest("[data-user-close]")) { closeUserApis(); return; }
+  const tr = e.target.closest(".urow");
+  if (!tr) return;
+  // 🔴 **연 것을 다시 누르면 닫는다.** 자동 새로고침은 이 경로로 안 오므로(사람의 클릭만
+  //    여기 닿는다) 펴 둔 상태가 30초마다 접히지 않는다.
+  UKEY = UKEY === tr.dataset.user ? null : tr.dataset.user;
+  if (LAST_DATA) renderUserStats(LAST_DATA.usage || {}, LAST_DATA.window_days);
+});
 
 // ── 빈 칸 표기 ────────────────────────────────────────────────────────────────
 // **짧게 쓴다.** 사유를 문단으로 적으면 표보다 설명이 길어져 화면이 안내문이 되고,
@@ -1018,19 +1320,22 @@ function render(d) {
   // 조용히 전체를 보여주면 "이 분야 것만 보는 줄" 알고 오독한다.
   if (DOMSCOPE) {
     const dl = "<b>" + esc(domLabel(DOMSCOPE)) + "</b>";
-    // 이 탭은 이제 **여섯 카드 전부** 좁혀진다(#156). 예전 문구는 "요청 종류·날짜별 요청·
-    // 이용자 재방문은 분야 축이 없다"고 했는데 사실이 아니었다 — 축은 로그에 있었고
-    // 서버가 안 실었을 뿐이다. 대신 **제품에 안 묶이는 요청**이 빠진다는 것을 밝힌다.
+    // 이 탭은 **남은 카드 전부** 좁혀진다(#156). 예전 문구는 "요청 종류·날짜별 요청은
+    // 분야 축이 없다"고 했는데 사실이 아니었다 — 축은 로그에 있었고 서버가 안 실었을
+    // 뿐이다. ('이용자별 재방문'은 이용 행동 탭으로 옮겼다 — 묻는 질문이 "누가 쓰나"다.)
+    // 대신 **분야에 안 들어가는 요청**이 빠진다는 것을 밝힌다.
     const unk = (d.serving.totals || []).find((r) => r.domain === null);
     N.serving.push(note("info", dl + " 분야만",
-      "KPI·날짜별 요청·요청 종류·제품·실패·0건 응답·이용자까지 <b>이 화면 전부</b>를 이 분야로 좁혔습니다.<br>" +
+      "KPI·날짜별 요청·요청 종류·제품·실패·0건 응답까지 <b>이 화면 전부</b>를 이 분야로 좁혔습니다.<br>" +
       "다만 <b>분야에 안 들어가는 요청</b>이 있습니다" +
       (unk && unk.calls ? " (이 기간 <b>" + nf.format(unk.calls) + "건</b>)" : "") +
       ". 그래서 <b>분야별 요청을 다 더해도 '전체'보다 작습니다.</b> 빠진 게 아니라 셀 분야가 없는 것입니다.<br>" +
       "무엇이 왜 빠졌는지는 <b>'요청이 어느 분야로 세어지나'</b> 카드가 갈라서 보여줍니다 — " +
-      "거기서 <b>조치가 필요한 것은 한 갈래뿐</b>입니다(#162).<br>" +
-      "이용자는 여러 분야를 쓰므로 <b>여기 요청 수는 이 분야에 보낸 것만</b>입니다."));
-    N.usage.push(note("info", dl + " 분야만", "AI 수요는 이 분야로 좁혔습니다. 여정·손님 구성·추적은 분야 축이 없어 전체입니다."));
+      "거기서 <b>조치가 필요한 것은 한 갈래뿐</b>입니다(#162)."));
+    N.usage.push(note("info", dl + " 분야만",
+      "AI 수요는 이 분야로 좁혔습니다. 여정·손님 구성·추적은 분야 축이 없어 전체입니다.<br>" +
+      "<b>이용자별 통계·재방문도 전체</b>입니다 — 한 사람이 여러 분야를 쓰므로 분야로 가르면 " +
+      "같은 사람이 여러 번 세어집니다."));
     N.apis.push(note("info", dl + " 분야만",
       "KPI·분야별 비중·API 목록까지 <b>이 화면 전부</b>를 이 분야로 좁혔습니다. " +
       "카드 안의 '분야 선택'도 같은 분야로 맞춰집니다 — 두 곳이 서로 다른 말을 하지 않게."));
@@ -1514,23 +1819,31 @@ function render(d) {
         ev:a.ev+x.ev, doms:a.doms+1 }), { dur:0, rows:0, api:0, ev:0, doms:0 });
     return { key:k, label:lab, ...t };
   }).filter((x) => x.ev > 0);
-  const maxDur = Math.max(1, ...byLayer.map((x) => x.dur));
-  const maxRow = Math.max(1, ...byLayer.map((x) => x.rows));
-  $("runsLayers").innerHTML = byLayer.length
-    ? "<div class='share'>" + byLayer.map((x) =>
-        "<div class='row'><div class='nm'>" + esc(x.label) +
-          "<small>" + esc(x.key) + " · 분야 " + x.doms + "</small></div>" +
-        "<div class='track' title='소요 " + hrs(x.dur) + "'>" +
-          "<div class='fill' style='width:" + Math.round(x.dur / maxDur * 100) + "%'></div></div>" +
-        "<div class='num'><b>" + hrs(x.dur) + "</b></div></div>" +
-        "<div class='row'><div class='nm'><small>적재 행수</small></div>" +
-        "<div class='track' title='" + nf.format(x.rows) + "행'>" +
-          "<div class='fill dim' style='width:" + Math.round(x.rows / maxRow * 100) + "%'></div></div>" +
-        "<div class='num'><small>" + nf.format(x.rows) + "행</small></div></div>").join("") +
-      "</div>" +
-      "<p class='hint' style='margin-top:10px'>막대는 단계끼리의 상대 크기입니다 · " +
-      "소요는 그 단계 전 분야 실행 시간의 합입니다</p>"
-    : emptyBox(["데이터 없음", "집계표가 채워지면 나타납니다"]);
+  // 날짜 축을 살린다 — '전체'는 창을 한 덩어리로 접어서 **언제 튀었는지**를 못 보여준다.
+  // 하루 × 단계로 다시 접고, 그 위에서 평균과 하루치를 견준다.
+  const layerDays = {};
+  for (const r of R.daily) {
+    const dd = (layerDays[r.observed_date_kst] ||= {});
+    const t = (dd[r.layer] ||= { dur:0, rows:0, ev:0, api:0, doms:0 });
+    t.dur += r.duration_s_sum || 0; t.rows += r.row_count_sum || 0;
+    t.ev += r.event_count || 0; t.api += r.api_call_count_sum || 0; t.doms += 1;
+  }
+  const dayList = Object.keys(layerDays).sort();
+  // 🔴 평균의 분모는 **그 단계 기록이 있는 날**이다. 창 전체 날수로 나누면 사흘에 한 번
+  //    도는 단계가 "평균이 3분의 1"로 보이고, 정상인 날이 전부 '초과'로 뜬다 —
+  //    없는 날을 0으로 세는 것이 곧 그 왜곡이다(agreement §4 모른다 ≠ 0).
+  const layerAvg = {};
+  for (const [k] of LAYERS) {
+    const vals = dayList.map((day) => layerDays[day][k]).filter(Boolean);
+    if (!vals.length) continue;
+    const n = vals.length;
+    layerAvg[k] = { days:n,
+      dur: vals.reduce((a, x) => a + x.dur, 0) / n,
+      rows: vals.reduce((a, x) => a + x.rows, 0) / n,
+      ev: vals.reduce((a, x) => a + x.ev, 0) / n };
+  }
+  LAYER_DATA = { byLayer, layerDays, dayList, layerAvg };
+  renderLayers();
 
   $("runsSlow").innerHTML = table([
     { t:"dag · task", name:true, get:(r) => esc((r.dag_id || "—") + " · " + (r.task_id || "—")) },
@@ -1549,9 +1862,10 @@ function render(d) {
   ], R.environments, "데이터 없음");
 
   // ── 서빙
-  // **여섯 카드 전부 스코프를 건다**(#156). 예전에는 제품·실패·0건 셋만 걸고 나머지는
+  // **남은 카드 전부 스코프를 건다**(#156). 예전에는 제품·실패·0건 셋만 걸고 나머지는
   // "분야 축이 없는 지표"라며 전체를 뒀는데, 축이 없던 게 아니라 서버가 **안 실었던 것**이다.
-  // 이제 서버가 `domain` 을 실어 주므로 화면은 버킷을 고르기만 한다(servRows/servStar).
+  // 이제 서버가 `domain` 을 실어 주므로 화면은 버킷을 고르기만 한다(servRows/servTotal).
+  // ⚠️ `keys` 는 여기서 안 쓴다 — 카드가 이용 행동 탭으로 옮겨 갔다(거기서 '*' 버킷을 쓴다).
   const s0 = d.serving;
   const scopeLabel = DOMSCOPE ? domLabel(DOMSCOPE) : "전체";
   const s = {
@@ -1561,7 +1875,6 @@ function render(d) {
     products: servRows(s0.products).sort((a, b) => b.calls - a.calls || b.previews - a.previews).slice(0, 12),
     failures: servRows(s0.failures).sort((a, b) => b.hits - a.hits).slice(0, 10),
     empty: servRows(s0.empty).sort((a, b) => b.empty_responses - a.empty_responses).slice(0, 10),
-    keys: servStar(s0.keys).sort((a, b) => b.calls - a.calls).slice(0, 10),
     // 날짜·요청 종류는 분야별로 쪼개져 오므로 전체 화면에선 합친다(더할 수 있는 값들이다).
     daily: mergeRows(servRows(s0.daily), (r) => r.day, ["calls", "errors"], (r) => ({ day: r.day })),
     routes: mergeRows(servRows(s0.routes), (r) => r.route, ["calls", "errors"],
@@ -1633,13 +1946,6 @@ function render(d) {
     { t:"평균 응답시간", r:true, get:(r) => fmtMs(r.avg_ms) },
   ], s.routes, "요청이 없습니다");
 
-  $("keys").innerHTML = table([
-    { t:"이용자", get:(r) => esc(r.key_id), name:true },
-    { t:"요청 수", r:true, get:(r) => nf.format(r.calls) },
-    { t:"방문한 날", r:true, get:(r) => r.active_days > 1
-        ? "<span class='pill ok'>" + r.active_days + "일</span>" : r.active_days + "일" },
-  ], s.keys, "키를 쓴 요청이 없습니다");
-
   // ── 이용 행동 — 여정·익명 비중은 지금 데이터로, 초안 종속 축은 '수집 전'으로 그린다
   const U = d.usage || { funnel:null, daily:[], clients:{pending:true,rows:[]},
                          agents:{pending:true,rows:[]}, pages:{pending:true,rows:[]} };
@@ -1686,6 +1992,20 @@ function render(d) {
       esc(U.daily[U.daily.length - 1].day) + "</span></div>";
   } else $("usageDaily").innerHTML =
       emptyBox(["데이터 없음", "최근 " + d.window_days + "일에 요청이 없습니다"]);
+
+  renderUserStats(U, d.window_days);
+
+  // 재방문은 **분야 축이 없다** — 한 사람이 여러 분야를 쓴다. 그래서 언제나 전 분야 합계
+  // 버킷('*')을 쓴다. 이 카드는 '응답 상태'에 있었는데, 묻는 질문이 "누가 쓰나"라서
+  // 이용 행동으로 옮겼다 — 옆의 '이용자별 통계'와 같은 축을 보는 카드다.
+  $("keys").innerHTML = table([
+    { t:"이용자", get:(r) => esc(r.key_id), name:true },
+    { t:"요청 수", r:true, get:(r) => nf.format(r.calls) },
+    { t:"방문한 날", r:true, get:(r) => r.active_days > 1
+        ? "<span class='pill ok'>" + r.active_days + "일</span>" : r.active_days + "일" },
+  ], (d.serving.keys || []).filter((r) => r.domain === "*")
+       .sort((a, b) => b.calls - a.calls).slice(0, 10),
+     "키를 쓴 요청이 없습니다");
 
   const CLASS_LABEL = { browser:"브라우저", ai_agent:"AI 대행", ai_crawler:"AI 크롤러",
                         bot:"봇", cli:"CLI·툴", unknown:"미상" };
