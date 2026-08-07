@@ -35,6 +35,35 @@ test("initialize — 데이터/인증 없이 서버정보", async () => {
   assert.ok(body.result.capabilities.tools);
 });
 
+// ── clientInfo → 관측 축 (#111 후속) ─────────────────────────────────────────
+// UA 로는 MCP 클라이언트를 못 잡아 prod 호출 95건이 전부 `unknown` 이었다. 이름은
+// 프로토콜 규격(`initialize.params.clientInfo`) 안에 이미 있었다.
+test("initialize — clientInfo 가 agent_name·agent_mode 로 남는다", async () => {
+  const trace = {};
+  await handleMcp(
+    rpc("initialize", { protocolVersion: "2025-06-18", clientInfo: { name: "Claude-AI", version: "0.1.0" } }),
+    {}, trace, mkDeps());
+  assert.equal(trace.agentName, "claude-ai");
+  assert.equal(trace.agentMode, "mcp_client");
+});
+
+test("initialize — clientInfo 가 없으면 축을 만들지 않는다", async () => {
+  const trace = { agentName: null, agentMode: null };
+  await handleMcp(rpc("initialize", { protocolVersion: "2025-06-18" }), {}, trace, mkDeps());
+  assert.equal(trace.agentName, null);
+  assert.equal(trace.agentMode, null);
+});
+
+// 🔴 이게 핵심이다. clientInfo 도 **자기 신고**라 CF 검증 대상이 아니다 — clientAxes 가
+// 넣은 NULL 을 그대로 둬야 한다. 0 을 쓰면 스펙이 경고한 "검증 실패" 오독이 된다.
+test("initialize — agent_verified 와 ua_class 는 건드리지 않는다", async () => {
+  const trace = { agentVerified: null, uaClass: "unknown" };
+  await handleMcp(
+    rpc("initialize", { clientInfo: { name: "cursor" } }), {}, trace, mkDeps());
+  assert.equal(trace.agentVerified, null, "검증 대상이 아닌데 값이 생겼다");
+  assert.equal(trace.uaClass, "unknown", "전송 계층 축을 프로토콜 사실로 덮었다");
+});
+
 test("tools/list — 6개 툴", async () => {
   const res = await handleMcp(rpc("tools/list"), {}, {}, mkDeps());
   const body = await res.json();
