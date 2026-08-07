@@ -91,6 +91,23 @@ curl -s "http://localhost:8788/api/summary?days=14" | jq '{env: .meta.env, scope
 `meta.runs_env_scope_partial` 에 "집계표는 `environment` 컬럼이 없어 **못 걸렀다**"가 실린다
 ([decision/0012](../ops-dashboard/docs/decision/0012-runs-tab-observation-boundaries.md)).
 
+### 제품 이름이 표 이름으로 보이면 — 둘 중 어느 쪽인지 먼저 가른다
+
+API 사용량 탭은 제품 이름을 게시본 `d1_catalog_display` 에서 읽는다(ASAC-DAG#706).
+목록에 `gold_…`·`d1_…` 이 보이는 경우가 둘인데 **조치가 정반대다.**
+
+```bash
+curl -s "http://localhost:8788/api/apis?days=14" -H "Authorization: Bearer $OPS_TOKEN" \
+  | jq '{missing: .meta.missing, 선언: .meta.display_declared, 미선언: .meta.display_undeclared}'
+# { "missing": [], "선언": 32, "미선언": 24 }        ← 정상. 미선언 도메인은 표명으로 보인다
+```
+
+- `missing` 에 `"display"` 가 있으면 **표를 못 읽은 것** — 전 제품이 한꺼번에 표명으로
+  떨어지고 화면도 그렇게 말한다. 데이터 준비 상태 탭의 '데이터 소스 상태'를 본다.
+- `missing` 이 비었는데 `미선언` 이 있으면 **정상이다.** 그 도메인이 아직
+  `meta.serving.display` 를 선언하지 않은 것이고, 계약이 optional 이라 발행은 안 막힌다.
+  콘솔에서 고칠 것이 없다 — 이름이 필요하면 도메인 오너가 dbt yml 에 넣는다.
+
 ## 4. SQL 로 직접 볼 때 — 쓰기는 되고 스키마는 안 된다
 
 ```bash
