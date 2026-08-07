@@ -83,6 +83,20 @@ curl -s -H "$AUTH" "$BASE/api/keys" | jq '.keys[0]'
 curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{spec_pending: .meta.usage_spec_pending,
   funnel: .usage.funnel, clients_pending: .usage.clients.pending}'
 
+# ④-0 이용자 축 — 키 있는 쪽/없는 쪽, 그리고 이용자별
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.usage.identity'
+#   keyed + anon == calls 여야 한다. keys_used 는 이 기간에 키로 요청한 사람 수
+#   🔴 익명은 신원 축이 없어 아래 목록에 **못 나온다** — 화면이 그 사실을 맨 위에서 밝힌다
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.usage.by_key[:3]'
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '
+  (.usage.by_key[0].key_id) as $k
+  | {key: $k,
+     calls: (.usage.by_key[0].calls),
+     listed: ([.usage.by_key_api[] | select(.key_id == $k) | .calls] | add // 0),
+     rows:   ([.usage.by_key_api[] | select(.key_id == $k)] | length)}'
+#   listed <= calls 다(이용자마다 상위 20만 싣는다). 화면은 그 차이를 "나머지 N건"으로 밝힌다
+#   rows 가 20이면 잘린 것이다 — 0이면 그 이용자 행이 아예 안 실린 것이라 질의를 의심한다
+
 # ④-1 제품 표시명 — 게시본(d1_catalog_display)에서 몇 종이 왔나 (ASAC-DAG#706)
 curl -s -H "$AUTH" "$BASE/api/apis?days=14" | jq '{missing: .meta.missing,
   declared: .meta.display_declared, undeclared: .meta.display_undeclared}'
@@ -202,6 +216,33 @@ curl -s -H "$AUTH" "$BASE/api/summary" | jq '.meta.missing'   # ["serving"] 등 
 | 환경 섞임 | 상단 경고 배너 + '환경' 카드 (dev 1건이 섞여 있다) |
 | 지연 | '지연 상위' — transit 97분 지연 |
 | 탭 점 | 위 문제들 때문에 '실행 기록' 탭 라벨의 점이 빨갛다 |
+
+### 3-1. 단계별 소요와 적재량 — 세부 보기 셋
+
+카드 위 [전체]·[평균]·[날짜별]은 **같은 데이터를 다른 각도로** 본다.
+
+| 보기 | 무엇 | 언제 쓰나 |
+|---|---|---|
+| 전체 | 창 전체의 합 | "어느 단계가 무거운가" |
+| 평균 | **하루치** 평균. 분모는 그 단계 기록이 있던 날 | 크기 감각의 기준선 · 날짜별 색의 근거 |
+| 날짜별 | 하루가 칩 하나. 색은 기간 평균 대비 | "언제 튀었나" |
+
+색 규약은 **초과 > 미달 > 정상** 순이다.
+
+- 🔴 **빨강** — 평균을 넘은 인자가 하나라도 있다
+- 🟡 **노랑** — (초과 없음) 평균에 못 미친 인자가 하나라도 있다
+- 🟢 **초록** — 모든 인자가 평균 ±10%(`LAYER_BAND`) 안
+
+'인자'는 **단계 × 지표**이고 지표는 이 카드가 보여주는 둘 — 소요·적재 행수다.
+
+⚠️ **칩이 전부 같은 색이면 판정이 아니라 기준을 의심한다.** 파이프라인의 하루치 소요·적재는
+원래 크게 흔들려서(실측 2026-08-07: 5일 전부 빨강) ±10% 가 좁을 수 있다. 폭을 바꿀 자리는
+`public/index.html` 의 `LAYER_BAND` **한 곳**이다. 다만 **넓히는 것이 곧 개선은 아니다** —
+색이 다 초록이면 그것대로 아무 말도 안 하는 화면이 된다. 무엇을 놓치기 싫은지를 먼저 정한다.
+
+⚠️ **기록이 없는 단계는 색에 안 들어간다.** 0으로 세면 사흘에 한 번 도는 단계가 안 도는 날마다
+'미달'을 찍는다. 기록 없음은 미달과 **다른 사실**이라 그 날 상세 아래에 글로 적힌다
+(agreement §4 모른다 ≠ 0).
 
 ## 4. 실측으로 채우기
 

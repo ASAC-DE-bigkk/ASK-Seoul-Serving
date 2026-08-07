@@ -401,13 +401,47 @@ p.hint b { color:var(--muted); }
 .drill-hd { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .drill-hd .sub { font-size:11.5px; color:var(--faint); }
 .drill h4 { font-size:12.5px; font-weight:700; margin:12px 0 4px; }
-/* 🔴 drill 안의 넓은 표는 각자 이 상자 안에서만 가로 스크롤한다 — drill 칩을 뚫고 나가지 않게.
-   (표를 바로 두면 nowrap 셀이 칩 밖으로 삐져나가 "페이지 밖으로 나가는" 것처럼 보인다) */
-.drill .tscroll { overflow-x:auto; min-width:0; scrollbar-width:thin;
-                  scrollbar-color:var(--line-strong) transparent; }
-.drill .tscroll::-webkit-scrollbar { height:8px; }
-.drill .tscroll::-webkit-scrollbar-thumb { background:var(--line-strong); border-radius:4px; }
-.drill .tscroll table { margin:0; }
+/* 🔴 넓은 표는 각자 이 상자 안에서만 가로 스크롤한다 — 담고 있는 칩·칸을 뚫고 나가지 않게.
+   (표를 바로 두면 nowrap 셀이 밖으로 삐져나가 "페이지 밖으로 나가는" 것처럼 보인다)
+   원래 `.drill .tscroll` 이었는데 드릴다운 밖에서도 같은 문제가 나서 규칙을 올렸다 —
+   재사용 규칙은 ui.css 에 두고 특정 화면에 묶지 않는다. */
+.tscroll { overflow-x:auto; min-width:0; scrollbar-width:thin;
+           scrollbar-color:var(--line-strong) transparent; }
+.tscroll::-webkit-scrollbar { height:8px; }
+.tscroll::-webkit-scrollbar-thumb { background:var(--line-strong); border-radius:4px; }
+.tscroll table { margin:0; }
+
+/* ── 카드 안 세부 보기 줄 ────────────────────────────────────────────────────── */
+/* 카드 하나가 같은 데이터를 여러 각도로 보여줄 때 쓴다(전체 / 평균 / 날짜별).
+   왼쪽 탭(`.tabs`)과 **모양을 일부러 다르게** 둔다 — 같아 보이면 화면 전환으로 읽힌다. */
+.segbar { display:flex; gap:4px; padding:0 18px 2px; flex-wrap:wrap; }
+.segbar button { font:inherit; font-family:var(--sans); font-size:11.5px; font-weight:600;
+                 padding:4px 12px; border-radius:999px; cursor:pointer;
+                 border:1px solid var(--line); background:var(--bg); color:var(--muted); }
+.segbar button:hover { border-color:var(--line-strong); color:var(--ink); }
+.segbar button[aria-selected="true"] { background:var(--accent-soft); color:var(--accent);
+                                       border-color:var(--accent-line); }
+.segbar button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+
+/* 날짜 칩 — 하루가 하나. 색은 기간 평균 대비 판정이다(초과 > 미달 > 정상). */
+.daychips { display:flex; gap:5px; flex-wrap:wrap; }
+.daychip { font:inherit; font-family:var(--mono); font-size:11px; font-weight:600;
+           padding:5px 9px; border-radius:6px; cursor:pointer;
+           border:1px solid var(--line); background:var(--bg); color:var(--muted); }
+.daychip.ok   { background:var(--ok-soft);    color:var(--ok);       border-color:#b7e4cb; }
+.daychip.warn { background:var(--amber-soft); color:var(--amber-ink); border-color:#fedf89; }
+.daychip.bad  { background:var(--red-soft);   color:var(--red-ink);   border-color:#fecdc9; }
+.daychip.sel  { box-shadow:0 0 0 2px var(--accent); }
+.daychip:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+
+/* ── 눌러서 펴는 표 줄 (이용자별 통계) ───────────────────────────────────────── */
+/* 상세는 `hidden` 토글이 아니라 **선택된 줄만 그려서** 낸다 — 표 행에 `hidden` 을 걸면
+   display 규칙에 지는 계열이고, 생성된 마크업이라 `check:hidden` 이 잡지도 못한다. */
+tr.urow { cursor:pointer; }
+tr.urow:hover > td { background:var(--sidebar-hi); }
+tr.urow.sel > td { background:var(--accent-soft); }
+tr.udet > td { background:var(--chip); padding:12px 14px; }
+tr.udet .drill-hd { margin-bottom:8px; }
 
 /* ── 상세 패널 ─────────────────────────────────────────────────────────────── */
 .detail { border-top:2px solid var(--accent); background:var(--accent-soft);

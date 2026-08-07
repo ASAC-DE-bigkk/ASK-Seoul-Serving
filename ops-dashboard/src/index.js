@@ -496,7 +496,8 @@ async function summary(env, params, writable = false) {
   // 초안 컬럼이 아직 없으면 safeRows 가 실패를 삼키고 그 카드는 '수집 전'으로 남는다 —
   // 콘솔은 게이트웨이 스키마를 만들지도 미러하지도 않는다(0010: ALTER 미러는 정본
   // 마이그레이션과 duplicate column 으로 충돌해 저쪽 시드를 깨뜨린다).
-  const [src, pub, funnel, udaily, uclients, uagents, upages, fill, genv] = await Promise.all([
+  const [src, pub, funnel, udaily, uclients, uagents, upages, fill, genv,
+         uident, ukeys, ukeyApis, udisp] = await Promise.all([
     sources(env),
     publication(env, days),
     safeRows(env,
@@ -541,6 +542,42 @@ async function summary(env, params, writable = false) {
     // NULL 은 `(미상)` 으로 따로 센다 — 운영으로 채우지 않는다(ASAC-DAG#692).
     safeRows(env, "SELECT COALESCE(env, '(미상)') AS env, COUNT(*) AS calls " +
       "FROM _gateway_request_log WHERE ts >= datetime('now', ?) GROUP BY env ORDER BY calls DESC", since),
+    // ── 이용자 축 ─────────────────────────────────────────────────────────────
+    //
+    // 🔴 **'키를 발급받은 사람'과 '아닌 사람'을 먼저 가른다.** 여태 화면은 '익명 비중'
+    //    KPI 한 칸으로만 말했는데, 그건 비율이라 **누가 쓰는지에는 답하지 못한다.**
+    //    익명은 신원 축이 아예 없으므로(키가 없다) 아래 이용자별 목록에 나올 수 없다 —
+    //    그래서 합계를 따로 실어, 화면이 "이 목록이 전체의 몇 %인가"를 밝힐 수 있게 한다
+    //    (decision/0012 — 거른 것은 걸렀다고 말한다).
+    safeRows(env, "SELECT COUNT(*) AS calls, SUM(key_hash IS NOT NULL) AS keyed, " +
+      "SUM(key_hash IS NULL) AS anon, COUNT(DISTINCT key_hash) AS keys_used " +
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW, since),
+    // 이용자 한 사람이 한 줄. **키 앞 8자로만 식별한다** — 이메일·전체 해시는 이 축에
+    // 필요 없고, 필요 없는 것을 내보내면 화면 공유·스크린샷으로 새어 나간다.
+    safeRows(env, "SELECT substr(key_hash,1,8) AS key_id, COUNT(*) AS calls, " +
+      "COALESCE(SUM(" + SERVE + "), 0) AS data_calls, " +
+      "COALESCE(SUM(status >= 400), 0) AS errors, " +
+      "COUNT(DISTINCT " + PRODUCT_KEY + ") AS apis, " +
+      "COUNT(DISTINCT substr(ts,1,10)) AS active_days, " +
+      "MIN(ts) AS first_call, MAX(ts) AS last_call " +
+      "FROM _gateway_request_log WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?)" + gwW +
+      " GROUP BY key_id ORDER BY calls DESC LIMIT 50", since),
+    // 이용자 × API. **이용자마다** 상위 20을 뽑는다(`topPerDomain` 과 같은 이유) — 전체
+    // 상위 N 을 뽑아 놓고 화면에서 이용자로 거르면 **상위 N 밖의 이용자가 0건으로 보인다.**
+    //
+    // 축은 제품이 정본이고, 제품이 없는 요청(목록·인증·키 발급)은 **route 로 남긴다** —
+    // 버리면 "이 사람 요청 수는 30인데 목록 합은 12"가 되어 화면이 못 맞춘다.
+    safeRows(env,
+      "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY key_id ORDER BY calls DESC) AS rn FROM (" +
+      "SELECT substr(key_hash,1,8) AS key_id, " + PRODUCT_KEY + " AS target, " +
+      "MAX(table_name) AS table_name, " +
+      "CASE WHEN " + PRODUCT_KEY + " IS NULL THEN route END AS route, " +
+      "COUNT(*) AS calls, COALESCE(SUM(status >= 400), 0) AS errors, MAX(ts) AS last_call " +
+      "FROM _gateway_request_log WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?)" + gwW +
+      " GROUP BY key_id, target, route)) WHERE rn <= 20 ORDER BY key_id, calls DESC", since),
+    // 사람이 아는 이름. 🔴 **조인하지 않는다** — 표가 없으면 질의가 통째로 실패해 카드가
+    // 죽는다(DISPLAY_COLS 주석의 그 판단). 못 읽으면 식별자로 내려앉는다.
+    displayMap(env),
   ]);
   // 행동 축이 **아직 안 오는 것**인지 **와서 0인 것**인지. 컬럼이 있어도 게이트웨이가 안 실으면
   // 질의는 성공하고 0행이 나와, 화면은 "데이터 없음"이라 말한다 — 그건 틀린 말이다.
@@ -634,7 +671,22 @@ async function summary(env, params, writable = false) {
              // 아직 안 싣는다. 둘을 뭉치면 "곧 온다"와 "안 온다"가 구분되지 않는다.
              clients: { pending: !uclients.ok, unfilled: unfilled("ua_class"), rows: uclients.rows },
              agents: { pending: !uagents.ok, unfilled: unfilled("agent_name"), rows: uagents.rows },
-             pages: { pending: !upages.ok, unfilled: unfilled("page_path"), rows: upages.rows } },
+             pages: { pending: !upages.ok, unfilled: unfilled("page_path"), rows: upages.rows },
+             // ── 이용자 축 ────────────────────────────────────────────────────
+             // `identity` 가 먼저다 — **키를 받은 사람과 아닌 사람**의 몫이고, 아래
+             // 목록이 그중 어디를 덮는지를 화면이 말할 수 있게 한다. 익명은 신원 축이
+             // 없어 목록에 못 나온다: 빠진 게 아니라 **셀 사람이 없는 것**이다.
+             identity: uident.ok ? (uident.rows[0] || null) : null,
+             by_key: ukeys.rows,
+             // 이용자마다 상위 20. 표시명은 조인이 아니라 여기서 붙인다(미선언은 null 그대로).
+             // 🔴 **제목 한 줄만 싣는다.** `displayOf()` 전체를 실으면 요약·주의·활용예까지
+             //    이용자 수 × 20 만큼 따라와 응답이 수십 배로 붓는다 — 이 카드가 쓰는 것은
+             //    이름뿐이고, 나머지는 API 사용량 탭 상세가 이미 보여준다.
+             by_key_api: ukeyApis.rows.map((r) => ({
+               ...r, display_title: (r.target && udisp.map.get(r.target)?.title) || null,
+             })),
+             // 표시명을 못 읽었나 — 화면이 "이름을 잃은 것"과 "아직 선언 안 한 것"을 가른다.
+             display_ok: udisp.ok },
     // 발행 점검 — #78 D-7 이 요구한 지표. 여기가 비면 "발행이 다 성공한 것처럼" 보인다.
     publication: pub,
     // 화면의 숫자가 왜 그 모양인지는 **표를 읽었는지**에서 갈린다. meta.missing 한 줄로는
