@@ -53,10 +53,26 @@ body { font-family:var(--sans); background:var(--bg); color:var(--ink);
        font-size:14.5px; line-height:1.7; word-break:keep-all; text-size-adjust:100%;
        min-height:100vh; display:flex; flex-direction:column; }
 body > main, body > .grow { flex:1; }
+/* 🔴 **본문이 창 밖으로 밀리는 것을 막는다.** body 가 세로 flex 라 머리·본문·바닥이 전부
+   플렉스 항목인데, 세로 컨테이너에서 항목의 가로 폭이 `stretch` 로 잡히지 않고 **내용의
+   최대 폭**으로 벌어지는 경우가 있다. 실측(375px 뷰포트, `/docs`): 긴 `<pre>` 코드 때문에
+   `main` 이 **798px** 로 벌어져 문서 전체에 가로 스크롤이 생겼다(형제인 nav·header·footer 는
+   375 로 정상이었다 — main 만 벌어졌다).
+   `min-width:0` 만으로는 안 잡히고 `max-width:100%` 가 필요하다(실측으로 확인).
+   `box-sizing:border-box` 라 패딩이 있어도 안전하다.
+   **본문은 가로로 밀지 않는다** — 넘치는 코드·표는 각자 컨테이너(`pre`·`.table-scroll`)
+   안에서만 스크롤한다.
+   ⚠️ 여기서 `max-width:100%` 를 걸어도 `.wrap`(0,2,0)이 이 규칙(0,0,1)을 **특이도로 이긴다.**
+   그래서 실제 잠금은 `.wrap` 쪽의 `width:100%` 가 한다 — 아래 참조. */
+body > * { min-width:0; }
 a { color:var(--accent-deep); text-decoration:none; }
 a:hover { text-decoration:underline; text-underline-offset:3px; }
 :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:6px; }
-.wrap { max-width:900px; margin:0 auto; padding:0 24px; }
+/* `width:100%` 가 **가로 밀림의 실제 잠금**이다. body 가 세로 flex 라 `main.wrap` 이 플렉스
+   항목인데, 폭을 안 박아 두면 내용의 최대 폭으로 벌어진다(실측 375px 뷰포트에서 `/docs`
+   798px). `max-width` 만으로는 못 막는다 — 그건 상한이지 하한이 아니다.
+   `box-sizing:border-box` 라 좌우 패딩 24px 을 포함한 값이 된다. */
+.wrap { width:100%; max-width:900px; margin:0 auto; padding:0 24px; }
 .wrap.wide { max-width:1080px; }
 code { font-family:var(--mono); font-size:.9em; background:var(--panel-2); padding:1px 5px;
        border-radius:4px; word-break:break-all; }
@@ -75,7 +91,9 @@ code { font-family:var(--mono); font-size:.9em; background:var(--panel-2); paddi
 .brand .nm { font-weight:700; font-size:14px; line-height:1.2; letter-spacing:-.01em; }
 .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
               color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
-.nav-links { display:flex; gap:2px; margin-left:6px; }
+/* `min-width:0` 이 없으면 플렉스 항목이 **내용 폭 아래로 줄지 않는다**(min-width:auto 가 기본).
+   그래서 좁은 화면에서 링크 묶음이 220px 를 그대로 차지하고 오른쪽 버튼을 화면 밖으로 민다. */
+.nav-links { display:flex; gap:2px; margin-left:6px; min-width:0; }
 .nav-links a { font-size:13px; font-weight:500; color:var(--muted); padding:6px 12px;
                border-radius:6px; white-space:nowrap; }
 .nav-links a:hover { background:var(--panel-2); color:var(--ink); text-decoration:none; }
@@ -102,6 +120,17 @@ code { font-family:var(--mono); font-size:.9em; background:var(--panel-2); paddi
 :root[data-theme="dark"] .theme-btn .moon { display:none; }
 @media (max-width:900px){ .env-pill { display:none; } .nav-in { gap:12px; } }
 @media (max-width:720px){ .nav-links a { padding:6px 9px; font-size:12.5px; } .brand .sub { display:none; } }
+/* 좁은 화면 — 링크를 **지우지 않고** 가로 스크롤로 흘린다. 720px 아래 규칙이 없어서
+   375px 에서 필요 폭이 418px 이 되고, 넘친 43px 만큼 테마 버튼이 화면 밖으로 나갔다.
+   링크를 숨기면 그 페이지로 가는 길이 헤더에서 사라지므로(푸터에만 남는다) 숨기지 않는다.
+   `.spacer` 는 여기서 필요 없다 — 링크가 남은 폭을 다 쓰므로 자리를 두면 버튼이 또 밀린다. */
+@media (max-width:560px){
+  .nav-in { gap:10px; padding:0 14px; }
+  .nav .spacer { display:none; }
+  .nav-links { margin-left:0; overflow-x:auto; overscroll-behavior-x:contain;
+               scrollbar-width:none; -ms-overflow-style:none; }
+  .nav-links::-webkit-scrollbar { display:none; }
+}
 
 /* ─── 페이지 머리 ─── */
 header.page { padding:38px 0 24px; border-bottom:1px solid var(--line); background:var(--panel); }
@@ -228,8 +257,11 @@ footer { border-top:1px solid var(--line); background:var(--panel); margin-top:a
 .fcol span { color:var(--faint); }
 .fcol a { color:var(--muted); }
 .fcol a:hover { color:var(--accent-deep); }
+/* 구분선을 두지 않는다 — `footer` 자체가 이미 `border-top` 으로 본문과 갈린다.
+   한 줄짜리 저작권 표시를 또 한 번 선으로 가르면 빈 띠처럼 보인다.
+   `.foot-in` 이 아래 여백(22px)을 이미 주므로 위 패딩도 0 이다. */
 .foot-btm { display:flex; flex-wrap:wrap; gap:8px 18px; max-width:1080px; margin:0 auto;
-            padding:14px 24px 22px; border-top:1px solid var(--line);
-            font-size:12px; color:var(--faint); }
+            padding:0 24px 24px; font-size:12px; color:var(--faint); }
+/* 오른쪽 정렬 슬롯 — 지금은 쓰는 곳이 없지만 한 줄에 항목이 둘 이상이면 필요하다. */
 .foot-btm .r { margin-left:auto; }
 @media (max-width:640px){ .foot-btm .r { margin-left:0; } }

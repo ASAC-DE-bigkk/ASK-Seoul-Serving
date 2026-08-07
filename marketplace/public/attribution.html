@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>데이터 출처 · 이용조건 — ASK: SEOUL 데이터 플랫폼</title>
+<link rel="stylesheet" href="/site.css">
+<script>
+  /* 테마 확정 — 첫 페인트 전. 아래로 내리면 라이트를 고른 사람에게 다크가 한 번 번쩍인다(FOUC).
+     저장값이 없으면 OS 로 해석하되 저장하지 않는다 — 저장 여부가 "직접 골랐는가"의 유일한
+     기록이고, 그게 뒤에서 OS 변경을 따라갈지 가른다. 배선은 /theme.js 한 벌이 맡는다. */
+  (function () {
+    var t;
+    try { t = localStorage.getItem("theme"); } catch (e) { /* 프라이빗 모드 등 차단 */ }
+    if (t !== "light" && t !== "dark") {
+      t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
+<style>
+  /* 팔레트·머리·바닥·표·본문은 전부 site.css 다 — 이 페이지에만 있는 두 규칙만 남긴다.
+     예전엔 같은 값 89줄을 여기 복제해 뒀는데, 그래서 팔레트를 바꿀 때 이 페이지만
+     구 테라코타로 남아 있었다(다크 전환 때 실측). 복제가 원인이라 복제를 지운다. */
+  /* 초안 고지 — .note.warn 과 달리 문서 전체에 걸리는 머리말이라 여백 규칙이 다르다 */
+  .draft { margin:20px 0 0; background:var(--amber-soft); border:1px solid var(--amber-line);
+           border-radius:8px; padding:12px 14px; font-size:12.5px; color:var(--amber-ink); }
+  td.dom { color:var(--ink); font-weight:600; white-space:nowrap; }
+</style>
+<style>
+  /* 두 절로 가른 뒤의 간격 — 절 사이가 붙으면 나눈 뜻이 안 보인다. */
+  main > section + section { margin-top:34px; padding-top:26px; border-top:1px solid var(--line); }
+  main > section > h2 { font-size:17px; margin:0 0 12px; }
+</style>
+</head>
+<body>
+
+<nav class="nav"><!-- partials/nav.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
+  <div class="nav-in">
+    <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="logo" aria-hidden="true">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></a>
+    <!-- 카탈로그 안의 섹션(플레이그라운드·API 키)은 헤더에 걸지 않는다 — 같은 문서로 가는
+         링크가 여럿이 되기 때문. 섹션 이동은 카탈로그 사이드바 몫이고, 여기엔 별도 문서만 건다. -->
+    <div class="nav-links">
+      <a href="/catalog">카탈로그</a>
+      <a href="/docs">API 문서</a>
+      <a href="/guide">가이드</a>
+      <a href="/status">상태</a>
+    </div>
+    <span class="spacer"></span>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
+      <svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+      <svg class="moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+    </button>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <h1>데이터 출처와 이용조건</h1>
+    <p class="lede">이 서비스가 어떤 데이터를 어디서 가져오는지, 그 데이터를 쓰실 때 무엇을 지켜야 하는지 적어 둡니다.</p>
+    <nav class="toc">
+      <a href="#sources">1. 데이터 출처</a>
+      <a href="#conditions">2. 이용 조건</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section id="sources">
+    <h2>1. 데이터 출처</h2>
+    <p class="lead">이 API가 제공하는 모든 데이터는 <b>공공 원천을 수집·가공한 2차 산출물</b>입니다. 원천 데이터를 그대로 중계하지 않으며, 집계·조인·파생 지표 계산을 거칩니다. 따라서 <b>수치가 원천 제공기관의 공식 발표와 다를 수 있고, 그 차이의 책임은 저희에게 있습니다.</b></p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>도메인</th><th>원천</th><th>제공기관</th></tr></thead>
+        <tbody>
+          <tr><td class="dom">문화·행사</td><td>문화행사 정보 · 공연예술통합전산망(KOPIS) · 영화관입장권통합전산망(KOBIS) · 문화공공데이터 · 세종문화회관 공연정보</td><td>서울특별시 · 예술경영지원센터 · 영화진흥위원회 · 한국문화정보원 · 세종문화회관</td></tr>
+          <tr><td class="dom">인구·도시</td><td>서울시 실시간 도시데이터(인구·상권·대기질·따릉이·충전소)</td><td>서울특별시 (상권 결제 지표는 신한카드 제공분 포함)</td></tr>
+          <tr><td class="dom">상권</td><td>지방행정인허가데이터개방(LOCALDATA) · 서울시 인허가 정보</td><td>행정안전부 · 서울특별시</td></tr>
+          <tr><td class="dom">대중교통</td><td>버스·주차장 정보 · 지하철 실시간 도착정보</td><td>서울특별시</td></tr>
+          <tr><td class="dom">교통</td><td>서울시 교통정보시스템(TOPIS) 도로 소통정보</td><td>서울특별시</td></tr>
+          <tr><td class="dom">날씨</td><td>기상청 단기예보 조회서비스</td><td>기상청 (공공데이터포털)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="conditions">
+    <h2>2. 이용 조건</h2>
+
+    <h3>원천의 이용조건이 우선합니다</h3>
+    <p>각 원천 데이터의 이용허락 범위(공공누리 유형, 상업적 이용 가능 여부, 출처 표시 의무 등)는 <b>제공기관의 고지를 따릅니다.</b> 저희는 그 조건을 대신 부여하거나 완화할 수 없습니다. 이 API의 결과를 재배포·상업적으로 이용하시려면 위 표의 원천별 조건을 직접 확인하시기 바랍니다.</p>
+    <p>이 API의 결과를 인용하실 때는 <b>원천 제공기관과 이 서비스를 함께 표시</b>해 주세요. 가공 과정이 있으므로 원천만 표시하면 원천의 공식 수치로 오인될 수 있습니다.</p>
+
+    <h3 id="caution">특히 주의할 제품</h3>
+    <ul>
+      <li><b>기상 위험 신호</b>(<code>gold_weather_place_risk_window</code>) — 저희가 정한 임계값으로 선별한 <b>후보 구간</b>이며, <b>기상청 공식 특보가 아닙니다.</b> 폭염경보·호우주의보 등 법적 효력이 있는 특보는 기상청 발표를 확인하세요. 강수 예보 구간 역시 예보이지 실제 강수 관측이나 발생 보장이 아닙니다.</li>
+      <li><b>교통·대중교통 실시간 제품</b> — 원천 관측 주기와 수집 배치의 시차가 있어, 응답 시점의 현장 상태와 다를 수 있습니다. 각 제품의 <code>exported_at</code>·시간축 값으로 시점을 확인하세요.</li>
+      <li><b>상권 파생 지표</b>(체인 비율·전화 승계 등) — 원천의 전화·좌표 결측이 커 근사치입니다. 각 제품 설명에 근사의 근거와 한계를 적어 두었습니다.</li>
+    </ul>
+  </section>
+  </section>
+
+  <p class="updated">최종 갱신 2026-08-07</p>
+</main>
+
+<footer><!-- partials/footer.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
+  <!-- 계약 버전·배치 시각·내부 이슈 번호는 우리 사정이다. 이용자에게 남는 정보만 둔다. -->
+  <div class="foot-in">
+    <div class="fcol">
+      <b>ASK: SEOUL</b>
+      <!-- ⚠️ "행정동 코드 하나로"라고 쓰지 않는다(2026-08-07 정정). 실측: 공개 55종 중
+           행정동 축은 23종(42%)뿐이고 자치구 축이 32종(58%)으로 더 많으며, 21종(38%)은
+           조인 축이 아예 없다. 축이 셋인데 하나처럼 말하면 카탈로그를 여는 순간 어긋난다.
+           시간 축도 빼지 않는다 — 히어로가 "시간과 공간 두 축"이라고 말한다. -->
+      <span>서울 공공데이터를 시간·공간 같은 축 위에 올린 API 허브</span>
+    </div>
+    <div class="fcol">
+      <b>서비스</b>
+      <a href="/catalog">데이터 카탈로그</a>
+      <a href="/docs">API 문서</a>
+      <a href="/status">서비스 상태</a>
+    </div>
+    <div class="fcol">
+      <b>이용</b>
+      <a href="/guide">가이드</a>
+      <a href="/guide#faq">자주 묻는 질문</a>
+      <a href="/support">문의하기</a>
+    </div>
+    <div class="fcol">
+      <b>정책</b>
+      <a href="/attribution">데이터 출처</a>
+      <a href="/terms">이용약관</a>
+      <a href="/privacy">개인정보 처리방침</a>
+    </div>
+  </div>
+  <div class="foot-btm">
+    <span>© 2026 ASK: SEOUL</span>
+  </div>
+</footer>
+<script src="/theme.js" defer></script>
+</body>
+</html>
