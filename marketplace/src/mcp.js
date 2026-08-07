@@ -172,8 +172,8 @@ async function callTool(name, args, ctx) {
     const res = await deps.handleCatalog(env);
     if (res.status >= 400) return toToolResult(res, trace);
     const body = await res.json();
-    // 검증 번들(#4 exact-six)과 일반 카탈로그를 구분해 노출한다(#26). 스코프는 전체 공개
-    // 제품(팀 결정 2026-08-04) — verified 는 신뢰 표시이지 필터가 아니다.
+    // 검증 번들(#4, seoul-weather-risk 단일 제품)과 일반 카탈로그를 구분해 노출한다(#26).
+    // 스코프는 전체 공개 제품(팀 결정 2026-08-04) — verified 는 신뢰 표시이지 필터가 아니다.
     const verified = new Set(SKILL_PRODUCT_IDS);
     if (Array.isArray(body.products))
       body.products = body.products.map((p) => ({ ...p, verified: verified.has(p.product_id) }));

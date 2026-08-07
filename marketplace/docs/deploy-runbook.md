@@ -274,7 +274,7 @@ SMOKE_KEY=ask_… npm run smoke -- https://<배포주소>
 ```
 확인되는 것    카탈로그·미리보기·발급 경로·데이터 401·없는 제품 404·
               MCP initialize/tools-list·X-Request-Id·정적 3종
-확인 안 되는 것 K-Skill 계약 — bundle exact-six · 6개 제품 상세·데이터 ·
+확인 안 되는 것 K-Skill 계약 — bundle 단일 제품(weather_place_risk_window) 상세·데이터 ·
               범위 밖 제품 404 · publication/evidence parity
 ```
 

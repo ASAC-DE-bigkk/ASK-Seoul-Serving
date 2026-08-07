@@ -1,5 +1,5 @@
 {
-  "note": "MCP P0 Tool Selection/Argument Binding 평가 정본 (#26 완료기준 '6도메인 질문에 기대 Tool·인자 선택'). 질문은 #4 exact-six 의 대표 질문을 그대로 쓴다. 실행 방법은 mcp-eval.test.mjs 머리 주석 참조 — 구조 검증은 npm test 가 자동으로, LLM 실측은 수동으로 기록한다. 함정(trap-*) 케이스는 환각 억제 검증 — 지어내지 않고 한계를 밝히면 PASS.",
+  "note": "MCP P0 Tool Selection/Argument Binding 평가 정본 (#26 완료기준 '6도메인 질문에 기대 Tool·인자 선택'). 질문은 6도메인 각각의 대표 질문이다(더 이상 #4 검증 번들 소속 여부와 결속되지 않음 — #4는 seoul-weather-risk 단일 제품으로 축소됨). 실행 방법은 mcp-eval.test.mjs 머리 주석 참조 — 구조 검증은 npm test 가 자동으로, LLM 실측은 수동으로 기록한다. 함정(trap-*) 케이스는 환각 억제 검증 — 지어내지 않고 한계를 밝히면 PASS.",
   "cases": [
     {
       "id": "weather",
