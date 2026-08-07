@@ -509,7 +509,15 @@ const domLabel = (d) => DOM_LABEL[d] || d;
 let DOMSCOPE = "";
 // 제품 식별자(product_id·table_name)의 앞부분이 도메인이다(commerce_age_band → commerce).
 // 서버 DOMAIN_EXPR 과 같은 규약 — 파이프라인이 그렇게 발행한다.
-const domOf = (v) => (v ? String(v).split("_")[0] : "");
+// 🔴 **밑줄이 없으면 분야가 아니다.** `split("_")[0]` 만 쓰면 밑줄 없는 값이 통째로 '분야'가
+// 된다 — 실제로 K-Skill 번들(`seoul-urban-analytics`)과 스모크 테스트 값
+// (`not-a-v1-product`)이 **분야 드롭다운에 항목으로 떴다**(#162). 서버 `GW_DOM` 과 같은 규약
+// 으로 맞춘다: 접두사가 있을 때만 분야, 아니면 빈 값(= 분야 미상)이다.
+const domOf = (v) => {
+  const s = v ? String(v) : "";
+  const i = s.indexOf("_");
+  return i > 0 ? s.slice(0, i) : "";
+};
 // 배열에서 현재 스코프에 해당하는 행만 남긴다. keyFn 은 그 행의 도메인을 뽑는 함수.
 // 스코프가 비면(전체) 원본을 그대로 돌려준다 — 필터를 거는 비용조차 없다.
 const scoped = (rows, keyFn) => (!DOMSCOPE || !Array.isArray(rows))
@@ -723,7 +731,12 @@ function syncScopeBar(domains) {
   updateScopeVisible();
 }
 function updateScopeVisible() {
-  const pane = ($("tab-pipeline") && parseHash().pane) || "pipeline";
+  // 🔴 **주소가 아니라 지금 열린 탭을 본다.** `showTab` 이 이 함수를 부른 뒤에 주소를 쓰므로,
+  //    여기서 주소를 읽으면 **직전 탭**이 잡힌다 — 스코프바가 한 탭씩 밀려서 '이용 행동'·
+  //    '이용자 키'에는 뜨고 'API 사용량'에는 안 뜨는, 정확히 반대인 상태였다.
+  //    키 탭은 아예 주소를 안 써서(showTab 의 early return) 더 어긋났다.
+  //    `SCOPED_PANES` 설정이 되돌려진 게 아니라 **이 한 줄이 그 설정을 무력화하고 있었다.**
+  const pane = activePane() || parseHash().pane || PANES[0];
   $("scopeBar").hidden = !SCOPED_PANES.includes(pane);
 }
 
