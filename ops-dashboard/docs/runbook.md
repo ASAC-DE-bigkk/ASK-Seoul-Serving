@@ -286,6 +286,8 @@ curl -s -X POST "$BASE/api/keys" -H "authorization: Bearer $TOKEN" \
 | `npm run d1` 이 DDL 을 거부 | 의도된 동작 | 스키마는 `migrations/` + `npm run migrate`. 남의 표면 소유자에게 |
 | '응답 상태' 탭에서 **분야를 바꿔도 숫자가 그대로**다 | 예전 결함(2026-08-07 수정). 서버가 분야 축을 안 실어서 KPI·날짜별·요청 종류·이용자가 전체 그대로였다 | 고쳐졌다. `.serving.totals` 가 비면 서버 쪽을 본다(§2 ④-2) |
 | 분야별 요청을 다 더해도 **'전체'보다 작다** | **정상이다.** 제품에 안 묶이는 요청(API 목록·인증·키 발급)은 어느 분야에도 안 넣는다 — 화면이 그 건수를 밝힌다 | 조치 없음. `.serving.totals` 의 `domain=null` 이 그 몫이다 |
+| 자동 새로고침 때 **보던 탭에서 튕겨 나간다** | 예전 결함(2026-08-07 수정). `render()` 가 주소에서 탭을 다시 골랐는데, 키 탭은 주소를 안 써서 클릭으로 열면 주소가 이전 탭에 머물렀다 | 고쳐졌다. 다시 나면 `activePane()` 이 아니라 주소를 읽고 있는지부터 본다 |
+| 공유받은 `#<탭>?dom=<분야>` 링크의 **스코프가 안 걸린다** | 예전 결함(2026-08-07 수정). `showTab` 이 `?dom=` 을 지운 뒤에 읽고 있었다 | 고쳐졌다. 부트에서 `showTab` 보다 **먼저** `DOMSCOPE` 를 세운다 |
 | 분야가 **영문 코드**로 뜬다 (`culture`·`commerce`·`common`) | `_ops_domain` 등록부가 비었다 — `domLabel()` 은 라벨을 지어내지 않는다 | `npm run d1 -- --file=fixtures/ops_domain.sql` (§4-1-1) |
 | API 목록에 제품이 **표 이름**으로 뜬다 (`gold_…`·`d1_…`) | 그 제품이 `meta.serving.display` 를 아직 선언 안 했다 — **정상**(계약이 optional, ASAC-DAG#706) | 콘솔에서 고칠 게 없다. 이름이 필요하면 **도메인 오너**가 dbt yml 에 선언하고 `<domain>_serving_export` 를 돌린다 |
 | 제품이 **전부** 표 이름으로 뜬다 | `d1_catalog_display` 를 못 읽었다(표 부재·발행 전) — 목록 위 안내가 그렇게 말한다 | 데이터 준비 상태 탭의 '데이터 소스 상태'에서 그 표의 상태를 본다(`absent`/`mismatch`) |
