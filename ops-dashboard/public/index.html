@@ -514,6 +514,45 @@ const scoped = (rows, keyFn) => (!DOMSCOPE || !Array.isArray(rows))
 const byDomain = (rows) => scoped(rows, (r) => r.domain);
 const byProduct = (rows) => scoped(rows, (r) => domOf(r.product_id || r.table_name || r.product_key));
 
+// ── 서빙 지표의 분야 축 (#156) ───────────────────────────────────────────────────
+//
+// 서버가 `domain` 을 실어서 준다. 세 값뿐이다:
+//   '<분야>'  그 분야 · null  **분야 미상** · '*'  전 분야 합계
+//
+// '분야 미상'은 제품에 안 묶이는 요청이다 — API 목록·인증·키 발급처럼 애초에 제품이 없는
+// 라우트, 그리고 접두사 없는 스킬 키(`seoul-urban-analytics`). **아무 분야에도 안 끼운다.**
+// 끼우면 그 분야 수치가 부풀고, 빼고 말 안 하면 분야 합이 전체와 안 맞는데 화면은 맞는 척한다.
+//
+// 🔴 예전에는 이 축이 아예 없었다. 날짜별·요청 종류·이용자 카드는 **분야를 바꿔도 그대로**였고,
+//    화면은 그걸 "분야 축이 없는 지표"라고 적었다 — 축이 없던 게 아니라 **안 실었던 것**이다.
+//    실패 목록은 더 나빴다: `table_name` 접두사로 걸렀는데 그건 등급이라
+//    (`gold_transit_…` → 'gold') 어느 분야를 골라도 안 걸렸다.
+const servRows = (rows) => (rows || []).filter((r) =>
+  DOMSCOPE ? r.domain === DOMSCOPE : r.domain !== "*");
+// 더할 수 없는 값(DISTINCT 세기)이 있는 목록은 서버가 '*' 합계 행을 따로 준다.
+const servStar = (rows) => (rows || []).filter((r) => r.domain === (DOMSCOPE || "*"));
+// 지금 스코프의 합계 한 줄. 목록을 더해서 만들지 않는다 — 목록은 상위 N 이라 합이 전체가 아니다.
+const servTotal = (rows) => (rows || []).find((r) => r.domain === (DOMSCOPE || "*"))
+  || { calls: 0, errors: 0, users: 0 };
+
+// 분야별로 쪼개진 행을 하나로 합친다(전체 화면). 더할 수 있는 값만 더하고, 평균은
+// 건수로 가중한다 — 평균의 평균을 내면 적게 불린 쪽이 과대 대표된다.
+function mergeRows(rows, keyOf, sumKeys, baseOf, avgKey) {
+  const m = new Map();
+  for (const r of rows) {
+    const k = keyOf(r);
+    if (!m.has(k)) m.set(k, { ...baseOf(r), ...Object.fromEntries(sumKeys.map((f) => [f, 0])), _w: 0 });
+    const t = m.get(k);
+    for (const f of sumKeys) t[f] += (r[f] || 0);
+    if (avgKey && r[avgKey] != null) t._w += r[avgKey] * (r.calls || 0);
+  }
+  for (const t of m.values()) {
+    if (avgKey) t[avgKey] = t.calls ? Math.round(t._w / t.calls * 10) / 10 : null;
+    delete t._w;
+  }
+  return [...m.values()];
+}
+
 // ── 빈 칸 표기 ────────────────────────────────────────────────────────────────
 // **짧게 쓴다.** 사유를 문단으로 적으면 표보다 설명이 길어져 화면이 안내문이 되고,
 // 그러면 정작 조치가 필요한 것이 안 읽힌다. 아이콘 + 두세 단어가 기본이고,
@@ -878,9 +917,17 @@ function render(d) {
   // 조용히 전체를 보여주면 "이 분야 것만 보는 줄" 알고 오독한다.
   if (DOMSCOPE) {
     const dl = "<b>" + esc(domLabel(DOMSCOPE)) + "</b>";
+    // 이 탭은 이제 **여섯 카드 전부** 좁혀진다(#156). 예전 문구는 "요청 종류·날짜별 요청·
+    // 이용자 재방문은 분야 축이 없다"고 했는데 사실이 아니었다 — 축은 로그에 있었고
+    // 서버가 안 실었을 뿐이다. 대신 **제품에 안 묶이는 요청**이 빠진다는 것을 밝힌다.
+    const unk = (d.serving.totals || []).find((r) => r.domain === null);
     N.serving.push(note("info", dl + " 분야만",
-      "제품·실패·0건 응답은 이 분야로 좁혔습니다. 다만 <b>요청 종류·날짜별 요청·이용자 재방문</b>은 " +
-      "분야 축이 없는 지표라 전체 그대로입니다."));
+      "KPI·날짜별 요청·요청 종류·제품·실패·0건 응답·이용자까지 <b>이 화면 전부</b>를 이 분야로 좁혔습니다.<br>" +
+      "다만 <b>제품에 안 묶이는 요청</b>은 어느 분야에도 안 들어갑니다 — API 목록·인증·키 발급처럼 " +
+      "애초에 제품이 없는 요청입니다" +
+      (unk && unk.calls ? " (이 기간 <b>" + nf.format(unk.calls) + "건</b>)" : "") +
+      ". 그래서 <b>분야별 요청을 다 더해도 '전체'보다 작습니다.</b> 빠진 게 아니라 셀 분야가 없는 것입니다.<br>" +
+      "이용자는 여러 분야를 쓰므로 <b>여기 요청 수는 이 분야에 보낸 것만</b>입니다."));
     N.usage.push(note("info", dl + " 분야만", "AI 수요는 이 분야로 좁혔습니다. 여정·손님 구성·추적은 분야 축이 없어 전체입니다."));
     N.apis.push(note("info", dl + " 분야만", "이 탭은 아래 '분야별 비중'과 목록 필터로 이미 분야를 고를 수 있어, 스코프와 별개로 봅니다."));
     N.keys.push(note("info", "분야 스코프 없음", "이용자 키는 분야 축이 없습니다 — 스코프와 무관하게 전체 키를 보여줍니다."));
@@ -1382,20 +1429,37 @@ function render(d) {
   ], R.environments, "데이터 없음");
 
   // ── 서빙
-  // 도메인 축이 있는 것(제품·실패·0건)만 스코프를 건다(#3). routes·daily·keys 는 분야
-  // 무관(요청 종류·날짜·이용자)이라 전체를 유지한다 — 그 사실을 스코프 배너가 밝힌다.
+  // **여섯 카드 전부 스코프를 건다**(#156). 예전에는 제품·실패·0건 셋만 걸고 나머지는
+  // "분야 축이 없는 지표"라며 전체를 뒀는데, 축이 없던 게 아니라 서버가 **안 실었던 것**이다.
+  // 이제 서버가 `domain` 을 실어 주므로 화면은 버킷을 고르기만 한다(servRows/servStar).
   const s0 = d.serving;
-  const s = { ...s0, products: byProduct(s0.products),
-              failures: byProduct(s0.failures), empty: byProduct(s0.empty) };
-  const calls = s.routes.reduce((a, r) => a + r.calls, 0);
-  const errs = s.routes.reduce((a, r) => a + (r.errors || 0), 0);
+  const scopeLabel = DOMSCOPE ? domLabel(DOMSCOPE) : "전체";
+  const s = {
+    ...s0,
+    // 하나의 행이 한 분야에 속하는 목록 — 고르고, 보여줄 만큼만 자른다.
+    // 서버가 **분야마다** 상위 N 을 뽑아 주므로(topPerDomain) 잘라도 그 분야의 진짜 상위다.
+    products: servRows(s0.products).sort((a, b) => b.calls - a.calls || b.previews - a.previews).slice(0, 12),
+    failures: servRows(s0.failures).sort((a, b) => b.hits - a.hits).slice(0, 10),
+    empty: servRows(s0.empty).sort((a, b) => b.empty_responses - a.empty_responses).slice(0, 10),
+    keys: servStar(s0.keys).sort((a, b) => b.calls - a.calls).slice(0, 10),
+    // 날짜·요청 종류는 분야별로 쪼개져 오므로 전체 화면에선 합친다(더할 수 있는 값들이다).
+    daily: mergeRows(servRows(s0.daily), (r) => r.day, ["calls", "errors"], (r) => ({ day: r.day })),
+    routes: mergeRows(servRows(s0.routes), (r) => r.route, ["calls", "errors"],
+                      (r) => ({ route: r.route }), "avg_ms"),
+  };
+  // 🔴 KPI 는 **목록을 더해서 만들지 않는다.** 목록은 상위 N 이라 합이 전체가 아니고
+  //    ('사용 중인 이용자'는 `keys` 목록 길이를 세는 바람에 **10에서 멈춰 있었다**),
+  //    예전에는 전체값(routes)과 분야값(empty)이 한 줄에 섞여 있었다. 서버 합계를 쓴다.
+  const T = servTotal(s0.totals);
+  const calls = T.calls, errs = T.errors || 0;
   const emptyN = s.empty.reduce((a, r) => a + r.empty_responses, 0);
   const errPct = calls ? errs / calls * 100 : 0;
+  const kSuffix = DOMSCOPE ? " · " + scopeLabel : "";
   kpis("servKpis", [
-    ["전체 요청", nf.format(calls), "최근 " + d.window_days + "일 합계", ""],
-    ["실패율", errPct.toFixed(1) + "%", errs + "건이 답을 받지 못함", errPct >= 5 ? "bad" : ""],
-    ["결과 0건", nf.format(emptyN), "오류는 아니나 보여줄 게 없던 요청", emptyN > 0 ? "bad" : ""],
-    ["사용 중인 이용자", nf.format(s.keys.length), "이 기간에 요청을 보낸 키 수", ""],
+    ["전체 요청", nf.format(calls), "최근 " + d.window_days + "일 합계" + kSuffix, ""],
+    ["실패율", errPct.toFixed(1) + "%", errs + "건이 답을 받지 못함" + kSuffix, errPct >= 5 ? "bad" : ""],
+    ["결과 0건", nf.format(emptyN), "오류는 아니나 보여줄 게 없던 요청" + kSuffix, emptyN > 0 ? "bad" : ""],
+    ["사용 중인 이용자", nf.format(T.users || 0), "이 기간에 요청을 보낸 키 수" + kSuffix, ""],
   ]);
 
   // 창 전체를 칸으로 깐다 — 빈 날이 보여야 "이 기간에 거의 안 왔다"가 읽힌다
