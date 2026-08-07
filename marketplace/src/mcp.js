@@ -46,7 +46,7 @@ export const TOOLS = [
   {
     name: "query_product",
     description:
-      "지역·기간·등가 필터로 데이터를 조회합니다(sort/join/집계 불가, 커서로 페이지네이션). 응답의 data_context 에 담긴 집계 기준 시점(freshness)·출처(attribution)·주의사항(caution)을 답변에 명시하세요.",
+      "지역·기간·등가 필터로 데이터를 조회합니다(sort/join/집계 불가, 커서로 페이지네이션). 응답의 data_context 에 집계 기준 시점(freshness)·출처(attribution)·주의사항(caution)이 함께 담깁니다.",
     inputSchema: {
       type: "object",
       properties: {
@@ -73,7 +73,7 @@ export const TOOLS = [
   {
     name: "run_pattern",
     description:
-      "실제 데이터에 실행해 동작이 확인된 질의 패턴을 실행합니다. 질문에 맞는 패턴이 있으면 필터를 직접 조립하기보다 이 도구를 우선 사용하세요. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. 응답의 insight_sample_ko(해석 예시)를 답변 구성에 참고하세요.",
+      "실제 데이터에 실행해 동작이 확인된 질의 패턴을 실행합니다. 질문에 맞는 패턴이 있으면 필터를 직접 조립하기보다 이 도구를 우선 사용하세요. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. 응답에는 insight_sample_ko(해석 예시)가 함께 제공됩니다.",
     inputSchema: {
       type: "object",
       properties: {
