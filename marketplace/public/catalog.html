@@ -367,6 +367,23 @@
      (테이블명은 바로 아래 호출 미리보기에 그대로 뜬다). */
   .field input, .field select { width:100%; }
   .field select { text-overflow:ellipsis; }
+  /* 「지금 고른 것」 — 셀렉트 자리를 대신한다. 아무것도 안 골랐을 때가 기본 상태라
+     빈 화면이 무엇을 하라는지 스스로 말해야 한다(.pick.empty). */
+  .pick { border:1px solid var(--line-strong); border-radius:6px; padding:10px 11px;
+          background:var(--panel-2); font-size:13px; line-height:1.5; }
+  .pick.empty { color:var(--muted); background:var(--panel); border-style:dashed; }
+  .pick .qq { font-weight:600; color:var(--ink); display:block; margin-bottom:3px; }
+  .pick .pp { font-size:12px; color:var(--muted); }
+  .pick .pp code { font-family:var(--mono); font-size:11.5px; }
+  .pick .kind { display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.04em;
+                padding:1px 6px; border-radius:3px; margin-bottom:6px;
+                background:var(--accent-soft); color:var(--accent-deep); border:1px solid var(--accent-line); }
+  .pick .kind.raw { background:var(--panel); color:var(--muted); border-color:var(--line-strong); }
+  .pick .chg { margin-top:8px; font-size:12px; }
+  /* 패턴 파라미터 — 이름이 곧 라벨이다(SQL 의 `:이름`). 설명을 지어내지 않는다:
+     서버가 아는 것도 이름뿐이고, 없는 뜻을 화면이 만들면 그게 곧 거짓말이 된다. */
+  .param label code { font-family:var(--mono); font-size:12px; color:var(--ink); }
+  .param .hint { font-weight:400; letter-spacing:0; color:var(--faint); margin-left:6px; }
   .resp-head { display:flex; align-items:center; gap:10px; margin:14px 0 8px; }
   .status { font-family:var(--mono); font-size:12px; font-weight:700; padding:2px 9px; border-radius:4px;
             display:none; }
@@ -484,8 +501,14 @@
       <div class="play">
         <div class="play-grid">
           <div>
-            <div class="field"><label for="pTable">데이터</label><select id="pTable"></select></div>
-            <div class="field"><label for="pLimit">행 수 (limit)</label><input type="number" id="pLimit" value="10" min="1" max="5000"></div>
+            <!-- 옛 57종 셀렉트 박스를 걷었다(2026-08-07). 목록 검색이 제품명·설명은 물론
+                 **활용 예시의 질문까지** 훑는데, 그 옆에 스크롤해야 하는 드롭다운을 또 두는 건
+                 같은 선택을 두 곳에서 하게 만드는 일이었다. 이제 진입은 목록 한 곳이다 —
+                 「써보기」는 직접 조회로, 「이 질문 돌려보기」는 패턴 실행으로 들어온다. -->
+            <div class="field"><label>지금 고른 것</label><div class="pick" id="pickBox"></div></div>
+            <!-- 패턴 파라미터는 SQL 의 `:이름` 자리에서 만들어 낸다(renderPick) -->
+            <div id="paramFields"></div>
+            <div class="field" id="limitField"><label for="pLimit">행 수 (limit)</label><input type="number" id="pLimit" value="10" min="1" max="5000"></div>
             <div class="field" id="rangeField" style="display:none">
               <label>기간 · <span id="axisName"></span></label>
               <input type="text" id="pFrom" placeholder="from · YYYY-MM-DD" style="margin-bottom:6px">
@@ -603,7 +626,7 @@ async function boot() {
   // #600 채택 시 이 정적 자산은 게시 테이블 조회(안 B 번들)로 교체된다.
   const q0 = new URLSearchParams(location.search).get("q");
   if (q0) { $("q").value = q0; query = q0.trim().toLowerCase(); }
-  renderNav(); renderStart(); renderList(); renderSelect();
+  renderNav(); renderStart(); renderList(); renderPick();
   updatePreview();
   if (location.hash) goHash(location.hash, "auto");   // 렌더가 끝난 뒤라야 위치가 맞는다
 }
@@ -741,6 +764,17 @@ function renderList() {
           (u.axes ? "<div class='umeta'>" + esc(u.axes) + "</div>" : "") +
           "<pre>" + esc(u.sql || "") + "</pre>" +
           (u.insight_sample_ko ? "<div class='uins'>실행 예시 — " + esc(u.insight_sample_ko) + "</div>" : "") +
+          // 여기가 이 화면이 바뀐 지점이다 — 질문이 **보이기만 하던 것**을 누를 수 있게 한다.
+          // 실행 불가는 **비활성 버튼 + 이유**로 남긴다: 버튼을 아예 안 그리면 "왜 이 질문만
+          // 못 돌리나"를 아무도 못 묻는다(commerce 77개가 그 상태다 — Serving#178).
+          "<div style='margin-top:8px'>" +
+          (patternRunnable(u)
+            ? "<button class='btn-g btn-sm' data-runpat='" + esc(p.product_id) + "' data-pat='" +
+              esc(u.pattern_id) + "'>이 질문 돌려보기</button>"
+            : "<button class='btn-g btn-sm' disabled title='" +
+              (u.verified_at ? "제품 id 규약(소문자·숫자·밑줄)과 달라 서버가 실행을 막습니다" : "아직 검증 전인 패턴입니다") +
+              "'>지금은 돌릴 수 없음</button>") +
+          "</div>" +
           "</div>").join("")
       : "";
     detail.innerHTML =
@@ -832,39 +866,100 @@ function renderList() {
     body.appendChild(pg);
   }
   body.querySelectorAll("[data-try]").forEach((b) => b.addEventListener("click", () => {
-    $("pTable").value = b.dataset.try;
-    onTableChange();
+    pickProduct(PRODUCTS.find((x) => x.name === b.dataset.try), null);   // 직접 조회로 진입
+    goHash("#playground");
+  }));
+  // 「이 질문 돌려보기」 — 검증된 SQL 을 그대로 실행한다. 여기가 이 화면의 요점이다:
+  // 목록에서 **질문을 고르면** 제품이 따라온다(제품을 먼저 고르지 않는다).
+  body.querySelectorAll("[data-runpat]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();   // 상세 토글(행 클릭)까지 번지면 방금 편 패널이 닫힌다
+    const p = PRODUCTS.find((x) => x.product_id === b.dataset.runpat);
+    pickProduct(p, (p.usage_patterns || []).find((u) => u.pattern_id === b.dataset.pat));
     goHash("#playground");
   }));
 }
 
-function renderSelect() {
-  const sel = $("pTable");
-  sel.innerHTML = "";
-  for (const p of PRODUCTS) {
-    const o = document.createElement("option");
-    // 라벨은 한국어 제목만 — "제목 — 테이블명"은 가장 긴 게 414px 라 240px 칸에서 잘렸다.
-    // 테이블명은 잃지 않는다: 아래 호출 미리보기에 그대로 뜨고, 여기선 tooltip 으로 남긴다.
-    // (62종 제목에 중복 없음을 확인하고 제목만 남겼다 — 중복이 생기면 구분이 사라진다.)
-    o.value = p.name; o.textContent = titleOf(p); o.title = p.name;
-    sel.appendChild(o);
-  }
-  onTableChange();
+// ── 플레이그라운드에서 무엇을 고르고 있나 ────────────────────────────────────
+// `{ product, pattern|null }`. pattern 이 있으면 **질문 실행**(검증된 SQL), 없으면
+// **직접 조회**(등가 필터·기간). 둘은 경쟁이 아니라 역할이 다르다 — 집계·랭킹·시계열은
+// 직접 조회로 안 되고 검증 패턴으로만 된다.
+let PICK = null;
+
+// 서버가 받는 id 모양(`handleRunPattern` 의 `^[a-z0-9_]+$`)과 **같은 규칙**이다.
+// 여기가 서버보다 느슨하면 눌러 놓고 400 을 받는다. commerce 77개가 실제로 이 모양이라
+// (하이픈, Serving#178) 버튼을 미리 죽여 둔다.
+const runnableId = (s) => /^[a-z0-9_]+$/.test(String(s || ""));
+const patternRunnable = (u) => Boolean(u && u.verified_at) && runnableId(u.pattern_id);
+
+// SQL 의 `:이름` 자리를 뽑는다. ⚠️ **주석을 먼저 벗긴다** — 패턴 SQL 은 주석에 예시값을
+// 적는 관례(`-- :from, :n=10`)라, 안 벗기면 주석 속 이름까지 입력칸으로 만들어 낸다.
+// 서버(`handleRunPattern`)도 같은 순서로 벗긴 뒤 바인딩을 센다.
+function patternParams(sql) {
+  const body = String(sql || "").replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  return [...new Set([...body.matchAll(/:([a-z_][a-z0-9_]*)/gi)].map((m) => m[1]))];
 }
 
-function currentProduct() { return PRODUCTS.find((p) => p.name === $("pTable").value); }
-function onTableChange() {
-  const p = currentProduct();
-  if (!p) return;
-  $("rangeField").style.display = p.time_axis ? "block" : "none";
-  $("axisName").textContent = p.time_axis || "";
+function pickProduct(p, pattern) {
+  PICK = p ? { product: p, pattern: pattern || null } : null;
   resetPaging();
+  renderPick();
   updatePreview();
 }
+
+function renderPick() {
+  const box = $("pickBox"), params = $("paramFields");
+  params.innerHTML = "";
+  if (!PICK) {
+    box.className = "pick empty";
+    box.textContent = "아직 고르지 않았습니다 — 위 목록에서 「써보기」나 「이 질문 돌려보기」를 누르세요.";
+    $("limitField").style.display = "none";
+    $("rangeField").style.display = "none";
+    $("runBtn").disabled = true;
+    return;
+  }
+  const { product: p, pattern: u } = PICK;
+  box.className = "pick";
+  $("runBtn").disabled = false;
+  box.innerHTML = u
+    ? "<span class='kind'>질문 실행</span><span class='qq'>" + esc(u.question_ko || u.pattern_id) + "</span>" +
+      "<span class='pp'>" + esc(titleOf(p)) + " · <code>" + esc(u.pattern_id) + "</code></span>"
+    : "<span class='kind raw'>직접 조회</span><span class='qq'>" + esc(titleOf(p)) + "</span>" +
+      "<span class='pp'><code>" + esc(p.name) + "</code></span>";
+  box.innerHTML += "<div class='chg'><a href='#catalog' onclick=\"goHash('#catalog');return false\">← 목록에서 다시 고르기</a></div>";
+
+  if (u) {
+    // 질문 실행 — limit·기간은 패턴 SQL 이 정한다. 화면이 따로 받으면 서버가 400 을 준다
+    // (선언 밖 파라미터). 그래서 칸 자체를 감춘다.
+    $("limitField").style.display = "none";
+    $("rangeField").style.display = "none";
+    for (const nm of patternParams(u.sql)) {
+      const f = document.createElement("div");
+      f.className = "field param";
+      f.innerHTML = "<label for='prm_" + nm + "'><code>:" + esc(nm) + "</code>" +
+        "<span class='hint'>패턴이 요구하는 값</span></label>" +
+        "<input id='prm_" + nm + "' data-prm='" + esc(nm) + "' autocomplete='off'>";
+      params.appendChild(f);
+      f.querySelector("input").addEventListener("input", updatePreview);
+    }
+    return;
+  }
+  $("limitField").style.display = "block";
+  $("rangeField").style.display = p.time_axis ? "block" : "none";
+  $("axisName").textContent = p.time_axis || "";
+}
+
 function buildPath() {
-  const p = currentProduct();
-  if (!p) return "";
+  if (!PICK) return "";
+  const { product: p, pattern: u } = PICK;
   const q = new URLSearchParams();
+  if (u) {
+    // 값이 빈 파라미터는 아예 안 싣는다 — 서버가 "값이 필요하다"로 안내하게 둔다.
+    // 빈 문자열을 실으면 그게 값으로 바인딩돼 조용히 0행이 나온다.
+    for (const el of $("paramFields").querySelectorAll("[data-prm]"))
+      if (el.value.trim()) q.set(el.dataset.prm, el.value.trim());
+    const qs = q.toString();
+    return "/api/v1/patterns/" + p.product_id + "/" + u.pattern_id + (qs ? "?" + qs : "");
+  }
   q.set("limit", $("pLimit").value || "10");
   if (p.time_axis && $("pFrom").value.trim()) q.set("from", $("pFrom").value.trim());
   if (p.time_axis && $("pTo").value.trim()) q.set("to", $("pTo").value.trim());
@@ -924,6 +1019,17 @@ function friendly(status, body) {
   if (status === 400 && t === "no time axis")
     return "이 데이터는 시간축이 없어서 기간(from/to) 필터를 지원하지 않아요 — 기간을 비우고 호출해주세요.";
   if (status === 400 && t === "unknown filter") return (body.detail || "") + " — 컬럼 이름 오타를 확인해주세요.";
+  // 질문 실행(검증 패턴)의 오류들. 서버 문구는 API 직접 호출자도 읽는 계약이라 그대로 두고,
+  // 화면에서만 이 페이지의 말투로 갈아입힌다. `missing parameter` 는 서버가 어느 값인지
+  // 짚어 주므로 그 문장을 살린다 — 화면이 다시 쓰면 오히려 정보가 준다.
+  if (status === 400 && t === "missing parameter")
+    return (body.detail || "").replace("값이 필요하다", "값이 필요해요") + " — 위 입력칸을 채워주세요.";
+  if (status === 400 && t === "unknown parameter")
+    return (body.detail || "") + " — 이 질문이 받지 않는 값이에요.";
+  if (status === 409 && t === "pattern not verified")
+    return "이 질문은 아직 검증 전이라 실행할 수 없어요 — 도메인 검증이 끝나면 열립니다.";
+  if (status === 404 && t === "unknown pattern")
+    return (body.detail || "") + " — 목록에서 질문을 다시 골라주세요.";
   // 화면 검증을 통과해도 서버가 더 좁게 볼 수 있다(API 직접 호출도 이 문구를 본다) — #109
   if (status === 400 && t === "invalid email")
     return "이메일 형식을 확인해주세요 — 예: you@example.com";
@@ -957,19 +1063,32 @@ async function run(useCursor) {
     $("toggleRaw").style.display = "inline";
     $("respEmpty").style.display = "none";
     if (res.ok) {
-      pageNo += 1;
-      pageRows += body.row_count;
-      showStatus(res.status, body.row_count + "행 · limit " + body.limit +
-        (pageNo > 1 ? " · " + pageNo + "페이지(누적 " + nf.format(pageRows) + "행)" : "") +
-        (body.time_axis ? " · 축 " + body.time_axis : ""));
       renderRows(body.rows || []);
       $("rawJson").style.display = "none";
-      pageCursor = body.next_cursor || null;
-      $("pager").style.display = pageNo > 1 || body.has_more ? "flex" : "none";
-      $("nextPageBtn").style.display = body.has_more ? "inline-block" : "none";
-      $("pagerNote").textContent = body.has_more
-        ? "커서 이어받기 — 페이지마다 쿼터 1회"
-        : "마지막 페이지 · 누적 " + nf.format(pageRows) + "행";
+      // 질문 실행과 직접 조회는 **응답 모양이 다르다.** 패턴에는 limit·커서·시간축이 없다
+      // (그 셋을 정하는 게 패턴 SQL 자신이다). 한 벌로 찍으면 `limit undefined` 가 나간다.
+      if (PICK && PICK.pattern) {
+        resetPaging();   // 커서 없음 — 이전 조회의 페이저가 남아 있으면 지운다
+        showStatus(res.status, (body.row_count ?? (body.rows || []).length) + "행");
+        // 검증 증거는 **현재값이 아니다.** 그 구분을 문구가 직접 말하지 않으면
+        // 방금 받은 결과의 요약으로 오해된다.
+        $("pagerNote").textContent = body.insight_sample_ko
+          ? "검증 당시 이 질의가 낸 문장 — " + body.insight_sample_ko : "";
+        $("pager").style.display = body.insight_sample_ko ? "flex" : "none";
+        $("nextPageBtn").style.display = "none";
+      } else {
+        pageNo += 1;
+        pageRows += body.row_count;
+        showStatus(res.status, body.row_count + "행 · limit " + body.limit +
+          (pageNo > 1 ? " · " + pageNo + "페이지(누적 " + nf.format(pageRows) + "행)" : "") +
+          (body.time_axis ? " · 축 " + body.time_axis : ""));
+        pageCursor = body.next_cursor || null;
+        $("pager").style.display = pageNo > 1 || body.has_more ? "flex" : "none";
+        $("nextPageBtn").style.display = body.has_more ? "inline-block" : "none";
+        $("pagerNote").textContent = body.has_more
+          ? "커서 이어받기 — 페이지마다 쿼터 1회"
+          : "마지막 페이지 · 누적 " + nf.format(pageRows) + "행";
+      }
     } else {
       showStatus(res.status, friendly(res.status, body));
       $("tableWrap").style.display = "none";
@@ -1045,7 +1164,6 @@ $("purgeBtn").addEventListener("click", () => callRevoke(true));
 $("runBtn").addEventListener("click", () => run(false));
 $("nextPageBtn").addEventListener("click", () => run(true));
 $("meBtn").addEventListener("click", () => { updatePreview(); refreshQuota(); });
-$("pTable").addEventListener("change", onTableChange);
 // 질의가 바뀌면 들고 있던 커서는 다른 질의의 표가 된다 — 버린다
 for (const id of ["pLimit", "pFrom", "pTo"]) $(id).addEventListener("input", resetPaging);
 for (const id of ["pKey", "pLimit", "pFrom", "pTo"]) $(id).addEventListener("input", updatePreview);
