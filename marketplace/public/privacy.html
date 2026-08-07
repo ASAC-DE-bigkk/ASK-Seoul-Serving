@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>개인정보 처리방침 — ASK: SEOUL 데이터 플랫폼</title>
+<link rel="stylesheet" href="/site.css">
+<script>
+  /* 테마 확정 — 첫 페인트 전. 아래로 내리면 라이트를 고른 사람에게 다크가 한 번 번쩍인다(FOUC).
+     저장값이 없으면 OS 로 해석하되 저장하지 않는다 — 저장 여부가 "직접 골랐는가"의 유일한
+     기록이고, 그게 뒤에서 OS 변경을 따라갈지 가른다. 배선은 /theme.js 한 벌이 맡는다. */
+  (function () {
+    var t;
+    try { t = localStorage.getItem("theme"); } catch (e) { /* 프라이빗 모드 등 차단 */ }
+    if (t !== "light" && t !== "dark") {
+      t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
+<style>
+  /* 조문 형식 — 공공 처리방침 관례(제X조 + ①②③). site.css 본문 규칙 위에 이 페이지에만
+     필요한 것만 얹는다. 팔레트·표·머리·바닥은 손대지 않는다. */
+  .art { margin:26px 0 0; }
+  .art h2 { font-size:15.5px; margin:0 0 10px; }
+  .cl { list-style:none; padding:0; margin:0; display:grid; gap:9px; }
+  /* 그리드 항목도 기본이 min-width:auto 다 — 안 박으면 안쪽 표가 줄지 않아 페이지가 밀린다
+     (site.css 의 .wrap 과 같은 함정, 실측 375px 에서 436px 로 벌어졌다). */
+  .cl > li { display:grid; grid-template-columns:20px minmax(0,1fr); gap:7px; align-items:start;
+             font-size:13.5px; line-height:1.75; }
+  .cl > li > div { min-width:0; }
+  .cl > li > .n { color:var(--accent-deep); font-weight:700; }
+  .cl ul { margin:7px 0 0; padding-left:18px; display:grid; gap:5px; }
+  .cl .table-scroll { margin:9px 0 2px; }
+  td.dom { color:var(--ink); font-weight:600; white-space:nowrap; }
+  .eff { margin:16px 0 0; font-size:13px; color:var(--muted); }
+  .addendum { margin:30px 0 0; padding:14px 16px; border:1px solid var(--line);
+              border-radius:8px; background:var(--panel); font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<nav class="nav"><!-- partials/nav.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
+  <div class="nav-in">
+    <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="logo" aria-hidden="true">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></a>
+    <!-- 카탈로그 안의 섹션(플레이그라운드·API 키)은 헤더에 걸지 않는다 — 같은 문서로 가는
+         링크가 여럿이 되기 때문. 섹션 이동은 카탈로그 사이드바 몫이고, 여기엔 별도 문서만 건다. -->
+    <div class="nav-links">
+      <a href="/catalog">카탈로그</a>
+      <a href="/docs">API 문서</a>
+      <a href="/guide">가이드</a>
+      <a href="/status">상태</a>
+    </div>
+    <span class="spacer"></span>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
+      <svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+      <svg class="moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+    </button>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <h1>개인정보 처리방침</h1>
+    <p class="lede">ASK: SEOUL(이하 &ldquo;서비스&rdquo;)은 「개인정보 보호법」 제30조에 따라 정보주체의 개인정보를 보호하고 이와 관련한 고충을 신속하게 처리할 수 있도록 다음과 같이 개인정보 처리방침을 수립·공개합니다.</p>
+    <p class="eff">시행일 <b>2026년 8월 7일</b></p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="art">
+    <h2>제1조 (개인정보의 처리 목적)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div>서비스는 <b>API 키 발급과 그 이용 관리</b>를 위해 최소한의 개인정보를 처리합니다.</div></li>
+      <li><span class="n">②</span><div>처리 목적은 <b>이메일당 1개의 키를 식별</b>하는 것, <b>발급 남용을 방지</b>하는 것, <b>어떤 데이터가 실제로 이용되는지 측정</b>하고 <b>장애·남용에 대응</b>하는 것입니다.</div></li>
+      <li><span class="n">③</span><div>처리한 개인정보는 위 목적 외의 용도로 이용하지 않으며, 목적이 변경되는 경우 사전에 동의를 받습니다.</div></li>
+    </ul>
+  </section>
+
+  <section class="art">
+    <h2>제2조 (수집하는 개인정보의 항목 및 수집 방법)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div><b>이용자가 제공하는 정보</b>
+      <div class="table-scroll"><table><thead><tr><th>항목</th><th>수집 시점</th><th>수집 방법</th></tr></thead><tbody><tr><td class="dom">이메일 주소</td><td>API 키 발급</td><td>Google 로그인(OAuth 2.0)을 통해 Google 로부터 전달받습니다. 서비스가 직접 입력받지 않습니다.</td></tr></tbody></table></div></div></li>
+      <li><span class="n">②</span><div><b>서비스 이용 과정에서 자동으로 생성·수집되는 정보</b>
+      <div class="table-scroll"><table><thead><tr><th>항목</th><th>수집 시점</th><th>수집 방법</th></tr></thead><tbody><tr><td class="dom">발급 요청 IP의 해시</td><td>API 키 발급</td><td>요청 시 자동 수집하여 즉시 해시로 변환합니다.</td></tr><tr><td class="dom">API 요청 기록</td><td>API 호출</td><td>호출 시 자동으로 생성됩니다.</td></tr></tbody></table></div>
+      <p>이 항목들은 <b>그 자체로는 특정 개인을 알아볼 수 없으나</b>, 서비스가 보유한 다른 정보와 결합하면 알아볼 수 있습니다. 따라서 <b>개인정보로 보아 관리</b>합니다. 결합의 통로는 다음 둘이며, 그래서 보유 기간을 짧게 두었습니다(제3조).</p>
+      <ul><li>API 요청 기록의 <b>키 해시</b>는 이메일과 1:1 로 대응합니다 — 이용자가 키를 완전 삭제하면 그 대응이 사라져 더는 연결되지 않습니다(제7조).</li><li>발급 요청 IP의 해시는 서비스가 보유한 비밀값을 알면 <b>같은 날 안에서는 원문을 되찾을 수 있습니다</b> — 24시간 뒤 삭제되며, 날이 바뀌면 앞뒤 기록이 서로 이어지지 않습니다.</li></ul></div></li>
+      <li><span class="n">③</span><div>API 요청 기록에 남는 항목은 <b>호출 경로, 제품(테이블)명, 응답 상태, 응답 행수, 소요 시간, 키 해시</b>, 그리고 필터로 사용한 <b>컬럼의 이름</b>입니다.</div></li>
+      <li><span class="n">④</span><div>이메일 주소는 <b>암호화하지 않은 상태로 저장</b>됩니다.</div></li>
+    </ul>
+  </section>
+
+  <section class="art">
+    <h2>제3조 (개인정보의 보유 및 이용 기간)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div>서비스는 법령에 따른 별도의 보유 의무가 없으며, 각 항목을 다음 기간 동안만 보유합니다.
+      <div class="table-scroll"><table><thead><tr><th>항목</th><th>보유 기간</th><th>근거</th></tr></thead><tbody><tr><td class="dom">이메일 주소</td><td>이용자의 삭제 요청 시까지</td><td>키 식별에 필요한 기간</td></tr><tr><td class="dom">발급 요청 IP의 해시</td><td><b>24시간</b></td><td>시간당 발급 횟수 제한에 필요한 기간</td></tr><tr><td class="dom">API 요청 기록</td><td><b>30일</b></td><td>장애·남용 대응에 필요한 기간</td></tr></tbody></table></div></div></li>
+      <li><span class="n">②</span><div>보유 기간이 지난 정보는 <b>자동으로 삭제</b>되며, 이용자의 별도 요청이 필요하지 않습니다.</div></li>
+    </ul>
+  </section>
+
+  <section class="art">
+    <h2>제4조 (개인정보의 파기 절차 및 방법)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div>보유 기간이 지나거나 처리 목적이 달성된 개인정보는 <b>지체 없이 파기</b>합니다.</div></li>
+      <li><span class="n">②</span><div>파기는 저장소에서의 삭제로 이루어지며, 별도의 백업 사본을 보관하지 않습니다.</div></li>
+      <li><span class="n">③</span><div>이용자가 삭제를 요청한 경우 <b>별도의 승인 절차 없이 즉시</b> 반영됩니다(제7조).</div></li>
+    </ul>
+  </section>
+
+  <section class="art">
+    <h2>제5조 (개인정보의 제3자 제공)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div>서비스는 이용자의 개인정보를 <b>제3자에게 제공하지 않으며, 판매하지 않습니다.</b></div></li>
+      <li><span class="n">②</span><div>법령에 근거하여 수사기관이 적법한 절차로 요구하는 경우에만 예외적으로 제공될 수 있습니다.</div></li>
+    </ul>
+  </section>
+
+  <section class="art">
+    <h2>제6조 (개인정보 처리의 위탁)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div>서비스는 원활한 운영을 위해 다음과 같이 개인정보 처리 업무를 위탁하고 있습니다.
+      <div class="table-scroll"><table><thead><tr><th>수탁자</th><th>위탁 업무</th><th>보관 위치</th></tr></thead><tbody><tr><td class="dom">Cloudflare, Inc.</td><td>서비스 인프라 운영 및 데이터 저장</td><td>Cloudflare 글로벌 네트워크</td></tr><tr><td class="dom">Google LLC</td><td>로그인(계정 소유 확인)</td><td>Google 인프라</td></tr></tbody></table></div></div></li>
+      <li><span class="n">②</span><div>수탁자가 변경되는 경우 이 처리방침을 통해 공개합니다.</div></li>
+    </ul>
+  </section>
+
+  <section class="art">
+    <h2>제7조 (정보주체의 권리·의무 및 행사 방법)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div>이용자는 언제든지 자신의 개인정보에 대한 <b>열람·정정·삭제·처리정지</b>를 요구할 수 있습니다.</div></li>
+      <li><span class="n">②</span><div>삭제는 <b>이용자가 직접 처리</b>할 수 있습니다. 카탈로그 화면의 &lsquo;내 사용량&rsquo; 아래 <b>키 폐기</b> 버튼을 사용하거나, API 를 직접 호출하셔도 됩니다.
+      <ul><li><b>폐기</b> — <code>DELETE /api/v1/keys</code>. 키가 즉시 무효가 되며, 이메일은 남아 같은 주소로 새 키를 받으실 수 있습니다.</li><li><b>완전 삭제</b> — <code>DELETE /api/v1/keys?purge=true</code>. 키와 <b>이메일·사용량 기록까지</b> 삭제합니다. 이미 폐기한 키로도 호출할 수 있습니다.</li></ul></div></li>
+      <li><span class="n">③</span><div>삭제 후에도 <b>API 요청 기록(30일 보존)은 남습니다.</b> 다만 그 기록에는 키 해시만 있고 삭제로 해시와 이메일의 대응이 사라지므로 <b>더는 특정 개인과 연결되지 않습니다.</b> 30일이 지나면 자동 삭제됩니다.</div></li>
+      <li><span class="n">④</span><div>권리 행사는 <a href="/support">문의 창구</a>를 통해서도 요청하실 수 있습니다.</div></li>
+    </ul>
+  </section>
+
+  <section class="art">
+    <h2>제8조 (수집하지 않는 정보)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div>서비스는 다음 정보를 <b>수집하거나 저장하지 않습니다.</b>
+      <ul><li><b>API 키 원문</b> — SHA-256 해시와 표시용 접두 8자만 저장하며, 서비스도 원문을 복원할 수 없습니다.</li><li><b>필터에 넣은 값</b> — 컬럼의 이름만 남기고 값은 버립니다.</li><li><b>발급 요청 IP의 원문</b> — <b>날짜와 비밀값을 함께 섞은</b> 해시만 남깁니다. 같은 날 안에서는 같은 값이라 시간당 횟수를 셀 수 있으나, 날이 바뀌면 값이 달라져 앞뒤 기록이 서로 이어지지 않습니다. 다만 비밀값을 아는 서비스는 <b>같은 날 안에서 원문을 되찾을 수 있으므로</b>, 이 기록은 24시간 뒤 삭제합니다(제3조).</li><li><b>인증 없는 요청의 식별자</b> — 미리보기 등 인증 없는 요청은 키 해시가 비어 있어 개인 단위로 묶을 수 없습니다.</li></ul></div></li>
+    </ul>
+  </section>
+
+  <section class="art">
+    <h2>제9조 (쿠키의 사용)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div>서비스는 <b>로그인 과정에서 쿠키 1개</b>를 사용합니다.
+      <div class="table-scroll"><table><thead><tr><th>이름</th><th>목적</th><th>속성</th><th>유효 기간</th></tr></thead><tbody><tr><td class="dom">ask_oauth_state</td><td>로그인 요청 위조(CSRF) 방지</td><td>HttpOnly · SameSite=Lax · Secure(HTTPS) · 경로 <code>/api/v1/auth</code> 한정</td><td><b>10분</b></td></tr></tbody></table></div></div></li>
+      <li><span class="n">②</span><div>이 쿠키에는 <b>개인을 식별할 수 있는 정보가 들어 있지 않으며</b>, 서명된 임시 난수만 담깁니다. 로그인이 끝나면 즉시 만료 처리됩니다.</div></li>
+      <li><span class="n">③</span><div>서비스는 <b>광고·분석·트래킹 목적의 쿠키를 사용하지 않으며</b>, 제3자 트래킹 스크립트를 포함하지 않습니다.</div></li>
+    </ul>
+  </section>
+
+  <section class="art">
+    <h2>제10조 (개인정보의 안전성 확보 조치)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div><b>최소 수집</b> — 목적에 필요하지 않은 항목은 처음부터 받지 않습니다(제8조).</div></li>
+      <li><span class="n">②</span><div><b>비가역 처리</b> — API 키는 해시로만, 발급 IP 는 일 단위로 교체되는 비밀값을 섞은 해시로만 저장합니다.</div></li>
+      <li><span class="n">③</span><div><b>전송 구간 암호화</b> — 모든 통신은 HTTPS(TLS)로 이루어집니다.</div></li>
+      <li><span class="n">④</span><div><b>노출 최소화</b> — 운영 화면에서도 이메일은 마스킹된 형태로만 표시됩니다.</div></li>
+      <li><span class="n">⑤</span><div><b>자동 파기</b> — 보유 기간이 지난 정보는 사람의 조작 없이 삭제됩니다.</div></li>
+    </ul>
+  </section>
+
+  <section class="art">
+    <h2>제11조 (개인정보 보호책임자 및 문의처)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div>서비스는 개인정보 처리에 관한 문의를 아래 창구에서 접수합니다.
+      <div class="table-scroll"><table><thead><tr><th>구분</th><th>내용</th></tr></thead><tbody><tr><td class="dom">운영 주체</td><td>ASK: SEOUL 프로젝트 팀</td></tr><tr><td class="dom">문의 창구</td><td><a href="/support">문의 페이지</a></td></tr></tbody></table></div></div></li>
+      <li><span class="n">②</span><div><b>삭제·폐기는 문의를 기다리실 필요가 없습니다</b> — 제7조의 방법으로 직접 처리하실 수 있습니다.</div></li>
+      <li><span class="n">③</span><div>상시 대기하는 지원 인력이 없어 <b>답변 시점을 약속드리지 못합니다.</b></div></li>
+    </ul>
+  </section>
+
+  <section class="art">
+    <h2>제12조 (권익침해 구제 방법)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div>개인정보 침해로 인한 상담·피해 구제가 필요한 경우 아래 기관에 문의하실 수 있습니다.
+      <ul><li>개인정보 분쟁조정위원회 — 1833-6972 (<a href="https://www.kopico.go.kr" target="_blank" rel="noopener noreferrer">www.kopico.go.kr</a>)</li><li>개인정보침해 신고센터 — 118 (<a href="https://privacy.kisa.or.kr" target="_blank" rel="noopener noreferrer">privacy.kisa.or.kr</a>)</li><li>대검찰청 사이버수사과 — 1301 (<a href="https://www.spo.go.kr" target="_blank" rel="noopener noreferrer">www.spo.go.kr</a>)</li><li>경찰청 사이버범죄 신고시스템 — 182 (<a href="https://ecrm.police.go.kr" target="_blank" rel="noopener noreferrer">ecrm.police.go.kr</a>)</li></ul></div></li>
+    </ul>
+  </section>
+
+  <section class="art">
+    <h2>제13조 (개인정보 처리방침의 변경)</h2>
+    <ul class="cl">
+      <li><span class="n">①</span><div>이 처리방침은 시행일부터 적용됩니다.</div></li>
+      <li><span class="n">②</span><div>법령·정책 또는 서비스의 변경에 따라 내용이 추가·삭제·수정되는 경우 <b>변경 사항의 시행 전에 이 페이지를 통해 공개</b>합니다.</div></li>
+    </ul>
+  </section>
+
+  <div class="addendum">
+    <b>부칙</b><br>
+    이 개인정보 처리방침은 <b>2026년 8월 7일</b>부터 시행합니다.
+  </div>
+
+</main>
+
+<footer><!-- partials/footer.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
+  <!-- 계약 버전·배치 시각·내부 이슈 번호는 우리 사정이다. 이용자에게 남는 정보만 둔다. -->
+  <div class="foot-in">
+    <div class="fcol">
+      <b>ASK: SEOUL</b>
+      <!-- ⚠️ "행정동 코드 하나로"라고 쓰지 않는다(2026-08-07 정정). 실측: 공개 55종 중
+           행정동 축은 23종(42%)뿐이고 자치구 축이 32종(58%)으로 더 많으며, 21종(38%)은
+           조인 축이 아예 없다. 축이 셋인데 하나처럼 말하면 카탈로그를 여는 순간 어긋난다.
+           시간 축도 빼지 않는다 — 히어로가 "시간과 공간 두 축"이라고 말한다. -->
+      <span>서울 공공데이터를 시간·공간 같은 축 위에 올린 API 허브</span>
+    </div>
+    <div class="fcol">
+      <b>서비스</b>
+      <a href="/catalog">데이터 카탈로그</a>
+      <a href="/docs">API 문서</a>
+      <a href="/status">서비스 상태</a>
+    </div>
+    <div class="fcol">
+      <b>이용</b>
+      <a href="/guide">가이드</a>
+      <a href="/guide#faq">자주 묻는 질문</a>
+      <a href="/support">문의하기</a>
+    </div>
+    <div class="fcol">
+      <b>정책</b>
+      <a href="/attribution">데이터 출처</a>
+      <a href="/terms">이용약관</a>
+      <a href="/privacy">개인정보 처리방침</a>
+    </div>
+  </div>
+  <div class="foot-btm">
+    <span>© 2026 ASK: SEOUL</span>
+  </div>
+</footer>
+<script src="/theme.js" defer></script>
+</body>
+</html>

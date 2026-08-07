@@ -10,7 +10,7 @@ export const BURST_PER_MIN = 60;
 
 // 법적 고지 정본 — 카탈로그(/api/v1)와 MCP(data_context)가 같은 문장을 쓴다. 두 벌이면
 // /legal 개정 때 한쪽만 고쳐지는데, 하필 법적 고지라 어긋났을 때 비용이 크다(PR #108 리뷰).
-export const ATTRIBUTION = "공공 원천의 2차 가공물 — 출처·이용조건 /legal#attribution";
+export const ATTRIBUTION = "공공 원천의 2차 가공물 — 출처·이용조건 /attribution";
 
 export const json = (obj, status = 200, headers = {}) =>
   new Response(JSON.stringify(obj), {
@@ -267,30 +267,34 @@ export function normalizeIntent(raw) {
   return INTENT_RE.test(value) ? value : "other";
 }
 
-// ── 발급 이메일 정규화 (#109) ────────────────────────────────────────────────
-// `_keys.email UNIQUE` 가 "이메일당 1키"를 지키는 **유일한 실질 장치**다. 그래서 같은
-// 메일함을 가리키는 두 문자열이 들어오면 그 제약이 조용히 통과된다 — prod 에서 실제로
-// `qe@gg.gg.` 와 `qe@gg.gg` 가 각각 키를 받았다(2026-08-06).
+// ── MCP 클라이언트 이름 (#111 후속) ──────────────────────────────────────────
+// **전송 계층 UA 로는 MCP 클라이언트를 못 잡는다.** 크롤러는 `ClaudeBot` 처럼 공개된 UA
+// 규약이 있지만 MCP 클라이언트는 앱·라이브러리라 그런 게 없다 — 정규식을 늘려도 다음
+// 클라이언트에서 또 뚫린다(prod 실측: MCP 호출 95건이 전부 `unknown`, 즉 UA 는 왔는데
+// 목록에 없었다).
 //
-// 그래서 순서가 **정규화 → 검증**이다. 검증만 강화하면 이번 형태 하나만 막고,
-// 정규화만 하면 잘못된 도메인이 통과한다.
+// 🔑 그런데 MCP 스펙이 `initialize` 에 `clientInfo{name, version}` 을 **필수로** 요구한다.
+// **이게 MCP 판 User-Agent 다** — 규격이 보장하니 뚫리지 않는다. 우리는 그동안 `params` 를
+// 받아 놓고 안 읽었다.
 //
-// 후행 점을 **거절이 아니라 정규화**하는 이유: `example.com.` 은 DNS 루트 표기라 같은
-// 메일함이다. 합쳐 두면 이후 같은 주소로 오는 요청이 409(재발급 확인)로 제대로 합류한다.
-// 반대로 `gg..gg`(빈 레이블)는 `gg.gg` 의 다른 표기가 **아니라** 그냥 잘못된 도메인이라
-// 거절한다 — 점을 전부 뭉개면 서로 다른 도메인이 한 값으로 붙어 더 큰 사고가 된다.
-//
-// 제공자 소관인 동치(gmail 의 점 무시·플러스 주소)는 **건드리지 않는다.** 그건 도메인마다
-// 규칙이 달라 우리가 알 수 없고, 지어내면 남의 주소를 같은 것으로 취급하게 된다.
-//
-// 도메인 레이블 규칙은 HTML5 `type="email"` 과 같은 수준으로 맞췄다 — 프런트와 서버의
-// 판정이 갈리면 화면에서 통과한 값이 서버에서 400 이 된다.
-const EMAIL_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
-const EMAIL_RE = new RegExp(`^[^\\s@]+@${EMAIL_LABEL}(?:\\.${EMAIL_LABEL})+$`);
-export function normalizeEmail(raw) {
-  const value = String(raw ?? "").trim().toLowerCase().replace(/\.+$/, "");
-  return EMAIL_RE.test(value) ? value : null;
+// 정규화 규칙은 `normalizeIntent` 와 같은 철학이다 — **안 보냄은 NULL, 못 알아봄은 `other`.**
+// 자유 문자열을 그대로 실으면 클라이언트가 로그에 아무 문장이나 쓸 수 있고, 같은 행의
+// `key_hash` 가 이메일과 1:1 이라 그건 값-최소화 원칙(0001 §값-최소화)을 깨는 길이다.
+const MCP_CLIENT_RE = /^[a-z0-9][a-z0-9._-]{0,39}$/;
+export function normalizeMcpClient(raw) {
+  // 공백은 하이픈으로 접는다 — "Example Client" 처럼 띄어 쓰는 구현이 흔하고, 그걸
+  // `other` 로 버리면 정작 알고 싶은 이름을 잃는다.
+  const value = String(raw ?? "").trim().toLowerCase().replace(/\s+/g, "-");
+  if (!value) return null;
+  return MCP_CLIENT_RE.test(value) ? value : "other";
 }
+
+// ── 발급 이메일 정규화 (#109) — 2026-08-07 제거 ────────────────────────────
+// `normalizeEmail` 은 **자유 입력 주소**를 합치려고 만든 것이었다(`qe@gg.gg.` 와
+// `qe@gg.gg` 가 각각 키를 받은 사고). 이메일 발급을 폐지하면서 자유 입력이 사라졌고,
+// Google 이 주는 주소는 이미 정규형이라 쓸 곳이 없어졌다.
+// ⚠️ 사람이 직접 적는 주소를 다시 받게 되면 이 함수를 되살려야 한다 —
+//    `_keys.email UNIQUE` 는 문자열이 다르면 통과한다.
 
 // D1 은 배열을 JSON 문자열로 싣는다(`requires`·`primary_key` — ASAC-DAG#638 §2). 깨진 값이
 // 와도 응답 전체를 죽이지 않는다 — 그 필드만 빈 배열로 두고 나머지를 서빙한다.

@@ -9,7 +9,7 @@
 // check_quota. run_pattern 은 #118 실행 계약(2026-08-07 확정)으로 P1 에서 승격.
 
 import { SKILL_BUNDLE_ID, SKILL_PRODUCT_IDS } from "./skill.js";
-import { burstProblem, normalizeIntent, ATTRIBUTION } from "./shared.js";
+import { burstProblem, normalizeIntent, normalizeMcpClient, ATTRIBUTION } from "./shared.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "ask-seoul", version: "0.1.0" };
@@ -18,13 +18,13 @@ export const TOOLS = [
   {
     name: "list_products",
     description:
-      "공개 서빙 제품 목록 — product_id·대표질문(product_question)·조인키·설명. 어느 제품이 사용자 질문에 맞는지 고를 때 먼저 부른다. verified=true 는 출처·품질 증거까지 닫힌 검증 번들(seoul-urban-analytics) 제품이고, 나머지는 일반 카탈로그다.",
+      "조회 가능한 서울 데이터 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 어떤 데이터가 질문에 맞는지 고를 때 가장 먼저 호출하세요. verified=true 는 출처·품질 증거까지 검증된 제품입니다.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "describe_product",
     description:
-      "제품 상세 — 컬럼 설명·grain·PK·시간축·usage_patterns·출처/신선도. 데이터 조회 전 스키마와 필터 가능 컬럼을 파악한다.",
+      "선택한 데이터의 컬럼 설명·기준(grain)·시간축·질의 패턴(usage_patterns)을 보여줍니다. 조회 전에 스키마와 필터 가능한 컬럼을 확인하세요. usage_patterns 중 runnable=true 인 것만 run_pattern 으로 실행할 수 있습니다.",
     inputSchema: {
       type: "object",
       properties: { product_id: { type: "string", description: "예: citydata_ppltn_dow_hour" } },
@@ -35,7 +35,7 @@ export const TOOLS = [
   {
     name: "preview_product",
     description:
-      "제품 5행 미리보기(쿼터 무과금) — 실물이 쓸만한지, 등가 필터에 넣을 값 예시(장소명·코드 등)를 확인한다.",
+      "데이터 5행을 미리 봅니다(일일 한도 무차감). 필터에 넣을 실제 값(장소명·코드 등)을 확인할 때 사용하세요.",
     inputSchema: {
       type: "object",
       properties: { product_id: { type: "string" } },
@@ -46,7 +46,7 @@ export const TOOLS = [
   {
     name: "query_product",
     description:
-      "제품 데이터 조회 — 등가 필터·시간범위(from/to)·limit·cursor. sort/join/집계는 불가(서버 결정 순서). 커서로 페이지네이션. 응답의 data_context(freshness=데이터 기준 시점·caution=주의사항·attribution=출처 표시 의무)를 답변에 반영할 것 — 데이터는 실시간이 아니다.",
+      "지역·기간·등가 필터로 데이터를 조회합니다(sort/join/집계 불가, 커서로 페이지네이션). 응답의 data_context 에 집계 기준 시점(freshness)·출처(attribution)·주의사항(caution)이 함께 담깁니다.",
     inputSchema: {
       type: "object",
       properties: {
@@ -73,7 +73,7 @@ export const TOOLS = [
   {
     name: "run_pattern",
     description:
-      "검증된 질의 패턴 실행(권장 경로) — describe_product 의 usage_patterns 에서 pattern_id 를 고르고, SQL 의 :파라미터 값을 params 로 넘긴다. 도메인 오너가 검증한 SQL 만 서버가 실행하므로 필터를 직접 조립하는 것보다 정확하다. 쿼터 1회 차감, 응답의 insight_sample_ko(해석 예시)를 참고해 답변을 구성할 것.",
+      "실제 데이터에 실행해 동작이 확인된 질의 패턴을 실행합니다. 질문에 맞는 패턴이 있으면 필터를 직접 조립하기보다 이 도구를 우선 사용하세요. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. 응답에는 insight_sample_ko(해석 예시)가 함께 제공됩니다.",
     inputSchema: {
       type: "object",
       properties: {
@@ -91,7 +91,7 @@ export const TOOLS = [
   },
   {
     name: "check_quota",
-    description: "내 키의 남은 일일 쿼터 확인(used/quota/exceeded).",
+    description: "내 API 키의 오늘 사용량과 남은 일일 한도를 확인합니다.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
 ];
@@ -270,12 +270,29 @@ export async function handleMcp(request, env, trace, deps) {
   const { id = null, method, params } = msg || {};
 
   // 발견 단계 — 데이터·쿼터 미소모(masondev 완료기준). 로드용이라 인증 요구 안 함.
-  if (method === "initialize")
+  if (method === "initialize") {
+    // 🔑 `clientInfo` 는 **MCP 판 User-Agent** 다(#111 후속). UA 로는 MCP 클라이언트를 못
+    // 잡아 prod 호출 95건이 전부 `ua_class='unknown'` 이었는데, 그 이름이 프로토콜 규격
+    // 안에 이미 있었다. `intent` 가 만든 선례와 같은 방식으로 trace 를 덮어쓴다.
+    //
+    // ⚠️ `agent_verified` 는 **건드리지 않는다.** clientInfo 도 자기 신고라 Cloudflare
+    //    검증 대상이 아니고, `clientAxes` 가 이미 넣은 NULL 이 맞는 값이다("검증할 것이
+    //    없다"). 여기서 0 을 쓰면 스펙이 경고한 "검증 실패" 오독이 된다.
+    //
+    // ⚠️ `ua_class` 도 그대로 둔다 — 그건 **전송 계층 자기 신고**의 분류이고, UA 를 진짜
+    //    못 알아본 것은 사실이다. 프로토콜 사실로 덮으면 #112 가 갈라 놓은 축이 도로 뭉개진다.
+    const client = normalizeMcpClient(params?.clientInfo?.name);
+    if (client) {
+      trace.agentName = client;
+      // 출처를 이 값이 말한다 — UA 에서 온 이름(crawler·on_demand)과 섞이지 않게.
+      trace.agentMode = "mcp_client";
+    }
     return rpcResult(id, {
       protocolVersion: PROTOCOL_VERSION,
       serverInfo: SERVER_INFO,
       capabilities: { tools: {} },
     });
+  }
   if (method === "notifications/initialized" || method === "notifications/cancelled")
     return new Response(null, { status: 202 });
   if (method === "tools/list") return rpcResult(id, { tools: TOOLS });

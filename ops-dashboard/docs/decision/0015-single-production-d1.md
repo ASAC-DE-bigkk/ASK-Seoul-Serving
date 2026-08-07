@@ -95,7 +95,7 @@ D1"** 으로 읽는다 — 원본이 하나라는 취지는 그대로고, 그 �
 | `_ops_slo`·`_ops_domain` | **여기** | 스키마·내용 모두 |
 | `_keys`·`_usage`·`_burst`·`_gateway_request_log` | `../marketplace/migrations/` | 데이터 조치만 — **스키마 불변** |
 | `_ops_run_event` 외 3종 | ASAC-DAG | 읽기 — **스키마 불변** |
-| `_catalog`·`_publication_ledger` | 도메인 export(dbt) | 읽기 — **스키마 불변** |
+| `_catalog`·`_publication_ledger`·`d1_catalog_display` | 도메인 export(dbt) | 읽기 — **스키마 불변** |
 
 - DDL(`CREATE`·`ALTER`·`DROP` …)은 `scripts/d1-query.mjs` 가 **전부 막는다.** 대상 표가
   무엇이든 스키마는 마이그레이션 장부를 거쳐야 한다([0007](0007-schema-single-file-reset.md)).

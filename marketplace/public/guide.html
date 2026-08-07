@@ -66,6 +66,7 @@
       <a href="#start">시작하기</a>
       <a href="#limits">한도와 갱신</a>
       <a href="#join">여러 도메인 함께 쓰기</a>
+      <a href="#mcp">AI 에이전트로 쓰기</a>
       <a href="#faq">자주 묻는 질문</a>
     </nav>
   </div>
@@ -100,7 +101,8 @@
 
   <section id="how">
     <h2>어떻게 만들어지나 <span class="en">Pipeline</span></h2>
-    <p>매일 정해진 시각에 아래 세 단계가 자동으로 돕니다. 사람이 손으로 올리는 데이터는 없습니다.</p>
+    <p>정해진 시각에 아래 세 단계가 자동으로 돕니다 — 도메인에 따라 <b>매시간</b> 또는 <b>매일</b>입니다.
+      사람이 손으로 올리는 데이터는 없습니다.</p>
     <div class="flow">
       <div class="st">
         <div class="lab">1 · Collect</div>
@@ -145,7 +147,10 @@
       </div>
     </div>
     <pre><code><span class="k">curl</span> -H <span class="s">"Authorization: Bearer &lt;API_KEY&gt;"</span> \
-  <span class="s">"https://&lt;호스트&gt;/api/v1/data/gold_culture_event_schedule?limit=10"</span></code></pre>
+  <span class="s">"https://&lt;호스트&gt;/api/v1/data/culture_event_schedule?limit=10"</span></code></pre>
+    <p>주소에 들어가는 이름은 <b>제품 id</b>(<code>culture_event_schedule</code>)입니다 —
+      카탈로그에 표시된 값을 그대로 쓰시면 됩니다. 저장소 안의 테이블 이름은 저희 사정이라
+      바뀔 수 있고, <b>제품 id 는 바뀌지 않습니다.</b></p>
     <p>파라미터·오류 코드·페이지네이션을 포함한 전체 규격은 <a href="/docs">API 문서</a>에 있습니다.
       브라우저에서 바로 실행해 보시려면 <a href="/catalog#playground">플레이그라운드</a>를 쓰세요.</p>
   </section>
@@ -161,7 +166,7 @@
           <tr><td class="nw"><b>분당 한도</b></td><td class="nw">60회</td><td>가용성 보호용입니다. 초과하면 <code>429</code> 와 함께 재시도 시각을 알려드립니다.</td></tr>
           <tr><td class="nw"><b>미리보기</b></td><td class="nw">무과금</td><td>키 없이 쓰는 샘플 5행은 일일 한도를 소모하지 않습니다.</td></tr>
           <tr><td class="nw"><b>한 번에 받는 행</b></td><td class="nw">최대 5,000행</td><td>그 이상은 커서로 이어받습니다.</td></tr>
-          <tr><td class="nw"><b>갱신 주기</b></td><td class="nw">매일 1회</td><td>제품별 마지막 발행 시각은 <a href="/status">상태 페이지</a>에 있습니다.</td></tr>
+          <tr><td class="nw"><b>갱신 주기</b></td><td class="nw">매시간 ~ 매일</td><td>도메인마다 다릅니다 — 인구·도시와 대중교통, 도로 소통은 <b>매시간</b>, 문화·행사는 <b>매일 1회</b>입니다. 제품별 마지막 발행 시각은 <a href="/status">상태 페이지</a>에 있습니다.</td></tr>
           <tr><td class="nw"><b>키 발급</b></td><td class="nw">IP당 시간당 5회</td><td>이메일 1개에 키 1개입니다.</td></tr>
         </tbody>
       </table>
@@ -188,6 +193,37 @@
       API 응답에서는 <code>join_keys</code> 필드로 내려갑니다.</p>
   </section>
 
+  <section id="mcp">
+    <h2>AI 에이전트로 쓰기 <span class="en">MCP</span></h2>
+    <p>REST 말고 <b>MCP</b>(Model Context Protocol) 로도 같은 데이터를 씁니다. Claude·Cursor 같은
+      MCP 클라이언트에 서버 주소를 등록하면, 에이전트가 <b>어떤 제품이 있는지 스스로 찾아보고</b>
+      필요한 것만 골라 질의합니다. 사람이 카탈로그를 뒤져 컬럼 이름을 찾아 주지 않아도 됩니다.</p>
+    <pre><code><span class="c"># MCP 클라이언트 설정 (Streamable HTTP)</span>
+  <span class="s">"url"</span>: <span class="s">"https://&lt;호스트&gt;/mcp"</span>
+  <span class="s">"headers"</span>: { <span class="s">"Authorization"</span>: <span class="s">"Bearer &lt;API_KEY&gt;"</span> }</code></pre>
+    <p><b>키는 사람이 받아 설정에 넣어 주셔야 합니다</b> — 에이전트는 브라우저를 열 수 없어
+      스스로 로그인하지 못합니다. REST 와 <b>같은 키·같은 한도</b>를 씁니다.</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>도구</th><th>하는 일</th><th>쿼터</th></tr></thead>
+        <tbody>
+          <tr><td class="nw"><code>list_products</code></td><td>제품 목록 — 대표 질문·조인키·설명. 어느 제품이 맞는지 고를 때 먼저 부릅니다.</td><td class="nw">무과금</td></tr>
+          <tr><td class="nw"><code>describe_product</code></td><td>제품 상세 — 컬럼 설명·시간축·검증된 질의 패턴·출처.</td><td class="nw">무과금</td></tr>
+          <tr><td class="nw"><code>preview_product</code></td><td>5행 미리보기 — 필터에 넣을 값의 실제 예시를 봅니다.</td><td class="nw">무과금</td></tr>
+          <tr><td class="nw"><code>query_product</code></td><td>데이터 조회 — 등가 필터·기간·커서.</td><td class="nw">1회</td></tr>
+          <tr><td class="nw"><code>run_pattern</code></td><td><b>검증된 질의 패턴 실행(권장)</b> — 도메인 담당자가 미리 검증해 둔 질의를 그대로 돌립니다.</td><td class="nw">1회</td></tr>
+          <tr><td class="nw"><code>check_quota</code></td><td>남은 일일 쿼터 확인.</td><td class="nw">무과금</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><b><code>run_pattern</code> 을 권합니다.</b> 에이전트가 필터를 스스로 조립하면 틀린 질의를 만들 수 있는데,
+      이 도구는 <b>검증을 마친 질의만</b> 돌리므로 답이 어긋날 여지가 적습니다.
+      쓸 수 있는 패턴은 <code>describe_product</code> 응답에 들어 있습니다.</p>
+    <p>기계가 읽는 요약은 <a href="/llms.txt">/llms.txt</a>, 전체 규격은
+      <a href="/openapi.json">/openapi.json</a> 에 있습니다.</p>
+  </section>
+
   <section id="faq">
     <h2>자주 묻는 질문 <span class="en">FAQ</span></h2>
     <div class="faq">
@@ -199,9 +235,12 @@
       <details>
         <summary>실시간 데이터인가요?</summary>
         <div class="a"><p>아닙니다. 원천이 실시간이더라도(예: 실시간 인구, 도로 소통) 이 API 가 내보내는 것은
-          <b>발행 시점의 스냅샷</b>입니다. 매일 1회 발행되므로, 지금 이 순간의 값이 필요하시면
-          원천 API 를 직접 쓰시는 편이 맞습니다.</p>
-          <p>제품마다 마지막 발행이 언제였는지는 <a href="/status">서비스 상태</a>와 카탈로그에서 확인하실 수 있습니다.</p></div>
+          <b>발행 시점의 스냅샷</b>입니다. 다만 <b>발행 주기는 도메인마다 다릅니다</b> — 실시간성이 중요한
+          쪽은 <b>매시간</b> 발행합니다.</p>
+          <p><b>초 단위의 지금 값</b>이 필요하시면 원천 API 를 직접 쓰시는 편이 맞습니다.
+          이 API 는 <b>같은 축으로 붙여 놓은 이력</b>이 필요할 때 쓰는 쪽에 가깝습니다.</p>
+          <p>제품마다 마지막 발행이 언제였는지는 <a href="/status">서비스 상태</a>와 카탈로그에서 확인하실 수 있고,
+          응답의 <code>exported_at</code> 으로도 확인하실 수 있습니다.</p></div>
       </details>
       <details>
         <summary>수치가 서울시 공식 발표와 다릅니다.</summary>
@@ -214,7 +253,7 @@
         <summary>상업적으로 이용해도 되나요?</summary>
         <div class="a"><p>저희가 허락하거나 제한할 수 있는 부분이 아닙니다.
           <b>각 원천 데이터 제공기관의 이용조건이 우선</b>하며, 기관마다 공공누리 유형과 상업적 이용 가능 여부가 다릅니다.
-          원천별 제공기관과 조건은 <a href="/legal#attribution">데이터 출처</a>에 표로 정리해 두었습니다.</p>
+          원천별 제공기관과 조건은 <a href="/attribution">데이터 출처</a>에 표로 정리해 두었습니다.</p>
           <p>인용하실 때는 원천 제공기관과 이 서비스를 <b>함께</b> 표시해 주세요.
           가공이 들어갔기 때문에 원천만 표시하면 그 기관의 공식 수치로 오인될 수 있습니다.</p></div>
       </details>
@@ -232,7 +271,7 @@
         <div class="a"><p>직접 하실 수 있습니다. <a href="/catalog#auth">카탈로그 상단의 인증 영역</a>에서
           <b>키 폐기</b>를 누르면 키가 즉시 무효가 되고, 이어서 <b>이메일·기록까지 삭제</b>를 누르면
           이메일과 사용량 기록이 지워집니다. 문의를 기다리실 필요가 없습니다.</p>
-          <p>자세한 보관 항목과 기간은 <a href="/legal#privacy">개인정보 처리방침</a>에 있습니다.</p></div>
+          <p>자세한 보관 항목과 기간은 <a href="/privacy">개인정보 처리방침</a>에 있습니다.</p></div>
       </details>
       <details>
         <summary>429 오류가 납니다.</summary>
@@ -281,7 +320,11 @@
   <div class="foot-in">
     <div class="fcol">
       <b>ASK: SEOUL</b>
-      <span>서울 공공데이터를 행정동 코드 하나로 붙여 쓰는 API 허브</span>
+      <!-- ⚠️ "행정동 코드 하나로"라고 쓰지 않는다(2026-08-07 정정). 실측: 공개 55종 중
+           행정동 축은 23종(42%)뿐이고 자치구 축이 32종(58%)으로 더 많으며, 21종(38%)은
+           조인 축이 아예 없다. 축이 셋인데 하나처럼 말하면 카탈로그를 여는 순간 어긋난다.
+           시간 축도 빼지 않는다 — 히어로가 "시간과 공간 두 축"이라고 말한다. -->
+      <span>서울 공공데이터를 시간·공간 같은 축 위에 올린 API 허브</span>
     </div>
     <div class="fcol">
       <b>서비스</b>
@@ -297,14 +340,13 @@
     </div>
     <div class="fcol">
       <b>정책</b>
-      <a href="/legal#attribution">데이터 출처</a>
-      <a href="/legal#terms">이용약관</a>
-      <a href="/legal#privacy">개인정보 처리방침</a>
+      <a href="/attribution">데이터 출처</a>
+      <a href="/terms">이용약관</a>
+      <a href="/privacy">개인정보 처리방침</a>
     </div>
   </div>
   <div class="foot-btm">
     <span>© 2026 ASK: SEOUL</span>
-    <span class="r">가용성을 보장하지 않습니다</span>
   </div>
 </footer>
 

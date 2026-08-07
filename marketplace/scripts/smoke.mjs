@@ -98,15 +98,16 @@ for (const [name, path] of [["/legal", "/legal"], ["/llms.txt", "/llms.txt"], ["
   });
 }
 
-// 7) 발급 경로가 닫혀 있지 않은가 — 솔트 미설정이면 503 이 난다(시크릿 누락 조기 발견).
-//    실제로 발급하지 않고 잘못된 본문으로 400 을 유도해, 503 인지 아닌지만 구분한다.
-await check("발급 경로 활성(솔트 설정 확인)", async () => {
+// 7) 폐지된 이메일 발급 경로가 **안내와 함께** 닫혀 있는가.
+//    쓰기를 하지 않는다 — 403 이라 애초에 키가 만들어지지 않는다.
+await check("이메일 발급 경로 폐지 확인", async () => {
   const r = await fetch(`${BASE}/api/v1/keys`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}),
   });
-  must(r.status !== 503, "503 issuance disabled — ISSUANCE_SALT 시크릿 미설정");
-  must(r.status === 400, `기대 400(잘못된 본문), 실제 ${r.status}`);
-  return "400 (솔트 설정됨, 발급 자체는 시도하지 않음)";
+  must(r.status === 403, `기대 403(폐지), 실제 ${r.status}`);
+  const b = await r.json().catch(() => ({}));
+  must(b.auth_url === "/api/v1/auth/google", "403 에 auth_url 안내가 없다");
+  return "403 · auth_url 안내 있음";
 });
 
 // 8) MCP 발견 단계 — PlayMCP·claude.ai 등록의 첫 관문(#26). 인증·쿼터 미소모 설계라

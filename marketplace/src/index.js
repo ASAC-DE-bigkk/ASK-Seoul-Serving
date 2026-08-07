@@ -8,7 +8,7 @@
 // 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
 import {
   json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC, ATTRIBUTION,
-  authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent, normalizeEmail, safeRows,
+  authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent, safeRows,
   parseJsonArray, loadRedistributionRights, redistributionBlockers, rightsBlockedProblem,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
@@ -48,86 +48,9 @@ function decodeCursor(raw) {
   return { rid, stamp: text.slice(at + 1) };
 }
 
-async function issueKey(env, request) {
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return problem(400, "invalid body", "JSON body { email } 이 필요하다");
-  }
-  // 정규화 → 검증 (#109). 후행 점 같은 동치 표기를 먼저 합쳐야 `_keys.email UNIQUE` 가
-  // "이메일당 1키"를 실제로 지킨다 — 정규화 규칙과 근거는 shared.js 의 normalizeEmail.
-  const email = normalizeEmail(body.email);
-  if (!email)
-    return problem(400, "invalid email", "올바른 이메일 형식이 아니다");
-
-  // 발급 rate limit 의 IP 축은 원문을 저장하지 않는다(#9 §7-①·⑥) — 일 회전 솔트 해시.
-  // 같은 날 안에서만 같은 값이라 시간당 카운트는 성립하고, 날이 바뀌면 대응이 끊겨
-  // 장기 추적 축이 되지 못한다. 자정 경계에서 카운터가 리셋돼 상한 2배까지 통과
-  // 가능하지만 시간당 5회 상한이라 실해가 없다. 컬럼명 ip 는 유지 — 이름 변경은
-  // 증분 규약 위반이고 바뀌는 건 내용물뿐이다.
-  //
-  // 솔트가 없으면 해시가 아니라 인코딩이다 — IPv4 는 43억 조합이라 전수 대입으로 원문이
-  // 복원된다. 그래서 미설정이면 **발급만** 닫는다(조회 경로는 영향 없음). 기본값을 안전한
-  // 쪽에 두는 게 목적이라, 배포 때 시크릿을 잊으면 열린 채 도는 게 아니라 막힌 채 돈다.
-  // 콘솔의 'ops write disabled' 503 과 같은 방식.
-  const salt = String(env.ISSUANCE_SALT || "").trim();
-  if (!salt)
-    return problem(503, "issuance disabled",
-      "ISSUANCE_SALT 미설정 — 발급 기록의 IP 해시에 솔트가 없으면 원문 IP 를 복원할 수 있어 발급을 막는다. " +
-      "로컬은 marketplace/.dev.vars 에, 배포 환경은 `wrangler secret put ISSUANCE_SALT` 로 설정할 것");
-  const rawIp = request.headers.get("cf-connecting-ip") || "local";
-  const ip = await sha256hex(`${kstDay()}|${salt}|${rawIp}`);
-  const hourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
-  const { results: recent } = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM _issuance_log WHERE ip = ? AND created_at > ?"
-  ).bind(ip, hourAgo).all();
-  if (recent[0].n >= ISSUE_HOURLY_CAP)
-    return problem(429, "issuance rate limited", `발급은 IP당 시간당 ${ISSUE_HOURLY_CAP}회까지다`);
-
-  const key = newKey();
-  const hash = await sha256hex(key);
-  const prefix = key.slice(0, 8);
-  const now = new Date().toISOString();
-
-  // 이메일당 1키: 기존 키가 있으면 rotate — 해시 교체 + 오늘 사용량 승계(rotate 로 쿼터 리셋 방지)
-  const existing = await env.DB.prepare("SELECT key_hash, key_prefix FROM _keys WHERE email = ?")
-    .bind(email).first();
-
-  // rotate 는 기존 키를 즉시 무효화하는 파괴적 동작 — confirm_rotate 없이는 실행하지 않는다
-  if (existing && body.confirm_rotate !== true)
-    return problem(409, "rotate confirmation required",
-      `'${email}' 에는 이미 키(${existing.key_prefix}…)가 있다 — 재발급하면 기존 키가 즉시 만료된다. ` +
-      "계속하려면 body 에 confirm_rotate: true 를 추가할 것",
-      { email, key_prefix: existing.key_prefix });
-
-  const statements = [];
-  let rotated = false;
-  if (existing) {
-    rotated = true;
-    statements.push(
-      env.DB.prepare("UPDATE _usage SET key_hash = ? WHERE key_hash = ?").bind(hash, existing.key_hash),
-      env.DB.prepare(
-        "UPDATE _keys SET key_hash = ?, key_prefix = ?, status = 'active', created_at = ? WHERE email = ?"
-      ).bind(hash, prefix, now, email)
-    );
-  } else {
-    statements.push(
-      env.DB.prepare(
-        "INSERT INTO _keys (key_hash, key_prefix, email, created_at) VALUES (?, ?, ?, ?)"
-      ).bind(hash, prefix, email, now)
-    );
-  }
-  statements.push(
-    env.DB.prepare("INSERT INTO _issuance_log (ip, created_at) VALUES (?, ?)").bind(ip, now),
-    // rate limit 창은 1시간 — 하루 지난 행은 유지할 이유가 없다(24h sweep, #9 §7-⑥)
-    env.DB.prepare("DELETE FROM _issuance_log WHERE created_at < ?")
-      .bind(new Date(Date.now() - 86400000).toISOString())
-  );
-  await env.DB.batch(statements);
-
-  return json({ key, key_prefix: prefix, rotated, note: "이 키는 지금 한 번만 표시된다 — 저장해 둘 것" }, 201);
-}
+// 이메일 발급(POST /api/v1/keys)은 폐지했다(2026-08-07) — 주소 소유가 확인되지 않은 채로
+// 키를 내주지 않기 위해서다(#110 ②). 발급 배선은 아래 OAuth 절 하나뿐이고,
+// `_issuance_log`·`ISSUE_HOURLY_CAP`·IP 해시는 **그쪽이 계속 쓴다**(지우면 안 된다).
 
 // ── Google OAuth 발급 경로 (#110 ②) ─────────────────────────────────────────
 // 순수 로직(state 서명·ID 토큰 판정)은 src/google-oauth.js 에 있고 단독 테스트가 붙어 있다.
@@ -310,8 +233,12 @@ const CATALOG_CACHE_HEADER = `public, max-age=${CATALOG_STALE_TTL}`;
 // 캐시를 지우는 대신 **키를 가른다**: 정책이 바뀌면 다른 칸을 보므로 즉시 새 값이 나가고,
 // 옛 칸은 TTL 로 알아서 만료된다.
 // 테스트가 키를 하드코딩하면 다음에 축을 하나 더 섞을 때 조용히 어긋난다 — 그래서 내보낸다.
-export const catalogCacheKey = (env) =>
-  `https://catalog.internal/api/v1/catalog?ki=${isConfigured(env) ? "google_oauth" : "email"}`;
+// 🐛 2026-08-06 사고의 잔상: 응답 본문에 `key_issuance` 가 들어 있는데 캐시 키에 그 축이
+// 없어서, 발급 방식을 바꾼 뒤 최대 10분간 **옛 방식이 그대로 나갔다**(화면은 이메일 폼,
+// 제출은 403). 그래서 키에 축을 섞었었다.
+// 이메일 발급을 폐지(2026-08-07)하면서 그 축은 **상수가 됐다** — 가를 것이 없어 뺀다.
+// ⚠️ 응답 본문에 **환경마다 달라지는 값**을 다시 넣게 되면 그 축을 여기 되살려야 한다.
+export const catalogCacheKey = () => "https://catalog.internal/api/v1/catalog";
 
 // 캐시에 담긴 사본의 나이(초). `x-cached-at` 이 없으면 옛 형식이라 만료로 본다.
 const cachedAgeSeconds = (res) => {
@@ -453,11 +380,10 @@ async function buildCatalog(env, cache, cacheKey) {
     attribution: ATTRIBUTION,
     docs: "/llms.txt",
     openapi: "/openapi.json",
-    // 키를 어떻게 받는지는 **화면을 안 거치는 소비자에게도** 필요하다(#110 ②). 환경마다
-    // 갈리므로(로컬은 이메일, 배포는 Google) 문서에 못 박지 않고 응답이 말한다.
-    key_issuance: isConfigured(env)
-      ? { method: "google_oauth", start: "/api/v1/auth/google" }
-      : { method: "email", start: "POST /api/v1/keys" },
+    // 키를 어떻게 받는지는 **화면을 안 거치는 소비자에게도** 필요하다(#110 ②).
+    // 이메일 발급 폐지(2026-08-07) 후로 방법은 하나뿐이지만 필드는 유지한다 — 소비자가
+    // 문서가 아니라 **응답을 보고** 알게 하는 것이 이 필드의 목적이다.
+    key_issuance: { method: "google_oauth", start: "/api/v1/auth/google" },
     join_axes: JOIN_AXES,
     products: results.map((r) => {
       const columns = JSON.parse(r.columns).map((c) => ({
@@ -644,6 +570,11 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
   trace.productId = productId;
   if (!/^[a-z0-9_]+$/.test(String(productId)) || !/^[a-z0-9_]+$/.test(String(patternId)))
     return problem(400, "invalid id", "product_id·pattern_id 형식이 아니다");
+  // 형식 검사를 **통과한 뒤에** 남긴다 — 실패 요청도 무엇을 찾았는지 남아야 하지만
+  // (`trace.table = id` 와 같은 이유), 검사 전이면 아무 문자열이나 로그에 실린다.
+  // 슬러그 모양만 통과하므로 여기서부터는 값-최소화(0001)를 깨지 않는다.
+  // 404·409 로 끝나도 남는다: "무슨 패턴을 부르다 막혔나"가 곧 수요 신호다.
+  trace.patternId = patternId;
   // 카탈로그를 먼저 통과한다(#132 사후 리뷰 ①) — 조회 4경로가 전부 같은 문(external=1)을
   // 지나야 한다. 지금은 publisher 가 비공개 제품에 패턴을 안 실어 우연히 안전하지만,
   // 코드가 지키지 않으면 그 우연이 깨지는 날 열린다. 부수로 404 구분(제품/패턴)·
@@ -765,7 +696,7 @@ export const LOG_COLUMNS = [
   // 행동 로그 (#9 · agreement §3-1) — 원문은 하나도 없다. UA 는 분류 상수로, Referer 는
   // 호스트로, IP 는 아예 안 본다(§3-2). 미배선으로 남는 셋은 아래 주석에 이유를 적었다.
   "ua_class", "agent_name", "agent_mode", "agent_verified", "country", "asn", "referer_host",
-  "publication_id",
+  "publication_id", "pattern_id",
 ];
 
 export function logValues(trace, env) {
@@ -788,14 +719,20 @@ export function logValues(trace, env) {
     trace.country ?? null, trace.asn ?? null, trace.refererHost ?? null,
     // 어느 게시본을 읽었는지 — 제품을 해석한 핸들러만 안다(카탈로그·미리보기·데이터·skill).
     trace.publicationId ?? null,
+    // 어느 검증 패턴을 돌렸는지(ASAC-DAG#642) — `run_pattern` 만 채운다. 나머지 경로는
+    // 패턴이라는 개념 자체가 없어 NULL 이 맞다(§4-3: 없는 것을 0·'' 로 꾸미지 않는다).
+    trace.patternId ?? null,
   ];
 }
 
-// 아직 채우지 않는 둘 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
+// 아직 채우지 않는 하나 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
 //
 //   page_path       정적 페이지·기계 문서는 `run_worker_first` 밖이라 워커에 닿지 않는다.
 //                   관측하려면 §3-4 의 6경로를 워커로 통과시키는 결정이 먼저다(#63 ④).
-//   pattern_id      패턴 실행 API(ASAC-DAG#642 안 C)가 아직 없다. 소비자가 생기면 붙인다.
+//
+// `pattern_id` 는 배선됐다 — "패턴 실행 API 가 아직 없다"가 미룬 이유였고 `run_pattern`(#132)
+// 이 그 소비자다. 이걸로 ASAC-DAG#642 의 로깅 키 `(product_id, pattern_id, publication_id)`
+// 세 축이 한 행에 모인다.
 
 async function logRequest(env, trace) {
   try {
@@ -818,16 +755,13 @@ async function logRequest(env, trace) {
 async function route(request, env, url, trace, ctx) {
   const path = url.pathname;
 
+  // 폐지된 이메일 발급 경로. **경로 자체는 안내용으로 남긴다** — 지우면 아래 405 분기로
+  // 떨어져 "왜 안 되는지"를 못 말하고, 같은 주소의 DELETE 는 살아 있어 더 헷갈린다.
   if (path === "/api/v1/keys" && request.method === "POST") {
     trace.route = "keys";
-    // OAuth 가 설정된 환경에서는 이 문을 닫는다(#110 ②). 확인되지 않은 주소로 키가 나가면
-    // OAuth 를 붙인 의미가 없다 — 두 문을 열어 두면 느슨한 쪽으로만 온다.
-    // 미설정(로컬·테스트)에서는 그대로 동작한다: 설정 여부가 곧 정책이다.
-    if (oauthConfigured(env))
-      return problem(403, "email issuance disabled",
-        "이 환경은 Google 로그인으로만 키를 발급한다 — GET /api/v1/auth/google 로 시작할 것",
-        { auth_url: "/api/v1/auth/google" });
-    return issueKey(env, request);
+    return problem(403, "email issuance disabled",
+      "이메일 발급은 폐지됐다 — GET /api/v1/auth/google 로 발급받을 것",
+      { auth_url: "/api/v1/auth/google" });
   }
   // ── Google OAuth (#110 ②) — 목적은 로그인이 아니라 **이메일 소유 확인**이다 ──────────
   if (path === "/api/v1/auth/google" && request.method === "GET") {

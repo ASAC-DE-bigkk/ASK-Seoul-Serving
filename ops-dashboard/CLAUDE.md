@@ -50,7 +50,7 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 | 실행 기록 | 무엇이 돌았고, 무엇이 조용한가 | **조회 DB 4종** `_ops_run_event` 외 (ASK-Seoul#78, → [0009](docs/decision/0009-ops-records-consumption.md)) |
 | 응답 상태 | 외부에 잘 나가고 있나 | `_gateway_request_log` (게이트웨이가 쌓는다) |
 | 이용 행동 | 누가·무엇이·어떻게 쓰나 | `_gateway_request_log` + `_keys` + 행동 스펙 초안 #9 (→ [0010](docs/decision/0010-behavior-log-console-first.md)) |
-| API 사용량 | 무엇이 얼마나 쓰이나 | `_gateway_request_log` + `_catalog` |
+| API 사용량 | 무엇이 얼마나 쓰이나 | `_gateway_request_log` + `_catalog` + `d1_catalog_display`(표시명) |
 | 이용자 키 | 누가 쓰고, 손댈 게 있나 | `_keys` + `_usage` + `_gateway_request_log` |
 
 탭 이름은 **화면 문구 규약(§5)** 을 따른다 — "파이프라인 품질"·"서빙 품질" 대신
@@ -65,6 +65,8 @@ reference/ 의 내용은 채택 근거가 아니다 — 채택 여부는 언제�
 + 운영 D1 (ask-seoul-prod-d1)       — **하나뿐이다.** 로컬 구동도 여기 직접 붙는다 (0015)
 + migrations/                       — 0001 _ops_slo·_ops_domain(정본) · 0002 조회 DB 4종(IF NOT EXISTS 미러)
 + fixtures/                         — 합성 샘플 (slo_sample · ops_records_sample) — 시드 체인에 없다
+                                      ⚠️ `ops_domain.sql` 만 **합성이 아니다** — 분야 한글 이름의
+                                      정본(참조 내용)이라 운영에 돌린다(manual-steps §4-1)
 ```
 
 🔴 **D1 은 운영 하나뿐이다**([0015](docs/decision/0015-single-production-d1.md)). dev D1 은
@@ -167,7 +169,7 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 |---|---|---|
 | `_ops_slo`, `_ops_domain` | **여기** (`migrations/0001`) | 스키마·내용 모두 |
 | `_ops_run_event`, `_ops_daily_metric`, `_ops_pipeline_state`, `_ops_pipeline_expectation` | ASAC-DAG (`common/ops/d1_ops.py`, ops-d1/v1) | **읽기 전용** — 파이프라인 산출물. 로컬 미러 `migrations/0002` 는 정본을 따라만 간다 |
-| `_catalog`, 제품 표 `d1_*` | 도메인 export (`meta.serving` 계약) | **읽기 전용** — dbt 산출물 |
+| `_catalog`, `d1_catalog_display`, 제품 표 `d1_*` | 도메인 export (`meta.serving` 계약) | **읽기 전용** — dbt 산출물 |
 | `_keys` | 게이트웨이 | `status`·`daily_quota` 갱신, 삭제 — 정해진 조치만 |
 | `_usage`, `_burst` | 게이트웨이 | 키 삭제 시 연쇄 삭제만 |
 | `_gateway_request_log` | 게이트웨이 | 읽기 전용 |
@@ -178,6 +180,13 @@ TypeScript, 모노레포 — **전부 없다.** 없는 이유와 도입 신호�
 NOT EXISTS` 만, DROP·ALTER 없이, 팀 D1 에 이미 있으면 아무 일도 하지 않는 형태여야 한다
 (로컬 화면을 돌려보기 위한 껍데기 — [0009](docs/decision/0009-ops-records-consumption.md)).
 개발용 **표본 데이터**는 `migrations/` 가 아니라 `fixtures/` 에 둔다.
+
+⚠️ **표본과 참조 내용을 한 파일에 섞지 않는다.** 분야 등록부(`_ops_domain`)가
+`slo_live.sql`·`slo_sample.sql` 안에 들어 있었는데, 그 둘이 `DELETE FROM _ops_slo` 로
+시작하는 바람에 **등록부만 채우려 해도 SLO 를 건드려야 했다.** 운영 D1 하나뿐인 환경에서
+둘 다 못 돌릴 파일이라 **등록부가 0행으로 남았고, 화면이 분야를 영문 코드로 불렀다.**
+2026-08-07 에 `fixtures/ops_domain.sql` 로 분리했다 — 표본(못 돌린다)과 참조 내용(돌려야
+한다)은 **적용 가능 여부가 반대**라 같은 파일에 있으면 안 된다.
 
 마이그레이션은 **증분(추가만)** — DROP 금지, 변경은 ALTER 추가 파일로([0007](docs/decision/0007-schema-single-file-reset.md),
 #78 D-6). `0001` 은 더 고치지 않는다. 적용은 장부가 추적한다
@@ -204,6 +213,9 @@ OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) �
 - 쓰기 경로를 고쳤으면 **토큰 미설정(503)·토큰 없음(401)·잘못된 토큰(401)** 을 다 본다.
   ⚠️ 정상 경로(200) 검증은 **실제 고객 키에 하지 않는다.** 확인용 키를 직접 발급해 그것으로만.
 - 화면을 고쳤으면 탭 6개와 배지(수집 전·탭 경고 점) 동작을 본다.
+- API 사용량 탭을 고쳤으면 **선언된 제품과 미선언 제품을 둘 다** 본다(#706) — 목록·분야별
+  목록·상세 셋에서 한글 제목이 뜨는지, 미선언이 표명으로 내려앉는지, 목록 위 미등록 개수
+  안내가 맞는지. 한쪽만 보면 폴백이 깨진 걸 못 잡는다.
 - **화면 스크립트는 띄워서 실제로 눌러 본다** — `node --check` 는 TDZ 를 통과시킨다(실사례 2건).
 - 검증 명령 세트와 실행 기록 탭의 시나리오별 확인법은 [docs/runbook.md](docs/runbook.md).
 
@@ -223,6 +235,7 @@ OS별 사전 준비·증상별 해결은 [../docs/setup.md](../docs/setup.md) �
 | **재사용 UI 규칙**(레이아웃·컴포넌트·툴팁·팔레트) | `public/ui.css`·`public/ui.js` 에 넣고 이 문서 §5 프런트 규약과 맞춘다 — 인라인 `<style>` 로 되돌리지 않는다(캐시·재사용이 목적) |
 | `meta.*` 응답 필드 | [runbook §2](docs/runbook.md) 의 `jq` 예시 (없는 필드를 파면 `null` 이 조용히 나온다) · 환경 매뉴얼의 `curl` 예시 |
 | **게이트웨이 route 값**(추가·개명·삭제) | [0014 §1 값 표](docs/decision/0014-console-route-contract.md) + `public/index.html` 의 `ROUTE_KO` 를 **같은 커밋에서**. 빠지면 화면에 내부 슬러그가 샌다. ⚠️ **퇴역한 값도 남긴다** — 로그는 개명보다 오래 산다(0014 §1-1) |
+| 🔴 **제품의 사람 이름·설명** | 손대는 곳이 화면이 아니라 **정본**이다 — `d1_catalog_display`(ASAC-DAG#706), 그 위는 dbt 의 `meta.serving.display`. `ROUTE_KO` 처럼 화면에 제품 번역표를 만들지 않는다: route 는 값이 17종으로 닫혀 있지만 제품은 계속 늘고 줄어 **손 사본이 반드시 어긋난다**(마켓플레이스가 `product-display.json`·`column-docs.json`·`usage-patterns.json` 으로 세 번 겪었다). 화면이 고칠 수 있는 것은 **없을 때 어떻게 내려앉나**뿐이고, 그건 표명 폴백이다 |
 | **무엇을 '데이터 서빙'으로 세나** | [0014 §2](docs/decision/0014-console-route-contract.md) 의 `SERVE_ROUTES` **한 곳만** — 배열이 정본이고 SQL·`meta.serve_routes` 가 거기서 나온다. 다섯 곳에 흩어 뒀던 것이 #63 사고의 원인이다 |
 | 🔴 **서빙 로그를 읽는 새 질의** | `gwWhere(env)`(별칭 있으면 `gwWhereR`)를 **반드시 건다**(#64). 안 걸면 `local`·`dev` 요청이 운영 지표에 조용히 합산된다. 일부러 안 거는 자리(요청 추적·환경 분포)는 **코드에 근거를 적는다** — 그 둘뿐이다 |
 | `wrangler.toml` 환경·바인딩 | [../docs/environments.md](../docs/environments.md) · README · [0011](docs/decision/0011-per-env-config.md) · **환경을 늘렸으면 매뉴얼 한 장을 새로 쓰고 [../docs/index.md](../docs/index.md) 에 매핑** |

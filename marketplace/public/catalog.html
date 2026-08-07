@@ -169,29 +169,29 @@
                   transition:border-color .12s, box-shadow .12s; }
   input:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
   .row input { flex:1; min-width:0; }
-  button { font:inherit; font-size:13.5px; font-weight:600; border:0; border-radius:6px; padding:7px 14px;
-           cursor:pointer; transition:background .12s, border-color .12s; }
-  button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  /* 🐛 모양을 `button` 요소에 걸어 뒀더니 **같은 모양의 `<a>` 가 못 받았다** — OAuth 시작
+     링크(`a.btn-p`)가 padding·radius 없이 배경색만 얻어 '색칠된 밑줄 글자'로 보였다.
+     모양은 요소가 아니라 **역할(.btn-*)** 에 건다(index.html 이 이미 그 방식이다). */
+  button, .btn-p, .btn-g { font:inherit; font-size:13.5px; font-weight:600; border:0; border-radius:6px;
+           padding:7px 14px; cursor:pointer; transition:background .12s, border-color .12s; }
+  a.btn-p, a.btn-g { display:inline-flex; align-items:center; justify-content:center; text-decoration:none; }
+  button:focus-visible, a.btn-p:focus-visible, a.btn-g:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .btn-p { background:var(--accent); color:var(--accent-ink); box-shadow:var(--shadow-xs); }
   .btn-p:hover { background:var(--accent-hover); }
   .btn-g { background:var(--panel); color:var(--muted); border:1px solid var(--line-strong);
            box-shadow:var(--shadow-xs); }
   .btn-g:hover { border-color:var(--accent); color:var(--accent-deep); }
   .btn-sm { padding:4px 10px; font-size:12.5px; }
-  .reveal { display:none; margin-top:10px; border:1px solid var(--accent-line); background:var(--accent-soft);
-            border-radius:6px; padding:10px 12px; }
-  .reveal .k { display:flex; gap:8px; align-items:center; }
-  .reveal code { font-family:var(--mono); font-size:12.5px; font-weight:700; word-break:break-all; flex:1;
-                 color:var(--accent-deep); }
-  .reveal .warn { font-size:12px; color:var(--red-ink); margin-top:6px; }
-  .ferr { font-size:13px; color:var(--red-ink); margin-top:8px; line-height:1.5; }
   .revoke { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px;
             padding-top:10px; border-top:1px solid var(--line); }
   .revoke span { font-size:12px; color:var(--faint); line-height:1.5; }
   .revoke span.done { color:var(--green-ink); }
   .pager { display:flex; align-items:center; gap:10px; margin-top:10px; }
   .pager span { font-size:12px; color:var(--faint); font-variant-numeric:tabular-nums; }
-  .consent { font-size:12px; color:var(--faint); margin-top:10px; line-height:1.6; }
+  /* 발급 창구 — `align-items` 가 일이다. 그냥 두면 버튼이 칸 너비만큼 늘어난다. */
+  .issue { display:flex; flex-direction:column; align-items:flex-start; }
+  .issue .btn-p { padding:9px 16px; }
+  .consent { font-size:12px; color:var(--faint); margin-top:16px; line-height:1.6; }
   .consent b { color:var(--muted); font-weight:600; }
   .usage .bar { height:6px; background:var(--bg); border:1px solid var(--line); border-radius:999px;
                 overflow:hidden; margin-top:10px; }
@@ -202,6 +202,9 @@
   .sec-title { display:flex; align-items:baseline; gap:10px; margin:4px 0 10px; }
   .sec-title h2 { font-size:15px; font-weight:700; letter-spacing:-.01em; }
   .sec-title .hint { font-size:12px; color:var(--faint); }
+  /* 검색 범위 안내 — 목록 바로 위. 제목줄(.sec-title)의 margin-bottom 을 이 줄이 대신 진다. */
+  .searchhint { font-size:12.5px; color:var(--muted); margin:-4px 0 10px; line-height:1.6; }
+  .searchhint b { color:var(--ink); font-weight:600; }
 
   .plist { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden;
            margin-bottom:30px; box-shadow:var(--shadow-xs); }
@@ -365,8 +368,8 @@
     </ul>
     <!-- 개발자용 페이지라 오류 형식(RFC 7807)은 남긴다 — 그건 붙일 때 실제로 필요한 정보다.
          반면 내부 계약 버전·배치 시각·이슈 번호는 이용자가 알 일이 아니라 뺐다. -->
-    <div class="foot">매일 1회 갱신<br>오류 응답 <code>RFC 7807</code><br>가용성 무보장
-      <br><a href="/legal#attribution">데이터 출처</a> · <a href="/legal#terms">이용약관</a> · <a href="/legal#privacy">개인정보</a>
+    <div class="foot">매시간~매일 갱신<br>오류 응답 <code>RFC 7807</code>
+      <br><a href="/attribution">데이터 출처</a> · <a href="/terms">이용약관</a> · <a href="/privacy">개인정보</a>
       <br>© 2026 ASK: SEOUL</div>
   </aside>
 
@@ -389,35 +392,23 @@
       <div class="auth" id="auth">
         <div>
           <h3>API 키 발급</h3>
-          <div class="row">
-            <!-- pattern 은 type="email" 에 **점 요구 하나만** 더한다(#109). HTML5 의 도메인
-                 규칙(레이블이 영숫자로 시작·끝)은 서버 normalizeEmail 과 이미 같고, 다른 건
-                 HTML5 가 점을 안 요구한다는 것뿐이라 여기서만 보탠다. 규칙 전체를 복제하면
-                 두 곳이 갈린다. -->
-            <input type="email" id="email" placeholder="you@example.com" autocomplete="email" aria-label="이메일"
-                   required pattern="[^@\s]+@[^@\s]+\.[^@\s]+"
-                   title="도메인에 점이 필요합니다 — 예: you@example.com">
-            <button class="btn-p" id="issueBtn">발급</button>
-          </div>
-          <!-- 배포 환경은 Google 로그인으로만 발급한다(#110 ②) — 어느 쪽인지는 서버가
-               `/api/v1/catalog` 의 key_issuance 로 알려 주므로 화면이 골라 보여준다.
-               둘 다 띄워 두면 이용자가 닫힌 문을 먼저 두드린다. -->
-          <div class="row" id="googleAuth" style="display:none">
+          <!-- 발급 창구는 **이것 하나**다(2026-08-07 이메일 발급 폐지, #110 ②). 옛 이메일 입력칸과
+               그 자리에서 키를 보여주던 상자는 지웠다 — 서버가 403 을 주므로 눌러도 안 되는 문이었고,
+               JS 가 뒤늦게 숨기는 구조라 로딩 동안 잠깐 보였다. OAuth 는 키를 **콜백 페이지**에서
+               한 번 보여준다(src/index.js authPage) — 그래서 이 화면에는 키를 그릴 자리가 없다.
+               ⚠️ `display:none` 은 **인라인에만** 둔다 — JS 가 `style.display = ""` 로 되돌리므로
+               클래스 쪽에 숨김을 넣으면 영영 안 나타난다. -->
+          <div class="issue" id="googleAuth" style="display:none">
             <a class="btn-p" href="/api/v1/auth/google">Google 계정으로 키 발급</a>
-            <span class="dim" style="font-size:.9rem">이메일 소유 확인을 Google 이 대신합니다</span>
           </div>
-          <div class="reveal" id="keyReveal">
-            <div class="k"><code id="keyValue"></code><button class="btn-g btn-sm" id="copyKey">복사</button></div>
-            <div class="warn" id="keyNote">이 키는 지금 한 번만 표시됩니다 — 서버에는 해시만 저장됩니다.</div>
-          </div>
-          <div class="ferr" id="issueErr"></div>
-          <!-- 고지는 수집 지점에 있어야 의미가 있다 — 이메일을 실제로 받는 곳이 여기다 -->
-          <div class="consent">발급하면 <a href="/legal#terms">이용약관</a>과 <a href="/legal#privacy">개인정보 처리방침</a>에 동의하는 것으로 봅니다.
+          <!-- 고지는 **수집이 시작되는 지점**에 있어야 의미가 있다. 이제 이메일을 입력받지는
+               않지만, 이 버튼을 누르면 Google 이 주소를 넘겨준다 — 여기가 그 출발점이다. -->
+          <div class="consent">발급하면 <a href="/terms">이용약관</a>과 <a href="/privacy">개인정보 처리방침</a>에 동의하는 것으로 봅니다.
             이메일은 <b>이메일당 1키 식별</b>에만 쓰고, 키 원문은 저장하지 않습니다.</div>
         </div>
         <div class="usage">
           <h3>내 사용량</h3>
-          <div class="row"><input type="password" id="pKey" placeholder="ask_… (발급 시 자동 입력)" autocomplete="off"><button class="btn-g" id="keyEye" title="키 보기/가리기" aria-label="키 보기/가리기">보기</button><button class="btn-g" id="meBtn">조회</button></div>
+          <div class="row"><input type="password" id="pKey" placeholder="ask_… (발급받은 키를 붙여넣으세요)" autocomplete="off"><button class="btn-g" id="keyEye" title="키 보기/가리기" aria-label="키 보기/가리기">보기</button><button class="btn-g" id="meBtn">조회</button></div>
           <div class="bar"><div class="fill" id="quotaFill"></div></div>
           <div class="txt"><span id="quotaWho">—</span><span id="quotaTxt">— / —</span></div>
           <!-- 파괴적 동작이라 2단계 — 발급의 rotate 확인과 같은 규칙 -->
@@ -430,6 +421,12 @@
       </div>
 
       <div class="sec-title" id="catalog"><h2 id="listTitle">전체 제품</h2><span class="hint" id="listHint"></span></div>
+      <!-- 검색이 무엇을 뒤지는지 알린다. `visible()` 은 제품명·설명뿐 아니라 **활용 예시의
+           질문(usage_patterns.question_ko)까지** 훑는데, 사람들은 보통 제품명만 찾는다고
+           생각해 짧은 질문을 넣어 볼 생각을 못 한다. 실측: "비" 한 글자가 6개 도메인 35종에
+           걸린다. 칩을 또 두는 것보다 이 한 줄이 값이 크다(2026-08-07). -->
+      <p class="searchhint">제품 이름과 설명은 물론 <b>활용 예시의 질문까지</b> 함께 찾습니다.
+        <b>“행사 혼잡”</b>처럼 낱말을 띄어 쓰면 <b>모두 포함한 제품</b>만 남아, 도메인을 엮어 볼 때 좋습니다.</p>
       <div class="plist">
         <div class="phead"><span>제품명</span><span>제품 설명</span><span>활용 예시</span><span></span></div>
         <div id="plistBody"></div>
@@ -552,7 +549,6 @@ async function boot() {
   // 값이 없으면(옛 배포본) 손대지 않는다 — 화면이 비어 버리는 것보다 낫다.
   if (catalog.key_issuance && catalog.key_issuance.method === "google_oauth") {
     $("googleAuth").style.display = "";
-    $("email").closest(".row").style.display = "none";
   }
   // 설명·표시명이 없어도 카탈로그는 그대로 뜬다 — 부가 정보라 실패를 삼킨다
   // 검증된 질의 예시(usage) — 라이브 d1_usage_patterns(commerce) + culture Phase 0 검증분.
@@ -605,7 +601,7 @@ function renderStart() {
     step(3, "바로 호출하기", "curl 한 줄 · JSON 응답", "#playground");
   $("terms").innerHTML =
     "<span>키당 하루 <b>1,000회</b> · 분당 <b>60회</b></span>" +
-    "<span>매일 1회 갱신</span>" +
+    "<span>매시간~매일 갱신</span>" +
     "<span>REST · JSON 표준</span>";
 }
 function fmtFresh(iso) {
@@ -617,14 +613,20 @@ function fmtFresh(iso) {
 }
 
 function visible() {
+  // 띄어쓴 낱말은 **모두 포함**(AND)으로 본다. 예전엔 질의 전체를 한 덩어리로 부분일치시켜서
+  // "행사 혼잡" 같은 자연스러운 입력이 전부 0건이었다 — 저장된 문장과 어순·조사까지 똑같아야
+  // 걸렸기 때문이다(2026-08-07 실측: "비 오는 날" 0건 · "문화 상권" 0건).
+  // AND 로 바꾸면 **여러 도메인을 엮는 검색이 처음으로 동작한다**("행사 혼잡" 2건 ·
+  // "지하철 혼잡" 2건). 낱말 하나만 넣는 경우의 결과는 이전과 같다.
+  const terms = query ? query.split(/\s+/).filter(Boolean) : [];
   return PRODUCTS.filter((p) => {
     if (activeDomain !== "all" && domainOf(p) !== activeDomain) return false;
-    if (!query) return true;
+    if (!terms.length) return true;
     // 검색 표면: 표시명·기술명·설명(쉬운 문장 + 계약 원문) + usage 질문들
     const uq = (p.usage_patterns || []).map((u) => u.question_ko).join(" ");
     const hay = (titleOf(p) + " " + ((p.display || {}).summary || fb(p).desc || "") + " " +
       (p.product_question || "") + " " + (p.description || "") + " " + uq + " " + p.name).toLowerCase();
-    return hay.includes(query);
+    return terms.every((t) => hay.includes(t));
   });
 }
 
@@ -930,60 +932,22 @@ async function run(useCursor) {
   finally { btn.disabled = false; refreshQuota(); }
 }
 
-// 발급은 2단계 — 등록된 이메일이면 서버가 409 를 주고, 버튼이 "재발급 확인" 모드로 바뀐다
-function resetIssueBtn() {
-  const b = $("issueBtn");
-  b.textContent = "발급"; b.dataset.confirm = ""; b.style.background = "";
-}
-$("issueBtn").addEventListener("click", async () => {
-  $("issueErr").textContent = "";
-  // 입력칸이 <form> 밖이라 **제약 검증이 저절로 돌지 않는다** — submit·checkValidity() 에서만
-  // 돈다. 안 부르면 type="email" 은 키보드 힌트 역할만 하고 어떤 문자열이든 그대로 나간다(#109).
-  //
-  // 검증 **전에** 서버(shared.js normalizeEmail)와 같은 정규화를 한 번 한다. 후행 점은 DNS
-  // 루트 표기라 서버가 합쳐서 받는데, 그냥 검증하면 화면이 먼저 거절해 판정이 갈린다.
-  const el = $("email");
-  el.value = el.value.trim().replace(/\.+$/, "");
-  if (!el.reportValidity()) return;
-  const confirmRotate = $("issueBtn").dataset.confirm === "1";
-  const res = await fetch("/api/v1/keys", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: $("email").value, ...(confirmRotate ? { confirm_rotate: true } : {}) }),
-  });
-  const body = await res.json();
-  if (res.status === 409 && body.title === "rotate confirmation required") {
-    $("issueErr").textContent =
-      "이 이메일에는 이미 키(" + body.key_prefix + "…)가 있어요. 재발급하면 그 키는 즉시 만료됩니다 — 계속하려면 버튼을 한 번 더 눌러주세요.";
-    const b = $("issueBtn");
-    b.textContent = "기존 키 만료하고 재발급"; b.dataset.confirm = "1"; b.style.background = "var(--red-ink, #b3423a)";
-    return;
-  }
-  resetIssueBtn();
-  if (!res.ok) { $("issueErr").textContent = friendly(res.status, body); return; }
-  $("keyValue").textContent = body.key;
-  $("keyReveal").style.display = "block";
-  if (body.rotated) $("keyNote").textContent = "기존 키는 방금 폐기되었습니다. 새 키는 지금 한 번만 표시됩니다.";
-  $("pKey").value = body.key;
-  resetRevokeUi();   // 새 키다 — 직전 키의 폐기 결과가 남아 있으면 안 된다
-  updatePreview(); refreshQuota();
-});
+// 이메일 발급 배선(입력 검증 · 409 재발급 확인 · 키 노출 상자)은 2026-08-07 에 지웠다 —
+// 서버가 403 을 준다. 발급은 `#googleAuth` 링크가 서버로 넘기고, 키는 콜백 페이지가 보여준다.
 function resetRevokeUi() {
   const b = $("revokeBtn");
   b.style.display = "inline-block"; b.textContent = "키 폐기"; b.dataset.confirm = "";
   $("purgeBtn").style.display = "none";
   $("revokeNote").className = ""; $("revokeNote").textContent = "";
 }
-$("email").addEventListener("input", () => { resetIssueBtn(); $("issueErr").textContent = ""; });
+// 키가 바뀌면 직전 키의 폐기 결과를 지운다. 예전엔 발급 성공 지점에서 했는데, 발급이 콜백
+// 페이지로 옮겨 가면서 이 화면이 그 순간을 못 본다 — 그래서 **키를 넣는 순간**으로 옮겼다.
+$("pKey").addEventListener("input", resetRevokeUi);
 $("keyEye").addEventListener("click", () => {
   const k = $("pKey");
   const show = k.type === "password";
   k.type = show ? "text" : "password";
   $("keyEye").textContent = show ? "가리기" : "보기";
-});
-$("copyKey").addEventListener("click", async () => {
-  await navigator.clipboard.writeText($("keyValue").textContent);
-  $("copyKey").textContent = "복사됨";
-  setTimeout(() => ($("copyKey").textContent = "복사"), 1500);
 });
 $("toggleRaw").addEventListener("click", () => {
   const r = $("rawJson");

@@ -95,6 +95,10 @@ export async function handleProductBundle(env, productId, request, trace = {}) {
       requires: parseJsonArray(p.requires),
       verified_rows: p.verified_rows,
       verified_at: p.verified_at,          // 백필 전이라 당분간 NULL (#642 §0)
+      // run_pattern 이 실행해 주는 패턴인지(#118 — verified 만 실행, 미검증은 409).
+      // 소비자가 고른 뒤 튕기는 왕복을 없애려고 고르기 전에 알려 준다. verified_at 에서
+      // 계산하는 파생값이라 스키마·계약 변경이 아니다.
+      runnable: Boolean(p.verified_at),
       allow_empty: Boolean(p.allow_empty),
       insight_sample_ko: p.insight_sample_ko,
     })),
