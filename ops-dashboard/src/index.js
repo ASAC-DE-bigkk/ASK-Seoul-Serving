@@ -111,7 +111,7 @@ const gwWhereR = (env) => { const c = envScope(env); return c ? ` AND r.env = '$
 // 진짜 분야로 거를 때는 **어느 것도 안 걸린다.** 화면 쪽 `SCOPE` 규약과 같은 판단이다.
 //
 // 값이 없거나(로그에 product_id 가 안 남은 옛 행·제품 없는 라우트) 접두사가 없는 값
-// (`seoul-urban-analytics` 같은 스킬 키 — 운영 실측 39건)은 **NULL** 로 둔다.
+    // (`seoul-weather-risk` 같은 스킬 키 — 운영 실측 39건)은 **NULL** 로 둔다.
 // 🔴 NULL 을 아무 분야에나 끼워 넣지 않는다. '분야 미상'이고, **화면이 그 몫을 밝힌다** —
 // 조용히 빼면 분야 합이 전체와 안 맞는데 화면은 맞는 척한다(0012: 거른 것은 걸렀다고 말한다).
 const GW_DOM = "CASE WHEN instr(COALESCE(product_id, ''), '_') > 1 " +

@@ -27,7 +27,7 @@
 
 ```
 /api/v1/…   마켓플레이스 — 사람·일반 소비자 (카탈로그·미리보기·데이터·키)   ← 판은 D-5
-/skill/v1/… K-Skill `seoul-urban-analytics` 전용
+/skill/v1/… K-Skill `seoul-weather-risk` 전용
 /mcp        MCP 클라이언트 전용 (POST 하나)
 ```
 
@@ -136,7 +136,7 @@ MCP 는 축이 둘인데 **경로는 둘 다 담당하지 않는다.**
   GET /api/v1/products/<product_id> · GET /api/v1/glossary   ← 옛 /v1 에서 흡수 (D-2)
 
 /skill/v1/…       K-Skill        판: 경로 (그대로)
-  GET /skill/v1/bundles/seoul-urban-analytics
+  GET /skill/v1/bundles/seoul-weather-risk
   GET /skill/v1/products/<product_id>[/data]
 
 /mcp              MCP            판: initialize 응답 (경로 아님)
