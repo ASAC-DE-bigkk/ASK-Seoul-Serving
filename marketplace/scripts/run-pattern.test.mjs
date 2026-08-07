@@ -26,25 +26,26 @@ function fakeEnv(patternRow, dataRows = [{ x: 1 }]) {
 }
 const keyRow = { key_hash: "h", daily_quota: 1000 };
 
-// countUsage·권리 게이트가 이 테스트의 관심사가 아니므로, 실제 shared 구현이 fakeEnv 의
-// DB 를 통과하도록 패턴 행 조회 외의 first()는 null(권리 미선언=1단계 통과), _usage 는
-// all/first 를 안 쓰는 경로가 없어 — countUsage 는 INSERT/SELECT 를 쓴다. 그래서 여기서는
-// run() 이 필요하다: 위 fake 에 없으면 실패한다. countUsage 경로까지 감당하도록 보강한다.
+// countUsage·권리 게이트가 이 테스트의 관심사가 아니므로, 권리 증거는 허용 1행을 준다 —
+// 게이트가 2단계(증거 누락 차단)라 0행이면 모든 케이스가 503 에서 끝나 버린다. 누락 차단
+// 자체는 아래 전용 테스트가 본다. _usage 는 all/first 를 안 쓰는 경로가 없어 — countUsage 는
+// INSERT/SELECT 를 쓴다. 그래서 여기서는 run() 이 필요하다: 위 fake 에 없으면 실패한다.
 function fullEnv(patternRow, dataRows) {
   const env = fakeEnv(patternRow, dataRows);
   env.catalogMeta = { name: "t", product_id: "p", publication_id: "pub1", exported_at: "s1" };
+  env.sources = [{ source_id: "s", redistribution: "allowed_with_attribution" }];
   const base = env.DB.prepare.bind(env.DB);
   env.DB.prepare = (sql) => {
     if (sql.includes("d1_usage_patterns")) return base(sql);   // "_usage" 부분일치 함정 회피
+    if (sql.includes("d1_catalog_sources")) {                  // "_catalog" 부분일치 함정 — _catalog 보다 먼저
+      return { bind: () => ({ all: async () => ({ results: env.sources }), first: async () => null }) };
+    }
     if (sql.includes("_catalog")) {
       // 카탈로그 게이트(#132 사후 리뷰 ①) — catalogMeta 를 null 로 두면 "없는 제품"이 된다
       return { bind: () => ({ first: async () => env.catalogMeta }) };
     }
     if (sql.includes("_usage")) {
       return { bind: () => ({ run: async () => ({}), first: async () => ({ count: 1 }) }) };
-    }
-    if (sql.includes("d1_catalog_sources")) {
-      return { bind: () => ({ all: async () => ({ results: [] }), first: async () => null }) };
     }
     return base(sql);
   };
@@ -116,6 +117,14 @@ test("서빙 카탈로그에 없는 제품은 카탈로그 404 — 패턴 404 �
   const res = await handleRunPattern(env, "nope", "pat", {}, keyRow, {});
   assert.equal(res.status, 404);
   assert.match((await res.json()).detail, /서빙 카탈로그에 없다/);   // mcp 유사 제안 분기가 무는 문구
+});
+
+test("권리 증거가 없으면 503 — run_pattern 도 게이트 2단계를 탄다 (#88)", async () => {
+  const env = fullEnv(PATTERN);
+  env.sources = [];
+  const res = await handleRunPattern(env, "p", "pat", { gu: "x", n: 1 }, keyRow, {});
+  assert.equal(res.status, 503);
+  assert.deepEqual((await res.json()).blockers, ["missing_source_rights_evidence"]);
 });
 
 test("카탈로그 통과 시 trace 에 table·publication_id 가 남는다 (#132 리뷰 ①-d)", async () => {

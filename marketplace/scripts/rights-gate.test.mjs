@@ -17,8 +17,8 @@ import {
 const allowed = (id = "a") => ({ source_id: id, redistribution: "allowed_with_attribution" });
 const denied = (id = "b", value = "prohibited") => ({ source_id: id, redistribution: value });
 
-test("현재 단계는 1 — 백필 전이라 누락은 막지 않는다", () => {
-  assert.equal(RIGHTS_GATE_STAGE, 1);
+test("현재 단계는 2 — 백필 완료(57종 전부 증거 보유)로 fail-closed 전환 (2026-08-07)", () => {
+  assert.equal(RIGHTS_GATE_STAGE, 2);
 });
 
 test("표가 없으면(null) 1단계는 통과시킨다 — 파이프라인 미게시가 서빙을 닫으면 안 된다", () => {
