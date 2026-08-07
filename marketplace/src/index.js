@@ -644,6 +644,11 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
   trace.productId = productId;
   if (!/^[a-z0-9_]+$/.test(String(productId)) || !/^[a-z0-9_]+$/.test(String(patternId)))
     return problem(400, "invalid id", "product_id·pattern_id 형식이 아니다");
+  // 형식 검사를 **통과한 뒤에** 남긴다 — 실패 요청도 무엇을 찾았는지 남아야 하지만
+  // (`trace.table = id` 와 같은 이유), 검사 전이면 아무 문자열이나 로그에 실린다.
+  // 슬러그 모양만 통과하므로 여기서부터는 값-최소화(0001)를 깨지 않는다.
+  // 404·409 로 끝나도 남는다: "무슨 패턴을 부르다 막혔나"가 곧 수요 신호다.
+  trace.patternId = patternId;
   // 카탈로그를 먼저 통과한다(#132 사후 리뷰 ①) — 조회 4경로가 전부 같은 문(external=1)을
   // 지나야 한다. 지금은 publisher 가 비공개 제품에 패턴을 안 실어 우연히 안전하지만,
   // 코드가 지키지 않으면 그 우연이 깨지는 날 열린다. 부수로 404 구분(제품/패턴)·
@@ -765,7 +770,7 @@ export const LOG_COLUMNS = [
   // 행동 로그 (#9 · agreement §3-1) — 원문은 하나도 없다. UA 는 분류 상수로, Referer 는
   // 호스트로, IP 는 아예 안 본다(§3-2). 미배선으로 남는 셋은 아래 주석에 이유를 적었다.
   "ua_class", "agent_name", "agent_mode", "agent_verified", "country", "asn", "referer_host",
-  "publication_id",
+  "publication_id", "pattern_id",
 ];
 
 export function logValues(trace, env) {
@@ -788,14 +793,20 @@ export function logValues(trace, env) {
     trace.country ?? null, trace.asn ?? null, trace.refererHost ?? null,
     // 어느 게시본을 읽었는지 — 제품을 해석한 핸들러만 안다(카탈로그·미리보기·데이터·skill).
     trace.publicationId ?? null,
+    // 어느 검증 패턴을 돌렸는지(ASAC-DAG#642) — `run_pattern` 만 채운다. 나머지 경로는
+    // 패턴이라는 개념 자체가 없어 NULL 이 맞다(§4-3: 없는 것을 0·'' 로 꾸미지 않는다).
+    trace.patternId ?? null,
   ];
 }
 
-// 아직 채우지 않는 둘 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
+// 아직 채우지 않는 하나 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
 //
 //   page_path       정적 페이지·기계 문서는 `run_worker_first` 밖이라 워커에 닿지 않는다.
 //                   관측하려면 §3-4 의 6경로를 워커로 통과시키는 결정이 먼저다(#63 ④).
-//   pattern_id      패턴 실행 API(ASAC-DAG#642 안 C)가 아직 없다. 소비자가 생기면 붙인다.
+//
+// `pattern_id` 는 배선됐다 — "패턴 실행 API 가 아직 없다"가 미룬 이유였고 `run_pattern`(#132)
+// 이 그 소비자다. 이걸로 ASAC-DAG#642 의 로깅 키 `(product_id, pattern_id, publication_id)`
+// 세 축이 한 행에 모인다.
 
 async function logRequest(env, trace) {
   try {

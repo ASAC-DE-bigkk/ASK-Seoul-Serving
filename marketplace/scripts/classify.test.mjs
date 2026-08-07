@@ -1,7 +1,7 @@
 // classifyClient 단독 테스트 (#9 §3) — 실제 UA 문자열 기준. 실행: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyClient, clientAxes, refererHost, normalizeIntent, agentVerified } from "../src/shared.js";
+import { classifyClient, clientAxes, refererHost, normalizeIntent, agentVerified, normalizeMcpClient } from "../src/shared.js";
 
 const cases = [
   // AI — crawler (사전 수집)
@@ -120,6 +120,39 @@ test("자칭 AI 인데 CF 가 확인 못 하면 0 — 이건 진짜 '검증 실�
 test("CF 가 카테고리를 주면 1", () => {
   assert.equal(agentVerified("anthropic", "AI Crawler"), 1);
   assert.equal(agentVerified("openai", "Search Engine Crawler"), 1);
+});
+
+// ── MCP clientInfo (#111 후속) ───────────────────────────────────────────────
+// UA 로는 MCP 클라이언트를 못 잡는다(공개 UA 규약이 없다). 프로토콜이 규격으로 주는
+// 이름을 쓰되, `normalizeIntent` 와 같은 3분기를 지킨다.
+test("안 보냄은 NULL — 못 알아봄(other)과 다르다", () => {
+  assert.equal(normalizeMcpClient(null), null);
+  assert.equal(normalizeMcpClient(undefined), null);
+  assert.equal(normalizeMcpClient(""), null);
+  assert.equal(normalizeMcpClient("   "), null);
+});
+
+test("모양이 맞으면 소문자 정규화해서 그대로", () => {
+  assert.equal(normalizeMcpClient("claude-ai"), "claude-ai");
+  assert.equal(normalizeMcpClient("Cursor"), "cursor");
+  assert.equal(normalizeMcpClient("mcp-remote"), "mcp-remote");
+  assert.equal(normalizeMcpClient("ExampleClient"), "exampleclient");
+});
+
+test("공백은 하이픈으로 접는다 — 띄어 쓰는 구현이 흔하고, 버리면 이름을 잃는다", () => {
+  assert.equal(normalizeMcpClient("Example Client"), "example-client");
+  assert.equal(normalizeMcpClient("Visual  Studio   Code"), "visual-studio-code");
+});
+
+test("모양이 아니면 other — 자유 문자열을 로그에 그대로 싣지 않는다", () => {
+  assert.equal(normalizeMcpClient("사용자 질문: 강남구 인구는?"), "other");
+  assert.equal(normalizeMcpClient("a".repeat(41)), "other");     // 40자 상한
+  assert.equal(normalizeMcpClient("-leading-hyphen"), "other");  // 첫 글자는 영숫자
+  assert.equal(normalizeMcpClient("has/slash"), "other");
+});
+
+test("40자 경계는 통과한다", () => {
+  assert.equal(normalizeMcpClient("a".repeat(40)), "a".repeat(40));
 });
 
 // 🔴 이게 이 축의 핵심이다. `""`(CF 가 봤고 아니라고 했다) 와 필드 부재(못 물어봤다)는
