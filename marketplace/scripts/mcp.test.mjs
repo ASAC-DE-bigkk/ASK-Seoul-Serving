@@ -22,6 +22,7 @@ const mkDeps = (over = {}) => ({
   handleProductBundle: async (_e, pid) => jsonRes({ product_id: pid, columns: [], usage_patterns: [] }),
   handlePreview: async (_e, id) => jsonRes({ id, preview: true, rows: [{ a: 1 }] }),
   handleData: async (_e, id) => jsonRes({ id, rows: [] }),
+  handleRunPattern: async (_e, pid, pat) => jsonRes({ product_id: pid, pattern_id: pat, rows: [{ a: 1 }], row_count: 1 }),
   ...over,
 });
 
@@ -34,11 +35,11 @@ test("initialize — 데이터/인증 없이 서버정보", async () => {
   assert.ok(body.result.capabilities.tools);
 });
 
-test("tools/list — P0 5개 툴", async () => {
+test("tools/list — 6개 툴", async () => {
   const res = await handleMcp(rpc("tools/list"), {}, {}, mkDeps());
   const body = await res.json();
   const names = body.result.tools.map((t) => t.name);
-  assert.deepEqual(names, ["list_products", "describe_product", "preview_product", "query_product", "check_quota"]);
+  assert.deepEqual(names, ["list_products", "describe_product", "preview_product", "query_product", "run_pattern", "check_quota"]);
   for (const t of body.result.tools) assert.ok(t.inputSchema && t.description);
 });
 
@@ -303,4 +304,23 @@ test("describe_product 404 도 유사 제품을 제안한다 — 세 경로 공�
   const res = await handleMcp(
     rpc("tools/call", { name: "describe_product", arguments: { product_id: "culture_activity_dong" } }), {}, {}, deps);
   assert.match((await res.json()).result.content[0].text, /culture_activity_by_dong/);
+});
+
+
+test("run_pattern — deps 로 위임, route 는 mcp_run_pattern", async () => {
+  const trace = {};
+  const res = await handleMcp(
+    rpc("tools/call", { name: "run_pattern", arguments: { product_id: "p", pattern_id: "top", params: { n: 5 } } }),
+    {}, trace, mkDeps());
+  const payload = JSON.parse((await res.json()).result.content[0].text);
+  assert.equal(payload.pattern_id, "top");
+  assert.equal(trace.route, "mcp_run_pattern");
+});
+
+test("run_pattern — 필수 인자 없으면 안내", async () => {
+  const res = await handleMcp(
+    rpc("tools/call", { name: "run_pattern", arguments: { product_id: "p" } }), {}, {}, mkDeps());
+  const body = await res.json();
+  assert.equal(body.result.isError, true);
+  assert.match(body.result.content[0].text, /pattern_id/);
 });
