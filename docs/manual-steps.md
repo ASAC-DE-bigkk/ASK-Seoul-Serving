@@ -178,8 +178,12 @@ _ops_slo  0행   (표는 존재)
 
 ```bash
 cd ops-dashboard
+npm run migrate                                # 🔴 먼저 — 0003 이 is_data_domain 컬럼을 만든다
 npm run d1 -- --file=fixtures/ops_domain.sql
 ```
+
+🔴 **순서가 있다.** 2026-08-07 에 `migrations/0003_ops_domain_kind.sql` 이 `is_data_domain`
+컬럼을 더했고 픽스처가 그 값을 채운다 — 거꾸로 돌리면 `no such column` 으로 끝난다.
 
 `INSERT OR REPLACE` 라 **다시 돌려도 안전하고**, `_ops_slo` 는 건드리지 않는다.
 합성이 아니라 참조 내용이므로 운영에 돌리는 것이 정상 경로다(4번의 "합성 픽스처를 넣지
@@ -188,15 +192,18 @@ npm run d1 -- --file=fixtures/ops_domain.sql
 ### 확인
 
 ```bash
-npm run d1 -- "SELECT domain,label,has_slo FROM _ops_domain ORDER BY domain"
+npm run d1 -- "SELECT domain,label,has_slo,is_data_domain FROM _ops_domain ORDER BY domain"
 ```
 
-화면에서는 좌상단 '보는 분야' 드롭다운이 한글로 뜨면 된 것이다.
+화면에서는 좌상단 '보는 분야' 드롭다운이 한글로 뜨면 된 것이다. 파이프라인 탭의
+**'측정 가능한 분야' 분모가 6**(데이터 분야 수)이어야 한다 — 7 이면 `is_data_domain` 이
+안 걸린 것이고, 화면이 "분야 종류를 아직 못 가릅니다" 배너로 직접 말한다.
 
 ### 상태 — ✅ 완료 (2026-08-07)
 
 ```text
 _ops_domain  7행   citydata·commerce·common·culture·traffic·transit·weather
+             is_data_domain  1×6(데이터 분야) · 0×1(common = 파이프라인 운영 지표)   ← #162 🅕
 _ops_slo     0행   (그대로 — 이 작업은 안 건드린다)
 ```
 
