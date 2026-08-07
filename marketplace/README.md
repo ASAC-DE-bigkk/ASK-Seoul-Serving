@@ -71,7 +71,7 @@ npm run dev
 | `GET /api/v1/preview/<table>` | — | 고정 5행 미리보기. 쿼터 무소모, IP 버스트만 |
 | `GET /api/v1/products/<product_id>` | Bearer | 제품 번들 — 컬럼 설명·grain·PK·시간축·질의 예시·출처. 쿼터 무소모 |
 | `GET /api/v1/glossary?vocabulary_id=` | Bearer | 코드값 사전(`code`→`label_ko`). 쿼터 무소모 |
-| `GET /skill/v1/…` | Bearer | K-Skill `seoul-urban-analytics` 전용 계약 — 별도 담당(`src/skill.js`) |
+| `GET /skill/v1/…` | Bearer | K-Skill `seoul-weather-risk` 전용 계약 — 별도 담당(`src/skill.js`) |
 | `POST /mcp` | `tools/call`부터 Bearer | MCP 서버(JSON-RPC, 툴 5종) — `src/mcp.js` |
 
 문은 **소비자 축**으로 갈린다(agreement §1-2) — 사람·일반 소비자(`/api/v1`) · K-Skill

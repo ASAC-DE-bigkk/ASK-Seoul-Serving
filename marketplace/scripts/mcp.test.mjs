@@ -84,14 +84,14 @@ test("list_products — 검증 번들과 일반 카탈로그를 구분(verified)
   const deps = mkDeps({
     handleCatalog: async () => jsonRes({
       products: [
-        { product_id: "citydata_purchasing_power_daily" }, // exact-six(#4)
-        { product_id: "citydata_ppltn_daily" },            // 일반 카탈로그
+        { product_id: "weather_place_risk_window" }, // 검증 번들(#4, seoul-weather-risk)
+        { product_id: "citydata_ppltn_daily" },       // 일반 카탈로그
       ],
     }),
   });
   const res = await handleMcp(rpc("tools/call", { name: "list_products", arguments: {} }), {}, {}, deps);
   const payload = JSON.parse((await res.json()).result.content[0].text);
-  assert.equal(payload.verified_bundle, "seoul-urban-analytics");
+  assert.equal(payload.verified_bundle, "seoul-weather-risk");
   assert.equal(payload.products[0].verified, true);
   assert.equal(payload.products[1].verified, false);
 });

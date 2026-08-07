@@ -10,7 +10,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { TOOLS } from "../src/mcp.js";
-import { SKILL_PRODUCT_IDS } from "../src/skill.js";
 
 const EVAL = JSON.parse(readFileSync(new URL("./mcp-eval.json", import.meta.url), "utf8"));
 const toolByName = new Map(TOOLS.map((t) => [t.name, t]));
@@ -36,12 +35,9 @@ test("평가 정본 — 기대 인자가 tool inputSchema 계약에 맞음", () 
   }
 });
 
-test("평가 정본 — 6도메인이 정확히 한 번씩, 대상은 검증 번들 제품", () => {
+test("평가 정본 — 6도메인이 정확히 한 번씩", () => {
   const domains = positives.map((c) => c.id).sort();
   assert.deepEqual(domains, ["citydata", "commerce", "culture", "traffic", "transit", "weather"]);
-  const bundle = new Set(SKILL_PRODUCT_IDS);
-  for (const c of positives)
-    assert.ok(bundle.has(c.expect.args.product_id), `${c.id}: '${c.expect.args.product_id}' 는 검증 번들(#4) 밖`);
 });
 
 test("평가 정본 — 음성·함정 케이스가 전부 행동 계약을 가짐", () => {

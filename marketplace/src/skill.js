@@ -1,23 +1,18 @@
-// `/skill/v1/*` — seoul-urban-analytics K-Skill 전용 읽기 계약.
+// `/skill/v1/*` — seoul-weather-risk K-Skill 전용 읽기 계약.
 //
 // `/api/v1` 제품 API와는 소비자와 제품 범위가 다르다. 다만 키 검증·버스트·오류
-// 형식·요청 로그는 src/shared.js를 반드시 함께 쓴다. 이 파일은 K-Skill이 선택한 여섯
-// 제품만 노출하고, 출처·권리·품질 증거가 아직 게시되지 않은 동안에는 데이터보다 먼저
-// `product_not_ready`를 반환한다. "모르는 데이터를 성공으로 보인다"보다 실패를 명시하는
-// 편이 등록 심사와 사용자 모두에게 안전하다.
+// 형식·요청 로그는 src/shared.js를 반드시 함께 쓴다. 이 파일은 K-Skill이 선택한
+// weather_place_risk_window 단일 제품만 노출하고, 출처·권리·품질 증거가 아직
+// 게시되지 않은 동안에는 데이터보다 먼저 `product_not_ready`를 반환한다.
+// "모르는 데이터를 성공으로 보인다"보다 실패를 명시하는 편이 등록 심사와 사용자
+// 모두에게 안전하다.
 import { countUsage, json, parseJsonArray, problem, quotaExceededProblem, quotaHeaders, safeRows } from "./shared.js";
 
-export const SKILL_BUNDLE_ID = "seoul-urban-analytics";
+export const SKILL_BUNDLE_ID = "seoul-weather-risk";
 
-// 순서는 K-Skill의 도메인 설명과 응답을 안정적으로 유지하는 계약이다. 카탈로그의
-// 정렬이나 물리 테이블 이름에 의존하지 않는다.
+// K-Skill이 노출하는 단일 제품. 카탈로그의 정렬이나 물리 테이블 이름에 의존하지 않는다.
 export const SKILL_PRODUCT_IDS = [
-  "weather_place_forecast_change_daily",
-  "traffic_incident_x_weather_current_hourly",
-  "citydata_purchasing_power_daily",
-  "commerce_flow_monthly",
-  "culture_activity_by_dong",
-  "transit_parking_full_risk",
+  "weather_place_risk_window",
 ];
 
 const PRODUCT_IDS = new Set(SKILL_PRODUCT_IDS);
@@ -137,7 +132,7 @@ async function safeFirst(statement) {
 
 function unknownProduct(productId) {
   return problem(404, "unknown product",
-    "seoul-urban-analytics에 등록된 제품이 아니다",
+    "seoul-weather-risk에 등록된 제품이 아니다",
     { code: "unknown_product", product_id: productId });
 }
 
