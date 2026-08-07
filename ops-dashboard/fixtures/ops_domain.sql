@@ -19,19 +19,24 @@
 --      지우면 옛 기록이 화면에서 다시 영문 코드가 된다(route 값과 같은 이유 — 0014 §1-1).
 --      분야를 정말 지울 일이 생기면 그때 `DELETE` 한 줄을 명시적으로 쓴다.
 --
+-- ⚠️ `is_data_domain` 컬럼은 `migrations/0003_ops_domain_kind.sql` 이 만든다.
+--    먼저 `npm run migrate` 를 돌린 뒤 이 파일을 적용한다 — 순서가 바뀌면 "no such column".
+--
 -- 적용:  npm run d1 -- --file=fixtures/ops_domain.sql
--- 확인:  npm run d1 -- "SELECT domain,label,has_slo FROM _ops_domain ORDER BY domain"
+-- 확인:  npm run d1 -- "SELECT domain,label,has_slo,is_data_domain FROM _ops_domain ORDER BY domain"
 
 -- `has_slo` 는 실측이다 — ASAC-DBT 에서 `*_slo_daily` 모델을 전수 검색해 culture 만 존재.
 -- 1 이면 '품질 기준(SLO)' 카드가 그 분야를 센다. 나머지는 기준 자체가 아직 없는 것이지
 -- 품질이 나쁜 게 아니다 — `note` 가 화면에서 그렇게 말한다.
-INSERT OR REPLACE INTO _ops_domain (domain,label,has_slo,note) VALUES
-  ('culture' ,'문화·행사',1,NULL),
-  ('citydata','인구·도시',0,'품질 측정 기준이 아직 없음'),
-  ('transit' ,'대중교통' ,0,'품질 측정 기준이 아직 없음'),
-  ('commerce','상권'     ,0,'품질 측정 기준이 아직 없음'),
-  ('weather' ,'날씨'     ,0,'품질 측정 기준이 아직 없음'),
-  ('traffic' ,'교통'     ,0,'품질 측정 기준이 아직 없음');
+--
+-- `is_data_domain=1` — 여섯 전부 **데이터 분야**다. 제품이 있고, 발행되고, API 로 나간다.
+INSERT OR REPLACE INTO _ops_domain (domain,label,has_slo,is_data_domain,note) VALUES
+  ('culture' ,'문화·행사',1,1,NULL),
+  ('citydata','인구·도시',0,1,'품질 측정 기준이 아직 없음'),
+  ('transit' ,'대중교통' ,0,1,'품질 측정 기준이 아직 없음'),
+  ('commerce','상권'     ,0,1,'품질 측정 기준이 아직 없음'),
+  ('weather' ,'날씨'     ,0,1,'품질 측정 기준이 아직 없음'),
+  ('traffic' ,'교통'     ,0,1,'품질 측정 기준이 아직 없음');
 
 -- `common` 은 데이터 분야가 아니라 **수집 기록을 나르는 공통 작업**이다
 -- (`common_ops_d1_load`·`common_ops_logship` — 운영 실측 19건).
@@ -44,5 +49,14 @@ INSERT OR REPLACE INTO _ops_domain (domain,label,has_slo,note) VALUES
 -- "여러 분야에 공통인 데이터"로 읽힌다. 실제로는 데이터가 아니라 **파이프라인 자체를 관측한
 -- 기록**이라, 이름이 그 사실을 직접 말하게 바꿨다. 등록부는 지우지 않는다 — 빼면 실행 기록
 -- 탭에서 영문 코드로 되돌아가고(화면은 라벨을 지어내지 않는다), 그 기록 자체는 실재한다.
-INSERT OR REPLACE INTO _ops_domain (domain,label,has_slo,note) VALUES
-  ('common','파이프라인 운영 지표',0,'데이터 분야가 아닙니다 — 수집 기록을 나르는 파이프라인 자체의 작업입니다');
+--
+-- 🔴 `is_data_domain=0` — **라벨만으로는 부족했다**(#162 🅕, 2026-08-07 결정).
+--    이름을 고쳐도 화면은 등록부 행 수를 그대로 세어 "분야 7개"라고 말했다. 사람은 읽어서
+--    알지만 **숫자는 여전히 틀렸다.** 이제 데이터 분야 계수에서 빠진다 — 안 보이게 하는 게
+--    아니라 **다른 줄에 세운다.** 실행 기록·분야 드롭다운에는 그대로 뜨고, 라벨도 그대로다.
+--
+--    파이프라인 담당 의견(#162)이 이 방향을 못 박았다: "`domain='common'` 은 원천에서 맞는
+--    값이다. 업스트림을 고치면 파이프라인이 자기 자신에 대해 거짓말을 하게 된다."
+--    그래서 **ASAC-DAG `common/ops/d1_ops.py` 는 건드리지 않는다.** 콘솔이 표시만 가른다.
+INSERT OR REPLACE INTO _ops_domain (domain,label,has_slo,is_data_domain,note) VALUES
+  ('common','파이프라인 운영 지표',0,0,'데이터 분야가 아닙니다 — 수집 기록을 나르는 파이프라인 자체의 작업입니다');

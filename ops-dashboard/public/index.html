@@ -264,6 +264,16 @@
         <div class="hd"><h3>날짜별 요청 건수</h3></div>
         <div class="bd" id="daily"></div>
       </div>
+      <!-- 분야 축 내역 (#162 🅐) — '분야 미상'을 한 덩어리로 두면 그 숫자가 문제로 읽힌다.
+           읽는 사람이 **할 일이 갈리는 지점**에서 갈라 놓는다: 앞의 셋은 정상, 마지막만 조치.
+           카드 자체를 `hidden` 으로 시작한다 — 카탈로그를 못 읽으면 접힌 채로 둔다
+           (🔴 `.pane`·`.scopebar` 와 달리 `.card` 에는 display 규칙이 없어 [hidden] 이 먹는다.
+            바뀌면 `npm run check:hidden` 이 잡는다). -->
+      <div class="card wide" id="axisCard" hidden>
+        <div class="hd"><h3>요청이 어느 분야로 세어지나</h3>
+          <p>분야에 안 들어가는 요청을 <b>한 덩어리로 두지 않습니다</b> — 앞의 셋은 정상이고 마지막만 조치 대상입니다</p></div>
+        <div class="bd" id="axisSplit"></div>
+      </div>
       <div class="card">
         <div class="hd"><h3>답하지 못한 요청</h3><p>찾는 데이터가 없거나 요청 형식이 잘못된 경우입니다 — 무엇을 원했는지 알려주는 신호입니다</p></div>
         <div class="bd" id="failures"></div>
@@ -562,6 +572,70 @@ function mergeRows(rows, keyOf, sumKeys, baseOf, avgKey) {
     delete t._w;
   }
   return [...m.values()];
+}
+
+// ── 요청이 어느 분야로 세어지나 (#162 🅐) ────────────────────────────────────────
+//
+// 예전에는 분야에 안 들어가는 요청을 **한 덩어리**로 두고 "미상 N건"이라고만 적었다.
+// 그 숫자가 커서 처음 보는 사람은 **문제로 읽었는데**, 실제로는 거의 전부가 정상이다.
+// 🔴 **읽는 사람이 할 일이 갈리는 지점에서 가른다** — 앞의 넷은 할 일이 없고 마지막만 조치다.
+//
+// 순서가 곧 메시지다: 정상 넷을 먼저 쌓고 조치 대상을 맨 아래 세운다.
+const AXIS_KIND = [
+  ["product",    "제품 요청",           "카탈로그에 있는 제품 — 분야로 셉니다",              ""],
+  ["no_product", "제품 축이 없는 요청", "목록·인증·키 발급 — 애초에 제품이 없습니다",        "dim"],
+  ["bundle",     "번들 요청",           "여러 제품을 묶은 패키지 — 분야로 환산하지 않습니다", "dim"],
+  ["qa_probe",   "의도된 점검",         "404 가 성공 조건인 네거티브 프로브(qa- 접두)",       "dim"],
+  ["not_found",  "제품을 못 찾은 요청", "카탈로그에 없는 이름입니다",                        "bad"],
+];
+function renderAxis(s0) {
+  const card = $("axisCard");
+  const rows = (s0 && s0.axis) || [];
+  const total = rows.reduce((a, r) => a + (r.calls || 0), 0);
+  // 🔴 카탈로그를 못 읽으면 **접는다.** 0으로 그리면 "못 찾은 요청이 없다"가 되는데
+  //    그건 모르는 것을 없다고 말하는 것이다(agreement §4 모른다 ≠ 0).
+  card.hidden = !(s0 && s0.axis_ok) || !total;
+  if (card.hidden) return;
+
+  const at = (k) => rows.find((r) => r.bucket === k) || { calls: 0, errors: 0 };
+  const max = Math.max(1, ...rows.map((r) => r.calls || 0));
+  const bars = AXIS_KIND.map(([k, name, why, cls]) => {
+    const n = at(k).calls || 0;
+    // 0 이면 언제나 흐리게 — 조치 대상이라도 0건이면 붉을 이유가 없다.
+    const fill = !n ? "dim" : (cls || "");
+    return "<div class='row'><div class='nm'>" + name + "<small>" + why + "</small></div>" +
+      "<div class='track'><div class='fill" + (fill ? " " + fill : "") +
+      "' style='width:" + (n ? Math.max(2, n / max * 100) : 0) + "%'></div></div>" +
+      "<div class='num'><b>" + nf.format(n) + "</b> <small>" +
+      (total ? (n / total * 100).toFixed(1) : "0.0") + "%</small></div></div>";
+  }).join("");
+
+  // 못 찾은 이름은 **이름째로** 낸다. 건수만 말하면 "무엇을 고치나"에 답이 안 된다.
+  // 부른 키를 같이 내는 이유: 실측에서 404 7건이 외부 오타가 아니라 **우리 오너 키의 점검**
+  // 이었다(#162). 키가 없으면 정상 트래픽을 장애로 읽는다.
+  const nf404 = s0.not_found || [];
+  const list = nf404.length
+    ? table([
+        { t:"부른 이름", name:true, get:(r) => "<code>" + esc(r.target) + "</code>" },
+        { t:"요청 종류", get:(r) => String(r.routes || "").split(",")
+            .map((x) => ROUTE_KO[x] || esc(x)).join(" · ") },
+        { t:"부른 키", get:(r) => String(r.key_ids || "").split(",").filter(Boolean)
+            .map((x) => "<span class='pill dim'>" + esc(x) + "</span>").join(" ") || "—" },
+        { t:"마지막", r:true, get:(r) => fmtTs(r.last_ts) },
+        { t:"건수", r:true, get:(r) => "<span class='pill bad'>" + nf.format(r.calls) + "</span>" },
+      ], nf404, "")
+    : "";
+  const hint = nf404.length
+    ? "<p style='font-size:11px;color:var(--faint);margin-top:10px'>" +
+      "점검용으로 일부러 없는 이름을 부르는 것이라면 <code>qa-</code> 로 시작하는 이름을 쓰십시오 " +
+      "(#162 결정). 그러면 위 '의도된 점검'으로 세어지고 여기서 사라집니다 — " +
+      "<b>예외 목록은 두지 않습니다.</b> 콘솔이 이름을 외우기 시작하면 그 목록이 늘 실물보다 늦습니다.</p>"
+    : "<p style='font-size:11px;color:var(--faint);margin-top:10px'>카탈로그에 없는 이름을 부른 요청이 없습니다.</p>";
+
+  $("axisSplit").innerHTML = "<div class='share'>" + bars + "</div>" + list + hint +
+    "<p style='font-size:11px;color:var(--faint);margin-top:8px'>" +
+    "🔴 <b>이 카드만 전체 기준입니다</b> — '분야 합이 왜 전체보다 작은가'에 답하는 카드라, " +
+    "분야를 좁히면 질문 자체가 사라집니다.</p>";
 }
 
 // ── 빈 칸 표기 ────────────────────────────────────────────────────────────────
@@ -898,6 +972,13 @@ function render(d) {
 
   if (d.meta.missing.includes("pipeline") && hasSlo)
     N.pipeline.push(note("info", "데이터 없음", "<code>npm run seed</code> 를 먼저 실행하세요."));
+  // 🔴 등록부가 아직 데이터 분야와 운영 축을 못 가른다(#162 🅕). 조용히 예전처럼 세면
+  //    "분야 7개"가 맞는 값으로 읽힌다 — 못 가른다는 사실을 화면이 직접 말한다.
+  if (d.meta.domain_kind === false)
+    N.pipeline.push(note("warn", "분야 종류를 아직 못 가릅니다",
+      "등록부에 <code>is_data_domain</code> 이 없어 <b>파이프라인 운영 축까지 데이터 분야로 셉니다</b> " +
+      "— '측정 가능한 분야'의 분모가 하나 큽니다.<br>" +
+      "<code>npm run migrate</code> 뒤 <code>npm run d1 -- --file=fixtures/ops_domain.sql</code> 로 켜집니다(#162)."));
   // 발행이 깨지고 있으면 이 탭에서 먼저 보여야 한다 — 성공률만 보면 안 보이는 축이다.
   if (pTot.failed > 0 || pTot.mismatch > 0)
     N.pipeline.push(note("warn", "발행 문제 " + nf.format(pTot.failed + pTot.mismatch) + "건",
@@ -943,10 +1024,11 @@ function render(d) {
     const unk = (d.serving.totals || []).find((r) => r.domain === null);
     N.serving.push(note("info", dl + " 분야만",
       "KPI·날짜별 요청·요청 종류·제품·실패·0건 응답·이용자까지 <b>이 화면 전부</b>를 이 분야로 좁혔습니다.<br>" +
-      "다만 <b>제품에 안 묶이는 요청</b>은 어느 분야에도 안 들어갑니다 — API 목록·인증·키 발급처럼 " +
-      "애초에 제품이 없는 요청입니다" +
+      "다만 <b>분야에 안 들어가는 요청</b>이 있습니다" +
       (unk && unk.calls ? " (이 기간 <b>" + nf.format(unk.calls) + "건</b>)" : "") +
       ". 그래서 <b>분야별 요청을 다 더해도 '전체'보다 작습니다.</b> 빠진 게 아니라 셀 분야가 없는 것입니다.<br>" +
+      "무엇이 왜 빠졌는지는 <b>'요청이 어느 분야로 세어지나'</b> 카드가 갈라서 보여줍니다 — " +
+      "거기서 <b>조치가 필요한 것은 한 갈래뿐</b>입니다(#162).<br>" +
       "이용자는 여러 분야를 쓰므로 <b>여기 요청 수는 이 분야에 보낸 것만</b>입니다."));
     N.usage.push(note("info", dl + " 분야만", "AI 수요는 이 분야로 좁혔습니다. 여정·손님 구성·추적은 분야 축이 없어 전체입니다."));
     N.apis.push(note("info", dl + " 분야만",
@@ -1082,7 +1164,15 @@ function render(d) {
   syncScopeBar(collectScopeDomains(d));   // 드롭다운은 등록부 ∪ 실제 적재된 데이터의 분야다(#3)
   const slo = byDomain(d.pipeline.slo);
   const doms = byDomain(d.pipeline.domains);
-  const withSlo = doms.filter((x) => x.has_slo).length;
+  // 🔴 **데이터 분야만 센다**(#162 🅕). 등록부에는 `common`(파이프라인 운영 지표)도 있는데
+  //    그건 데이터 분야가 아니라 **관측 기록을 나르는 작업 자체**다. 행 수를 그냥 세면
+  //    화면이 "분야 7개"라고 말하는데 실제 데이터 분야는 여섯이다 — 라벨을 고쳐도
+  //    (#162 1차) 숫자는 그대로 틀렸다. 목록에는 그대로 남는다: **안 보이게 하는 게
+  //    아니라 다른 줄에 세우는 것**이다.
+  //    `is_data_domain` 이 없는 배포(0003 마이그레이션 전)에서는 서버가 1 로 채워 주므로
+  //    예전과 같이 동작하고, 그 사실은 `meta.domain_kind` 로 화면이 안다.
+  const dataDoms = doms.filter((x) => x.is_data_domain !== 0);
+  const withSlo = dataDoms.filter((x) => x.has_slo).length;
   const passed = slo.filter((r) => r.scheduled_slo_passed).length;
   const viol = slo.reduce((a, r) => a + (r.violation_count || 0), 0);
   // 초록 위장 — Airflow success 인데 expected=0. **통과로 보이는 날**이라 실패 목록에 안 잡힌다.
@@ -1094,8 +1184,9 @@ function render(d) {
     ["제때 갱신된 날", slo.length ? Math.round(passed / slo.length * 100) + "%" : "—",
      slo.length ? slo.length + "일 중 " + passed + "일 성공" : "데이터 없음",
      slo.length && passed / slo.length < 0.9 ? "bad" : "good"],
-    ["측정 가능한 분야", withSlo + " / " + doms.length, "나머지는 문제가 생겨도 알 수 없음",
-     withSlo < doms.length ? "bad" : "good"],
+    ["측정 가능한 분야", withSlo + " / " + dataDoms.length,
+     "데이터 분야만 셉니다 — 나머지는 문제가 생겨도 알 수 없음",
+     withSlo < dataDoms.length ? "bad" : "good"],
     ["데이터 규칙 위반", nf.format(viol), "값 범위·형식이 약속과 다른 건수", viol > 0 ? "bad" : "good"],
     ["성공했지만 0건", nf.format(disguise), "성공 표시였으나 받은 데이터가 없던 작업",
      disguise > 0 ? "bad" : "good"],
@@ -1117,11 +1208,18 @@ function render(d) {
       "<span><b style='color:var(--red-ink)'>붉은 테두리</b> 성공으로 기록됐지만 실제 데이터는 0건</span></div>"
     : emptyBox("데이터 없음");
 
+  // 목록에는 운영 축도 **그대로 남긴다** — 그 기록은 실재하고 계속 들어온다. 다만 데이터
+  // 분야와 한 줄에 놓으면 같은 급으로 읽히므로 종류를 직접 적는다(#162 🅕).
   $("domains").innerHTML = table([
     { t:"분야", get:(r) => esc(r.label) + " <span class='pill dim'>" + esc(r.domain) + "</span>" },
-    { t:"품질 측정", get:(r) => r.has_slo
-        ? "<span class='pill ok'>가능</span>"
-        : "<span class='pill warn'>" + esc(r.note || "기준 없음") + "</span>" },
+    { t:"종류", get:(r) => r.is_data_domain === 0
+        ? "<span class='pill warn'>파이프라인 작업</span>"
+        : "<span class='pill ok'>데이터 분야</span>" },
+    { t:"품질 측정", get:(r) => r.is_data_domain === 0
+        ? "<span class='zero'>해당 없음</span>"
+        : r.has_slo
+          ? "<span class='pill ok'>가능</span>"
+          : "<span class='pill warn'>" + esc(r.note || "기준 없음") + "</span>" },
   ], doms, "분야 목록이 비었습니다");
 
   $("badDays").innerHTML = table([
@@ -1499,6 +1597,8 @@ function render(d) {
       "<span>" + d.window_days + "일</span>" +
       "<span>" + esc(dSeries[dSeries.length - 1].day) + "</span></div>"
     : emptyBox(["데이터 없음", "최근 " + d.window_days + "일에 요청이 없습니다"]);
+
+  renderAxis(s0);
 
   // 축은 product_id 가 정본이고 표명은 폴백이다(서버 PRODUCT_KEY). 화면에는 사람이 아는
   // 이름을 먼저 보이고, 없으면 식별자를 그대로 쓴다 — 빈칸으로 두면 무엇인지 알 수 없다.

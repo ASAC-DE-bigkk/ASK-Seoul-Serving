@@ -48,6 +48,17 @@ CD 는 **코드만** 배포한다. 마이그레이션이 자동으로 돌면 운
 읽기 문이 fail-closed 로 닫혔다). 헤더 없이 부르면 전부 **401** 이고, 그건 고장이 아니라
 설계다. 아래 예시는 `$AUTH` 를 달고 도는 것을 전제로 한다.
 
+⚠️ **`npm run d1` 은 이 디렉터리(`ops-dashboard/`)에만 있다.** 마켓플레이스·DAG 리포에는 없다 —
+이슈나 코멘트에 이 명령을 인용할 때는 **어디서 도는지 한 줄을 같이 적는다**(#162 에서 실제로
+막힌 사람이 있었다). 다른 레포에서 같은 D1 을 보려면 wrangler 를 직접 부른다:
+
+```bash
+# ops-dashboard 안에서
+cd ops-dashboard && npm run d1 -- "SELECT 1"
+# 아무 데서나 (같은 운영 D1)
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --command "SELECT 1"
+```
+
 ```bash
 BASE=http://localhost:8788
 # 토큰은 .dev.vars 에서 읽는다 — 셸 히스토리·문서에 값을 남기지 않는다.
@@ -91,6 +102,30 @@ curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '
   | {all: $all, by_domain: $byDom, unknown: $unknown, ok: (($byDom + $unknown) == $all)}'
 #   🔴 by_domain + unknown == all 이어야 한다. unknown 은 제품에 안 묶이는 요청
 #      (API 목록·인증·키 발급) — 어느 분야에도 안 넣는다. 화면이 그 건수를 밝힌다
+
+# ④-2-a 그 unknown 이 **무엇인지** — 다섯 갈래로 갈렸나 (#162 🅐)
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{axis: .serving.axis, ok: .serving.axis_ok}'
+#   product     카탈로그 제품 — 분야로 센다
+#   no_product  목록·인증·키 발급 — 애초에 제품이 없다. 정상
+#   bundle      번들 요청 — 🔴 **분야로 환산하지 않는다**(정의가 시점마다 다르다, PR #161)
+#   qa_probe    404 가 성공 조건인 점검(`qa-` 접두). 정상
+#   not_found   카탈로그에 없는 이름 — 🔴 **여기만 조치 대상**
+#   axis_ok=false 면 _catalog 를 못 읽은 것이다. 화면은 그때 카드를 **접는다**(0 으로 안 그린다)
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '
+  (.serving.totals | map(select(.domain=="*")) | .[0].calls) as $all
+  | (.serving.axis | map(.calls) | add // 0) as $axis
+  | {all: $all, axis_sum: $axis, ok: ($axis == $all)}'
+#   🔴 다섯 갈래 합 == 전체. 모자라면 어느 갈래에도 안 들어간 요청이 있다는 뜻이고,
+#      그건 예전의 '미상 한 덩어리'로 되돌아간 것이다
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.serving.not_found'
+#   조치 대상을 **이름째로**. `key_ids` 가 우리 팀 키면 점검 트래픽이니 `qa-` 로 바꾸게 한다
+
+# ④-2-b 분야 등록부가 데이터 분야와 운영 축을 가르나 (#162 🅕)
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{kind: .meta.domain_kind,
+  data: (.pipeline.domains | map(select(.is_data_domain != 0)) | length),
+  ops:  (.pipeline.domains | map(select(.is_data_domain == 0)) | length)}'
+#   kind=false → 0003 마이그레이션 전이다. 화면이 파이프라인 탭에 배너로 직접 말한다
+#   data 는 6, ops 는 1(common)이어야 한다 — data 가 7 이면 픽스처를 안 돌린 것이다
 
 # ④-3 숨김이 실제로 먹는지 — CSS 가 [hidden] 을 덮고 있지 않은지 (브라우저 없이, 통과 기준 0건)
 npm run check:hidden
@@ -187,10 +222,19 @@ curl -s -H "$AUTH" "$BASE/api/summary" | jq '.meta.missing'   # ["serving"] 등 
 않지만, `_ops_domain` 은 콘솔 소유의 **참조 내용**(분야 코드 → 한글 이름)이다.
 마이그레이션은 표만 만들고 내용은 안 넣으므로 **한 번 돌려야 한다.**
 
+🔴 **`npm run migrate` 를 먼저 돌린다.** 픽스처가 `is_data_domain`(0003)을 채우므로 순서가
+바뀌면 `no such column` 으로 끝난다.
+
 ```bash
+npm run migrate                                  # 0003 — is_data_domain 컬럼
 npm run d1 -- --file=fixtures/ops_domain.sql     # INSERT OR REPLACE — 다시 돌려도 안전
-npm run d1 -- "SELECT domain,label,has_slo FROM _ops_domain ORDER BY domain"
+npm run d1 -- "SELECT domain,label,has_slo,is_data_domain FROM _ops_domain ORDER BY domain"
 ```
+
+`is_data_domain` 은 **데이터 분야와 파이프라인 운영 축을 가른다**(#162 🅕). `common`
+(파이프라인 운영 지표) 하나만 `0` 이고, 그래야 '측정 가능한 분야' 분모가 **6**(데이터 분야
+수)으로 나온다. 안 걸리면 **7** 이 뜬다 — 라벨은 맞는데 숫자가 틀린 상태이고, 화면이
+파이프라인 탭에 "분야 종류를 아직 못 가릅니다" 배너로 직접 말한다.
 
 안 하면 화면이 분야를 `culture`·`commerce`·`common` 으로 부른다 — `domLabel()` 이 등록부에
 없으면 코드를 그대로 쓰기 때문이다(**화면은 라벨을 지어내지 않는다**). 실제로 운영 등록부가
