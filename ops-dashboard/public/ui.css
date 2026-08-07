@@ -322,6 +322,15 @@ tbody tr:hover .kbtn { border-color:var(--line-strong); }
 .scroll { max-height:360px; overflow:auto; }
 .scroll.tall { max-height:460px; }
 .scroll thead th { position:sticky; top:0; background:var(--panel); z-index:1; }
+/* `ui.js`(UIPage)가 **긴 표를 만나 직접 승격한** 상자. 원래 스크롤 상자가 아니었으므로
+   왜 스크롤이 생겼는지 표시를 남긴다 — 나중에 "이건 왜 잘려 보이지"에 답할 수 있어야 한다. */
+.scroll.pagehost { max-height:min(60vh, 420px); }
+/* "20 / 58" — 지금 몇 개를 보고 있나. 🔴 **잘린 표는 잘렸다고 말해야 한다**(0012):
+   침묵하면 사람이 첫 20행을 전부로 읽는다. 상자 안 맨 아래에 붙어 스크롤 끝에서 만난다. */
+.pagefoot { position:sticky; bottom:0; background:var(--panel); font-size:11px;
+            color:var(--faint); padding:7px 0 3px; text-align:center;
+            border-top:1px solid var(--line); }
+.pagefoot b { color:var(--muted); font-variant-numeric:tabular-nums; }
 .scroll::-webkit-scrollbar { width:10px; height:10px; }
 .scroll::-webkit-scrollbar-thumb { background:var(--line-strong); border-radius:5px;
                                    border:3px solid var(--panel); }
