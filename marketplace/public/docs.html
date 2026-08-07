@@ -199,8 +199,13 @@
       지금 값이 아니라 “이 질의가 이런 답을 낸다”는 증거로 보십시오.</p>
 
     <div class="ep"><span class="m">GET</span><span class="p">/api/v1/glossary</span><span class="auth">인증 필요 · 무과금</span></div>
-    <p>코드값의 뜻을 돌려줍니다(예: 요일 코드, 혼잡도 등급). <code>?vocabulary_id=</code> 로 좁힐 수 있습니다.
-      제품 응답에 숫자·약어로 들어오는 값의 의미를 여기서 찾습니다.</p>
+    <p>코드값의 뜻을 돌려줍니다(예: 요일 코드, 혼잡도 등급). 제품 응답에 숫자·약어로 들어오는 값의
+      의미를 여기서 찾습니다.</p>
+    <p><b><code>?vocabulary_id=</code> 는 필수입니다</b> — 없으면 400 입니다.
+      ⚠️ 다만 <b>지금은 그 값을 알아낼 방법이 마땅치 않습니다.</b> 컬럼이 자기 어휘를 선언하지 않고
+      어휘 목록을 주는 경로도 없어서, 실질적으로는 어휘 이름을 이미 아는 경우에만 쓸 수 있습니다.
+      계약을 고치는 논의가 <a href="https://github.com/ASAC-DE-bigkk/ASK-Seoul-Serving/issues/180">#180</a>
+      에 있습니다.</p>
 
     <div class="ep"><span class="m post">POST</span><span class="p">/mcp</span><span class="auth">도구 호출부터 인증</span></div>
     <p><b>MCP</b>(Model Context Protocol) 서버입니다. Streamable HTTP · JSON-RPC 2.0 단일 엔드포인트로,
