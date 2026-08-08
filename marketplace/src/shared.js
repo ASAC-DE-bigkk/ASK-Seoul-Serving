@@ -70,9 +70,46 @@ export const kstDay = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString()
 // `_catalog` 등록과 외부 공개는 다른 결정이다. NULL(미선언)은 공개하지 않는다.
 export const PUBLIC = "external = 1";
 
-// allowRevoked: 폐기 경로 전용. 이미 폐기한 키로도 자기 정보를 지울 수 있어야 한다 —
-// 폐기가 삭제 요청의 문을 닫아버리면 "지울 권리"가 폐기 순서에 걸려 사라진다.
-export async function authenticate(env, request, { allowRevoked = false } = {}) {
+// service key의 scope는 발급 화면의 사용자 key scope와 다르다. proxy 같은 비인간
+// principal은 원문을 실어 전달받지 않고, 운영자가 D1에 hash·scope만 등록한다.
+// 저장값이 깨졌다면 넓게 허용하지 않는다. 원문 유출보다 fail-closed가 싸다.
+function serviceKeyScopes(raw) {
+  try {
+    const scopes = JSON.parse(raw || "[]");
+    return Array.isArray(scopes) && scopes.every((scope) =>
+      typeof scope === "string" && /^[a-z0-9][a-z0-9:._-]{0,127}$/.test(scope),
+    ) ? new Set(scopes) : null;
+  } catch {
+    return null;
+  }
+}
+
+// 사용자 키와 service key는 서로 다른 수명주기를 갖는다. 전자는 이메일 소유권·셀프
+// 삭제가 있고, 후자는 service principal·최소 scope·운영자 폐기가 있다. 한 표에 억지로
+// 섞으면 기존 사용자 key migration의 부분 적용이 곧 전 서비스 인증 장애가 된다.
+async function loadKeyRow(env, hash) {
+  const userKey = await env.DB.prepare(
+    "SELECT key_hash, key_prefix, email, status, daily_quota FROM _keys WHERE key_hash = ?"
+  ).bind(hash).first();
+  if (userKey) return { ...userKey, key_type: "user", service_name: null, scopes_json: null };
+
+  try {
+    const serviceKey = await env.DB.prepare(
+      "SELECT key_hash, key_prefix, status, daily_quota, service_name, scopes_json " +
+      "FROM _service_keys WHERE key_hash = ?"
+    ).bind(hash).first();
+    return serviceKey ? { ...serviceKey, key_type: "service", email: null } : null;
+  } catch {
+    // 새 service-key migration이 적용되기 전에는 기존 사용자 key 인증을 계속 보장한다.
+    // service key만 unknown으로 fail-closed 된다.
+    return null;
+  }
+}
+
+// allowRevoked: 사용자 폐기 경로 전용. 이미 폐기한 사용자 키로도 자기 정보를 지울 수
+// 있어야 한다 — 폐기가 삭제 요청의 문을 닫아버리면 "지울 권리"가 폐기 순서에 걸려
+// 사라진다. service key는 이 예외를 받지 않으며, 오직 requiredScope가 있는 route만 탄다.
+export async function authenticate(env, request, { allowRevoked = false, requiredScope = null } = {}) {
   const auth = request.headers.get("authorization") || "";
   const m = auth.match(/^Bearer\s+(ask_[0-9a-f]{32})$/i);
   // ⚠️ 안내가 **폐지된 경로**를 가르치고 있었다 — `POST /api/v1/keys` 는 2026-08-07 에
@@ -80,12 +117,30 @@ export async function authenticate(env, request, { allowRevoked = false } = {}) 
   //    발급은 사람이 브라우저로 여는 Google 로그인 하나뿐이라 그 주소를 준다.
   if (!m) return { error: problem(401, "missing api key", "Authorization: Bearer ask_… 헤더가 필요하다 — 키 발급은 브라우저로 GET /api/v1/auth/google") };
   const hash = await sha256hex(m[1]);
-  const row = await env.DB.prepare(
-    "SELECT key_hash, key_prefix, email, status, daily_quota FROM _keys WHERE key_hash = ?"
-  ).bind(hash).first();
+  const row = await loadKeyRow(env, hash);
   if (!row) return { error: problem(401, "unknown api key", "등록되지 않은 키다") };
-  if (row.status !== "active" && !allowRevoked)
-    return { error: problem(403, "revoked api key", "폐기된 키다") };
+  if (row.status !== "active" && !(allowRevoked && row.key_type === "user")) {
+    return {
+      error: problem(403, "revoked api key", "폐기된 키다", {
+        code: row.key_type === "service" ? "revoked_service_key" : "revoked_api_key",
+      }),
+    };
+  }
+  if (row.key_type === "service") {
+    if (!requiredScope) {
+      return { error: problem(403, "service key scope required",
+        "service key는 명시적으로 허용된 K-Skill route에서만 사용할 수 있다",
+        { code: "service_key_scope_required" }) };
+    }
+    const scopes = serviceKeyScopes(row.scopes_json);
+    if (!row.service_name || !scopes || !scopes.has(requiredScope)) {
+      return { error: problem(403, "insufficient api key scope",
+        "이 service key에는 요청한 K-Skill read scope가 없다",
+        { code: "insufficient_scope", required_scope: requiredScope }) };
+    }
+  } else if (row.key_type !== "user") {
+    return { error: problem(403, "invalid api key type", "알 수 없는 API key 유형이다", { code: "invalid_key_type" }) };
+  }
   return { keyRow: row };
 }
 
