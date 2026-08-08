@@ -138,6 +138,10 @@ SLO 를 한 화면에서 본다.
 - **폐기된 키로도 이 엔드포인트는 통과한다**(`authenticate(..., {allowRevoked:true})`).
   폐기가 삭제의 문을 닫으면 "지울 권리"가 폐기 순서에 걸려 사라진다.
 - **요청 로그는 남는다**(30일 보존 그대로). 다만 purge 로 해시→이메일 대응이 사라지므로
+  남은 `key_hash` 는 사람과 연결되지 않는다. 처리방침에 그대로 적었다.
+
+남용 대응 폐기(약관의 "사전 통지 없이")는 공개 엔드포인트가 아니라 운영자의 D1 조작이다 —
+`UPDATE _keys SET status='revoked' WHERE key_prefix = ?`.
 
 ## K-Skill proxy 서비스 키 — 사용자 키와 분리
 
@@ -146,14 +150,40 @@ SLO 를 한 화면에서 본다.
 `/skill/v1`의 단일 Weather bundle/product/data read route에서만 통과한다. `/api/v1`,
 `/mcp`, key 관리 route는 같은 key로 호출할 수 없다.
 
+🔑 **막는 코드가 따로 있는 게 아니라 열어 주는 코드가 없어서 막힌다.** `requiredScope` 를
+넘기는 호출처는 `index.js` 의 `/skill/v1` 블록 **한 곳뿐**이고, 나머지 문은 그냥
+`authenticate()` 를 부르므로 service key 가 오면 403 `service_key_scope_required` 다.
+새 라우트가 생겨도 실수로 열리지 않는다 — 거부가 기본값이다.
+
 서비스 key는 `_service_keys`에 hash·prefix·principal·scope·상태만 저장한다. 원문은 proxy
 운영 환경에만 두고, 사고 시 `status='revoked'`로 즉시 차단한다. rotation은 새 scoped key
 등록 → proxy secret 교체·smoke → 이전 key revoke 순서다. 자세한 계약은
 [decision/0005](docs/decision/0005-k-skill-service-key-scope.md)를 따른다.
-  남은 `key_hash` 는 사람과 연결되지 않는다. 처리방침에 그대로 적었다.
 
-남용 대응 폐기(약관의 "사전 통지 없이")는 공개 엔드포인트가 아니라 운영자의 D1 조작이다 —
-`UPDATE _keys SET status='revoked' WHERE key_prefix = ?`.
+### 발급 — `npm run issue:service-key`
+
+```bash
+npm run issue:service-key -- --service-name "k-skill-proxy:seoul-weather-risk" \
+                             --scope "skill:seoul-weather-risk:read"
+```
+
+🔴 **원문은 stderr, SQL 은 stdout 이다.** `… > insert.sql` 로 받으면 파일에는 **해시만 담긴
+INSERT** 가 들어가고 원문은 터미널에만 뜬다. 반대로 두면 "SQL 을 파일로 받는다"는 지극히
+자연스러운 동작이 곧 유출이 된다. 스크립트는 어떤 경로로도 파일을 쓰지 않는다.
+
+발급 전에 **서버가 받아 줄 값인지 먼저 본다** — scope 문자열이 `shared.js` 정규식과 다르거나
+서버가 어느 route 에서도 요구하지 않는 값이면 발급을 거부한다. 그런 키는 인증은 되는데 모든
+route 가 403 이라, 원인이 D1 에도 로그에도 안 보인다(비공개 채널 전달까지 왕복을 다시 해야
+한다). 미리 발급해야 할 사정이 있으면 `--allow-unknown-scope` 로 명시적으로 연다.
+
+출력된 SQL 은 해시만 담고 있어 명령행에 남아도 된다.
+
+```bash
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --command "<출력된 SQL>"
+```
+
+원문을 잃으면 복구 경로가 없다 — 새로 발급하고 이전 행을 `revoked` 로 바꾼다(rotation 과
+같은 절차다).
 
 ## 페이지네이션 — offset 이 아니라 rowid 키셋 커서
 
