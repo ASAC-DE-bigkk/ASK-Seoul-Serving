@@ -225,10 +225,14 @@ async function check(models, env) {
     "토큰이 죽었거나 잘못 복사됐다. 대시보드에서 새로 만든다");
   if (!active) return 3;
 
+  // ⚠️ **이 단계로 중단하지 않는다.** `GET /accounts/{id}` 는 `Account Settings · Read` 를
+  //    요구하는데 **우리는 그 권한이 필요 없다** — Workers AI 만 있으면 된다. 최소 권한으로
+  //    만든 토큰은 여기서 403 이 정상이고, 그걸 게이트로 두면 **필요 없는 권한을 요구해
+  //    진짜 검사를 가로막는다**(2026-08-08 실사례). 계정이 맞는지는 아래 추론이 판정한다.
   const a = await json(`${API}/${env.account}`, { headers: auth });
-  line(a.status === 200, `계정 접근 — ${a.status === 200 ? a.body?.result?.name ?? "OK" : `HTTP ${a.status}`}`,
-    "CF_ACCOUNT_ID 가 이 토큰의 계정이 아니다. `npx wrangler whoami` 로 확인한다");
-  if (a.status !== 200) return 3;
+  const known = a.status === 200;
+  line(true, `계정 이름 — ${known ? a.body?.result?.name : `확인 못 함(HTTP ${a.status})`}` +
+    (known ? "" : " · 이 토큰엔 계정 조회 권한이 없다. 필요 없는 권한이라 그대로 진행한다"));
 
   // 🔴 여기가 진짜 판정이다 — 우리가 실제로 부를 엔드포인트를 그대로 부른다.
   const model = models[0];
@@ -237,10 +241,14 @@ async function check(models, env) {
     body: JSON.stringify({ messages: [{ role: "user", content: "hi" }], max_tokens: 1 }),
   });
   const ok = r.status === 200;
+  // 🔴 여기가 유일한 판정이다. 401/403 이면 원인이 둘인데 응답 본문이 갈라 준다 —
+  //    권한 부족이면 Workers AI 를 지목하고, 계정이 틀렸으면 대개 "not found" 계열이 온다.
   line(ok, `Workers AI 추론 (${model}) — ${ok ? "통과" : `HTTP ${r.status}`}`,
     r.status === 403 || r.status === 401
-      ? "토큰에 **Account · Workers AI** 권한이 없다. `Edit Cloudflare Workers` 템플릿에는 안 붙는다 — 커스텀 토큰으로 그 권한을 더한다"
-      : `응답: ${JSON.stringify(r.body).slice(0, 200)}`);
+      ? "둘 중 하나다 — ① 토큰에 **Account · Workers AI** 권한이 없다(`Edit Cloudflare Workers` " +
+        "템플릿엔 안 붙는다) ② `CF_ACCOUNT_ID` 가 이 토큰의 계정이 아니다.\n" +
+        `        응답: ${JSON.stringify(r.body?.errors ?? r.body).slice(0, 300)}`
+      : `응답: ${JSON.stringify(r.body).slice(0, 300)}`);
   if (!ok) return 3;
 
   // 도구 호출까지 되는지 — 여기서 막히면 모델은 살아 있어도 이 설계엔 못 쓴다.
