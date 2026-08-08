@@ -105,12 +105,33 @@ const rpcError = (id, code, message) => rpcJson({ jsonrpc: "2.0", id, error: { c
 const errText = (text) => ({ content: [{ type: "text", text }], isError: true });
 const okJson = (data) => ({ content: [{ type: "text", text: JSON.stringify(data) }] });
 
+// 상태별 안내 기본값 — `/api/v1` 의 데이터 질의(preview·query)를 기준으로 쓴 문장이다.
+// 같은 상태 코드라도 툴에 따라 **뜻이 다르면** 아래 툴별 표로 덮는다.
+const BASE_HINTS = {
+  400: "요청이 잘못됐습니다(없는 필터/시간축) — describe_product 로 컬럼을 확인하세요.",
+  401: "키가 없거나 유효하지 않습니다 — 키를 발급/교체하세요.",
+  403: "이 제품은 비공개입니다.",
+  404: "없는 제품입니다 — list_products 로 확인하세요.",
+  409: "커서가 만료됐습니다(게시본 갱신) — 처음부터 다시 조회하세요.",
+  429: "쿼터/버스트 초과 — 잠시 후 재시도하세요(Retry-After).",
+  503: "게시 정합성 일시 불일치 — 잠시 후 재시도하세요.",
+};
+
+// `run_pattern` 은 같은 코드가 다른 사건을 뜻한다 — 400 은 필터가 아니라 pattern_id·파라미터
+// 문제이고, 409 는 커서 만료가 아니라 **미검증 패턴**이다(handleRunPattern). 기본 문장을 그대로
+// 쓰면 안내가 본문 detail 과 정반대를 말한다 — 실측(2026-08-08 전수 평가)에서 AI 가 그 안내를
+// 믿고 list_products 로 되돌아가 왕복을 낭비했다. 안내가 틀리면 없느니만 못하다.
+const RUN_PATTERN_HINTS = {
+  400: "패턴 요청이 잘못됐습니다 — describe_product 의 usage_patterns 에서 pattern_id 와 필요한 파라미터를 확인하세요.",
+  409: "아직 검증되지 않아 실행할 수 없는 패턴입니다 — describe_product 에서 runnable 이 true 인 패턴을 고르세요.",
+};
+
 // Response(shared 핸들러 결과) → MCP tool result. 4xx/5xx 는 상태별 사용자 안내로.
 //
 // **실패한 상태를 `trace` 에 옮겨 싣는다**(#62). JSON-RPC 는 오류도 봉투 안에 담아 HTTP 는
 // 200 이라, 그대로 두면 로그가 전부 `mcp/200` 이 되고 콘솔의 오류율이 영원히 0 이 된다.
 // 요청 하나에 툴 호출은 하나이므로 여기서 정해지는 값도 하나다.
-async function toToolResult(res, trace = {}) {
+async function toToolResult(res, trace = {}, hintOverrides = null) {
   const ct = res.headers.get("content-type") || "";
   const body = ct.includes("json") ? await res.json() : await res.text();
   if (res.status >= 400) {
@@ -121,16 +142,7 @@ async function toToolResult(res, trace = {}) {
     if (res.status === 503 && rightsBlockers.some((b) => b === "source_redistribution_not_allowed" || b === "missing_source_rights_evidence")) {
       return errText("이 제품은 원천이 재배포를 허용한 근거가 아직 확인되지 않아 제공할 수 없습니다(권리 사유 — 재시도해도 동일). describe_product 로 원천·라이선스를 확인하세요.");
     }
-    const hint =
-      {
-        400: "요청이 잘못됐습니다(없는 필터/시간축) — describe_product 로 컬럼을 확인하세요.",
-        401: "키가 없거나 유효하지 않습니다 — 키를 발급/교체하세요.",
-        403: "이 제품은 비공개입니다.",
-        404: "없는 제품입니다 — list_products 로 확인하세요.",
-        409: "커서가 만료됐습니다(게시본 갱신) — 처음부터 다시 조회하세요.",
-        429: "쿼터/버스트 초과 — 잠시 후 재시도하세요(Retry-After).",
-        503: "게시 정합성 일시 불일치 — 잠시 후 재시도하세요.",
-      }[res.status] || `요청 실패(${res.status})`;
+    const hint = { ...BASE_HINTS, ...(hintOverrides || {}) }[res.status] || `요청 실패(${res.status})`;
     return errText(`${hint}\n${typeof body === "string" ? body : JSON.stringify(body)}`);
   }
   return okJson(body);
@@ -163,6 +175,35 @@ async function notFoundWithSuggestions(env, deps, productId, trace) {
     }
   } catch { /* 제안은 덤이다 — 실패해도 404 안내는 나간다 */ }
   return errText(`없는 제품입니다: ${productId} — list_products 로 확인하세요.${hint}`);
+}
+
+// 제품은 있는데 그 패턴이 없을 때. 위 유사 제품 제안과 **같은 취지**다 — 다음 시도가 또
+// 추측이면 왕복만 는다. 다른 점은 이쪽은 짐작할 필요조차 없다는 것이다: 제품이 가진
+// pattern_id 는 확정 목록이라 그대로 실어 준다.
+// 실측(2026-08-08 전수 평가)에서 AI 가 `hotspot-top-grids` 처럼 **없는 이름을 지어내** 400·404 를
+// 오간 사례가 나왔다. 목록이 응답 안에 있으면 그 루프가 한 번에 끝난다.
+// 🔴 실행 가능(runnable)만 싣는다 — 미검증 패턴을 권하면 다음 호출이 409 로 끝난다.
+// 상한 12: 안내 문장이 읽히는 선. 넘으면 개수만 알린다(제품당 최대 16개 — prod 실측).
+const MAX_PATTERN_HINT = 12;
+
+async function unknownPatternWithList(env, deps, request, productId, patternId, trace) {
+  trace.status = 404;
+  let hint = " describe_product 의 usage_patterns 에서 pattern_id 를 확인하세요.";
+  try {
+    // trace 를 넘기지 않는다 — 메타 조회가 위에서 정한 404 를 200 으로 덮으면 로그가 거짓말한다.
+    const res = await deps.handleProductBundle(env, productId, request, {});
+    if (res.status < 400) {
+      const body = await res.json();
+      const list = body.patterns || body.usage_patterns || [];
+      const ids = list.filter((p) => p && p.runnable !== false && p.pattern_id).map((p) => p.pattern_id);
+      const shown = ids.slice(0, MAX_PATTERN_HINT);
+      if (shown.length)
+        hint = ` 이 제품에서 실행 가능한 pattern_id: ${shown.join(" · ")}` +
+          (ids.length > shown.length ? ` 외 ${ids.length - shown.length}개` : "") +
+          " — 이 중 하나를 그대로 쓰세요(이름을 지어내지 마세요).";
+    }
+  } catch { /* 목록은 덤이다 — 실패해도 404 안내는 나간다 */ }
+  return errText(`'${patternId}' 는 '${productId}' 의 패턴이 아닙니다.${hint}`);
 }
 
 async function callTool(name, args, ctx) {
@@ -243,13 +284,13 @@ async function callTool(name, args, ctx) {
     if (args.intent) trace.intent = normalizeIntent(args.intent) ?? trace.intent ?? null;
     const res = await deps.handleRunPattern(env, args.product_id, args.pattern_id, args.params || {}, keyRow, trace);
     if (res.status === 404) {
-      // 제품 오타일 수도, 패턴 오타일 수도 있다 — 본문 detail 이 구분해 주므로 그대로 전달하되
-      // 제품 쪽이면 유사 이름 제안이 붙는다.
+      // 제품 오타일 수도, 패턴 오타일 수도 있다 — 본문 detail 이 둘을 가른다. 어느 쪽이든
+      // "다음에 무엇을 쓰면 되는지"를 함께 준다: 제품이면 유사 이름, 패턴이면 실제 목록.
       const body = await res.clone().json().catch(() => null);
       if (body && /서빙 카탈로그에 없다/.test(body.detail || "")) return notFoundWithSuggestions(env, deps, args.product_id, trace);
-      return toToolResult(res, trace);
+      return unknownPatternWithList(env, deps, request, args.product_id, args.pattern_id, trace);
     }
-    return toToolResult(res, trace);
+    return toToolResult(res, trace, RUN_PATTERN_HINTS);
   }
   return errText(`알 수 없는 tool: ${name}`);
 }
