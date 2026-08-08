@@ -14,8 +14,17 @@
 | 로컬 | http://localhost:8788/qa-lab/ (`cd ops-dashboard && npm run dev`) | `http://localhost:8787` (마켓 로컬) |
 | wrangler 없이 | `index.html` 파일 더블클릭 | `https://ask-seoul.kr` |
 
-- 이 화면은 게이트웨이와 **다른 출처**라 `/api/v1/*`(CORS 허용)만 라이브 호출한다.
-  신설형 라이브 실행(`/mcp`)은 CORS로 막혀 마켓 콘솔 결과를 붙여넣어 반영한다(아래 6).
+- 이 화면은 게이트웨이와 **다른 출처(교차 출처)** 다. `/api/v1/*` 는 `Access-Control-Allow-Origin: *`
+  라 교차 출처 조회가 되지만, **커스텀 헤더(`X-ASK-Intent`)를 실으면 CORS 프리플라이트가 뜨고**
+  게이트웨이 OPTIONS 가 그 헤더를 불허해 **실패한다("Failed to fetch")**. 그래서 이 화면은
+  **교차 출처일 때 식별자 헤더를 자동으로 뺀다**(단순 요청 → 정상). 마커 `max20_fable` 는 동일
+  출처인 마켓 랩·MCP `initialize` 가 남긴다.
+- 신설형 라이브 실행(`/mcp`)은 응답에 CORS 헤더가 없어 교차 출처로는 막힌다 → 마켓 콘솔 결과를
+  붙여넣어 반영한다(아래 6). 또는 CLI 직접 연결(마스터 매뉴얼 §D)로 검증한다.
+
+> ⚠️ **"Failed to fetch / 로드 실패"가 떴다면**: (1) base 가 실행 환경과 맞는지 —
+> 배포에서 봤으면 `https://ask-seoul.kr`, 로컬이면 `http://localhost:8787`. (2) 위 헤더-프리플라이트
+> 이슈는 코드에서 이미 교차 출처 헤더를 빼도록 고쳤다(재배포 반영 필요).
 
 ## 순차 절차
 

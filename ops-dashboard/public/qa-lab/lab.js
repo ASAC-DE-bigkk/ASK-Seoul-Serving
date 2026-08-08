@@ -52,11 +52,19 @@ const asisAnswerable = (req) => hardBlockers(req).length === 0;
 const state = { products: [], base: "https://ask-seoul.kr", live: {} };
 const baseUrl = () => ($("baseUrl").value || "").trim().replace(/\/+$/, "");
 
+// 🔴 출처에 따라 요청을 바꾼다. 교차 출처(ops.ask-seoul.kr → ask-seoul.kr)에서는 커스텀 헤더
+// (x-ask-intent)가 CORS 프리플라이트를 유발하는데, 게이트웨이 OPTIONS 는 authorization·
+// content-type 만 허용하고 x-ask-intent 는 불허라 프리플라이트가 실패한다("Failed to fetch").
+// 그래서 동일 출처일 때만 식별자 헤더를 싣고(프리플라이트 없음), 교차 출처면 빼서 단순 요청으로
+// 만든다. 식별자 마커는 동일 출처인 마켓 랩·MCP initialize 가 남긴다.
+const sameOriginBase = () => { const b = baseUrl(); if (!b) return true; try { return new URL(b, location.href).origin === location.origin; } catch { return false; } };
+const intentHeaders = () => sameOriginBase() ? { "x-ask-intent": CLIENT_ID } : {};
+
 // ── 카탈로그 로드 ───────────────────────────────────
 $("loadBtn").addEventListener("click", async () => {
   $("loadState").textContent = "불러오는 중…";
   try {
-    const res = await fetch(baseUrl() + "/api/v1/catalog", { headers: { "x-ask-intent": CLIENT_ID } });
+    const res = await fetch(baseUrl() + "/api/v1/catalog", { headers: intentHeaders() });
     const json = await res.json();
     state.products = (json.products || []).filter((p) => (p.usage_patterns || []).length);
     $("loadState").innerHTML = `제품 <b>${state.products.length}</b>종 로드됨`;
@@ -66,7 +74,10 @@ $("loadBtn").addEventListener("click", async () => {
     $("cmpCard").classList.remove("hide");
   } catch (err) {
     $("loadState").innerHTML = `<span style="color:var(--err)">로드 실패</span> — ${esc(String(err && err.message || err))}`;
-    $("corsNote").style.display = ""; $("corsNote").innerHTML = "교차 출처 조회에 실패했습니다. base 주소를 확인하세요. (게이트웨이가 로컬이면 <span class='mono'>http://localhost:8787</span>)";
+    $("corsNote").style.display = "";
+    $("corsNote").innerHTML = "조회에 실패했습니다. <b>게이트웨이 주소(base)</b>가 실행 환경과 맞는지 확인하세요 — " +
+      "배포에서 이 페이지를 봤다면 <span class='mono'>https://ask-seoul.kr</span>, 게이트웨이를 로컬로 띄웠다면 " +
+      "<span class='mono'>http://localhost:8787</span>. (게이트웨이가 안 떠 있거나 주소가 틀리면 네트워크 오류가 납니다.)";
   }
 });
 
@@ -186,7 +197,7 @@ $("runAsisBtn").addEventListener("click", async () => {
   $("asisLiveState").textContent = "조회 중…";
   const t0 = performance.now();
   try {
-    const res = await fetch(baseUrl() + `/api/v1/data/${encodeURIComponent(p.product_id)}?limit=50`, { headers: { authorization: "Bearer " + apiKey, "x-ask-intent": CLIENT_ID } });
+    const res = await fetch(baseUrl() + `/api/v1/data/${encodeURIComponent(p.product_id)}?limit=50`, { headers: { authorization: "Bearer " + apiKey, ...intentHeaders() } });
     const ms = Math.round(performance.now() - t0);
     const json = await res.json();
     if (res.ok) {
