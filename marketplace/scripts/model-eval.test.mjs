@@ -156,3 +156,15 @@ test("툴 왕복은 OpenAI 표준 모양으로 되민다 — id·function·tool_
   assert.equal(tool.tool_call_id, "call_1", "tool 응답이 어느 호출에 대한 건지 못 잇는다");
   assert.equal(typeof tool.content, "string");
 });
+
+// `--hint` A/B (2026-08-09). 두 모델 다 describe 까지 가고 실행 대신 설명으로 끝내는 것이
+// 응답 탓인지 시험하는 스위치다. **기본은 꺼져 있어야** 대조군이 남는다.
+test("--hint 는 describe 응답에만 next_action 을 얹고, 기본은 없다", () => {
+  const plain = answerTool("describe_product", { product_id: "culture_event_schedule" }, PRODUCTS);
+  assert.equal(plain.next_action, undefined, "기본에 힌트가 붙으면 대조군이 사라진다");
+
+  const hinted = answerTool("describe_product", { product_id: "culture_event_schedule" }, PRODUCTS, { hint: true });
+  assert.match(hinted.next_action, /run_pattern/);
+  // 힌트는 덧붙이는 것이지 원래 내용을 바꾸지 않는다
+  assert.deepEqual(hinted.usage_patterns, plain.usage_patterns);
+});

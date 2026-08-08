@@ -111,7 +111,7 @@ export function buildCases(products, n) {
 }
 
 /** 툴 호출에 **카탈로그만으로** 답한다. D1·키·쿼터를 쓰지 않는다. */
-export function answerTool(name, args, products) {
+export function answerTool(name, args, products, opts = {}) {
   const find = (id) => (products || []).find((p) => p.product_id === id);
   if (name === "list_products") {
     return { products: products.map((p) => ({
@@ -122,7 +122,7 @@ export function answerTool(name, args, products) {
   if (name === "describe_product") {
     const p = find(args?.product_id);
     if (!p) return { error: `'${args?.product_id}' 은 카탈로그에 없다` };
-    return {
+    const out = {
       product_id: p.product_id, grain: p.grain, time_axis: p.time_axis,
       columns: (p.columns || []).map((c) => c.name || c),
       usage_patterns: (p.usage_patterns || []).map((u) => ({
@@ -130,6 +130,16 @@ export function answerTool(name, args, products) {
         runnable: Boolean(u.verified_at), params: declaredParams(u.sql),
       })),
     };
+    // `--hint` 실험(2026-08-09). 두 모델 다 여기까지 와서 **실행 대신 설명으로 끝냈다**
+    // (10회 중 5회). 응답이 다음 행동을 말하지 않아 완결로 읽힌 것이라는 가설을 시험한다.
+    // 🔑 이건 `TOOLS`(MCP 계약)가 아니라 **어댑터가 조립하는 응답 본문**이다 — chat.js 가
+    //    자기 몫으로 얹는 자리이고, MCP 담당 조건("TOOLS 읽기 전용") 안쪽이다.
+    if (opts.hint) {
+      out.next_action = "이 목록에서 runnable=true 인 pattern_id 를 하나 골라 " +
+        "run_pattern(product_id, pattern_id, params) 를 지금 호출하세요. " +
+        "설명만 하고 끝내지 마세요 — 실행해야 사용자가 답을 받습니다.";
+    }
+    return out;
   }
   // run_pattern·query_product·preview_product 는 **실행하지 않는다.** 여기까지 왔다는 것이
   // 곧 측정하려던 결과이므로, 도달 사실만 남기고 대화를 끝낸다.
@@ -185,7 +195,7 @@ export function readCall(c) {
   return { name, args };
 }
 
-async function runModel(model, cse, products, env) {
+async function runModel(model, cse, products, env, opts = {}) {
   const messages = [
     { role: "system", content: SYSTEM },
     { role: "user", content: cse.question },
@@ -216,7 +226,7 @@ async function runModel(model, cse, products, env) {
     for (const [i, c] of calls.entries()) {
       const { name, args } = readCall(c);
       trace.push({ name, args });
-      const out = answerTool(name, args, products);
+      const out = answerTool(name, args, products, opts);
       if (out._terminal) return { trace, usage, turns: turn + 1 };
       messages.push(...echoMessages(c.id ?? `call_${turn}_${i}`, name, args, out));
     }
@@ -238,11 +248,12 @@ export function score(result, cse) {
 }
 
 function parseArgs(argv) {
-  const out = { models: DEFAULT_MODELS, n: 5, check: false };
+  const out = { models: DEFAULT_MODELS, n: 5, check: false, hint: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--models") out.models = argv[++i].split(",").map((s) => s.trim());
     else if (argv[i] === "--n") out.n = Number(argv[++i]);
     else if (argv[i] === "--check") out.check = true;
+    else if (argv[i] === "--hint") out.hint = true;
   }
   return out;
 }
@@ -337,7 +348,7 @@ async function main(argv) {
     process.stderr.write("CF_ACCOUNT_ID · CF_AI_TOKEN 환경변수가 필요하다 (원문을 인자로 넘기지 않는다)\n");
     return 2;
   }
-  const { models, n, check: checkOnly } = parseArgs(argv);
+  const { models, n, check: checkOnly, hint } = parseArgs(argv);
   if (checkOnly) return check(models, { account, token });
 
   const products = (await (await fetch(`${CATALOG}?cb=eval`)).json()).products;
@@ -347,7 +358,7 @@ async function main(argv) {
   const rows = [];
   for (const model of models) {
     for (const cse of cases) {
-      const r = await runModel(model, cse, products, { account, token });
+      const r = await runModel(model, cse, products, { account, token }, { hint });
       // 🔴 인증 실패는 **즉시 멈춘다.** 재시도해도 같고, 계속 돌면 0/5 표가 나와서
       //    "모델이 못 한다"로 읽힌다 — 실제로는 한 번도 물어본 적이 없는 것이다.
       if (/^HTTP 40[13]$/.test(r.error || "")) {
