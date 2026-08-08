@@ -353,3 +353,74 @@ test("run_pattern — 필수 인자 없으면 안내", async () => {
   assert.equal(body.result.isError, true);
   assert.match(body.result.content[0].text, /pattern_id/);
 });
+
+// ── 안내 문구가 사건과 맞는가 (2026-08-08 전수 평가에서 드러난 결함) ──────────────
+// 상태 코드만 보고 문구를 고르면 `run_pattern` 에서 안내가 본문 detail 과 반대를 말한다.
+// 실측에서 AI 가 없는 pattern_id 를 지어냈는데 "없는 제품입니다 — list_products" 안내를 받고
+// 제품 목록으로 되돌아가 왕복을 낭비했다. 안내가 틀리면 없느니만 못하다.
+
+test("없는 패턴 404 — 제품이 아니라 패턴 문제라고 말하고, 실행 가능한 pattern_id 를 준다", async () => {
+  const deps = mkDeps({
+    handleRunPattern: async () => jsonRes({ title: "unknown pattern", detail: "'nope' 는 'p' 의 패턴에 없다" }, 404),
+    handleProductBundle: async (_e, pid) => jsonRes({
+      product_id: pid,
+      patterns: [
+        { pattern_id: "top_dong", runnable: true },
+        { pattern_id: "hourly_peak", runnable: true },
+        { pattern_id: "미검증", runnable: false },   // 권하면 다음 호출이 409 로 끝난다
+      ],
+    }),
+  });
+  const res = await handleMcp(
+    rpc("tools/call", { name: "run_pattern", arguments: { product_id: "p", pattern_id: "hotspot-top-grids" } }),
+    {}, {}, deps);
+  const text = (await res.json()).result.content[0].text;
+  assert.match(text, /패턴이 아닙니다/);
+  assert.doesNotMatch(text, /없는 제품입니다/, "제품은 멀쩡한데 제품 탓을 했다");
+  assert.match(text, /top_dong · hourly_peak/);
+  assert.doesNotMatch(text, /미검증/, "실행 못 하는 패턴을 권했다");
+});
+
+test("패턴 목록 조회가 실패해도 404 안내는 나간다", async () => {
+  const deps = mkDeps({
+    handleRunPattern: async () => jsonRes({ title: "unknown pattern" }, 404),
+    handleProductBundle: async () => { throw new Error("boom"); },
+  });
+  const res = await handleMcp(
+    rpc("tools/call", { name: "run_pattern", arguments: { product_id: "p", pattern_id: "nope" } }), {}, {}, deps);
+  const body = await res.json();
+  assert.equal(body.result.isError, true);
+  assert.match(body.result.content[0].text, /usage_patterns/);
+});
+
+test("없는 패턴 404 는 로그에도 404 로 남는다 — 목록 조회(200)가 덮지 않는다", async () => {
+  const trace = {};
+  const deps = mkDeps({ handleRunPattern: async () => jsonRes({ title: "unknown pattern" }, 404) });
+  await handleMcp(
+    rpc("tools/call", { name: "run_pattern", arguments: { product_id: "p", pattern_id: "nope" } }), {}, trace, deps);
+  assert.equal(trace.status, 404);
+});
+
+test("run_pattern 의 400·409 는 제 사건으로 안내한다 — 컬럼·커서 문구를 쓰지 않는다", async () => {
+  const bad = mkDeps({ handleRunPattern: async () => jsonRes({ detail: "파라미터 :n 값이 필요하다" }, 400) });
+  const t1 = (await (await handleMcp(
+    rpc("tools/call", { name: "run_pattern", arguments: { product_id: "p", pattern_id: "x" } }), {}, {}, bad)).json())
+    .result.content[0].text;
+  assert.match(t1, /pattern_id 와 필요한 파라미터/);
+  assert.doesNotMatch(t1, /없는 필터/);
+
+  const unverified = mkDeps({ handleRunPattern: async () => jsonRes({ title: "pattern not verified" }, 409) });
+  const t2 = (await (await handleMcp(
+    rpc("tools/call", { name: "run_pattern", arguments: { product_id: "p", pattern_id: "x" } }), {}, {}, unverified)).json())
+    .result.content[0].text;
+  assert.match(t2, /검증되지 않아/);
+  assert.doesNotMatch(t2, /커서/);
+});
+
+test("다른 툴의 400·409 안내는 그대로다 — 덮어쓰기가 새지 않는다", async () => {
+  const deps = mkDeps({ handleData: async () => jsonRes({ title: "cursor expired" }, 409) });
+  const text = (await (await handleMcp(
+    rpc("tools/call", { name: "query_product", arguments: { product_id: "p" } }), {}, {}, deps)).json())
+    .result.content[0].text;
+  assert.match(text, /커서가 만료/);
+});
