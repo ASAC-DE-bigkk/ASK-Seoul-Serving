@@ -1,0 +1,111 @@
+/* ops-dashboard qa-lab — AS-IS/TO-BE 비교 콘솔 전용 스타일 (자체 완결).
+ *
+ * 🔴 이 폴더(ops-dashboard/public/qa-lab/)는 통째로 삭제하면 사라지는 부가물이다.
+ *    ui.css·ui.js 등 근간 자산을 <link> 로 끌어오지 않는다 — 결합을 만들지 않기 위해서.
+ *    콘솔 톤(슬레이트/블루)에 맞춰 색만 이 파일에 자체 보유한다.
+ */
+:root {
+  --bg: #f4f6f8; --panel: #ffffff; --ink: #17202b; --muted: #5a6673; --line: #e0e5ea;
+  --console: #2b5f8a;                 /* 콘솔 블루 */
+  --asis: #8a6d3b;                    /* 기존형(AS-IS) 앰버 */
+  --tobe: #2f7d5b;                    /* 신설형(TO-BE) 그린 */
+  --ok: #1f7a4d; --warn: #9a6a12; --err: #b3261e;
+  --code-bg: #0f1720; --code-ink: #d6dde6;
+  --radius: 12px; --shadow: 0 1px 2px rgba(0,0,0,.05), 0 6px 20px rgba(0,0,0,.04);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#0f141a; --panel:#161c24; --ink:#e7ecf1; --muted:#93a0ad; --line:#28313b;
+    --console:#5b9bd0; --asis:#c8a45e; --tobe:#5cbe8c; --ok:#56c48a; --warn:#d6a53a; --err:#f0857b;
+    --code-bg:#0a0f15; --code-ink:#cfd7e0; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.25); }
+}
+:root[data-theme="dark"] { --bg:#0f141a; --panel:#161c24; --ink:#e7ecf1; --muted:#93a0ad; --line:#28313b;
+  --console:#5b9bd0; --asis:#c8a45e; --tobe:#5cbe8c; --ok:#56c48a; --warn:#d6a53a; --err:#f0857b; --code-bg:#0a0f15; --code-ink:#cfd7e0; }
+:root[data-theme="light"] { --bg:#f4f6f8; --panel:#ffffff; --ink:#17202b; --muted:#5a6673; --line:#e0e5ea;
+  --console:#2b5f8a; --asis:#8a6d3b; --tobe:#2f7d5b; --ok:#1f7a4d; --warn:#9a6a12; --err:#b3261e; --code-bg:#0f1720; --code-ink:#d6dde6; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  overflow-x: hidden; }
+.wrap { max-width: 1160px; margin: 0 auto; padding: 1.25rem clamp(.75rem, 3vw, 1.5rem) 4rem; }
+header.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+h1 { font-size: clamp(1.25rem, 3.4vw, 1.7rem); margin: .2rem 0 .1rem; letter-spacing: -.01em; }
+.sub { color: var(--muted); margin: 0; font-size: .95rem; }
+.pillrow { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .5rem; }
+.tag { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; font-weight: 600; padding: .2rem .55rem;
+  border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: color-mix(in srgb, var(--panel) 70%, transparent); }
+.tag.exp { color: var(--console); border-color: color-mix(in srgb, var(--console) 40%, var(--line)); }
+.tag.id { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.themebtn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: .4rem .6rem; cursor: pointer; font-size: .85rem; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1rem 1.1rem; margin-top: 1rem; }
+.card > h2 { font-size: 1.02rem; margin: 0 0 .2rem; }
+.card > .hint { color: var(--muted); font-size: .88rem; margin: 0 0 .8rem; }
+.note { border-left: 3px solid var(--warn); background: color-mix(in srgb, var(--warn) 9%, transparent); padding: .55rem .75rem; border-radius: 0 8px 8px 0; font-size: .86rem; margin: .6rem 0 0; }
+
+label { display: block; font-size: .82rem; font-weight: 600; color: var(--muted); margin-bottom: .25rem; }
+input, select, textarea { width: 100%; min-width: 0; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: .5rem .6rem; }
+textarea { resize: vertical; min-height: 5rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .82rem; }
+.grid { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); }
+.btn { border: 0; border-radius: 9px; padding: .55rem 1rem; font: inherit; font-weight: 700; cursor: pointer; }
+.btn.primary { background: var(--console); color: #fff; }
+.btn.ghost { background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btnrow { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; }
+.kv { font-size: .8rem; color: var(--muted); } .kv b { color: var(--ink); }
+
+/* ── 헤드라인 스코어 ─────────────────────────────── */
+.headline { display: grid; gap: .8rem; grid-template-columns: 1fr; }
+@media (min-width: 720px) { .headline { grid-template-columns: 1fr 1fr; } }
+.bignum { border: 1px solid var(--line); border-radius: 12px; padding: 1rem; text-align: center; }
+.bignum.asis { border-color: color-mix(in srgb, var(--asis) 45%, var(--line)); background: color-mix(in srgb, var(--asis) 7%, transparent); }
+.bignum.tobe { border-color: color-mix(in srgb, var(--tobe) 45%, var(--line)); background: color-mix(in srgb, var(--tobe) 7%, transparent); }
+.bignum .n { font-size: clamp(2rem, 8vw, 3rem); font-weight: 800; line-height: 1; letter-spacing: -.02em; }
+.bignum.asis .n { color: var(--asis); } .bignum.tobe .n { color: var(--tobe); }
+.bignum .l { color: var(--muted); font-size: .85rem; margin-top: .35rem; }
+
+.bars { margin-top: 1rem; display: grid; gap: .5rem; }
+.bar { display: grid; grid-template-columns: minmax(120px, 34%) 1fr auto; gap: .6rem; align-items: center; font-size: .84rem; }
+.bar .track { background: color-mix(in srgb, var(--muted) 15%, transparent); border-radius: 999px; height: 12px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--console); border-radius: 999px; }
+.bar .pct { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 4.5rem; text-align: right; }
+.bar.block .fill { background: var(--err); }
+
+/* ── 비교 카드 ───────────────────────────────────── */
+.cmp { display: grid; gap: .8rem; grid-template-columns: 1fr; }
+@media (min-width: 820px) { .cmp { grid-template-columns: 1fr 1fr; } }
+.side { border: 1px solid var(--line); border-radius: 12px; padding: .9rem 1rem; }
+.side.asis { border-top: 4px solid var(--asis); }
+.side.tobe { border-top: 4px solid var(--tobe); }
+.side h3 { margin: 0 0 .1rem; font-size: 1rem; }
+.side .role { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.side.asis .role { color: var(--asis); } .side.tobe .role { color: var(--tobe); }
+.side dl { margin: .7rem 0 0; display: grid; grid-template-columns: auto 1fr; gap: .35rem .7rem; font-size: .86rem; }
+.side dt { color: var(--muted); }
+.side dd { margin: 0; }
+.verdict { margin-top: .7rem; font-weight: 700; padding: .4rem .6rem; border-radius: 8px; font-size: .86rem; }
+.verdict.no { background: color-mix(in srgb, var(--err) 13%, transparent); color: var(--err); }
+.verdict.yes { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.verdict.partial { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+
+.chips { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: .3rem; }
+.cap { font-size: .78rem; padding: .18rem .5rem; border-radius: 6px; border: 1px solid var(--line); }
+.cap.ok { color: var(--tobe); border-color: color-mix(in srgb, var(--tobe) 40%, var(--line)); }
+.cap.no { color: var(--err); border-color: color-mix(in srgb, var(--err) 40%, var(--line)); background: color-mix(in srgb, var(--err) 7%, transparent); }
+.cap.part { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+
+table.metric { width: 100%; border-collapse: collapse; font-size: .86rem; margin-top: 1rem; }
+.tblbox { overflow-x: auto; }
+table.metric th, table.metric td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.metric th { color: var(--muted); font-weight: 700; background: var(--bg); }
+table.metric td.asis { color: var(--asis); } table.metric td.tobe { color: var(--tobe); }
+table.metric .dim { width: 30%; font-weight: 600; }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); border-radius: 10px; padding: .8rem .9rem; margin: .5rem 0 0; overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .8rem; line-height: 1.5; max-height: 320px; overflow-y: auto; }
+.linkish { color: var(--console); cursor: pointer; }
+.foot { margin-top: 2rem; color: var(--muted); font-size: .82rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+.foot a { color: var(--console); }
+.hide { display: none !important; }
