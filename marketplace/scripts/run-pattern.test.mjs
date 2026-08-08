@@ -6,7 +6,7 @@ import { handleRunPattern } from "../src/index.js";
 
 // d1_usage_patterns 한 행 + 데이터 질의를 흉내내는 최소 DB.
 // prepare 된 SQL 에 무엇이 왔는지(converted/binds)를 기록해 검증에 쓴다.
-function fakeEnv(patternRow, dataRows = [{ x: 1 }]) {
+function fakeEnv(patternRow, dataRows = [{ x: 1 }], patternIds = null) {
   const seen = { sql: null, binds: null };
   return {
     seen,
@@ -16,7 +16,13 @@ function fakeEnv(patternRow, dataRows = [{ x: 1 }]) {
           bind(...binds) {
             return {
               async first() { return sql.includes("d1_usage_patterns") ? patternRow : null; },
-              async all() { seen.sql = sql; seen.binds = binds; return { results: dataRows }; },
+              async all() {
+                // 404 안내용 pattern_id 목록 질의(#204)는 데이터 질의와 구분한다 — 같은 표를
+                // 읽지만 쓰임이 다르고, 여기서 안 가르면 `seen.sql` 이 덮여 다른 테스트가 흐려진다.
+                if (patternIds && sql.includes("SELECT pattern_id"))
+                  return { results: patternIds.map((pattern_id) => ({ pattern_id })) };
+                seen.sql = sql; seen.binds = binds; return { results: dataRows };
+              },
             };
           },
         };
@@ -30,8 +36,8 @@ const keyRow = { key_hash: "h", daily_quota: 1000 };
 // 게이트가 2단계(증거 누락 차단)라 0행이면 모든 케이스가 503 에서 끝나 버린다. 누락 차단
 // 자체는 아래 전용 테스트가 본다. _usage 는 all/first 를 안 쓰는 경로가 없어 — countUsage 는
 // INSERT/SELECT 를 쓴다. 그래서 여기서는 run() 이 필요하다: 위 fake 에 없으면 실패한다.
-function fullEnv(patternRow, dataRows) {
-  const env = fakeEnv(patternRow, dataRows);
+function fullEnv(patternRow, dataRows, patternIds) {
+  const env = fakeEnv(patternRow, dataRows, patternIds);
   env.catalogMeta = { name: "t", product_id: "p", publication_id: "pub1", exported_at: "s1" };
   env.sources = [{ source_id: "s", redistribution: "allowed_with_attribution" }];
   const base = env.DB.prepare.bind(env.DB);
@@ -125,6 +131,41 @@ test("권리 증거가 없으면 503 — run_pattern 도 게이트 2단계를 �
   const res = await handleRunPattern(env, "p", "pat", { gu: "x", n: 1 }, keyRow, {});
   assert.equal(res.status, 503);
   assert.deepEqual((await res.json()).blockers, ["missing_source_rights_evidence"]);
+});
+
+// ── 없는 패턴 404 의 회복 경로 (#204) ────────────────────────────────────────────
+// 안내가 **실재하지 않는 곳**을 가리키던 것을 고친 자리다. 옛 문구는 "카탈로그의
+// usage_patterns 에서 runnable 인 것을 고를 것"이었는데 카탈로그에 그 필드가 없었다.
+
+test("없는 패턴 404 는 실행 가능한 pattern_id 를 그대로 실어 준다 (#204)", async () => {
+  const env = fullEnv(null, undefined, ["free_in_gu", "gu_window", "today_in_gu"]);
+  const res = await handleRunPattern(env, "p", "nope", {}, keyRow, {});
+  assert.equal(res.status, 404);
+  const { detail } = await res.json();
+  for (const id of ["free_in_gu", "gu_window", "today_in_gu"]) assert.match(detail, new RegExp(id));
+  // 🔴 목록이 있으면 **어디를 보라고 하지 않는다** — 그 '어디'가 틀렸던 게 이 결함이다.
+  assert.doesNotMatch(detail, /카탈로그/);
+});
+
+test("패턴 목록을 못 얻으면 `runnable` 이 실제로 있는 곳을 가리킨다 (#204)", async () => {
+  const env = fullEnv(null, undefined, []);
+  const res = await handleRunPattern(env, "p", "nope", {}, keyRow, {});
+  assert.equal(res.status, 404);
+  const { detail } = await res.json();
+  // 제품 번들만이 `runnable` 을 싣는다(v1.js). 카탈로그를 가리키면 다시 같은 결함이다.
+  assert.match(detail, /\/api\/v1\/products\/p/);
+  assert.doesNotMatch(detail, /카탈로그/);
+});
+
+test("목록 질의가 죽어도 404 안내는 나간다 — 덤이 본문을 막지 않는다 (#204)", async () => {
+  const env = fullEnv(null, undefined, []);
+  const base = env.DB.prepare;
+  env.DB.prepare = (sql) => sql.includes("SELECT pattern_id")
+    ? { bind: () => ({ all: async () => { throw new Error("D1 down"); } }) }
+    : base(sql);
+  const res = await handleRunPattern(env, "p", "nope", {}, keyRow, {});
+  assert.equal(res.status, 404);
+  assert.match((await res.json()).detail, /'nope' 는 'p' 의 패턴에 없다/);
 });
 
 test("카탈로그 통과 시 trace 에 table·publication_id 가 남는다 (#132 리뷰 ①-d)", async () => {
