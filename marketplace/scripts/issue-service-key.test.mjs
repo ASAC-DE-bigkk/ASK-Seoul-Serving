@@ -72,6 +72,19 @@ test("INSERT 는 해시만 싣는다 — 원문이 들어갈 자리가 없다", 
   assert.ok(sql.includes("'active'"));
 });
 
+// 🔴 2026-08-08 실사고의 회귀 방지. `'["skill:…:read"]'` 를 리터럴로 박았더니 PowerShell 이
+// 큰따옴표를 먹어 `[skill:…:read]`(json_valid=0)로 등록됐고, 인증은 되는데 모든 경로가 403 인
+// 죽은 키가 됐다. **SQL 에 큰따옴표가 한 글자도 없으면** 셸이 먹을 것이 없다.
+test("SQL 에 큰따옴표가 없다 — 셸이 먹을 것이 없어야 한다", () => {
+  const sql = buildInsert({
+    hash: "h", prefix: "p", scopes: ["skill:seoul-weather-risk:read", "skill:other:read"],
+    serviceName: "k-skill-proxy:seoul-weather-risk", quota: 1000, createdAt: "t",
+  });
+  assert.ok(!sql.includes('"'), `SQL 에 큰따옴표가 있다: ${sql}`);
+  // scope 는 SQLite 가 JSON 으로 만든다 — 저장 결과는 ["a","b"] 이고 json_valid=1 이다.
+  assert.match(sql, /json_array\('skill:seoul-weather-risk:read', 'skill:other:read'\)/);
+});
+
 test("홑따옴표가 SQL 을 깨지 않는다", () => {
   const sql = buildInsert({
     hash: "h", prefix: "p", serviceName: "it's", scopes: ["a"], quota: 1,
