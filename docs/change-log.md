@@ -61,6 +61,49 @@
 - **결과**: 주석·문서만, 동작 변경 없음(`SERVE_ROUTES`·`ROUTE_KO` 무변). `node --check` 통과.
   역사 서술(0014 §1-1 의 "17종으로만 채웠더니", §5 의 "18종")은 **당시 사실이라 그대로 둔다.**
 
+### MCP `verified` 배지를 뺀다 — K-Skill allowlist 와의 결합 해체 (#172)
+
+- **작업자**: @yooseongjin527
+- **의도 · 목표**: MCP `list_products` 의 `verified` 가 **K-Skill 경로 allowlist**
+  (`skill.js` `SKILL_PRODUCT_IDS`)를 그대로 찍고 있었다. 설명은 *"출처·품질 증거까지
+  검증"* — **말과 실체가 달랐다.** PR#161 이 allowlist 를 6→1 로 줄이자 57종 중 56종이
+  `verified:false` 로 나갈 참이었고, kang 실측으로 **citydata 10/14 가 실제 ready** 임이
+  확인돼(#172) 거짓 신호가 될 것이 구체적으로 증명됐다. `main` 배포 전에 끊는다.
+- **조치**: #172 합의(masondev·kang) 그대로 —
+  - `mcp.js` 가 `skill.js` 를 **import 하지 않는다.** `verified`·`verified_bundle` 미노출,
+    툴 설명·`llms.txt` 의 해당 문장 제거. K-Skill 소속은 `/skill/v1` 번들이 말한다.
+  - 증거 신호는 별도 `evidence_ready` 로 **추후** 온다(#172) — 그때까지 없는 판정을 싣지
+    않는다. **없는 필드가 틀린 필드보다 낫다**: 지금 잘못된 `false` 를 실으면 AI 가
+    "증거 닫힌 제품은 서울에 하나"라고 결론 낸다.
+  - 테스트 2건 교체·신설 — 필드 부재 + **`import skill.js` 금지 구조 회귀 검사**
+    (masondev 완료기준 "MCP 테스트는 K-Skill 상품 수 변경과 독립" 을 그대로 코드로).
+- **결과**: `npm test` **199 PASS**(dev 리베이스 후 실측 — PR#175 의 라우트 테스트가 들어와
+  198 이 된 위에 이 PR 이 순증 1). 문서(`llms.txt`)가 대체 판단 경로(describe 의 출처·신선도,
+  `runnable`)를 안내한다.
+  🔴 **외부 계약 변화 — 예방이 아니라 수습이다.** 처음엔 *"현 운영은 `verified` 6종 true 를
+  내보내는 중이라 외부가 56종 false 를 한 번도 안 본다"* 고 적었는데 **틀렸다.** #188(dev→main,
+  08-08 01:45Z)이 #161 의 allowlist 축소(6→1)를 main 으로 내보냈고 main 의 `mcp.js` 는 여전히
+  `SKILL_PRODUCT_IDS` 로 `verified` 를 계산한다 — **그 시점부터 운영이 57종 중 56종을
+  `verified:false` 로 내보내는 중**이다(kang 실측 ready 인 citydata 10종 포함). MCP 오너가
+  운영 `tools/call` 로 교차 확인했다(true 1 · false 56). PR 을 연 것은 04:34Z 로 이미
+  2시간 49분 뒤였는데, **배포 이력을 조회하지 않고 기억으로 썼다.**
+  🔴 **PlayMCP 등록 요청이 이미 제출된 상태다**(MCP 오너 확인). `tools/list` 의 설명이
+  카탈로그에 그대로 노출되는데 그 문장은 "verified=true 는 …검증"인 반면 응답은 56종 false —
+  **심사자가 둘을 나란히 볼 수 있는 구간이 이미 시작됐다.** dev 머지 후 main 배포까지 바로 간다.
+  ⚠️ 배포 뒤 PlayMCP 가 툴 설명을 스냅샷으로 갖고 있는지(= 서버를 고쳐도 카탈로그 문구가
+  옛것일 수 있는지) 확인이 남는다 — MCP 오너가 맡기로 했다.
+  📌 곁가지로 **툴 개수 표기가 낡아 있던 것 4곳**을 처리했다(리뷰어 두 분이 같이 짚었다).
+  `run_pattern` 이 들어오면서 5 에 멈춰 있었고, 실측 `TOOLS` 는 list_products·describe_product·
+  preview_product·query_product·run_pattern·check_quota **6종**이다.
+  🔑 **숫자를 고치는 대신 세 곳에서는 걷었다.** 병합으로 받은 @Exisign 의 route 종 수 보정
+  (위 항목)이 같은 날 같은 결론을 냈다 — *"목록 없이 숫자만 있는 자리는 검증할 길이 없어
+  반드시 낡는다"*(콘솔 CLAUDE.md §7-1: 그 밖의 산문에는 종 수를 적지 않는다). 그 규칙을
+  그대로 따른다: **`llms.txt` 만 숫자를 남긴다**(바로 아래 툴 6개가 나열돼 자기 검증이 되고,
+  AI 가 읽는 계약 문서다). `marketplace/CLAUDE.md`·`README.md` 2곳의 표·산문에서는 종 수를
+  빼고 **`src/mcp.js` 의 `TOOLS` 가 정본**임을 가리키게 했다 — 안 그러면 다음 툴이 들어올 때
+  같은 자리가 또 낡는다.
+  📌 #161 의 change-log 누락분은 담당자(masondev)가 분리 작업과 함께 보강하기로 했다(#172).
+
 ### 긴 표는 20행이 한 쪽 — 스크롤로 이어 받는다
 
 - **작업자**: @Exisign
