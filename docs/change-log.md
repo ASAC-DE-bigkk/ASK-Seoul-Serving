@@ -56,9 +56,24 @@
     "증거 닫힌 제품은 서울에 하나"라고 결론 낸다.
   - 테스트 2건 교체·신설 — 필드 부재 + **`import skill.js` 금지 구조 회귀 검사**
     (masondev 완료기준 "MCP 테스트는 K-Skill 상품 수 변경과 독립" 을 그대로 코드로).
-- **결과**: `npm test` 191 PASS. ⚠️ **외부 계약 변화**: 현 운영(main)은 `verified` 6종
-  true 를 내보내는 중 — 이 변경이 나가면 필드 자체가 사라진다. 문서(`llms.txt`)가
-  대체 판단 경로(describe 의 출처·신선도, `runnable`)를 안내한다.
+- **결과**: `npm test` 191 PASS. 문서(`llms.txt`)가 대체 판단 경로(describe 의 출처·신선도,
+  `runnable`)를 안내한다.
+  🔴 **외부 계약 변화 — 예방이 아니라 수습이다.** 처음엔 *"현 운영은 `verified` 6종 true 를
+  내보내는 중이라 외부가 56종 false 를 한 번도 안 본다"* 고 적었는데 **틀렸다.** #188(dev→main,
+  08-08 01:45Z)이 #161 의 allowlist 축소(6→1)를 main 으로 내보냈고 main 의 `mcp.js` 는 여전히
+  `SKILL_PRODUCT_IDS` 로 `verified` 를 계산한다 — **그 시점부터 운영이 57종 중 56종을
+  `verified:false` 로 내보내는 중**이다(kang 실측 ready 인 citydata 10종 포함). MCP 오너가
+  운영 `tools/call` 로 교차 확인했다(true 1 · false 56). PR 을 연 것은 04:34Z 로 이미
+  2시간 49분 뒤였는데, **배포 이력을 조회하지 않고 기억으로 썼다.**
+  🔴 **PlayMCP 등록 요청이 이미 제출된 상태다**(MCP 오너 확인). `tools/list` 의 설명이
+  카탈로그에 그대로 노출되는데 그 문장은 "verified=true 는 …검증"인 반면 응답은 56종 false —
+  **심사자가 둘을 나란히 볼 수 있는 구간이 이미 시작됐다.** dev 머지 후 main 배포까지 바로 간다.
+  ⚠️ 배포 뒤 PlayMCP 가 툴 설명을 스냅샷으로 갖고 있는지(= 서버를 고쳐도 카탈로그 문구가
+  옛것일 수 있는지) 확인이 남는다 — MCP 오너가 맡기로 했다.
+  📌 곁가지로 **툴 개수 표기가 낡아 있던 것 4곳을 같이 고쳤다**(5 → 6). `run_pattern` 이
+  들어오면서 어긋났고 `llms.txt`·`marketplace/CLAUDE.md`·`README.md` 2곳에 남아 있었다.
+  실측: `TOOLS` 는 list_products·describe_product·preview_product·query_product·run_pattern·
+  check_quota **6종**.
   📌 #161 의 change-log 누락분은 담당자(masondev)가 분리 작업과 함께 보강하기로 했다(#172).
 
 ### 긴 표는 20행이 한 쪽 — 스크롤로 이어 받는다
