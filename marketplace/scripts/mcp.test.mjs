@@ -98,9 +98,46 @@ test("list_products — K-Skill allowlist 와 결합하지 않는다(#172): veri
   const payload = JSON.parse((await res.json()).result.content[0].text);
   assert.equal("verified_bundle" in payload, false);
   for (const p of payload.products) assert.equal("verified" in p, false);
-  // 카탈로그 본문은 그대로 통과한다 — mcp 가 덧씌우는 것이 없어야 한다
+  // 제품 목록과 순서는 카탈로그 그대로다 — mcp 가 판정을 덧씌우지 않는다
   assert.deepEqual(payload.products.map((p) => p.product_id),
     ["weather_place_risk_window", "citydata_ppltn_daily"]);
+});
+
+// ── 목록은 고르기 위한 것이다 (2026-08-08 실측: 510KB · 최대 10초) ──────────────
+// AI 가 가장 먼저 부르는 도구가 57종의 질의 패턴 431건 + 컬럼 전량을 싣고 있었다.
+// 한 번의 호출로 컨텍스트가 무너지고, 전수 평가에서 AI 가 응답을 파일로 저장해 grep 하는
+// 이상행동까지 나왔다. 상세는 describe_product 의 몫이다.
+
+test("list_products — 상세(패턴·컬럼)는 빼고 개수만 싣는다", async () => {
+  const deps = mkDeps({
+    handleCatalog: async () => jsonRes({
+      products: [{
+        product_id: "p", name: "t", product_question: "질문?",
+        usage_patterns: [{ pattern_id: "a", sql: "SELECT 1" }, { pattern_id: "b", sql: "SELECT 2" }],
+        columns: [{ name: "c1" }, { name: "c2" }, { name: "c3" }],
+      }],
+    }),
+  });
+  const payload = JSON.parse((await (await handleMcp(
+    rpc("tools/call", { name: "list_products", arguments: {} }), {}, {}, deps)).json())
+    .result.content[0].text);
+  const p = payload.products[0];
+  assert.equal("usage_patterns" in p, false, "패턴 전문이 목록에 남았다");
+  assert.equal("columns" in p, false, "컬럼 전문이 목록에 남았다");
+  assert.equal(p.pattern_count, 2);
+  assert.equal(p.column_count, 3);
+  // 고르는 데 쓰는 값은 남는다
+  assert.equal(p.product_question, "질문?");
+  assert.match(payload.detail_hint, /describe_product/);
+});
+
+test("메타가 없는 제품은 개수 0 — 필드를 지어내지 않는다", async () => {
+  const deps = mkDeps({ handleCatalog: async () => jsonRes({ products: [{ product_id: "p" }] }) });
+  const payload = JSON.parse((await (await handleMcp(
+    rpc("tools/call", { name: "list_products", arguments: {} }), {}, {}, deps)).json())
+    .result.content[0].text);
+  assert.equal(payload.products[0].pattern_count, 0);
+  assert.equal(payload.products[0].column_count, 0);
 });
 
 test("mcp.js 는 skill.js 를 import 하지 않는다(#172 구조 회귀 방지)", async () => {

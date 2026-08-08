@@ -17,7 +17,7 @@ export const TOOLS = [
   {
     name: "list_products",
     description:
-      "조회 가능한 서울 데이터 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 어떤 데이터가 질문에 맞는지 고를 때 가장 먼저 호출하세요.",
+      "조회 가능한 서울 데이터 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 어떤 데이터가 질문에 맞는지 고를 때 가장 먼저 호출하세요. 컬럼과 질의 패턴은 개수만 담기므로, 제품을 고른 뒤 describe_product 로 상세를 확인하세요.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -219,6 +219,24 @@ async function callTool(name, args, ctx) {
     // 합의(#172 masondev·kang): mcp 는 skill.js 상수를 직접 참조하지 않는다. K-Skill
     // 소속은 /skill/v1 번들이 말하고, 증거 신호는 별도 `evidence_ready` 로 **추후** 온다 —
     // 그때까지 없는 판정을 싣지 않는다(없는 필드가 틀린 필드보다 낫다).
+    //
+    // 🔴 **목록은 고르기 위한 것이지 읽기 위한 것이 아니다.** 카탈로그 본문을 그대로
+    // 흘려보내면 57종의 질의 패턴 431건과 컬럼 전량이 함께 나가 응답이 **510KB**가 된다
+    // (실측 2026-08-08: usage_patterns 75.5% · columns 17.2% = 93%). 이건 AI 가 **가장 먼저**
+    // 부르는 도구라, 한 번의 호출로 컨텍스트가 무너지고 응답도 2.7~10초가 걸린다.
+    // 실제로 전수 평가에서 AI 가 이 응답을 파일로 저장한 뒤 grep 으로 뒤지는 이상행동을 했다.
+    // 둘 다 `describe_product` 가 제품별로 이미 주는 것이므로, 여기서는 **개수만** 남긴다.
+    // 개수를 남기는 이유: 0 이면 "아직 메타가 없는 제품"이라 고르는 판단에 쓰인다.
+    // ⚠️ `/api/v1/catalog`(REST)는 건드리지 않는다 — 웹 카탈로그 화면이 상세를 쓴다.
+    if (Array.isArray(body.products)) {
+      body.products = body.products.map(({ usage_patterns, columns, ...rest }) => ({
+        ...rest,
+        pattern_count: Array.isArray(usage_patterns) ? usage_patterns.length : 0,
+        column_count: Array.isArray(columns) ? columns.length : 0,
+      }));
+      body.detail_hint =
+        "컬럼 설명과 실행 가능한 질의 패턴은 describe_product(product_id) 로 확인하세요 — 목록에는 개수만 싣습니다.";
+    }
     return okJson(body);
   }
   if (name === "check_quota") {
