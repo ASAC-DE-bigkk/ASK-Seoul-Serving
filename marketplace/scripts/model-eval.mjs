@@ -154,6 +154,25 @@ export function extractToolCalls(result) {
   return [];
 }
 
+/** 툴 왕복을 **OpenAI 표준 모양으로** 대화에 되민다.
+ *
+ * 🔴 모델이 돌려준 모양을 **그대로 되밀면 안 된다.** glm 은 `{name, arguments}` 로 주는데
+ *    그걸 그대로 넣으면 qwen 쪽 엔드포인트가 거절한다(2026-08-08 실측):
+ *
+ *      'ChatCompletionMessageFunctionToolCallParam' 'id'       Field required
+ *      'ChatCompletionMessageFunctionToolCallParam' 'function' Field required
+ *
+ *    **읽을 때는 관대하게, 되밀 때는 표준으로.** 안 그러면 모델 비교가 아니라
+ *    "누가 우리 형식 실수를 봐주나"를 재게 된다.
+ */
+export function echoMessages(id, name, args, out) {
+  return [
+    { role: "assistant", content: null,
+      tool_calls: [{ id, type: "function", function: { name, arguments: JSON.stringify(args) } }] },
+    { role: "tool", tool_call_id: id, name, content: JSON.stringify(out).slice(0, 6000) },
+  ];
+}
+
 /** tool call 한 건에서 (이름, 인자)를 꺼낸다 — 공급자마다 감싸는 모양이 다르다. */
 export function readCall(c) {
   const name = c?.name ?? c?.function?.name;
@@ -190,13 +209,12 @@ async function runModel(model, cse, products, env) {
     const calls = extractToolCalls(r);
     if (!calls.length) return { trace, answer: (r.response || "").slice(0, 200), usage, turns: turn + 1 };
 
-    for (const c of calls) {
+    for (const [i, c] of calls.entries()) {
       const { name, args } = readCall(c);
       trace.push({ name, args });
       const out = answerTool(name, args, products);
       if (out._terminal) return { trace, usage, turns: turn + 1 };
-      messages.push({ role: "assistant", content: "", tool_calls: [c] });
-      messages.push({ role: "tool", name, content: JSON.stringify(out).slice(0, 6000) });
+      messages.push(...echoMessages(c.id ?? `call_${turn}_${i}`, name, args, out));
     }
   }
   return { trace, usage, turns: MAX_TURNS, exhausted: true };

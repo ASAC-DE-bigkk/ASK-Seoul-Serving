@@ -133,3 +133,24 @@ test("tool call 의 이름·인자를 모양에 관계없이 읽는다", async (
   // 깨진 JSON 이 와도 죽지 않는다 — 채점에서 파라미터 불일치로 잡히면 된다
   assert.deepEqual(readCall({ function: { name: "a", arguments: "{oops" } }), { name: "a", args: {} });
 });
+
+// 🔴 2026-08-08 실측 회귀. glm 이 준 `{name, arguments}` 를 그대로 되밀었더니 qwen 쪽
+// 엔드포인트가 `id`·`function` 누락으로 400 을 냈다. 읽을 때는 관대하게, **되밀 때는
+// 표준으로** — 안 그러면 모델 비교가 아니라 "누가 우리 형식 실수를 봐주나"를 재게 된다.
+test("툴 왕복은 OpenAI 표준 모양으로 되민다 — id·function·tool_call_id", async () => {
+  const { echoMessages } = await import("./model-eval.mjs");
+  const [assistant, tool] = echoMessages("call_1", "describe_product", { product_id: "p" }, { ok: 1 });
+
+  assert.equal(assistant.role, "assistant");
+  const tc = assistant.tool_calls[0];
+  assert.equal(tc.id, "call_1");
+  assert.equal(tc.type, "function");
+  assert.equal(tc.function.name, "describe_product");
+  // arguments 는 **문자열**이어야 한다 — 객체로 넣으면 같은 검증에 걸린다
+  assert.equal(typeof tc.function.arguments, "string");
+  assert.deepEqual(JSON.parse(tc.function.arguments), { product_id: "p" });
+
+  assert.equal(tool.role, "tool");
+  assert.equal(tool.tool_call_id, "call_1", "tool 응답이 어느 호출에 대한 건지 못 잇는다");
+  assert.equal(typeof tool.content, "string");
+});
