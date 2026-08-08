@@ -72,7 +72,7 @@ npm run dev
 | `GET /api/v1/products/<product_id>` | Bearer | 제품 번들 — 컬럼 설명·grain·PK·시간축·질의 예시·출처. 쿼터 무소모 |
 | `GET /api/v1/glossary?vocabulary_id=` | Bearer | 코드값 사전(`code`→`label_ko`). 쿼터 무소모 |
 | `GET /skill/v1/…` | Bearer | K-Skill `seoul-weather-risk` 전용 계약 — 별도 담당(`src/skill.js`) |
-| `POST /mcp` | `tools/call`부터 Bearer | MCP 서버(JSON-RPC, 툴 5종) — `src/mcp.js` |
+| `POST /mcp` | `tools/call`부터 Bearer | MCP 서버(JSON-RPC) — `src/mcp.js` 의 `TOOLS` 가 정본 |
 
 문은 **소비자 축**으로 갈린다(agreement §1-2) — 사람·일반 소비자(`/api/v1`) · K-Skill
 (`/skill/v1`) · MCP 클라이언트(`/mcp`). 옛 `/v1/*` 는 표면을 접고 기능을 `/api/v1` 로
@@ -186,7 +186,7 @@ append 제품은 계속 늘어난다. 그 사이 `offset` 은 같은 행을 두 
 
 이미 에이전트 친화적이던 것들은 그대로다 — `product_question`(자연어 질문 = 시맨틱 라우팅),
 자기교정형 에러(잘못된 필터 → 사용 가능 컬럼 전체 목록), 매 응답의 쿼터 피드백, `Retry-After`,
-키리스 미리보기. **같은 Worker 의 MCP 동시 서빙은 들어왔다** — `POST /mcp`(툴 5종, #26·#32).
+키리스 미리보기. **같은 Worker 의 MCP 동시 서빙은 들어왔다** — `POST /mcp`(#26·#32).
 
 ## 공개 게이트 — 등록 ≠ 공개
 

@@ -8,7 +8,6 @@
 // 툴(6): list_products · describe_product · preview_product · query_product · run_pattern ·
 // check_quota. run_pattern 은 #118 실행 계약(2026-08-07 확정)으로 P1 에서 승격.
 
-import { SKILL_BUNDLE_ID, SKILL_PRODUCT_IDS } from "./skill.js";
 import { burstProblem, normalizeIntent, normalizeMcpClient, ATTRIBUTION } from "./shared.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -18,7 +17,7 @@ export const TOOLS = [
   {
     name: "list_products",
     description:
-      "조회 가능한 서울 데이터 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 어떤 데이터가 질문에 맞는지 고를 때 가장 먼저 호출하세요. verified=true 는 출처·품질 증거까지 검증된 제품입니다.",
+      "조회 가능한 서울 데이터 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 어떤 데이터가 질문에 맞는지 고를 때 가장 먼저 호출하세요.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -213,12 +212,13 @@ async function callTool(name, args, ctx) {
     const res = await deps.handleCatalog(env);
     if (res.status >= 400) return toToolResult(res, trace);
     const body = await res.json();
-    // 검증 번들(#4, seoul-weather-risk 단일 제품)과 일반 카탈로그를 구분해 노출한다(#26).
-    // 스코프는 전체 공개 제품(팀 결정 2026-08-04) — verified 는 신뢰 표시이지 필터가 아니다.
-    const verified = new Set(SKILL_PRODUCT_IDS);
-    if (Array.isArray(body.products))
-      body.products = body.products.map((p) => ({ ...p, verified: verified.has(p.product_id) }));
-    body.verified_bundle = SKILL_BUNDLE_ID;
+    // `verified`·`verified_bundle` 은 뺐다(#172, 2026-08-08). 그 값의 출처가
+    // **K-Skill 경로 allowlist**(skill.js SKILL_PRODUCT_IDS)였는데, 설명은 "출처·품질
+    // 증거까지 검증"이라 **말과 실체가 달랐다** — PR#161 이 allowlist 를 6→1 로 줄이자
+    // 실측 ready 인 제품 10종까지 verified:false 로 나갈 뻔했다(kang 실측, #172).
+    // 합의(#172 masondev·kang): mcp 는 skill.js 상수를 직접 참조하지 않는다. K-Skill
+    // 소속은 /skill/v1 번들이 말하고, 증거 신호는 별도 `evidence_ready` 로 **추후** 온다 —
+    // 그때까지 없는 판정을 싣지 않는다(없는 필드가 틀린 필드보다 낫다).
     return okJson(body);
   }
   if (name === "check_quota") {

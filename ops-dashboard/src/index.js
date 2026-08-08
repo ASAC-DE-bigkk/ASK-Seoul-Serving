@@ -21,12 +21,17 @@
 // **정본은 [decision/0014](docs/decision/0014-console-route-contract.md).** 값을 늘리거나
 // 뜻을 바꿀 때는 그 문서를 먼저 고친다 — 여기만 고치면 화면 문구가 따라오지 않는다.
 //
-// 게이트웨이가 내보내는 값 전수 17종(`marketplace/src/index.js` 의 `trace.route` 대입 자리
-// 12종 + `mcp.js` 의 툴별 세분화 5종과 1:1):
-//   catalog · preview · data · me · keys · revoke · product · glossary
+// 게이트웨이가 내보내는 값 전수 21종(`marketplace/src/index.js` 의 `trace.route` 대입 자리
+// 15종 + `mcp.js` 의 툴별 세분화 6종과 1:1):
+//   catalog · preview · data · me · keys · revoke · product · glossary · run_pattern
+//   auth_start · auth_callback
 //   skill_bundle · skill_data · skill_product
 //   mcp · mcp_list_products · mcp_describe_product · mcp_preview_product
 //       · mcp_query_product · mcp_run_pattern · mcp_check_quota
+//
+// ⚠️ 이 종 수는 세 번의 추가(auth 2종 · mcp_run_pattern · run_pattern)가 지나도록 17종에
+// 멈춰 있었다(2026-08-08 보정). 값을 늘리면 **이 주석의 목록·종 수와 0014 §1 머리**도 함께
+// 고친다 — CLAUDE.md §7-1 route 행이 이 자리를 가리킨다.
 //
 // ⚠️ `product`·`glossary` 는 한때 `v1_product`·`v1_glossary` 였다 — ea28bcc(#67)가 `/v1` 을
 // 삭제가 아니라 **흡수**로 바꾸면서 개명했다. 옛 이름으로 번역표를 채우면 화면에 슬러그가 샌다.
@@ -37,7 +42,9 @@
 //
 // **배열이 정본이고 SQL 은 거기서 만든다.** 화면에 알리는 `meta.serve_routes` 와 질의 조건을
 // 따로 적으면 언젠가 어긋나고, 그때 화면은 "이렇게 셌습니다"라고 **틀린 말**을 하게 된다.
-const SERVE_ROUTES = ["data", "skill_data", "mcp_query_product", "mcp_run_pattern"];
+// `run_pattern`(2026-08-07 신설, Serving PR#175) — 검증 패턴에 **사람용 문**이 생겼다.
+// `mcp_run_pattern` 과 같은 함수를 부르고 같은 쿼터를 깎는다. 문만 둘이다.
+const SERVE_ROUTES = ["data", "skill_data", "mcp_query_product", "mcp_run_pattern", "run_pattern"];
 const SERVE = "route IN (" + SERVE_ROUTES.map((r) => "'" + r + "'").join(", ") + ")";
 
 // ── MCP 를 어떻게 셀 것인가 (#63 결정 A) ──────────────────────────────────────

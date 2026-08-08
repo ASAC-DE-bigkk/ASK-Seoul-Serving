@@ -185,9 +185,27 @@
       <b>검증된 질의 패턴</b>(usage_patterns)까지 들어 있습니다. <code>/api/v1/catalog</code> 가 전 제품의
       얕은 목록이라면 이쪽은 한 제품의 깊은 설명입니다. 조회 전에 한 번 부르면 필터에 쓸 컬럼을 확인할 수 있습니다.</p>
 
+    <div class="ep"><span class="m">GET</span><span class="p">/api/v1/patterns/{product_id}/{pattern_id}</span><span class="auth">인증 필요</span></div>
+    <p><b>동작이 확인된 질의를 그대로 실행합니다.</b> 도메인 담당자가 게시하고 <b>실제 게시본에 돌려 본</b>
+      SQL 만 돌아갑니다 — 이 경로로 질의를 새로 짜실 수는 없습니다. 대신
+      <code>/api/v1/data</code> 로는 안 되는 <b>집계·랭킹·시계열</b>이 여기서는 됩니다(data 는 일치 필터와
+      기간까지입니다).</p>
+    <p>쓸 수 있는 패턴은 카탈로그 각 제품의 <code>usage_patterns</code> 에 있습니다.
+      <code>runnable</code> 이 <code>true</code> 인 것을 고르시고, <code>:파라미터</code> 자리의 값만 쿼리스트링으로 넘기시면 됩니다.
+      선언되지 않은 이름을 보내시면 400 이 <b>쓸 수 있는 이름을 함께</b> 알려 드리고, 아직 검증 전인 패턴은 409 입니다.
+      일일 한도는 데이터 조회와 똑같이 1회 차감됩니다.</p>
+    <pre><code>GET /api/v1/patterns/culture_activity_by_dong/exhibition_dongs?n=10</code></pre>
+    <p>응답의 <code>insight_sample_ko</code> 는 <b>검증 당시 이 질의를 실제로 돌려 나온 문장</b>입니다 —
+      지금 값이 아니라 “이 질의가 이런 답을 낸다”는 증거로 보십시오.</p>
+
     <div class="ep"><span class="m">GET</span><span class="p">/api/v1/glossary</span><span class="auth">인증 필요 · 무과금</span></div>
-    <p>코드값의 뜻을 돌려줍니다(예: 요일 코드, 혼잡도 등급). <code>?vocabulary_id=</code> 로 좁힐 수 있습니다.
-      제품 응답에 숫자·약어로 들어오는 값의 의미를 여기서 찾습니다.</p>
+    <p>코드값의 뜻을 돌려줍니다(예: 요일 코드, 혼잡도 등급). 제품 응답에 숫자·약어로 들어오는 값의
+      의미를 여기서 찾습니다.</p>
+    <p><b><code>?vocabulary_id=</code> 는 필수입니다</b> — 없으면 400 입니다.
+      ⚠️ 다만 <b>지금은 그 값을 알아낼 방법이 마땅치 않습니다.</b> 컬럼이 자기 어휘를 선언하지 않고
+      어휘 목록을 주는 경로도 없어서, 실질적으로는 어휘 이름을 이미 아는 경우에만 쓸 수 있습니다.
+      계약을 고치는 논의가 <a href="https://github.com/ASAC-DE-bigkk/ASK-Seoul-Serving/issues/180">#180</a>
+      에 있습니다.</p>
 
     <div class="ep"><span class="m post">POST</span><span class="p">/mcp</span><span class="auth">도구 호출부터 인증</span></div>
     <p><b>MCP</b>(Model Context Protocol) 서버입니다. Streamable HTTP · JSON-RPC 2.0 단일 엔드포인트로,

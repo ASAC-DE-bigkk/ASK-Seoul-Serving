@@ -367,6 +367,42 @@
      (테이블명은 바로 아래 호출 미리보기에 그대로 뜬다). */
   .field input, .field select { width:100%; }
   .field select { text-overflow:ellipsis; }
+  /* 「지금 고른 것」 — 셀렉트 자리를 대신한다. 아무것도 안 골랐을 때가 기본 상태라
+     빈 화면이 무엇을 하라는지 스스로 말해야 한다(.pick.empty). */
+  .pick { border:1px solid var(--line-strong); border-radius:6px; padding:10px 11px;
+          background:var(--panel-2); font-size:13px; line-height:1.5; }
+  .pick.empty { color:var(--muted); background:var(--panel); border-style:dashed; }
+  .pick .qq { font-weight:600; color:var(--ink); display:block; margin-bottom:3px; }
+  .pick .pp { font-size:12px; color:var(--muted); }
+  /* 본문이 `word-break:keep-all`(한글용)이라 **라틴 식별자는 안 끊긴다** —
+     `gold_citydata_ppltn_x_culture_daily` 가 카드를 8px 넘겼다. 스키마 표의 컬럼명이
+     이미 `break-all` 인 것과 같은 처방이다. */
+  .pick .pp code { font-family:var(--mono); font-size:11.5px; word-break:break-all; }
+  .pick .kind { display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.04em;
+                padding:1px 6px; border-radius:3px; margin-bottom:6px;
+                background:var(--accent-soft); color:var(--accent-deep); border:1px solid var(--accent-line); }
+  .pick .kind.raw { background:var(--panel); color:var(--muted); border-color:var(--line-strong); }
+  .pick .chg { margin-top:8px; font-size:12px; }
+  /* 패턴 파라미터 — 이름이 곧 라벨이다(SQL 의 `:이름`). 설명을 지어내지 않는다:
+     서버가 아는 것도 이름뿐이고, 없는 뜻을 화면이 만들면 그게 곧 거짓말이 된다. */
+  .param label code { font-family:var(--mono); font-size:12px; color:var(--ink); }
+  .param .hint { font-weight:400; letter-spacing:0; color:var(--faint); margin-left:6px; }
+  /* 필터 행 — 컬럼 고르기 + 값. `min-width:0` 이 있어야 긴 컬럼명이 칸을 밀지 않는다
+     (이 페이지에서 세 번 겪은 그 함정이다 — scripts/responsive-audit.js). */
+  .lnote { font-weight:400; letter-spacing:0; color:var(--faint); text-transform:none; }
+  .frow { display:flex; gap:6px; margin-bottom:6px; align-items:center; }
+  .frow select { flex:1 1 45%; min-width:0; }
+  .frow input { flex:1 1 55%; min-width:0; }
+  .frow .del { flex:none; width:28px; height:30px; padding:0; font-size:15px; line-height:1;
+               color:var(--muted); background:var(--panel); border:1px solid var(--line-strong); }
+  .frow .del:hover { color:var(--red-ink); border-color:var(--red-ink); }
+  #addFilter { width:100%; }
+  /* 복사 버튼은 어두운 명령창 위에 얹힌다 — 본문 토큰(밝은 판)을 쓰면 안 보인다 */
+  .endpoint-wrap { position:relative; }
+  .endpoint-wrap .endpoint { padding-right:56px; }
+  .copybtn { position:absolute; top:8px; right:8px; font-size:11.5px; padding:3px 9px;
+             background:rgba(255,255,255,.12); color:#e4e9f1; border:1px solid rgba(255,255,255,.22); }
+  .copybtn:hover { background:rgba(255,255,255,.2); }
   .resp-head { display:flex; align-items:center; gap:10px; margin:14px 0 8px; }
   .status { font-family:var(--mono); font-size:12px; font-weight:700; padding:2px 9px; border-radius:4px;
             display:none; }
@@ -484,21 +520,42 @@
       <div class="play">
         <div class="play-grid">
           <div>
-            <div class="field"><label for="pTable">데이터</label><select id="pTable"></select></div>
-            <div class="field"><label for="pLimit">행 수 (limit)</label><input type="number" id="pLimit" value="10" min="1" max="5000"></div>
+            <!-- 옛 57종 셀렉트 박스를 걷었다(2026-08-07). 목록 검색이 제품명·설명은 물론
+                 **활용 예시의 질문까지** 훑는데, 그 옆에 스크롤해야 하는 드롭다운을 또 두는 건
+                 같은 선택을 두 곳에서 하게 만드는 일이었다. 이제 진입은 목록 한 곳이다 —
+                 「써보기」는 직접 조회로, 「이 질문 돌려보기」는 패턴 실행으로 들어온다. -->
+            <div class="field"><label>지금 고른 것</label><div class="pick" id="pickBox"></div></div>
+            <!-- 패턴 파라미터는 SQL 의 `:이름` 자리에서 만들어 낸다(renderPick) -->
+            <div id="paramFields"></div>
+            <div class="field" id="limitField"><label for="pLimit">행 수 (limit)</label><input type="number" id="pLimit" value="10" min="1" max="5000"></div>
             <div class="field" id="rangeField" style="display:none">
               <label>기간 · <span id="axisName"></span></label>
               <input type="text" id="pFrom" placeholder="from · YYYY-MM-DD" style="margin-bottom:6px">
               <input type="text" id="pTo" placeholder="to · YYYY-MM-DD">
             </div>
+            <!-- 필터 — 조작부에 행 수밖에 없어서 "조합으로 조회"가 화면에서 성립하지 않았다.
+                 ⚠️ 할 수 있는 것을 **정직하게** 보여야 한다: API 는 **일치(=)만**, 조합은
+                 **AND 만**이다. 범위·포함·정렬·집계는 없다 — 그게 검증 패턴이 따로 있는 이유라
+                 안내문에서 그쪽으로 길을 낸다. 없는 기능을 UI 가 암시하면 400 을 받고서야 안다. -->
+            <div class="field" id="filterField" style="display:none">
+              <label>필터 <span class="lnote">일치(=)만 · 여러 개는 모두 만족(AND)</span></label>
+              <div id="filterRows"></div>
+              <button class="btn-g btn-sm" id="addFilter" type="button">+ 조건 추가</button>
+            </div>
             <button class="btn-p" id="runBtn" style="width:100%">호출</button>
           </div>
           <div>
-            <div class="endpoint" id="reqPreview"><span class="m">GET</span> /api/v1/data/&lt;table&gt;?limit=10</div>
+            <div class="endpoint-wrap">
+              <div class="endpoint" id="reqPreview"><span class="m">GET</span> /api/v1/data/&lt;table&gt;?limit=10</div>
+              <!-- 붙여넣기 한 번에 끝나야 "먼저 만져보세요"가 성립한다. 여태 손으로 긁어야 했다 -->
+              <button class="copybtn" id="copyCurl" type="button" title="curl 명령 복사">복사</button>
+            </div>
             <div class="resp-head">
               <span class="status" id="respStatus"></span>
               <span class="resp-meta" id="respMeta"></span>
               <span style="flex:1"></span>
+              <button class="toggle-raw" id="dlCsv" style="display:none">CSV 내려받기</button>
+              <button class="toggle-raw" id="copyJson" style="display:none">JSON 복사</button>
               <button class="toggle-raw" id="toggleRaw" style="display:none">JSON 원문</button>
             </div>
             <div class="table-scroll" id="tableWrap" style="display:none"><table class="data" id="respTable"></table></div>
@@ -603,7 +660,7 @@ async function boot() {
   // #600 채택 시 이 정적 자산은 게시 테이블 조회(안 B 번들)로 교체된다.
   const q0 = new URLSearchParams(location.search).get("q");
   if (q0) { $("q").value = q0; query = q0.trim().toLowerCase(); }
-  renderNav(); renderStart(); renderList(); renderSelect();
+  renderNav(); renderStart(); renderList(); renderPick();
   updatePreview();
   if (location.hash) goHash(location.hash, "auto");   // 렌더가 끝난 뒤라야 위치가 맞는다
 }
@@ -741,6 +798,17 @@ function renderList() {
           (u.axes ? "<div class='umeta'>" + esc(u.axes) + "</div>" : "") +
           "<pre>" + esc(u.sql || "") + "</pre>" +
           (u.insight_sample_ko ? "<div class='uins'>실행 예시 — " + esc(u.insight_sample_ko) + "</div>" : "") +
+          // 여기가 이 화면이 바뀐 지점이다 — 질문이 **보이기만 하던 것**을 누를 수 있게 한다.
+          // 실행 불가는 **비활성 버튼 + 이유**로 남긴다: 버튼을 아예 안 그리면 "왜 이 질문만
+          // 못 돌리나"를 아무도 못 묻는다(commerce 77개가 그 상태다 — Serving#178).
+          "<div style='margin-top:8px'>" +
+          (patternRunnable(u)
+            ? "<button class='btn-g btn-sm' data-runpat='" + esc(p.product_id) + "' data-pat='" +
+              esc(u.pattern_id) + "'>이 질문 돌려보기</button>"
+            : "<button class='btn-g btn-sm' disabled title='" +
+              (u.verified_at ? "제품 id 규약(소문자·숫자·밑줄)과 달라 서버가 실행을 막습니다" : "아직 검증 전인 패턴입니다") +
+              "'>지금은 돌릴 수 없음</button>") +
+          "</div>" +
           "</div>").join("")
       : "";
     detail.innerHTML =
@@ -832,39 +900,136 @@ function renderList() {
     body.appendChild(pg);
   }
   body.querySelectorAll("[data-try]").forEach((b) => b.addEventListener("click", () => {
-    $("pTable").value = b.dataset.try;
-    onTableChange();
+    pickProduct(PRODUCTS.find((x) => x.name === b.dataset.try), null);   // 직접 조회로 진입
+    goHash("#playground");
+  }));
+  // 「이 질문 돌려보기」 — 검증된 SQL 을 그대로 실행한다. 여기가 이 화면의 요점이다:
+  // 목록에서 **질문을 고르면** 제품이 따라온다(제품을 먼저 고르지 않는다).
+  body.querySelectorAll("[data-runpat]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();   // 상세 토글(행 클릭)까지 번지면 방금 편 패널이 닫힌다
+    const p = PRODUCTS.find((x) => x.product_id === b.dataset.runpat);
+    pickProduct(p, (p.usage_patterns || []).find((u) => u.pattern_id === b.dataset.pat));
     goHash("#playground");
   }));
 }
 
-function renderSelect() {
-  const sel = $("pTable");
-  sel.innerHTML = "";
-  for (const p of PRODUCTS) {
-    const o = document.createElement("option");
-    // 라벨은 한국어 제목만 — "제목 — 테이블명"은 가장 긴 게 414px 라 240px 칸에서 잘렸다.
-    // 테이블명은 잃지 않는다: 아래 호출 미리보기에 그대로 뜨고, 여기선 tooltip 으로 남긴다.
-    // (62종 제목에 중복 없음을 확인하고 제목만 남겼다 — 중복이 생기면 구분이 사라진다.)
-    o.value = p.name; o.textContent = titleOf(p); o.title = p.name;
-    sel.appendChild(o);
-  }
-  onTableChange();
+// ── 플레이그라운드에서 무엇을 고르고 있나 ────────────────────────────────────
+// `{ product, pattern|null }`. pattern 이 있으면 **질문 실행**(검증된 SQL), 없으면
+// **직접 조회**(등가 필터·기간). 둘은 경쟁이 아니라 역할이 다르다 — 집계·랭킹·시계열은
+// 직접 조회로 안 되고 검증 패턴으로만 된다.
+let PICK = null;
+
+// 서버가 받는 id 모양(`handleRunPattern` 의 `^[a-z0-9_]+$`)과 **같은 규칙**이다.
+// 여기가 서버보다 느슨하면 눌러 놓고 400 을 받는다. commerce 77개가 실제로 이 모양이라
+// (하이픈, Serving#178) 버튼을 미리 죽여 둔다.
+const runnableId = (s) => /^[a-z0-9_]+$/.test(String(s || ""));
+const patternRunnable = (u) => Boolean(u && u.verified_at) && runnableId(u.pattern_id);
+
+// SQL 의 `:이름` 자리를 뽑는다. ⚠️ **주석을 먼저 벗긴다** — 패턴 SQL 은 주석에 예시값을
+// 적는 관례(`-- :from, :n=10`)라, 안 벗기면 주석 속 이름까지 입력칸으로 만들어 낸다.
+// 서버(`handleRunPattern`)도 같은 순서로 벗긴 뒤 바인딩을 센다.
+function patternParams(sql) {
+  const body = String(sql || "").replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  return [...new Set([...body.matchAll(/:([a-z_][a-z0-9_]*)/gi)].map((m) => m[1]))];
 }
 
-function currentProduct() { return PRODUCTS.find((p) => p.name === $("pTable").value); }
-function onTableChange() {
-  const p = currentProduct();
-  if (!p) return;
-  $("rangeField").style.display = p.time_axis ? "block" : "none";
-  $("axisName").textContent = p.time_axis || "";
+function pickProduct(p, pattern) {
+  PICK = p ? { product: p, pattern: pattern || null } : null;
   resetPaging();
+  renderPick();
   updatePreview();
 }
+
+function renderPick() {
+  const box = $("pickBox"), params = $("paramFields");
+  params.innerHTML = "";
+  if (!PICK) {
+    box.className = "pick empty";
+    box.textContent = "아직 고르지 않았습니다 — 위 목록에서 「써보기」나 「이 질문 돌려보기」를 누르세요.";
+    $("limitField").style.display = "none";
+    $("rangeField").style.display = "none";
+    $("filterField").style.display = "none";
+    $("runBtn").disabled = true;
+    return;
+  }
+  const { product: p, pattern: u } = PICK;
+  box.className = "pick";
+  $("runBtn").disabled = false;
+  box.innerHTML = u
+    ? "<span class='kind'>질문 실행</span><span class='qq'>" + esc(u.question_ko || u.pattern_id) + "</span>" +
+      "<span class='pp'>" + esc(titleOf(p)) + " · <code>" + esc(u.pattern_id) + "</code></span>"
+    : "<span class='kind raw'>직접 조회</span><span class='qq'>" + esc(titleOf(p)) + "</span>" +
+      "<span class='pp'><code>" + esc(p.name) + "</code></span>";
+  box.innerHTML += "<div class='chg'><a href='#catalog' onclick=\"goHash('#catalog');return false\">← 목록에서 다시 고르기</a></div>";
+
+  if (u) {
+    // 질문 실행 — limit·기간은 패턴 SQL 이 정한다. 화면이 따로 받으면 서버가 400 을 준다
+    // (선언 밖 파라미터). 그래서 칸 자체를 감춘다.
+    $("limitField").style.display = "none";
+    $("rangeField").style.display = "none";
+    $("filterField").style.display = "none";   // 패턴은 자기 WHERE 를 갖고 있다
+    for (const nm of patternParams(u.sql)) {
+      const f = document.createElement("div");
+      f.className = "field param";
+      f.innerHTML = "<label for='prm_" + nm + "'><code>:" + esc(nm) + "</code>" +
+        "<span class='hint'>패턴이 요구하는 값</span></label>" +
+        "<input id='prm_" + nm + "' data-prm='" + esc(nm) + "' autocomplete='off'>";
+      params.appendChild(f);
+      f.querySelector("input").addEventListener("input", updatePreview);
+    }
+    return;
+  }
+  $("limitField").style.display = "block";
+  $("rangeField").style.display = p.time_axis ? "block" : "none";
+  $("axisName").textContent = p.time_axis || "";
+  $("filterField").style.display = "block";
+  $("filterRows").innerHTML = "";   // 제품이 바뀌면 컬럼 목록이 달라진다 — 이전 조건은 버린다
+}
+
+// 서버가 제어용으로 먼저 읽는 이름들. 같은 이름의 컬럼이 있어도 필터로는 못 보낸다
+// (쿼리스트링에서 구분이 안 된다). 목록에서 빼서 **고를 수 없게** 한다 — 고르게 두면
+// 눌러 놓고 왜 안 걸리는지 모른다.
+const RESERVED_Q = new Set(["limit", "from", "to", "cursor"]);
+
+function addFilterRow() {
+  const p = PICK && PICK.product;
+  if (!p) return;
+  const cols = (p.columns || []).filter((c) => !RESERVED_Q.has(c.name));
+  const row = document.createElement("div");
+  row.className = "frow";
+  row.innerHTML =
+    "<select data-fcol>" +
+    cols.map((c) => "<option value='" + esc(c.name) + "' title='" + esc(c.description || "") + "'>" +
+      esc(c.name) + "</option>").join("") +
+    "</select><input data-fval placeholder='값' autocomplete='off'>" +
+    "<button class='del' type='button' title='이 조건 지우기' aria-label='이 조건 지우기'>×</button>";
+  $("filterRows").appendChild(row);
+  row.querySelector(".del").addEventListener("click", () => { row.remove(); resetPaging(); updatePreview(); });
+  for (const el of row.querySelectorAll("select, input"))
+    el.addEventListener("input", () => { resetPaging(); updatePreview(); });
+  updatePreview();
+}
+
 function buildPath() {
-  const p = currentProduct();
-  if (!p) return "";
+  if (!PICK) return "";
+  const { product: p, pattern: u } = PICK;
   const q = new URLSearchParams();
+  if (u) {
+    // 값이 빈 파라미터는 아예 안 싣는다 — 서버가 "값이 필요하다"로 안내하게 둔다.
+    // 빈 문자열을 실으면 그게 값으로 바인딩돼 조용히 0행이 나온다.
+    for (const el of $("paramFields").querySelectorAll("[data-prm]"))
+      if (el.value.trim()) q.set(el.dataset.prm, el.value.trim());
+    const qs = q.toString();
+    return "/api/v1/patterns/" + p.product_id + "/" + u.pattern_id + (qs ? "?" + qs : "");
+  }
+  // 필터를 **먼저** 싣는다 — 뒤의 제어 파라미터(limit·from·to)가 같은 이름을 덮게 두려는
+  // 것이 아니라, 읽는 사람에게 조건이 앞에 오는 편이 자연스러워서다. 이름 충돌 자체는
+  // `RESERVED_Q` 가 목록에서 빼 막는다.
+  for (const r of $("filterRows").querySelectorAll(".frow")) {
+    const col = r.querySelector("[data-fcol]").value;
+    const val = r.querySelector("[data-fval]").value.trim();
+    if (col && val) q.set(col, val);   // 값이 빈 조건은 안 싣는다 — 빈 문자열도 값이다
+  }
   q.set("limit", $("pLimit").value || "10");
   if (p.time_axis && $("pFrom").value.trim()) q.set("from", $("pFrom").value.trim());
   if (p.time_axis && $("pTo").value.trim()) q.set("to", $("pTo").value.trim());
@@ -891,7 +1056,11 @@ async function refreshQuota() {
     $("quotaWho").textContent = b.email + " · " + b.day;
   } catch {}
 }
+// 마지막 응답의 행. 표는 15행만 그리지만 **내려받기는 받은 전부**를 준다 —
+// 화면에 보이는 것만 주면 "limit 500 으로 받았는데 15줄"이 되어 조용히 틀린다.
+let LAST_ROWS = [];
 function renderRows(rows) {
+  LAST_ROWS = rows || [];
   const tbl = $("respTable");
   tbl.innerHTML = "";
   if (!rows.length) { $("tableWrap").style.display = "none"; return; }
@@ -924,6 +1093,17 @@ function friendly(status, body) {
   if (status === 400 && t === "no time axis")
     return "이 데이터는 시간축이 없어서 기간(from/to) 필터를 지원하지 않아요 — 기간을 비우고 호출해주세요.";
   if (status === 400 && t === "unknown filter") return (body.detail || "") + " — 컬럼 이름 오타를 확인해주세요.";
+  // 질문 실행(검증 패턴)의 오류들. 서버 문구는 API 직접 호출자도 읽는 계약이라 그대로 두고,
+  // 화면에서만 이 페이지의 말투로 갈아입힌다. `missing parameter` 는 서버가 어느 값인지
+  // 짚어 주므로 그 문장을 살린다 — 화면이 다시 쓰면 오히려 정보가 준다.
+  if (status === 400 && t === "missing parameter")
+    return (body.detail || "").replace("값이 필요하다", "값이 필요해요") + " — 위 입력칸을 채워주세요.";
+  if (status === 400 && t === "unknown parameter")
+    return (body.detail || "") + " — 이 질문이 받지 않는 값이에요.";
+  if (status === 409 && t === "pattern not verified")
+    return "이 질문은 아직 검증 전이라 실행할 수 없어요 — 도메인 검증이 끝나면 열립니다.";
+  if (status === 404 && t === "unknown pattern")
+    return (body.detail || "") + " — 목록에서 질문을 다시 골라주세요.";
   // 화면 검증을 통과해도 서버가 더 좁게 볼 수 있다(API 직접 호출도 이 문구를 본다) — #109
   if (status === 400 && t === "invalid email")
     return "이메일 형식을 확인해주세요 — 예: you@example.com";
@@ -957,21 +1137,39 @@ async function run(useCursor) {
     $("toggleRaw").style.display = "inline";
     $("respEmpty").style.display = "none";
     if (res.ok) {
-      pageNo += 1;
-      pageRows += body.row_count;
-      showStatus(res.status, body.row_count + "행 · limit " + body.limit +
-        (pageNo > 1 ? " · " + pageNo + "페이지(누적 " + nf.format(pageRows) + "행)" : "") +
-        (body.time_axis ? " · 축 " + body.time_axis : ""));
       renderRows(body.rows || []);
       $("rawJson").style.display = "none";
-      pageCursor = body.next_cursor || null;
-      $("pager").style.display = pageNo > 1 || body.has_more ? "flex" : "none";
-      $("nextPageBtn").style.display = body.has_more ? "inline-block" : "none";
-      $("pagerNote").textContent = body.has_more
-        ? "커서 이어받기 — 페이지마다 쿼터 1회"
-        : "마지막 페이지 · 누적 " + nf.format(pageRows) + "행";
+      const has = (body.rows || []).length > 0;
+      $("dlCsv").style.display = has ? "inline" : "none";
+      $("copyJson").style.display = "inline";
+      // 질문 실행과 직접 조회는 **응답 모양이 다르다.** 패턴에는 limit·커서·시간축이 없다
+      // (그 셋을 정하는 게 패턴 SQL 자신이다). 한 벌로 찍으면 `limit undefined` 가 나간다.
+      if (PICK && PICK.pattern) {
+        resetPaging();   // 커서 없음 — 이전 조회의 페이저가 남아 있으면 지운다
+        showStatus(res.status, (body.row_count ?? (body.rows || []).length) + "행");
+        // 검증 증거는 **현재값이 아니다.** 그 구분을 문구가 직접 말하지 않으면
+        // 방금 받은 결과의 요약으로 오해된다.
+        $("pagerNote").textContent = body.insight_sample_ko
+          ? "검증 당시 이 질의가 낸 문장 — " + body.insight_sample_ko : "";
+        $("pager").style.display = body.insight_sample_ko ? "flex" : "none";
+        $("nextPageBtn").style.display = "none";
+      } else {
+        pageNo += 1;
+        pageRows += body.row_count;
+        showStatus(res.status, body.row_count + "행 · limit " + body.limit +
+          (pageNo > 1 ? " · " + pageNo + "페이지(누적 " + nf.format(pageRows) + "행)" : "") +
+          (body.time_axis ? " · 축 " + body.time_axis : ""));
+        pageCursor = body.next_cursor || null;
+        $("pager").style.display = pageNo > 1 || body.has_more ? "flex" : "none";
+        $("nextPageBtn").style.display = body.has_more ? "inline-block" : "none";
+        $("pagerNote").textContent = body.has_more
+          ? "커서 이어받기 — 페이지마다 쿼터 1회"
+          : "마지막 페이지 · 누적 " + nf.format(pageRows) + "행";
+      }
     } else {
       showStatus(res.status, friendly(res.status, body));
+      $("dlCsv").style.display = "none";
+      $("copyJson").style.display = "none";
       $("tableWrap").style.display = "none";
       $("rawJson").style.display = "block";
       if (res.status === 409) resetPaging();   // 재발행 — 커서를 들고 있어도 의미가 없다
@@ -1042,10 +1240,43 @@ $("revokeBtn").addEventListener("click", () => {
 $("purgeBtn").addEventListener("click", () => callRevoke(true));
 
 // run(useCursor) 이라 이벤트 객체를 그대로 넘기면 안 된다 — 클릭 이벤트는 truthy 다
+// ── 가져가기 ─────────────────────────────────────────────────────────────────
+async function copyText(text, btn, done) {
+  const old = btn.textContent;
+  try { await navigator.clipboard.writeText(text); btn.textContent = done; }
+  catch { btn.textContent = "복사 실패 — 직접 선택해 주세요"; }
+  setTimeout(() => { btn.textContent = old; }, 1600);
+}
+// CSV 는 규격(RFC 4180)대로 감싼다. 공공 원천 텍스트에 쉼표·따옴표·줄바꿈이 실제로 들어 있다
+// (행사 제목이 대표적이다) — 안 감싸면 열이 밀려 **조용히 어긋난 표**가 나간다.
+function toCsv(rows) {
+  if (!rows.length) return "";
+  const cols = Object.keys(rows[0]);
+  const cell = (v) => {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  return [cols.join(","), ...rows.map((r) => cols.map((c) => cell(r[c])).join(","))].join("\r\n");
+}
+$("copyCurl").addEventListener("click", (e) => copyText($("reqPreview").textContent.trim(), e.currentTarget, "복사됨"));
+$("copyJson").addEventListener("click", (e) =>
+  copyText($("rawJson").textContent, e.currentTarget, "복사됨 ✓"));
+$("dlCsv").addEventListener("click", () => {
+  if (!LAST_ROWS.length) return;
+  // BOM 을 앞에 붙인다 — 없으면 Excel 이 UTF-8 을 못 알아보고 한글이 깨진다
+  const blob = new Blob(["\uFEFF" + toCsv(LAST_ROWS)], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  const base = PICK ? (PICK.pattern ? PICK.product.product_id + "_" + PICK.pattern.pattern_id : PICK.product.name) : "ask-seoul";
+  a.href = URL.createObjectURL(blob);
+  a.download = base + ".csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$("addFilter").addEventListener("click", addFilterRow);
 $("runBtn").addEventListener("click", () => run(false));
 $("nextPageBtn").addEventListener("click", () => run(true));
 $("meBtn").addEventListener("click", () => { updatePreview(); refreshQuota(); });
-$("pTable").addEventListener("change", onTableChange);
 // 질의가 바뀌면 들고 있던 커서는 다른 질의의 표가 된다 — 버린다
 for (const id of ["pLimit", "pFrom", "pTo"]) $(id).addEventListener("input", resetPaging);
 for (const id of ["pKey", "pLimit", "pFrom", "pTo"]) $(id).addEventListener("input", updatePreview);
