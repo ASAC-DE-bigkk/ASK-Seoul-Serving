@@ -132,10 +132,11 @@ npm run verify:log  # 요청 로그 유실 검증(C-10)
 
 ## 1. 팀 D1 에 운영 테이블 만들기 (최초 1회)
 
-게이트웨이가 쓰는 `_keys`·`_usage`·`_burst`·`_issuance_log`·`_gateway_request_log` 는
+게이트웨이가 쓰는 `_keys`·`_service_keys`·`_usage`·`_burst`·`_issuance_log`·`_gateway_request_log` 는
 **원격 D1 에 환경마다 최초 1회 만들어야 한다.** 안 하면 배포해도 키 발급·인증이 전부 죽는다.
 ✅ **2026-08-06 완료** — 운영 D1 에 `_keys`·`_usage`·`_burst`·`_issuance_log`·
-`_gateway_request_log` 5종이 실측 확인됐다. dev D1 은 폐기됐으므로 만들 대상이 아니다.
+`_gateway_request_log` 5종이 실측 확인됐다. `_service_keys`는 #194 migration으로 추가한다.
+dev D1 은 폐기됐으므로 만들 대상이 아니다.
 
 > ⚠️ **팀(원격) D1 쓰기다.** 스키마 생성만 하고 기존 표(`_catalog`·제품 테이블)는 건드리지
 > 않지만, 실행 전에 팀에 알린다. 이 명령은 **직접 실행한다** — 에이전트가 대신 돌리지
@@ -177,7 +178,7 @@ npx wrangler d1 execute ask-seoul-prod-d1 --remote \
   --command "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '\_%' ESCAPE '\'"
 ```
 
-`_keys`·`_usage`·`_burst`·`_issuance_log`·`_gateway_request_log`·`_catalog` 가 보이면 된다.
+`_keys`·`_service_keys`·`_usage`·`_burst`·`_issuance_log`·`_gateway_request_log`·`_catalog` 가 보이면 된다.
 
 그리고 **남의 표를 안 건드렸는지** 같이 본다 — 행 수만 보면 못 잡는다(ALTER 로 컬럼이
 붙는 사고는 행 수가 그대로다):
@@ -188,6 +189,25 @@ npx wrangler d1 execute ask-seoul-prod-d1 --remote --env production \
 ```
 
 기대: `cols` 가 prod·dev 모두 4 그대로.
+
+### 1-2. K-Skill proxy service key 등록·회전·폐기
+
+이 절은 **migration 적용 뒤**, k-skill maintainer가 hosted proxy route를 실제로 켜기 전에만
+실행한다. key 원문을 issue, PR, shell argument, URL, 로그에 넣지 않는다.
+
+1. 운영자가 안전한 key 관리 경로에서 새 원문을 만들고, SHA-256 hash·8자 prefix·아래 메타만
+   `_service_keys`에 등록한다. 원문은 proxy 운영자에게 안전한 채널로 한 번만 전달한다.
+   - `service_name`: `k-skill-proxy:seoul-weather-risk`
+   - `scopes_json`: `["skill:seoul-weather-risk:read"]`
+   - `status`: `active`
+   - `daily_quota`: 운영 합의값(기본 1000)
+2. proxy runtime에만 새 key를 주입하고 `/health`, bundle, product, bounded data를 확인한다.
+3. 정상 응답을 확인한 뒤 이전 key의 `_service_keys.status`를 `revoked`로 바꾸고
+   `revoked_at`을 기록한다. 다음 요청부터 403이어야 한다.
+
+서비스 key가 유출됐거나 proxy가 침해된 경우는 2단계를 기다리지 않는다. 즉시 `revoked`로
+바꾸고 proxy secret을 제거·재배포한다. Worker는 매 요청에서 D1 상태를 읽으므로 별도 cache
+flush를 기다리지 않는다. 상세 정책은 [decision/0005](decision/0005-k-skill-service-key-scope.md)다.
 
 ## 2. 시크릿 넣기 (최초 1회)
 

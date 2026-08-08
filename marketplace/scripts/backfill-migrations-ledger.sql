@@ -60,3 +60,10 @@ SELECT '0004_request_id.sql'
 WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_request_log')
   AND NOT EXISTS (SELECT 1 FROM pragma_table_info('_request_log') WHERE name='route')
   AND NOT EXISTS (SELECT 1 FROM d1_migrations WHERE name='0004_request_id.sql');
+
+-- 0006은 사용자 key 표를 ALTER하지 않고 service key 표 하나만 만든다. 표가 이미 있으면
+-- 장부에 적어 재생성을 건너뛰고, 없으면 apply가 `CREATE TABLE IF NOT EXISTS`로 추가한다.
+INSERT INTO d1_migrations(name)
+SELECT '0006_service_key_scope.sql'
+WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='_service_keys')
+  AND NOT EXISTS (SELECT 1 FROM d1_migrations WHERE name='0006_service_key_scope.sql');
