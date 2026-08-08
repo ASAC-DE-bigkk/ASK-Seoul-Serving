@@ -113,6 +113,51 @@
         }
       }
     },
+    "/api/v1/patterns/{product_id}/{pattern_id}": {
+      "get": {
+        "tags": ["data"],
+        "summary": "검증된 질의 패턴 실행",
+        "description": "도메인 오너가 게시하고 실제 게시본에 돌려 동작을 확인한 SQL 만 실행한다 — 질의를 이 API 로 '짓는' 방법은 없다. 그래서 /api/v1/data 로는 못 하는 집계·랭킹·시계열이 여기서는 된다.\n\n패턴 목록은 카탈로그 각 제품의 usage_patterns 에 있다. runnable=true 인 것만 실행되고, 아직 검증 전이면 409 pattern not verified.\n\n스키마에 없는 쿼리 파라미터는 패턴 SQL 의 :이름 자리에 그대로 바인딩된다(예: ?gu=강남구&n=10). 선언되지 않은 이름을 보내면 400 unknown parameter 가 사용 가능한 파라미터 목록과 함께 온다.",
+        "operationId": "runPattern",
+        "parameters": [
+          { "$ref": "#/components/parameters/Table" },
+          {
+            "name": "pattern_id",
+            "in": "path",
+            "required": true,
+            "description": "카탈로그 usage_patterns[].pattern_id.",
+            "schema": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+            "example": "exhibition_dongs"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "패턴 실행 결과. insight_sample_ko 는 이 질의를 검증 시점에 실제로 돌렸을 때 나온 해석 문장이며 현재값이 아니다.",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/XRequestId" } },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "product_id": { "type": "string" },
+                    "pattern_id": { "type": "string" },
+                    "question_ko": { "type": "string", "description": "이 패턴이 답하는 질문" },
+                    "rows": { "type": "array", "items": { "type": "object" } },
+                    "row_count": { "type": "integer" },
+                    "insight_sample_ko": { "type": "string", "description": "검증 증거 — 현재값이 아니다" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
     "/api/v1/me": {
       "get": {
         "tags": ["keys"],

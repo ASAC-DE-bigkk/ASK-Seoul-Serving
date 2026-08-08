@@ -37,7 +37,7 @@
 | `GET /api/v1/products/<id>` | 제품 번들 — 구조·컬럼 설명·질의 예시 (옛 `/v1` 에서 흡수) | Bearer, 무과금 |
 | `GET /api/v1/glossary` | 용어 사전 (`?vocabulary_id=`) — `d1_catalog_glossary` 를 읽는 유일한 문 | Bearer, 무과금 |
 | `GET /skill/v1/…` | K-Skill 전용 계약(번들·제품·데이터) — src/skill.js | Bearer |
-| `POST /mcp` | MCP 서버(JSON-RPC, 툴 6종) — src/mcp.js | `tools/call` 부터 Bearer |
+| `POST /mcp` | MCP 서버(JSON-RPC) — src/mcp.js 의 `TOOLS` 가 정본 | `tools/call` 부터 Bearer |
 | 정적 | `/docs` `/legal` `/llms.txt` `/openapi.json` `/skill-openapi.json` | Assets 서빙 |
 
 구성은 이것이 전부다:
