@@ -132,6 +132,23 @@
     </div>
   </section>
 
+  <!-- ── 실사용 A/B (기계적 지표) ─────────────────── -->
+  <section class="card" id="abCard">
+    <h2><span class="step-n">5</span> 실사용 A/B <span style="font-weight:400;color:var(--muted);font-size:.85rem">— 기계적 지표(실제 호출 비교)</span></h2>
+    <p class="hint">같은 질문을 <b>기존형(query_product)</b>과 <b>신설형(run_pattern)</b>으로 <b>실제로 둘 다 호출</b>해, 반환 행수·지연·쿼터·답 직결성을 나란히 잽니다. "표현력(가능/불가)"이 아니라 <b>실제 호출하면 얼마나 다른가</b>를 수치로 봅니다. <b>API 키 필요</b> · 동일 출처 MCP 필요(마켓 랩).</p>
+    <div class="grid">
+      <div><label for="ab_product">product_id</label><input id="ab_product" type="text" placeholder="예: commerce_address_succession"></div>
+      <div><label for="ab_pattern">pattern_id (신설형)</label><input id="ab_pattern" type="text" placeholder="예: category_net_flow"></div>
+      <div><label for="ab_params">params (JSON · 패턴 필요시)</label><input id="ab_params" type="text" placeholder='{} 또는 {"n":10}'></div>
+    </div>
+    <div class="btnrow"><button class="btn primary" id="abRun" type="button">A/B 실행</button><span class="kv" id="abState"></span></div>
+    <div class="tblbox" style="margin-top:.6rem"><table class="tbl" id="abTbl"></table></div>
+    <div class="split" style="margin-top:.6rem">
+      <div><h3>기존형 원시 응답</h3><pre class="code" id="abAsisDump">—</pre></div>
+      <div><h3>신설형 답 응답</h3><pre class="code" id="abTobeDump">—</pre></div>
+    </div>
+  </section>
+
   <footer class="foot">
     이 콘솔은 <b>실험용 부가물</b>입니다 — <span class="mono">marketplace/public/qa-lab/</span> 폴더를 삭제하면 흔적 없이 사라지며, 게이트웨이 근간 코드(<span class="mono">src/</span>·<span class="mono">partials/</span>·<span class="mono">wrangler.toml</span>)는 한 줄도 바뀌지 않았습니다.
     관련 이슈 <a href="https://github.com/ASAC-DE-bigkk/ASK-Seoul-Serving/issues/192">#192</a>.
