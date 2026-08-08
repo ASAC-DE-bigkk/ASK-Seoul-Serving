@@ -65,10 +65,18 @@ export function newServiceKey() {
 // 들어올 자리는 없지만, **"들어올 리 없다"에 기대지 않는다** — 이 문자열이 운영 D1 로 간다.
 const lit = (s) => "'" + String(s).replace(/'/g, "''") + "'";
 
+// 🔴 **SQL 에 큰따옴표를 한 글자도 넣지 않는다.** `JSON.stringify(scopes)` 를 리터럴로 박으면
+//    `'["skill:…:read"]'` 가 되는데, **PowerShell 5.1 이 네이티브 실행 파일로 인자를 넘길 때
+//    큰따옴표를 먹는다.** 2026-08-08 실사고: 그렇게 등록된 행이 `[skill:…:read]`(len 31,
+//    `json_valid=0`)로 들어가 `serviceKeyScopes()` 가 fail-closed 됐고, **인증은 되는데 모든
+//    경로가 403 인 죽은 키**가 됐다. 원인이 D1 에도 로그에도 안 보였다.
+//    `json_array()` 는 SQLite 안에서 JSON 을 만들므로 셸이 먹을 큰따옴표가 없다.
+//    (아래 테스트가 "SQL 에 `\"` 가 없다"를 고정한다 — 이 성질이 곧 방어다.)
 export function buildInsert({ hash, prefix, serviceName, scopes, quota, createdAt }) {
+  const scopesJson = "json_array(" + scopes.map(lit).join(", ") + ")";
   return "INSERT INTO _service_keys " +
     "(key_hash, key_prefix, service_name, scopes_json, status, daily_quota, created_at) VALUES (" +
-    [lit(hash), lit(prefix), lit(serviceName), lit(JSON.stringify(scopes)), lit("active"),
+    [lit(hash), lit(prefix), lit(serviceName), scopesJson, lit("active"),
      String(quota), lit(createdAt)].join(", ") + ");";
 }
 
