@@ -48,6 +48,17 @@ CD 는 **코드만** 배포한다. 마이그레이션이 자동으로 돌면 운
 읽기 문이 fail-closed 로 닫혔다). 헤더 없이 부르면 전부 **401** 이고, 그건 고장이 아니라
 설계다. 아래 예시는 `$AUTH` 를 달고 도는 것을 전제로 한다.
 
+⚠️ **`npm run d1` 은 이 디렉터리(`ops-dashboard/`)에만 있다.** 마켓플레이스·DAG 리포에는 없다 —
+이슈나 코멘트에 이 명령을 인용할 때는 **어디서 도는지 한 줄을 같이 적는다**(#162 에서 실제로
+막힌 사람이 있었다). 다른 레포에서 같은 D1 을 보려면 wrangler 를 직접 부른다:
+
+```bash
+# ops-dashboard 안에서
+cd ops-dashboard && npm run d1 -- "SELECT 1"
+# 아무 데서나 (같은 운영 D1)
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --command "SELECT 1"
+```
+
 ```bash
 BASE=http://localhost:8788
 # 토큰은 .dev.vars 에서 읽는다 — 셸 히스토리·문서에 값을 남기지 않는다.
@@ -72,6 +83,20 @@ curl -s -H "$AUTH" "$BASE/api/keys" | jq '.keys[0]'
 curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{spec_pending: .meta.usage_spec_pending,
   funnel: .usage.funnel, clients_pending: .usage.clients.pending}'
 
+# ④-0 이용자 축 — 키 있는 쪽/없는 쪽, 그리고 이용자별
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.usage.identity'
+#   keyed + anon == calls 여야 한다. keys_used 는 이 기간에 키로 요청한 사람 수
+#   🔴 익명은 신원 축이 없어 아래 목록에 **못 나온다** — 화면이 그 사실을 맨 위에서 밝힌다
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.usage.by_key[:3]'
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '
+  (.usage.by_key[0].key_id) as $k
+  | {key: $k,
+     calls: (.usage.by_key[0].calls),
+     listed: ([.usage.by_key_api[] | select(.key_id == $k) | .calls] | add // 0),
+     rows:   ([.usage.by_key_api[] | select(.key_id == $k)] | length)}'
+#   listed <= calls 다(이용자마다 상위 20만 싣는다). 화면은 그 차이를 "나머지 N건"으로 밝힌다
+#   rows 가 20이면 잘린 것이다 — 0이면 그 이용자 행이 아예 안 실린 것이라 질의를 의심한다
+
 # ④-1 제품 표시명 — 게시본(d1_catalog_display)에서 몇 종이 왔나 (ASAC-DAG#706)
 curl -s -H "$AUTH" "$BASE/api/apis?days=14" | jq '{missing: .meta.missing,
   declared: .meta.display_declared, undeclared: .meta.display_undeclared}'
@@ -91,6 +116,30 @@ curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '
   | {all: $all, by_domain: $byDom, unknown: $unknown, ok: (($byDom + $unknown) == $all)}'
 #   🔴 by_domain + unknown == all 이어야 한다. unknown 은 제품에 안 묶이는 요청
 #      (API 목록·인증·키 발급) — 어느 분야에도 안 넣는다. 화면이 그 건수를 밝힌다
+
+# ④-2-a 그 unknown 이 **무엇인지** — 다섯 갈래로 갈렸나 (#162 🅐)
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{axis: .serving.axis, ok: .serving.axis_ok}'
+#   product     카탈로그 제품 — 분야로 센다
+#   no_product  목록·인증·키 발급 — 애초에 제품이 없다. 정상
+#   bundle      번들 요청 — 🔴 **분야로 환산하지 않는다**(정의가 시점마다 다르다, PR #161)
+#   qa_probe    404 가 성공 조건인 점검(`qa-` 접두). 정상
+#   not_found   카탈로그에 없는 이름 — 🔴 **여기만 조치 대상**
+#   axis_ok=false 면 _catalog 를 못 읽은 것이다. 화면은 그때 카드를 **접는다**(0 으로 안 그린다)
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '
+  (.serving.totals | map(select(.domain=="*")) | .[0].calls) as $all
+  | (.serving.axis | map(.calls) | add // 0) as $axis
+  | {all: $all, axis_sum: $axis, ok: ($axis == $all)}'
+#   🔴 다섯 갈래 합 == 전체. 모자라면 어느 갈래에도 안 들어간 요청이 있다는 뜻이고,
+#      그건 예전의 '미상 한 덩어리'로 되돌아간 것이다
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.serving.not_found'
+#   조치 대상을 **이름째로**. `key_ids` 가 우리 팀 키면 점검 트래픽이니 `qa-` 로 바꾸게 한다
+
+# ④-2-b 분야 등록부가 데이터 분야와 운영 축을 가르나 (#162 🅕)
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{kind: .meta.domain_kind,
+  data: (.pipeline.domains | map(select(.is_data_domain != 0)) | length),
+  ops:  (.pipeline.domains | map(select(.is_data_domain == 0)) | length)}'
+#   kind=false → 0003 마이그레이션 전이다. 화면이 파이프라인 탭에 배너로 직접 말한다
+#   data 는 6, ops 는 1(common)이어야 한다 — data 가 7 이면 픽스처를 안 돌린 것이다
 
 # ④-3 숨김이 실제로 먹는지 — CSS 가 [hidden] 을 덮고 있지 않은지 (브라우저 없이, 통과 기준 0건)
 npm run check:hidden
@@ -167,6 +216,55 @@ curl -s -H "$AUTH" "$BASE/api/summary" | jq '.meta.missing'   # ["serving"] 등 
 | 환경 섞임 | 상단 경고 배너 + '환경' 카드 (dev 1건이 섞여 있다) |
 | 지연 | '지연 상위' — transit 97분 지연 |
 | 탭 점 | 위 문제들 때문에 '실행 기록' 탭 라벨의 점이 빨갛다 |
+| **긴 표** | 행이 20을 넘으면 첫 20행만 뜨고 상자 아래에 "20 / 58"이 뜬다 — 바닥까지 스크롤하면 20씩 이어진다(#3-2) |
+
+### 3-1. 단계별 소요와 적재량 — 세부 보기 셋
+
+카드 위 [전체]·[평균]·[날짜별]은 **같은 데이터를 다른 각도로** 본다.
+
+| 보기 | 무엇 | 언제 쓰나 |
+|---|---|---|
+| 전체 | 창 전체의 합 | "어느 단계가 무거운가" |
+| 평균 | **하루치** 평균. 분모는 그 단계 기록이 있던 날 | 크기 감각의 기준선 · 날짜별 색의 근거 |
+| 날짜별 | 하루가 칩 하나. 색은 기간 평균 대비 | "언제 튀었나" |
+
+색 규약은 **초과 > 미달 > 정상** 순이다.
+
+- 🔴 **빨강** — 평균을 넘은 인자가 하나라도 있다
+- 🟡 **노랑** — (초과 없음) 평균에 못 미친 인자가 하나라도 있다
+- 🟢 **초록** — 모든 인자가 평균 ±10%(`LAYER_BAND`) 안
+
+'인자'는 **단계 × 지표**이고 지표는 이 카드가 보여주는 둘 — 소요·적재 행수다.
+
+⚠️ **칩이 전부 같은 색이면 판정이 아니라 기준을 의심한다.** 파이프라인의 하루치 소요·적재는
+원래 크게 흔들려서(실측 2026-08-07: 5일 전부 빨강) ±10% 가 좁을 수 있다. 폭을 바꿀 자리는
+`public/index.html` 의 `LAYER_BAND` **한 곳**이다. 다만 **넓히는 것이 곧 개선은 아니다** —
+색이 다 초록이면 그것대로 아무 말도 안 하는 화면이 된다. 무엇을 놓치기 싫은지를 먼저 정한다.
+
+⚠️ **기록이 없는 단계는 색에 안 들어간다.** 0으로 세면 사흘에 한 번 도는 단계가 안 도는 날마다
+'미달'을 찍는다. 기록 없음은 미달과 **다른 사실**이라 그 날 상세 아래에 글로 적힌다
+(agreement §4 모른다 ≠ 0).
+
+## 3-2. 긴 표 — 20행이 한 쪽, 스크롤로 이어 받는다
+
+행이 20을 넘는 표는 **첫 쪽만** 그린다. 상자 바닥에 닿으면 20씩 이어 붙는다.
+상자가 없던 카드는 `ui.js`(`UIPage`)가 부모를 스크롤 상자로 **승격**한다(`.scroll.pagehost`).
+
+- 상자 아래 꼬리말이 **"20 / 58 · 스크롤하면 이어집니다"** → 다 받으면 **"58개 전부 불러왔습니다"**
+- 20행 이하 표는 **예전과 완전히 같다** — 상자도 꼬리말도 안 붙는다
+
+### 증상별
+
+| 보이는 것 | 무슨 뜻인가 |
+|---|---|
+| 표가 20행에서 멈추고 스크롤해도 안 늘어난다 | `/ui.js` 를 못 받았을 가능성 — 다만 그때는 **애초에 안 자른다**(전부 그린다). 잘려 있는데 안 늘어나면 콘솔에서 `UIPage` 를 확인한다 |
+| 꼬리말이 없는데 표가 짧아 보인다 | 페이징이 아니라 **서버가 자른 것**이다(상위 N). 그 카드의 안내 문구를 본다 |
+| 개수를 세는 검사가 갑자기 틀린다 | 🔴 **첫 쪽 20행만 세고 있다.** 전체는 꼬리말이나 응답 배열에서 읽는다 |
+
+```bash
+# 표 하나가 몇 행짜리인지는 응답에서 본다(화면 행 수와 다를 수 있다 — 화면은 첫 쪽만 그린다)
+curl -s -H "$AUTH" "$BASE/api/apis?days=14" | jq '.apis | length'
+```
 
 ## 4. 실측으로 채우기
 
@@ -187,10 +285,19 @@ curl -s -H "$AUTH" "$BASE/api/summary" | jq '.meta.missing'   # ["serving"] 등 
 않지만, `_ops_domain` 은 콘솔 소유의 **참조 내용**(분야 코드 → 한글 이름)이다.
 마이그레이션은 표만 만들고 내용은 안 넣으므로 **한 번 돌려야 한다.**
 
+🔴 **`npm run migrate` 를 먼저 돌린다.** 픽스처가 `is_data_domain`(0003)을 채우므로 순서가
+바뀌면 `no such column` 으로 끝난다.
+
 ```bash
+npm run migrate                                  # 0003 — is_data_domain 컬럼
 npm run d1 -- --file=fixtures/ops_domain.sql     # INSERT OR REPLACE — 다시 돌려도 안전
-npm run d1 -- "SELECT domain,label,has_slo FROM _ops_domain ORDER BY domain"
+npm run d1 -- "SELECT domain,label,has_slo,is_data_domain FROM _ops_domain ORDER BY domain"
 ```
+
+`is_data_domain` 은 **데이터 분야와 파이프라인 운영 축을 가른다**(#162 🅕). `common`
+(파이프라인 운영 지표) 하나만 `0` 이고, 그래야 '측정 가능한 분야' 분모가 **6**(데이터 분야
+수)으로 나온다. 안 걸리면 **7** 이 뜬다 — 라벨은 맞는데 숫자가 틀린 상태이고, 화면이
+파이프라인 탭에 "분야 종류를 아직 못 가릅니다" 배너로 직접 말한다.
 
 안 하면 화면이 분야를 `culture`·`commerce`·`common` 으로 부른다 — `domLabel()` 이 등록부에
 없으면 코드를 그대로 쓰기 때문이다(**화면은 라벨을 지어내지 않는다**). 실제로 운영 등록부가

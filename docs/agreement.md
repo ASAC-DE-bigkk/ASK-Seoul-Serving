@@ -7,7 +7,7 @@
 > 바꿀 일이 생기면 이슈를 열어 관계자 전원의 답을 받고, 그 결과를 이 문서에 옮긴다.
 > 코드가 문서와 어긋나면 **문서가 맞다.**
 >
-> 범위 밖: **#2**(K-Skill 등록 준비도) · **#4**(seoul-urban-analytics 제품 API 계약)
+> 범위 밖: **#2**(K-Skill 등록 준비도) · **#4**(seoul-weather-risk 단일 제품 API 계약)
 >
 > v1 2026-08-04 작성 · **v2 2026-08-04 전원 확인 반영**
 > 확인: @yooseongjin527(게이트웨이) · @kang-gyeongmin(citydata·MCP) · @Exisign(콘솔)
@@ -70,7 +70,7 @@
 
 ```
 /api/v1/…    사람·일반 소비자 (카탈로그·미리보기·데이터·키)
-/skill/v1/…  K-Skill seoul-urban-analytics 전용
+/skill/v1/…  K-Skill seoul-weather-risk 전용
 /mcp         MCP 클라이언트 전용 (POST 하나, 무버전 — 프로토콜이 버전을 협상)
 ```
 
