@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>AS-IS / TO-BE 비교 — QA Lab (실험) · 운영 콘솔</title>
+<link rel="stylesheet" href="./lab.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>기존형 ↔ 신설형 비교 <span style="font-weight:400;color:var(--muted)">QA Lab</span></h1>
+      <p class="sub">기존형(<span class="mono">query_product</span>)과 신설형(<span class="mono">run_pattern</span>)의 요청·답변 범위 · AI 질의 접근성 · 정보 제공 정확성을 지표로 비교 — 이슈 #192</p>
+      <div class="pillrow">
+        <span class="tag exp">실험 · 근간 코드 무수정</span>
+        <span class="tag">삭제 = <span class="mono">public/qa-lab/</span> 폴더 제거</span>
+        <span class="tag id">식별자: <b>max20_fable</b></span>
+      </div>
+    </div>
+    <button class="themebtn" id="themeBtn" type="button">◐ 테마</button>
+  </header>
+
+  <!-- 연결 -->
+  <section class="card">
+    <h2>0. 데이터 원천</h2>
+    <p class="hint">비교 근거는 게이트웨이 <span class="mono">/api/v1/catalog</span>(무인증·교차 출처 허용)의 <span class="mono">usage_patterns</span> 메타다. 라이브 기존형 조회(<span class="mono">/api/v1/data</span>)는 키가 있으면 실제로 호출한다. 신설형 라이브 실행(<span class="mono">/mcp</span>)은 교차 출처 CORS 로 막혀 있어 마켓플레이스 랩(<span class="mono">ask-seoul.kr/qa-lab/</span>)에서 실행한 결과를 붙여넣어 반영한다.</p>
+    <div class="grid">
+      <div><label for="baseUrl">게이트웨이 주소</label><input id="baseUrl" type="text" value="https://ask-seoul.kr"></div>
+      <div><label for="apiKey">API 키 (선택 — 라이브 기존형 조회용)</label><input id="apiKey" type="password" autocomplete="off" placeholder="ask_… 없어도 지표 비교는 가능"></div>
+    </div>
+    <div class="btnrow">
+      <button class="btn primary" id="loadBtn" type="button">카탈로그 불러와 비교 시작</button>
+      <span class="kv" id="loadState">아직 안 불러옴</span>
+    </div>
+    <div class="note" id="corsNote" style="display:none"></div>
+  </section>
+
+  <!-- 헤드라인 -->
+  <section class="card hide" id="headlineCard">
+    <h2>1. 한눈에 — 검증된 질의 패턴은 어느 형에서 답이 되나</h2>
+    <p class="hint" id="headlineHint"></p>
+    <div class="headline">
+      <div class="bignum asis"><div class="n" id="asisPct">–</div><div class="l">기존형(query_product) 능력만으로 답 가능</div></div>
+      <div class="bignum tobe"><div class="n" id="tobePct">–</div><div class="l">신설형(run_pattern)이 필요 — 정렬·집계·그룹 등</div></div>
+    </div>
+    <div class="bars" id="capBars"></div>
+    <p class="hint" style="margin-top:.8rem">막대 = 그 능력을 필요로 하는 패턴의 비율. 빨강은 기존형이 <b>서버에서 지원하지 않는</b> 능력(정렬·집계 등)으로, AI 가 원시 행을 받아 직접 후처리해야 해 정확성이 보장되지 않는다.</p>
+  </section>
+
+  <!-- 질문별 비교 -->
+  <section class="card hide" id="cmpCard">
+    <h2>2. 질문 하나로 나란히 보기</h2>
+    <div class="grid">
+      <div><label for="prodSel">제품</label><select id="prodSel"></select></div>
+      <div><label for="patSel">질의 패턴 (질문)</label><select id="patSel"></select></div>
+    </div>
+    <p class="hint" id="qLine" style="margin-top:.6rem"></p>
+    <div class="btnrow">
+      <button class="btn ghost" id="runAsisBtn" type="button">기존형 라이브 조회(/api/v1/data)</button>
+      <span class="kv" id="asisLiveState"></span>
+    </div>
+
+    <div class="cmp" style="margin-top:1rem">
+      <div class="side asis">
+        <div class="role">기존형 · AS-IS</div>
+        <h3>query_product</h3>
+        <div id="asisBody"></div>
+      </div>
+      <div class="side tobe">
+        <div class="role">신설형 · TO-BE</div>
+        <h3>run_pattern</h3>
+        <div id="tobeBody"></div>
+      </div>
+    </div>
+
+    <div class="tblbox"><table class="metric" id="metricTbl"></table></div>
+
+    <details style="margin-top:1rem">
+      <summary style="cursor:pointer;color:var(--muted);font-size:.85rem">신설형 라이브 결과 붙여넣기 (마켓플레이스 랩의 "대시보드 비교용으로 복사")</summary>
+      <textarea id="pasteBox" placeholder='{ "tool": "run_pattern", ... } — 마켓플레이스 랩에서 복사한 JSON' style="margin-top:.5rem"></textarea>
+      <div class="btnrow"><button class="btn ghost" id="applyPasteBtn" type="button">반영</button><span class="kv" id="pasteState"></span></div>
+    </details>
+  </section>
+
+  <footer class="foot">
+    이 페이지는 <b>실험용 부가물</b>입니다 — <span class="mono">ops-dashboard/public/qa-lab/</span> 폴더를 삭제하면 흔적 없이 사라지며,
+    콘솔 근간(<span class="mono">src/</span>·<span class="mono">public/index.html</span>·<span class="mono">ui.css</span>·<span class="mono">ui.js</span>)은 한 줄도 바뀌지 않았습니다.
+    관련 이슈 <a href="https://github.com/ASAC-DE-bigkk/ASK-Seoul-Serving/issues/192">#192</a>.
+  </footer>
+</div>
+<script src="./lab.js"></script>
+</body>
+</html>

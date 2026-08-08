@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>질의 테스트 콘솔 — QA Lab (실험) · ASK: SEOUL</title>
+<link rel="stylesheet" href="./lab.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>질의 테스트 콘솔 <span style="font-weight:400;color:var(--muted)">QA Lab</span></h1>
+      <p class="sub">MCP 6종 · REST 게이트웨이를 그대로 요청·검증하는 실험 콘솔 — 이슈 #192(run_pattern 표현력) 검증용</p>
+      <div class="pillrow">
+        <span class="tag exp">실험 · 근간 코드 무수정</span>
+        <span class="tag">삭제 = <span class="mono">public/qa-lab/</span> 폴더 제거</span>
+        <span class="tag id">요청 식별자: <b id="clientTag">max20_fable</b></span>
+      </div>
+    </div>
+    <button class="themebtn" id="themeBtn" type="button" aria-label="테마 전환">◐ 테마</button>
+  </header>
+
+  <!-- ── 연결 설정 ─────────────────────────────────── -->
+  <section class="card">
+    <h2><span class="step-n">0</span> 연결 설정 <span style="font-weight:400;color:var(--muted);font-size:.85rem">— 방법 B(직접 연결)</span></h2>
+    <p class="hint">MCP(<span class="mono">/mcp</span>)는 <b>같은 출처에서만</b> 브라우저로 호출됩니다(응답에 CORS 헤더가 없음). 이 페이지를 게이트웨이와 같은 호스트에서 여세요 — 로컬은 <span class="mono">http://localhost:8787/qa-lab/</span>, 배포는 <span class="mono">https://ask-seoul.kr/qa-lab/</span>.</p>
+    <div class="grid">
+      <div>
+        <label for="baseUrl">게이트웨이 주소 (base)</label>
+        <input id="baseUrl" type="text" value="" placeholder="비우면 현재 출처(권장)">
+      </div>
+      <div>
+        <label for="apiKey">API 키 (Bearer)</label>
+        <input id="apiKey" type="password" autocomplete="off" placeholder="ask_… — 조회·패턴·쿼터에 필요">
+      </div>
+      <div>
+        <label for="intent">요청 식별자 (intent / clientInfo)</label>
+        <input id="intent" type="text" value="max20_fable">
+      </div>
+    </div>
+    <div class="btnrow">
+      <button class="btn primary" id="connectBtn" type="button">연결 확인 (initialize)</button>
+      <button class="btn ghost" id="loadCatalogBtn" type="button">제품 목록 불러오기</button>
+      <span class="kv" id="connState">아직 연결 확인 안 함</span>
+    </div>
+    <div class="note" id="corsNote" style="display:none"></div>
+    <details style="margin-top:.7rem">
+      <summary style="cursor:pointer;color:var(--muted);font-size:.85rem">Claude Code(CLI)에 이 서버 등록하는 명령</summary>
+      <pre class="code" style="margin-top:.5rem" id="cliCmd"></pre>
+    </details>
+  </section>
+
+  <!-- ── 요청 빌더 ─────────────────────────────────── -->
+  <section class="card">
+    <h2><span class="step-n">1</span> 요청 빌더</h2>
+    <p class="hint">전송 방식과 도구를 고르면 아래 폼이 바뀝니다. 모든 요청에 식별자 <span class="mono">max20_fable</span> 가 함께 나갑니다(MCP는 <span class="mono">clientInfo.name</span>·<span class="mono">intent</span>, REST는 <span class="mono">X-ASK-Intent</span> 헤더).</p>
+    <div class="grid">
+      <div>
+        <label>전송 방식</label>
+        <div class="seg" id="transportSeg" role="group" aria-label="전송 방식">
+          <button type="button" data-t="mcp" aria-pressed="true">MCP (/mcp)</button>
+          <button type="button" data-t="rest" aria-pressed="false">REST (/api/v1)</button>
+        </div>
+      </div>
+      <div>
+        <label for="toolSel">도구 / 엔드포인트</label>
+        <select id="toolSel"></select>
+      </div>
+    </div>
+    <p class="hint" id="toolDesc" style="margin-top:.6rem"></p>
+    <div id="formFields" class="grid" style="margin-top:.2rem"></div>
+    <div class="chips" id="exampleChips"></div>
+    <div class="btnrow">
+      <button class="btn primary" id="sendBtn" type="button">보내기</button>
+      <button class="btn ghost" id="clearBtn" type="button">결과 지우기</button>
+      <span class="tag" id="toolTag" style="display:none"></span>
+    </div>
+  </section>
+
+  <!-- ── 결과 ─────────────────────────────────────── -->
+  <section class="card" id="resultCard">
+    <h2><span class="step-n">2</span> 결과</h2>
+    <div class="meta-row" id="resultMeta">
+      <span class="status wait">대기</span>
+      <span class="kv">요청을 보내면 상태·소요시간·쿼터·본문이 여기 표시됩니다.</span>
+    </div>
+    <div id="resultTable"></div>
+    <div class="split">
+      <div>
+        <h3>보낸 요청</h3>
+        <pre class="code" id="reqDump">—</pre>
+      </div>
+      <div>
+        <h3>받은 응답</h3>
+        <pre class="code" id="resDump">—</pre>
+      </div>
+    </div>
+    <div class="btnrow">
+      <button class="btn ghost" id="copyForCompareBtn" type="button" disabled>대시보드 비교용으로 복사</button>
+      <span class="kv" id="copyState"></span>
+    </div>
+  </section>
+
+  <!-- ── 제품 브라우저 ─────────────────────────────── -->
+  <section class="card" id="browserCard" style="display:none">
+    <h2><span class="step-n">3</span> 제품 브라우저 <span style="font-weight:400;color:var(--muted);font-size:.85rem" id="browserCount"></span></h2>
+    <p class="hint">제품을 누르면 빌더의 <span class="mono">product_id</span> 에 채워지고, 패턴을 누르면 <span class="mono">run_pattern</span> 폼으로 전환됩니다.</p>
+    <input id="browserFilter" type="text" placeholder="제품·질문 검색…" style="margin-bottom:.6rem">
+    <div class="tblbox" style="max-height:420px;overflow:auto"><table class="tbl" id="browserTbl"></table></div>
+  </section>
+
+  <!-- ── 승격 후보 미리보기 (P1·P3) ─────────────────── -->
+  <section class="card" id="ppCard">
+    <h2><span class="step-n">4</span> 패턴 변환 미리보기 <span style="font-weight:400;color:var(--muted);font-size:.85rem">— #192 P1·P3 승격 후보 로직</span></h2>
+    <p class="hint">현행 게이트웨이가 저장된 패턴 SQL 을 어떻게 <span class="mono">?</span> 바인딩으로 바꾸는지, 그리고 <b>P1(기본값)·P3(배열 IN)</b> 을 얹으면 무엇이 달라지는지 <b>순수 변환</b>만 미리 봅니다(실제 D1 실행은 <span class="mono">run_pattern</span> 이 합니다). 이 로직은 <span class="mono">pattern-plus.js</span> 에 게이트웨이 규약 그대로 있어, 검증 후 <span class="mono">src/index.js</span> 의 <span class="mono">handleRunPattern</span> 을 대체하도록 작성됐습니다.</p>
+    <p class="hint" id="ppHint" style="color:var(--warn)">먼저 위 “제품 목록 불러오기” 로 카탈로그를 로드하면 패턴 SQL 을 여기서 고를 수 있습니다.</p>
+    <div class="grid">
+      <div><label for="pp_product">product_id</label><input id="pp_product" type="text" placeholder="예: commerce_address_succession"></div>
+      <div><label for="pp_pattern">pattern_id</label><input id="pp_pattern" type="text" placeholder="예: category_net_flow"></div>
+    </div>
+    <div style="margin-top:.7rem"><label for="pp_sql">패턴 SQL (카탈로그에서 자동 채움 · 직접 편집 가능)</label><textarea id="pp_sql" placeholder="SELECT … FROM … WHERE col >= :min AND gu_code IN (:gus)"></textarea></div>
+    <div class="grid" style="margin-top:.5rem">
+      <div><label for="pp_params">params (JSON · 배열도 가능)</label><textarea id="pp_params" placeholder='{"gus":["11680","11650"],"n":10}'></textarea></div>
+      <div><label for="pp_defaults">param_defaults (JSON · P1)</label><textarea id="pp_defaults" placeholder='{"min_biz":100,"dir":"desc"}'></textarea></div>
+    </div>
+    <div class="btnrow"><button class="btn primary" id="ppRun" type="button">변환 미리보기</button><span class="kv" id="ppState"></span></div>
+    <div class="split" style="margin-top:.6rem">
+      <div><h3>변환된 SQL (converted)</h3><pre class="code" id="ppSql">—</pre></div>
+      <div><h3>바인딩 값 (values)</h3><pre class="code" id="ppVals">—</pre></div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    이 콘솔은 <b>실험용 부가물</b>입니다 — <span class="mono">marketplace/public/qa-lab/</span> 폴더를 삭제하면 흔적 없이 사라지며, 게이트웨이 근간 코드(<span class="mono">src/</span>·<span class="mono">partials/</span>·<span class="mono">wrangler.toml</span>)는 한 줄도 바뀌지 않았습니다.
+    관련 이슈 <a href="https://github.com/ASAC-DE-bigkk/ASK-Seoul-Serving/issues/192">#192</a>.
+  </footer>
+</div>
+<script src="./pattern-plus.js"></script>
+<script src="./lab.js"></script>
+</body>
+</html>
