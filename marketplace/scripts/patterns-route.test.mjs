@@ -24,8 +24,12 @@ const PATTERN = {
   insight_sample_ko: "강남구가 가장 많았다",
 };
 
+// 재배포 권리 증거(#88). `RIGHTS_GATE_STAGE=2` 부터는 **증거가 비면 닫힌다**(fail-closed) —
+// 기본값을 채워 두지 않으면 이 파일의 모든 테스트가 503 을 받는다. 빈 경우는 맨 아래에서 본다.
+const RIGHTS_OK = [{ source_id: "seoul_open_data", redistribution: "allowed_with_attribution" }];
+
 /** 라우터가 통과하는 문 전부를 흉내낸다 — 키·카탈로그·패턴·권리·쿼터·로그. */
-function fixtureDb(seen = {}) {
+function fixtureDb(seen = {}, rights = RIGHTS_OK) {
   return {
     prepare(sql) {
       return {
@@ -44,7 +48,7 @@ function fixtureDb(seen = {}) {
               return null;
             },
             async all() {
-              if (sql.includes("d1_catalog_sources")) return { results: [] };
+              if (sql.includes("d1_catalog_sources")) return { results: rights };
               seen.sql = sql;
               seen.dataBinds = binds;
               return { results: [{ gu: "강남구", cnt: 12 }] };
@@ -60,12 +64,12 @@ function fixtureDb(seen = {}) {
   };
 }
 
-async function call(path, { key = TEST_API_KEY, method = "GET" } = {}, seen = {}) {
+async function call(path, { key = TEST_API_KEY, method = "GET", rights = RIGHTS_OK } = {}, seen = {}) {
   const pending = [];
   const headers = key ? { authorization: `Bearer ${key}` } : {};
   const res = await worker.fetch(
     new Request(`https://marketplace.example.test${path}`, { method, headers }),
-    { DB: fixtureDb(seen), ASK_ENV: "dev" },
+    { DB: fixtureDb(seen, rights), ASK_ENV: "dev" },
     { waitUntil: (p) => pending.push(p) },
   );
   await Promise.all(pending);
@@ -137,4 +141,20 @@ test("④ route 값은 `run_pattern` 이다 — 콘솔 계약(0014)이 이 문�
   assert.ok(logged, "요청 로그가 기록되지 않았다");
   assert.ok(logged.includes("run_pattern"),
     `route 값이 로그에 없다 — 기록된 값: ${JSON.stringify(logged)}`);
+});
+
+test("재배포 권리 게이트가 이 문에도 걸린다 — 증거가 없으면 패턴 SQL 이 돌지 않는다", async () => {
+  // 새 문은 실행 로직을 안 만들고 `handleRunPattern` 을 부르므로 게이트가 저절로 따라온다.
+  // 하지만 **저절로 따라오는 것이야말로 나중에 조용히 끊긴다** — 라우터가 핸들러를 우회하는
+  // 날 아무도 못 알아챈다. 권리는 소비자와 무관한 원천과의 약속이라(shared.js §권리 게이트)
+  // 어느 문으로도 안 뚫려야 하고, 그래서 문마다 고정한다.
+  const seen = {};
+  const res = await call("/api/v1/patterns/p/top_gu?gu=x&n=1", { rights: [] }, seen);
+  assert.equal(res.status, 503);
+  const body = await res.json();
+  assert.equal(body.code, "product_not_ready");
+  assert.ok(body.blockers.includes("missing_source_rights_evidence"),
+    `blockers: ${JSON.stringify(body.blockers)}`);
+  // 막혔으면 질의가 D1 에 안 닿아야 한다 — 응답만 503 이고 SQL 은 돈 상태면 게이트가 아니다.
+  assert.equal(seen.dataBinds, undefined);
 });
