@@ -40,6 +40,27 @@
 
 ## 2026-08-08
 
+### MCP `verified` 배지를 뺀다 — K-Skill allowlist 와의 결합 해체 (#172)
+
+- **작업자**: @yooseongjin527
+- **의도 · 목표**: MCP `list_products` 의 `verified` 가 **K-Skill 경로 allowlist**
+  (`skill.js` `SKILL_PRODUCT_IDS`)를 그대로 찍고 있었다. 설명은 *"출처·품질 증거까지
+  검증"* — **말과 실체가 달랐다.** PR#161 이 allowlist 를 6→1 로 줄이자 57종 중 56종이
+  `verified:false` 로 나갈 참이었고, kang 실측으로 **citydata 10/14 가 실제 ready** 임이
+  확인돼(#172) 거짓 신호가 될 것이 구체적으로 증명됐다. `main` 배포 전에 끊는다.
+- **조치**: #172 합의(masondev·kang) 그대로 —
+  - `mcp.js` 가 `skill.js` 를 **import 하지 않는다.** `verified`·`verified_bundle` 미노출,
+    툴 설명·`llms.txt` 의 해당 문장 제거. K-Skill 소속은 `/skill/v1` 번들이 말한다.
+  - 증거 신호는 별도 `evidence_ready` 로 **추후** 온다(#172) — 그때까지 없는 판정을 싣지
+    않는다. **없는 필드가 틀린 필드보다 낫다**: 지금 잘못된 `false` 를 실으면 AI 가
+    "증거 닫힌 제품은 서울에 하나"라고 결론 낸다.
+  - 테스트 2건 교체·신설 — 필드 부재 + **`import skill.js` 금지 구조 회귀 검사**
+    (masondev 완료기준 "MCP 테스트는 K-Skill 상품 수 변경과 독립" 을 그대로 코드로).
+- **결과**: `npm test` 191 PASS. ⚠️ **외부 계약 변화**: 현 운영(main)은 `verified` 6종
+  true 를 내보내는 중 — 이 변경이 나가면 필드 자체가 사라진다. 문서(`llms.txt`)가
+  대체 판단 경로(describe 의 출처·신선도, `runnable`)를 안내한다.
+  📌 #161 의 change-log 누락분은 담당자(masondev)가 분리 작업과 함께 보강하기로 했다(#172).
+
 ### 긴 표는 20행이 한 쪽 — 스크롤로 이어 받는다
 
 - **작업자**: @Exisign

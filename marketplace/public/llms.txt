@@ -40,7 +40,9 @@
 Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버전 `2025-06-18`.
 **같은 데이터·같은 키·같은 한도**이며, 아래 REST 절차를 툴 5개로 감싼 것이다.
 
-- `list_products` — 제품 목록. `verified=true` 는 출처·품질 증거까지 닫힌 검증 번들 제품.
+- `list_products` — 제품 목록. (옛 `verified` 필드는 2026-08-08 에 뺐다 — K-Skill 번들
+  범위를 증거 신호처럼 말하던 값이라 뜻이 틀렸다. 신뢰 판단은 describe_product 의
+  출처·신선도와 usage_patterns 의 `runnable` 로 한다.)
 - `describe_product(product_id)` — 컬럼·grain·PK·시간축·usage_patterns·출처/신선도.
 - `preview_product(product_id)` — 5행 미리보기(쿼터 무과금).
 - `query_product(product_id, filters, from, to, limit, cursor, intent)` — 데이터 조회.

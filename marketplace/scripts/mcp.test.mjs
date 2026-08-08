@@ -1,6 +1,7 @@
 // MCP 서버 스모크 — 프로토콜(initialize/tools-list)은 D1 불필요, tools/call 은 deps 목킹.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { handleMcp, TOOLS } from "../src/mcp.js";
 
 const rpc = (method, params, id = 1) =>
@@ -80,20 +81,31 @@ test("tools/call list_products — 인증 후 handleCatalog 재사용", async ()
   assert.equal(payload.products[0].product_id, "citydata_ppltn_daily");
 });
 
-test("list_products — 검증 번들과 일반 카탈로그를 구분(verified)", async () => {
+test("list_products — K-Skill allowlist 와 결합하지 않는다(#172): verified 미노출", async () => {
+  // 예전에는 skill.js 의 SKILL_PRODUCT_IDS 로 verified 를 찍었다 — allowlist 가 6→1 로
+  // 줄자(PR#161) 실측 ready 인 제품까지 false 로 나갈 뻔했다. 지금은 그 판정 자체를
+  // 싣지 않는다. 이 테스트는 **재결합 회귀**를 막는다: K-Skill 상품 수가 몇이 되든
+  // MCP 응답 모양이 변하지 않아야 한다(masondev 완료기준 "MCP 테스트는 K-Skill 과 독립").
   const deps = mkDeps({
     handleCatalog: async () => jsonRes({
       products: [
-        { product_id: "weather_place_risk_window" }, // 검증 번들(#4, seoul-weather-risk)
+        { product_id: "weather_place_risk_window" }, // K-Skill 번들 소속
         { product_id: "citydata_ppltn_daily" },       // 일반 카탈로그
       ],
     }),
   });
   const res = await handleMcp(rpc("tools/call", { name: "list_products", arguments: {} }), {}, {}, deps);
   const payload = JSON.parse((await res.json()).result.content[0].text);
-  assert.equal(payload.verified_bundle, "seoul-weather-risk");
-  assert.equal(payload.products[0].verified, true);
-  assert.equal(payload.products[1].verified, false);
+  assert.equal("verified_bundle" in payload, false);
+  for (const p of payload.products) assert.equal("verified" in p, false);
+  // 카탈로그 본문은 그대로 통과한다 — mcp 가 덧씌우는 것이 없어야 한다
+  assert.deepEqual(payload.products.map((p) => p.product_id),
+    ["weather_place_risk_window", "citydata_ppltn_daily"]);
+});
+
+test("mcp.js 는 skill.js 를 import 하지 않는다(#172 구조 회귀 방지)", async () => {
+  const src = await readFile(new URL("../src/mcp.js", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /from\s+["']\.\/skill\.js["']/);
 });
 
 test("check_quota — 이메일 미노출(#26 완료기준), 나머지는 유지", async () => {
