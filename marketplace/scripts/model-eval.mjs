@@ -176,7 +176,12 @@ async function runModel(model, cse, products, env) {
       headers: { authorization: `Bearer ${env.token}`, "content-type": "application/json" },
       body: JSON.stringify({ messages, tools: toOpenAITools(TOOLS), max_tokens: 800 }),
     });
-    if (!res.ok) return { trace, error: `HTTP ${res.status}`, usage, turns: turn + 1 };
+    if (!res.ok) {
+      // 🔴 **본문을 버리지 않는다.** `HTTP 400` 만 남기면 모델이 거절한 건지 우리가 보낸
+      //    메시지 모양이 틀린 건지 알 수 없다 — 그 둘은 다음 행동이 완전히 다르다.
+      const why = await res.text().catch(() => "");
+      return { trace, error: `HTTP ${res.status}`, errorBody: why.slice(0, 400), usage, turns: turn + 1 };
+    }
     const body = await res.json();
     const r = body.result || {};
     usage = { prompt: usage.prompt + (r.usage?.prompt_tokens || 0),
@@ -337,6 +342,15 @@ async function main(argv) {
         `${model.split("/").pop().padEnd(22)} ${cse.expect.product_id.padEnd(30)} ` +
         `도달 ${mark(s.reached)} 제품 ${mark(s.product)} 패턴 ${mark(s.pattern)} 파라미터 ${mark(s.params)} ` +
         `· ${r.turns}턴${r.exhausted ? "(소진)" : ""}${r.error ? " · " + r.error : ""}\n`);
+      // 🔑 **어디까지 갔는지**를 같이 남긴다. "도달 X" 만으로는 제품을 못 고른 건지,
+      //    고르고 나서 멈춘 건지, 애초에 툴을 안 부른 건지가 안 갈린다 — 대응이 전부 다르다.
+      const path = (r.trace || []).map((t) =>
+        t.name === "describe_product" ? `describe(${t.args?.product_id ?? "?"})`
+        : t.name === "run_pattern" ? `run(${t.args?.product_id ?? "?"}/${t.args?.pattern_id ?? "?"} ${JSON.stringify(Object.keys(t.args?.params || {}))})`
+        : t.name).join(" → ");
+      if (path) process.stderr.write(`${" ".repeat(23)}↳ ${path}\n`);
+      if (r.answer) process.stderr.write(`${" ".repeat(23)}↳ [툴 대신 문장] ${r.answer.slice(0, 90)}\n`);
+      if (r.errorBody) process.stderr.write(`${" ".repeat(23)}↳ ${r.errorBody}\n`);
     }
     process.stderr.write("\n");
   }
