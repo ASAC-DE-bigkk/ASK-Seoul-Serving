@@ -454,6 +454,93 @@ $("ppRun").addEventListener("click", () => {
   }
 });
 
+// ── 실사용 A/B (기계적 지표) ────────────────────────────────────────────────
+// 같은 질문을 기존형(query_product)·신설형(run_pattern)으로 실제 호출해 비용을 나란히 잰다.
+// MCP 전용이라 동일 출처(마켓 랩)에서만 완전 동작한다.
+const AB_MAX_LIMIT = 5000;   // src/index.js MAX_LIMIT 과 같은 값
+const AB_SAMPLE_LIMIT = 500; // 라이브 표본 크기(전량을 매번 받지 않는다)
+
+async function abMcpCall(name, args) {
+  if (!state.initialized) { try { await mcpInitialize(); } catch { /* 아래서 함께 처리 */ } }
+  const body = { jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name, arguments: args } };
+  const headers = { "content-type": "application/json" };
+  if (apiKey()) headers.authorization = "Bearer " + apiKey();
+  const t0 = performance.now();
+  let res, json = null, ms;
+  try {
+    res = await fetch(baseUrl() + "/mcp", { method: "POST", headers, body: JSON.stringify(body) });
+    ms = Math.round(performance.now() - t0);
+    json = await res.json().catch(() => null);
+  } catch (e) { return { ms: Math.round(performance.now() - t0), isErr: true, payload: { error: String(e && e.message || e) }, http: 0 }; }
+  let payload = null, isErr = res.status >= 400;
+  if (json && json.error) { isErr = true; payload = json.error; }
+  else if (json && json.result && Array.isArray(json.result.content)) {
+    const tn = json.result.content.find((c) => c.type === "text");
+    try { payload = tn ? JSON.parse(tn.text) : null; } catch { payload = tn ? tn.text : null; }
+    if (json.result.isError) isErr = true;
+  } else if (json && json.result) payload = json.result;
+  return { ms, isErr, payload, http: res.status };
+}
+
+function abCatalogRowCount(pid) { const p = (state.catalog || []).find((x) => x.product_id === pid); return p && p.row_count != null ? p.row_count : null; }
+$("ab_product").addEventListener("change", () => {
+  const pid = $("ab_product").value.trim();
+  if (!pid || $("ab_pattern").value.trim()) return;
+  const p = (state.catalog || []).find((x) => x.product_id === pid);
+  if (p && (p.usage_patterns || [])[0]) $("ab_pattern").value = p.usage_patterns[0].pattern_id;
+});
+
+$("abRun").addEventListener("click", async () => {
+  const pid = $("ab_product").value.trim(), patId = $("ab_pattern").value.trim();
+  if (!pid || !patId) { $("abState").innerHTML = '<span style="color:var(--warn)">product_id·pattern_id 가 필요합니다.</span>'; return; }
+  if (!apiKey()) { $("abState").innerHTML = '<span style="color:var(--warn)">API 키가 필요합니다(연결 설정).</span>'; return; }
+  let params = {}; try { const r = $("ab_params").value.trim(); params = r ? JSON.parse(r) : {}; } catch { $("abState").innerHTML = '<span style="color:var(--err)">params JSON 오류</span>'; return; }
+  const btn = $("abRun"); btn.disabled = true; $("abState").textContent = "두 방식으로 호출 중…";
+  const id = clientId();
+  const asis = await abMcpCall("query_product", { product_id: pid, limit: AB_SAMPLE_LIMIT, intent: id });
+  const tobe = await abMcpCall("run_pattern", { product_id: pid, pattern_id: patId, params, intent: id });
+  btn.disabled = false; $("abState").textContent = "";
+  renderAB(pid, patId, asis, tobe);
+});
+
+function renderAB(pid, patId, asis, tobe) {
+  const total = abCatalogRowCount(pid);
+  const pages = total ? Math.ceil(total / AB_MAX_LIMIT) : null;
+  const asisRows = !asis.isErr && asis.payload ? asis.payload.row_count : null;
+  const asisMore = !asis.isErr && asis.payload ? asis.payload.has_more : null;
+  const tobeRows = !tobe.isErr && tobe.payload ? tobe.payload.row_count : null;
+  const insight = !tobe.isErr && tobe.payload ? tobe.payload.insight_sample_ko : null;
+  const verified = !tobe.isErr && tobe.payload && tobe.payload.verified ? tobe.payload.verified : null;
+
+  const errCell = (r) => r.isErr ? `⚠️ ${escapeHtml(typeof r.payload === "object" ? (r.payload.title || r.payload.error || JSON.stringify(r.payload)) : String(r.payload)).slice(0, 80)}` : null;
+  const aErr = errCell(asis), tErr = errCell(tobe);
+
+  const rows = [
+    ["이번 호출 반환 행", aErr || `${asisRows ?? "?"}행 (원시)${asisMore ? " · 더 있음" : ""}`, tErr || `${tobeRows ?? "?"}행 (답)`],
+    ["완전한 답에 필요한 전송", total ? `최대 <b>${total.toLocaleString()}</b>행 · ${pages}페이지 받아 집계` : "제품 전량(후처리 필요)", tErr ? "—" : `<b>${tobeRows ?? "?"}</b>행 · 1회로 끝`],
+    ["이 호출 지연", aErr ? "—" : `${asis.ms}ms`, tErr ? "—" : `${tobe.ms}ms`],
+    ["쿼터 소모", total ? `1/페이지 → 최대 ${pages}회` : "다수", tErr ? "—" : "1회"],
+    ["답 직결성", "❌ 원시 행 — 정렬·집계 후처리 필요", tErr ? "—" : "✅ 계산된 답 직행"],
+    ["검증", "❌ 없음(클라 집계 = 환각 위험)", verified && verified.at ? `✅ ${verified.rows ?? "?"}행 확인 (${String(verified.at).slice(0, 10)})` : (tErr ? "—" : "✅ 검증 패턴")],
+    ["해석(insight)", "—", tErr ? "—" : (insight ? escapeHtml(insight) : "—")],
+  ];
+  const t = $("abTbl"); t.innerHTML = "";
+  const head = el("tr");
+  ["지표", "기존형 · query_product (AS-IS)", "신설형 · run_pattern (TO-BE)"].forEach((h) => head.append(el("th", {}, document.createTextNode(h))));
+  t.append(el("thead", {}, head));
+  const body = el("tbody");
+  for (const [dim, a, b] of rows) {
+    const tr = el("tr");
+    tr.append(el("td", { style: "white-space:nowrap;font-weight:600;color:var(--muted)" }, document.createTextNode(dim)));
+    tr.append(el("td", { class: "", style: "white-space:normal", html: a }));
+    tr.append(el("td", { style: "white-space:normal", html: b }));
+    body.append(tr);
+  }
+  t.append(body);
+  $("abAsisDump").textContent = JSON.stringify(asis.payload, null, 2);
+  $("abTobeDump").textContent = JSON.stringify(tobe.payload, null, 2);
+}
+
 // ── 초기화 ───────────────────────────────────────────
 fillToolSelect();
 updateCorsNote();
