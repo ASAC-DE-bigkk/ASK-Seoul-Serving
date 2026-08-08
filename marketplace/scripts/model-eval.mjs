@@ -167,7 +167,11 @@ export function extractToolCalls(result) {
  */
 export function echoMessages(id, name, args, out) {
   return [
-    { role: "assistant", content: null,
+    // ⚠️ `content` 는 **빈 문자열**이다. OpenAI 표준은 tool call 을 실은 assistant 메시지에
+    //    `null` 을 쓰지만 Workers AI 스키마는 문자열을 요구한다(2026-08-09 실측):
+    //      Type mismatch of '/messages/2/content', 'string' not in 'null'
+    //    빈 문자열은 양쪽 다 받는다.
+    { role: "assistant", content: "",
       tool_calls: [{ id, type: "function", function: { name, arguments: JSON.stringify(args) } }] },
     { role: "tool", tool_call_id: id, name, content: JSON.stringify(out).slice(0, 6000) },
   ];

@@ -142,6 +142,8 @@ test("툴 왕복은 OpenAI 표준 모양으로 되민다 — id·function·tool_
   const [assistant, tool] = echoMessages("call_1", "describe_product", { product_id: "p" }, { ok: 1 });
 
   assert.equal(assistant.role, "assistant");
+  // 🔴 null 이 아니라 빈 문자열 — Workers AI 스키마가 문자열을 요구한다(2026-08-09 실측)
+  assert.equal(assistant.content, "", "content 가 null 이면 Workers AI 가 400 을 낸다");
   const tc = assistant.tool_calls[0];
   assert.equal(tc.id, "call_1");
   assert.equal(tc.type, "function");
