@@ -53,6 +53,23 @@ test("문항은 제품을 돌아가며 고른다 — 한 제품에 몰리면 '�
     ["citydata_ppltn_hourly", "culture_event_schedule"]);
 });
 
+// 🔴 2026-08-08 첫 실행 회귀. 카탈로그는 도메인별로 묶여 있고 commerce 가 22종으로 맨 앞이라,
+// 제품 단위로만 돌리면 앞 5문항이 전부 commerce 였다. 그러면 "commerce" 라고만 찍어도
+// 제품 도메인이 맞아 무엇을 재는지가 흐려진다.
+test("문항은 **도메인**을 먼저 돌린다 — 한 도메인이 앞을 다 먹지 않게", () => {
+  // commerce 3종이 앞에 몰려 있는 카탈로그를 흉내낸다
+  const skewed = [
+    { product_id: "commerce_a", usage_patterns: [{ pattern_id: "p1", question_ko: "q", sql: "SELECT :x", verified_at: "d" }] },
+    { product_id: "commerce_b", usage_patterns: [{ pattern_id: "p2", question_ko: "q", sql: "SELECT :x", verified_at: "d" }] },
+    { product_id: "commerce_c", usage_patterns: [{ pattern_id: "p3", question_ko: "q", sql: "SELECT :x", verified_at: "d" }] },
+    { product_id: "culture_a", usage_patterns: [{ pattern_id: "p4", question_ko: "q", sql: "SELECT :x", verified_at: "d" }] },
+    { product_id: "weather_a", usage_patterns: [{ pattern_id: "p5", question_ko: "q", sql: "SELECT :x", verified_at: "d" }] },
+  ];
+  const doms = buildCases(skewed, 3).map((c) => c.expect.product_id.split("_")[0]);
+  assert.deepEqual([...new Set(doms)].sort(), ["commerce", "culture", "weather"],
+    `한 도메인에 몰렸다: ${doms.join(", ")}`);
+});
+
 test("🔴 툴 응답은 카탈로그로만 만든다 — 실행 툴은 종료 신호만 준다", () => {
   // 여기서 실제 조회를 하면 D1·키·쿼터를 쓰게 된다. 우리가 재는 건 실행이 아니라 선택이다.
   assert.equal(answerTool("run_pattern", { product_id: "x" }, PRODUCTS)._terminal, true);

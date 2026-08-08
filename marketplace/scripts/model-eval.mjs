@@ -72,18 +72,29 @@ export function buildCases(products, n) {
       });
     }
   }
-  // 한 제품에 몰리지 않게 제품당 하나씩 돌아가며 고른다 — 같은 제품 5문항이면
-  // "이 제품을 잘 고른다"만 재게 되고 57종 중 고르는 능력은 안 재진다.
-  const byProduct = new Map();
+  // 🔴 **도메인을 먼저 돌린다.** 카탈로그는 도메인별로 묶여 있고 commerce 가 22종으로 맨
+  //    앞이라, 제품 단위로만 돌리면 앞 5개가 전부 commerce 다(2026-08-08 첫 실행에서 그랬다).
+  //    한 도메인 5문항이면 **"commerce" 라고만 찍어도 제품 도메인이 맞아** 무엇을 재는지가
+  //    흐려진다. 도메인 → 제품 순으로 돌려 6개 도메인이 고루 섞이게 한다.
+  const byDomain = new Map();
   for (const c of cases) {
+    const dom = c.expect.product_id.split("_")[0];
+    if (!byDomain.has(dom)) byDomain.set(dom, new Map());
+    const byProduct = byDomain.get(dom);
     if (!byProduct.has(c.expect.product_id)) byProduct.set(c.expect.product_id, []);
     byProduct.get(c.expect.product_id).push(c);
   }
+  // 도메인마다 "제품을 돌아가며" 뽑은 대기열을 만든다
+  const queues = [...byDomain.values()].map((products) => {
+    const lists = [...products.values()];
+    const q = [];
+    for (let i = 0; i < 50; i++) for (const l of lists) if (l[i]) q.push(l[i]);
+    return q;
+  });
   const picked = [];
-  const lists = [...byProduct.values()];
   for (let i = 0; picked.length < n && i < 50; i++) {
-    for (const list of lists) {
-      if (list[i]) picked.push(list[i]);
+    for (const q of queues) {
+      if (q[i]) picked.push(q[i]);
       if (picked.length >= n) break;
     }
   }
@@ -193,6 +204,18 @@ async function main(argv) {
   for (const model of models) {
     for (const cse of cases) {
       const r = await runModel(model, cse, products, { account, token });
+      // 🔴 인증 실패는 **즉시 멈춘다.** 재시도해도 같고, 계속 돌면 0/5 표가 나와서
+      //    "모델이 못 한다"로 읽힌다 — 실제로는 한 번도 물어본 적이 없는 것이다.
+      if (/^HTTP 40[13]$/.test(r.error || "")) {
+        process.stderr.write(
+          `\n🔴 ${r.error} — 자격증명이 거절됐다. 모델을 재기 전에 이것부터 푼다.\n` +
+          "   ① 토큰 자체가 유효한가\n" +
+          "        curl.exe -s https://api.cloudflare.com/client/v4/user/tokens/verify \\\n" +
+          '          -H "authorization: Bearer $env:CF_AI_TOKEN"\n' +
+          "   ② 토큰에 Workers AI 권한(Account · Workers AI · Read)이 있는가\n" +
+          "   ③ CF_ACCOUNT_ID 가 그 토큰의 계정인가 — `npx wrangler whoami`\n");
+        return 3;
+      }
       const s = score(r, cse);
       rows.push({ model, cse, r, s });
       const mark = (b) => (b ? "O" : "X");
