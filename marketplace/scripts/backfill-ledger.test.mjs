@@ -35,6 +35,16 @@ const FOREIGN_PROD = `CREATE TABLE _request_log (ts TEXT, path TEXT, query TEXT,
 const FOREIGN_DEV = `CREATE TABLE _request_log (ts TEXT, path TEXT, query TEXT, token TEXT, request_id TEXT)`;
 
 const KEYS = `CREATE TABLE _keys (key_hash TEXT PRIMARY KEY)`;
+const SERVICE_KEYS = `CREATE TABLE _service_keys (
+  key_hash TEXT PRIMARY KEY,
+  key_prefix TEXT NOT NULL,
+  service_name TEXT,
+  scopes_json TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  daily_quota INTEGER NOT NULL DEFAULT 1000,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT
+)`;
 const BURST = `CREATE TABLE _burst (bucket TEXT PRIMARY KEY)`;
 
 /** 주어진 모양의 DB 에 백필을 돌리고 (장부, DB핸들) 을 돌려준다. */
@@ -64,6 +74,16 @@ test("우리 표에 0004 만 빠진 DB — 0004 를 기록하지 않는다 (appl
   const { ledger } = backfill(KEYS, OURS, BURST);
   assert.deepEqual(ledger, ["0001_keys_usage.sql", "0002_request_log.sql", "0003_burst.sql"]);
   assert.ok(!ledger.includes("0004_request_id.sql"));
+});
+
+test("service key 표가 이미 있으면 0006도 기록한다 (apply가 중복 생성하지 않음)", NEEDS_SQLITE, () => {
+  const { ledger } = backfill(SERVICE_KEYS);
+  assert.deepEqual(ledger, ["0006_service_key_scope.sql"]);
+});
+
+test("기존 user key 표만 있으면 0006은 기록하지 않는다 (apply가 service key 표를 추가함)", NEEDS_SQLITE, () => {
+  const { ledger } = backfill(KEYS);
+  assert.deepEqual(ledger, ["0001_keys_usage.sql"]);
 });
 
 test("남의 표가 이름을 선점한 prod 모양 — 0004 를 기록한다 (apply 가 남의 표를 안 건드림)", NEEDS_SQLITE, () => {

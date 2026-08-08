@@ -12,7 +12,13 @@ import {
   parseJsonArray, loadRedistributionRights, redistributionBlockers, rightsBlockedProblem,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
-import { SKILL_BUNDLE_ID, handleSkillBundle, handleSkillData, handleSkillProduct } from "./skill.js";
+import {
+  SKILL_BUNDLE_ID,
+  SKILL_SERVICE_SCOPE,
+  handleSkillBundle,
+  handleSkillData,
+  handleSkillProduct,
+} from "./skill.js";
 import { handleMcp } from "./mcp.js";
 import {
   isConfigured, redirectUri, authorizeUrl, exchangeCode, makeState, verifyState,
@@ -860,7 +866,7 @@ async function route(request, env, url, trace, ctx) {
         `GET ${bundlePath} · /skill/v1/products/<product_id> · /skill/v1/products/<product_id>/data`);
 
     trace.route = path === bundlePath ? "skill_bundle" : dataMatch ? "skill_data" : "skill_product";
-    const { keyRow, error } = await authenticate(env, request);
+    const { keyRow, error } = await authenticate(env, request, { requiredScope: SKILL_SERVICE_SCOPE });
     if (error) return error;
     trace.keyHash = keyRow.key_hash;
     const burst = await checkBurst(env, "k:" + keyRow.key_hash);
