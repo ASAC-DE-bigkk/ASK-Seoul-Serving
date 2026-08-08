@@ -98,9 +98,68 @@ test("list_products — K-Skill allowlist 와 결합하지 않는다(#172): veri
   const payload = JSON.parse((await res.json()).result.content[0].text);
   assert.equal("verified_bundle" in payload, false);
   for (const p of payload.products) assert.equal("verified" in p, false);
-  // 카탈로그 본문은 그대로 통과한다 — mcp 가 덧씌우는 것이 없어야 한다
+  // 제품 목록과 순서는 카탈로그 그대로다 — mcp 가 판정을 덧씌우지 않는다
   assert.deepEqual(payload.products.map((p) => p.product_id),
     ["weather_place_risk_window", "citydata_ppltn_daily"]);
+});
+
+// ── 목록은 고르기 위한 것이다 (2026-08-08 실측: 510KB · 최대 10초) ──────────────
+// AI 가 가장 먼저 부르는 도구가 57종의 질의 패턴 431건 + 컬럼 전량을 싣고 있었다.
+// 한 번의 호출로 컨텍스트가 무너지고, 전수 평가에서 AI 가 응답을 파일로 저장해 grep 하는
+// 이상행동까지 나왔다. 상세는 describe_product 의 몫이다.
+
+const listPayload = async (products) => {
+  const deps = mkDeps({ handleCatalog: async () => jsonRes({ products }) });
+  const res = await handleMcp(rpc("tools/call", { name: "list_products", arguments: {} }), {}, {}, deps);
+  return JSON.parse((await res.json()).result.content[0].text);
+};
+
+const FAT_PRODUCT = {
+  product_id: "p", name: "t", product_question: "대표질문?",
+  usage_patterns: [
+    { pattern_id: "cohort_survival", question_ko: "창업 후 몇 년을 버티나?",
+      sql: "SELECT ".repeat(50), axes: ["a"], requires: ["x"], insight_sample_ko: "해석",
+      verified_at: "2026-08-06", verified_rows: 10, allow_empty: 0 },
+    { pattern_id: "top_dong", question_ko: "어느 동이 많나?", sql: "SELECT 2" },
+  ],
+  columns: [
+    { name: "gu", type: "TEXT", description: "자치구 이름 — 긴 설명이 여기 붙는다" },
+    { name: "event_date", type: "DATE", description: "행사 일자" },
+  ],
+};
+
+test("list_products — 무거운 필드는 빼되 **검색 신호는 남긴다**", async () => {
+  const p = (await listPayload([FAT_PRODUCT])).products[0];
+  // 남는 것 — 소비자가 제품을 고르는 데 쓰는 값
+  assert.equal(p.product_question, "대표질문?");
+  assert.deepEqual(p.usage_patterns, [
+    { pattern_id: "cohort_survival", question_ko: "창업 후 몇 년을 버티나?" },
+    { pattern_id: "top_dong", question_ko: "어느 동이 많나?" },
+  ]);
+  assert.deepEqual(p.column_names, ["gu", "event_date"]);
+  assert.equal(p.pattern_count, 2);
+  assert.equal(p.column_count, 2);
+  // 빠지는 것 — 목록 단계에서 안 쓰는데 응답의 대부분을 차지하던 것들
+  for (const u of p.usage_patterns) {
+    for (const k of ["sql", "axes", "requires", "insight_sample_ko", "verified_at", "verified_rows", "allow_empty"]) {
+      assert.equal(k in u, false, `${k} 가 목록에 남았다`);
+    }
+  }
+  assert.equal("columns" in p, false, "컬럼 전문(설명 포함)이 목록에 남았다");
+});
+
+test("메타가 없는 제품은 개수 0 · 빈 목록 — 필드를 지어내지 않는다", async () => {
+  const p = (await listPayload([{ product_id: "p" }])).products[0];
+  assert.equal(p.pattern_count, 0);
+  assert.equal(p.column_count, 0);
+  assert.deepEqual(p.usage_patterns, []);
+  assert.deepEqual(p.column_names, []);
+});
+
+test("목록이 상세로 가는 길을 알려 준다", async () => {
+  const payload = await listPayload([FAT_PRODUCT]);
+  assert.match(payload.detail_hint, /describe_product/);
+  assert.match(payload.detail_hint, /runnable/);   // 실행 가능 여부는 목록이 말하지 않는다
 });
 
 test("mcp.js 는 skill.js 를 import 하지 않는다(#172 구조 회귀 방지)", async () => {

@@ -155,6 +155,78 @@ SLO 를 한 화면에서 본다.
 남용 대응 폐기(약관의 "사전 통지 없이")는 공개 엔드포인트가 아니라 운영자의 D1 조작이다 —
 `UPDATE _keys SET status='revoked' WHERE key_prefix = ?`.
 
+## K-Skill proxy 서비스 키 — 사용자 키와 분리
+
+`k-skill-proxy:seoul-weather-risk`는 사용자가 발급받는 key가 아니라 운영자가 등록하는
+비인간 service key다. 허용 scope는 `skill:seoul-weather-risk:read` 하나이며,
+`/skill/v1`의 단일 Weather bundle/product/data read route에서만 통과한다. `/api/v1`,
+`/mcp`, key 관리 route는 같은 key로 호출할 수 없다.
+
+🔑 **막는 코드가 따로 있는 게 아니라 열어 주는 코드가 없어서 막힌다.** `requiredScope` 를
+넘기는 호출처는 `index.js` 의 `/skill/v1` 블록 **한 곳뿐**이고, 나머지 문은 그냥
+`authenticate()` 를 부르므로 service key 가 오면 403 `service_key_scope_required` 다.
+새 라우트가 생겨도 실수로 열리지 않는다 — 거부가 기본값이다.
+
+서비스 key는 `_service_keys`에 hash·prefix·principal·scope·상태만 저장한다. 원문은 proxy
+운영 환경에만 두고, 사고 시 `status='revoked'`로 즉시 차단한다. rotation은 새 scoped key
+등록 → proxy secret 교체·smoke → 이전 key revoke 순서다. 자세한 계약은
+[decision/0005](docs/decision/0005-k-skill-service-key-scope.md)를 따른다.
+
+### 발급 — `npm run issue:service-key`
+
+```bash
+npm run issue:service-key -- --service-name "k-skill-proxy:seoul-weather-risk" \
+                             --scope "skill:seoul-weather-risk:read"
+```
+
+🔴 **원문은 stderr, SQL 은 stdout 이다.** `… > insert.sql` 로 받으면 파일에는 **해시만 담긴
+INSERT** 가 들어가고 원문은 터미널에만 뜬다. 반대로 두면 "SQL 을 파일로 받는다"는 지극히
+자연스러운 동작이 곧 유출이 된다. 스크립트는 어떤 경로로도 파일을 쓰지 않는다.
+
+발급 전에 **서버가 받아 줄 값인지 먼저 본다** — scope 문자열이 `shared.js` 정규식과 다르거나
+서버가 어느 route 에서도 요구하지 않는 값이면 발급을 거부한다. 그런 키는 인증은 되는데 모든
+route 가 403 이라, 원인이 D1 에도 로그에도 안 보인다(비공개 채널 전달까지 왕복을 다시 해야
+한다). 미리 발급해야 할 사정이 있으면 `--allow-unknown-scope` 로 명시적으로 연다.
+
+출력된 SQL 은 해시만 담고 있어 명령행에 남아도 된다.
+
+```bash
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --command "<출력된 SQL>"
+```
+
+🔴 **SQL 에 큰따옴표가 한 글자도 없다** — `scopes_json` 을 `json_array('…')` 로 만들기 때문이다.
+2026-08-08 에 `'["skill:…:read"]'` 를 리터럴로 박았다가 **PowerShell 5.1 이 네이티브 인자의
+큰따옴표를 먹어** `[skill:…:read]`(`json_valid=0`)로 등록됐고, `serviceKeyScopes()` 가
+fail-closed 되어 **인증은 되는데 모든 경로가 403 인 죽은 키**가 나왔다. 원인이 D1 에도 로그에도
+안 보였다. 셸이 먹을 것을 아예 안 만드는 쪽으로 고쳤다.
+
+### 등록 뒤 반드시 확인한다 — 두 줄이면 된다
+
+```bash
+# ① 저장된 값이 유효한 JSON 인가 (is_valid 1 · len 33 이어야 한다)
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --command \
+  "SELECT key_prefix, length(scopes_json) AS len, json_valid(scopes_json) AS is_valid FROM _service_keys WHERE key_prefix = '<prefix>'"
+
+# ② 실제로 통과·차단되는가 (허용 200 · /api/v1 은 403)
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer <원문>" \
+  https://ask-seoul.kr/skill/v1/bundles/seoul-weather-risk
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer <원문>" \
+  https://ask-seoul.kr/api/v1/me
+```
+
+**②에서 401 이면 등록이 안 된 것이고, 200/200 이면 스코프 게이트가 안 걸린 것**이다. 위 실사고는
+①·② 어느 쪽으로도 즉시 잡혔을 문제였는데 그때는 확인 단계가 없었다.
+
+scope 만 어긋난 것이면 **키를 다시 발급할 필요가 없다** — 해시·prefix 는 멀쩡하다.
+
+```bash
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --command \
+  "UPDATE _service_keys SET scopes_json = json_array('skill:seoul-weather-risk:read') WHERE key_prefix = '<prefix>'"
+```
+
+원문을 잃었을 때만 재발급이다 — 복구 경로가 없으므로 새로 발급하고 이전 행을 `revoked` 로
+바꾼다(rotation 과 같은 절차다).
+
 ## 페이지네이션 — offset 이 아니라 rowid 키셋 커서
 
 `limit` 상한이 5,000 이라 큰 제품(weather `risk_window` 30만 행)은 한 번에 다 못 받는다.

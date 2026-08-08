@@ -566,6 +566,31 @@ async function handleData(env, id, params, keyRow, trace = {}, opts = {}) {
   }, 200, quotaHeaders(usage.used, usage.quota));
 }
 
+// 없는 패턴을 불렀을 때 **무엇을 고르면 되는지**까지 답한다(#204).
+//
+// 🔴 **검증된 것만 싣는다**(`verified_at IS NOT NULL`) — 미검증을 권하면 다음 호출이 409 로
+//    끝난다. 이 기준은 제품 번들의 `runnable`(= `Boolean(verified_at)`, `v1.js`)과 같은 값이다.
+// 상한 12: 안내 문장이 읽히는 선. 넘으면 개수만 알린다(MCP 문과 같은 값 — 두 문의 안내가
+// 다른 길이로 잘리면 같은 404 를 두 모양으로 배우게 된다).
+const MAX_PATTERN_HINT = 12;
+
+async function runnablePatternHint(env, productId) {
+  try {
+    const res = await env.DB.prepare(
+      "SELECT pattern_id FROM d1_usage_patterns " +
+      "WHERE product_id = ? AND verified_at IS NOT NULL ORDER BY pattern_id"
+    ).bind(productId).all();
+    const ids = (res?.results || []).map((r) => r && r.pattern_id).filter(Boolean);
+    if (!ids.length) return null;
+    const shown = ids.slice(0, MAX_PATTERN_HINT);
+    return `실행 가능한 pattern_id: ${shown.join(" · ")}` +
+      (ids.length > shown.length ? ` 외 ${ids.length - shown.length}개` : "") +
+      " — 이 중 하나를 그대로 쓸 것(이름을 지어내지 말 것)";
+  } catch {
+    return null;   // 목록은 덤이다 — 이것이 실패해도 404 안내 자체는 나가야 한다
+  }
+}
+
 // 검증된 질의 패턴 실행 (#118 run_pattern — MCP P1). AI 가 필터를 조립하는 대신 도메인
 // 오너가 게시·검증한 SQL(d1_usage_patterns)을 서버가 실행한다 — 질의를 "짓는" 여지가 없다.
 //
@@ -595,12 +620,18 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
     "SELECT sql, question_ko, verified_rows, verified_at, allow_empty, insight_sample_ko " +
     "FROM d1_usage_patterns WHERE product_id = ? AND pattern_id = ?"
   ).bind(productId, patternId).first();
-  if (!pattern)
+  if (!pattern) {
+    // 문구는 **두 독자를 겸한다** — MCP 로 오는 AI 와 `/api/v1/patterns` 로 오는 사람.
+    // 🔴 전에는 *"카탈로그의 usage_patterns 에서 runnable 인 것을 고를 것"* 이었는데
+    //    **카탈로그 응답에 `runnable` 이 없다**(#204, 2026-08-08 운영에서 404 를 받고 발견).
+    //    그 값은 제품 번들이 `Boolean(verified_at)` 로 만든다(`v1.js`) — 가리킨 곳에 없었다.
+    // 그래서 **가리키지 않고 목록을 싣는다.** 제품이 가진 pattern_id 는 확정 목록이라
+    // 짐작할 여지가 없다. MCP 문은 #187 에서 이미 이렇게 한다(`mcp.js unknownPatternWithList`).
+    const hint = await runnablePatternHint(env, productId);
     return problem(404, "unknown pattern",
-      // 문구가 **두 독자를 겸한다** — MCP 로 오는 AI 와, `/api/v1/patterns` 로 오는 사람.
-      // 전에는 `describe_product`(MCP 툴 이름)를 가리켰는데, 사람 쪽에는 그런 버튼이 없어
-      // 막다른 길이었다. 둘 다 결국 **카탈로그의 usage_patterns** 를 보므로 그걸 가리킨다.
-      `'${patternId}' 는 '${productId}' 의 패턴에 없다 — 카탈로그의 usage_patterns 에서 runnable 인 것을 고를 것`);
+      `'${patternId}' 는 '${productId}' 의 패턴에 없다 — ` + (hint ||
+        `GET /api/v1/products/${productId} 의 usage_patterns 에서 runnable=true 인 것을 고를 것`));
+  }
   // 미검증 패턴 실행은 "환각을 서버가 대행"하는 꼴이다(#118 ②) — 검증되면 저절로 열린다
   if (!pattern.verified_at)
     return problem(409, "pattern not verified",
