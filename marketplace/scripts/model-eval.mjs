@@ -181,12 +181,74 @@ export function score(result, cse) {
 }
 
 function parseArgs(argv) {
-  const out = { models: DEFAULT_MODELS, n: 5 };
+  const out = { models: DEFAULT_MODELS, n: 5, check: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--models") out.models = argv[++i].split(",").map((s) => s.trim());
     else if (argv[i] === "--n") out.n = Number(argv[++i]);
+    else if (argv[i] === "--check") out.check = true;
   }
   return out;
+}
+
+/**
+ * `--check` — 자격증명을 **필요한 동작 그대로** 확인한다.
+ *
+ * 🔑 권한 목록을 조회해 "있어 보인다"로 판정하지 않는다. Cloudflare 의 토큰 정책은 템플릿·
+ * 범위 조합이 많아 **목록으로는 실제 허용 여부를 못 맞힌다.** 마지막 단계에서 `max_tokens: 1`
+ * 짜리 **진짜 추론**을 한 번 돌린다 — 그게 우리가 쓸 동작 자체다. 비용은 뉴런 몇 개다.
+ *
+ * 단계를 나누는 이유: 401 하나로는 **토큰이 죽었나 · 계정이 다른가 · 권한이 없나**를 못 가른다.
+ */
+async function check(models, env) {
+  const line = (ok, label, hint) =>
+    process.stderr.write(`${ok ? "✅" : "🔴"} ${label}\n${ok || !hint ? "" : `      → ${hint}\n`}`);
+  const json = async (url, init) => {
+    try {
+      const r = await fetch(url, init);
+      return { status: r.status, body: await r.json().catch(() => ({})) };
+    } catch (e) { return { status: 0, body: { _err: String(e) } }; }
+  };
+  const auth = { authorization: `Bearer ${env.token}` };
+
+  const v = await json("https://api.cloudflare.com/client/v4/user/tokens/verify", { headers: auth });
+  const active = v.body?.result?.status === "active";
+  line(active, `토큰 유효성 — ${active ? "active" : `HTTP ${v.status}`}`,
+    "토큰이 죽었거나 잘못 복사됐다. 대시보드에서 새로 만든다");
+  if (!active) return 3;
+
+  const a = await json(`${API}/${env.account}`, { headers: auth });
+  line(a.status === 200, `계정 접근 — ${a.status === 200 ? a.body?.result?.name ?? "OK" : `HTTP ${a.status}`}`,
+    "CF_ACCOUNT_ID 가 이 토큰의 계정이 아니다. `npx wrangler whoami` 로 확인한다");
+  if (a.status !== 200) return 3;
+
+  // 🔴 여기가 진짜 판정이다 — 우리가 실제로 부를 엔드포인트를 그대로 부른다.
+  const model = models[0];
+  const r = await json(`${API}/${env.account}/ai/run/${model}`, {
+    method: "POST", headers: { ...auth, "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "hi" }], max_tokens: 1 }),
+  });
+  const ok = r.status === 200;
+  line(ok, `Workers AI 추론 (${model}) — ${ok ? "통과" : `HTTP ${r.status}`}`,
+    r.status === 403 || r.status === 401
+      ? "토큰에 **Account · Workers AI** 권한이 없다. `Edit Cloudflare Workers` 템플릿에는 안 붙는다 — 커스텀 토큰으로 그 권한을 더한다"
+      : `응답: ${JSON.stringify(r.body).slice(0, 200)}`);
+  if (!ok) return 3;
+
+  // 도구 호출까지 되는지 — 여기서 막히면 모델은 살아 있어도 이 설계엔 못 쓴다.
+  const t = await json(`${API}/${env.account}/ai/run/${model}`, {
+    method: "POST", headers: { ...auth, "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "서울 데이터 제품 목록 보여줘" }],
+                           tools: toOpenAITools(TOOLS), max_tokens: 200 }),
+  });
+  const called = Boolean(t.body?.result?.tool_calls?.length);
+  line(t.status === 200, `tools 파라미터 수용 — ${t.status === 200 ? "통과" : `HTTP ${t.status}`}`,
+    `이 모델·API 가 tools 를 안 받는다: ${JSON.stringify(t.body).slice(0, 200)}`);
+  if (t.status !== 200) return 3;
+  line(called, `도구 호출 실제 발생 — ${called ? t.body.result.tool_calls.map((c) => c.name || c.function?.name).join(", ") : "없음"}`,
+    "형식은 받는데 툴을 안 부른다. 프롬프트 문제일 수도, 모델 한계일 수도 있다 — 본 측정에서 갈린다");
+
+  process.stderr.write("\n준비됐다. `npm run eval:model` 로 본 측정을 돌린다.\n");
+  return 0;
 }
 
 async function main(argv) {
@@ -195,7 +257,9 @@ async function main(argv) {
     process.stderr.write("CF_ACCOUNT_ID · CF_AI_TOKEN 환경변수가 필요하다 (원문을 인자로 넘기지 않는다)\n");
     return 2;
   }
-  const { models, n } = parseArgs(argv);
+  const { models, n, check: checkOnly } = parseArgs(argv);
+  if (checkOnly) return check(models, { account, token });
+
   const products = (await (await fetch(`${CATALOG}?cb=eval`)).json()).products;
   const cases = buildCases(products, n);
   process.stderr.write(`카탈로그 ${products.length}종 · 문항 ${cases.length}개 · 모델 ${models.length}개\n\n`);
@@ -208,12 +272,9 @@ async function main(argv) {
       //    "모델이 못 한다"로 읽힌다 — 실제로는 한 번도 물어본 적이 없는 것이다.
       if (/^HTTP 40[13]$/.test(r.error || "")) {
         process.stderr.write(
-          `\n🔴 ${r.error} — 자격증명이 거절됐다. 모델을 재기 전에 이것부터 푼다.\n` +
-          "   ① 토큰 자체가 유효한가\n" +
-          "        curl.exe -s https://api.cloudflare.com/client/v4/user/tokens/verify \\\n" +
-          '          -H "authorization: Bearer $env:CF_AI_TOKEN"\n' +
-          "   ② 토큰에 Workers AI 권한(Account · Workers AI · Read)이 있는가\n" +
-          "   ③ CF_ACCOUNT_ID 가 그 토큰의 계정인가 — `npx wrangler whoami`\n");
+          `\n🔴 ${r.error} — 자격증명이 거절됐다. 어디가 막혔는지 이 명령이 갈라 준다:\n\n` +
+          "      npm run eval:model -- --check\n\n" +
+          "   토큰 유효성 · 계정 접근 · Workers AI 추론 · 도구 호출을 순서대로 짚는다.\n");
         return 3;
       }
       const s = score(r, cse);
@@ -244,5 +305,9 @@ async function main(argv) {
 // `pathToFileURL` — Windows 경로를 손으로 `file://` 에 붙이면 안 맞아, 테스트가 import 하는
 // 순간 CLI 가 도는 사고가 난다(`issue-service-key.mjs` 와 같은 이유).
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.argv.slice(2)).then((c) => process.exit(c));
+  // 🔴 `process.exit()` 을 쓰지 않는다. `fetch` 가 keep-alive 소켓을 쥔 채로 즉시 죽이면
+  //    Windows 에서 libuv 가 어서션으로 넘어진다(`UV_HANDLE_CLOSING`, 종료코드 127) —
+  //    **검사가 통과했는지 실패했는지가 그 크래시에 묻힌다.** 종료코드만 정해 두고
+  //    Node 가 핸들을 정리한 뒤 스스로 끝내게 한다.
+  main(process.argv.slice(2)).then((c) => { process.exitCode = c; });
 }
