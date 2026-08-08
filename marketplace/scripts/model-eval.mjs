@@ -136,12 +136,35 @@ export function answerTool(name, args, products) {
   return { _terminal: true };
 }
 
+const SYSTEM = "당신은 서울 공공데이터 API 안내자입니다. 데이터를 직접 조회하지 말고 반드시 도구를 사용하세요. " +
+  "SQL 을 작성하지 마세요 — 검증된 질의 패턴(run_pattern)을 고르고 파라미터만 채웁니다. " +
+  "먼저 list_products 로 제품을 고르고, describe_product 로 패턴을 확인한 뒤, runnable=true 인 패턴을 run_pattern 으로 실행하세요.";
+
+/** 응답 어디에 tool call 이 실렸는지 **찾아서** 돌려준다.
+ *
+ * 🔴 한 자리만 보고 "안 불렀다"고 판정하지 않는다. Workers AI 는 모델·버전에 따라
+ *    `result.tool_calls` 이기도 하고 OpenAI 호환 `result.choices[0].message.tool_calls`
+ *    이기도 하다. **파서가 엉뚱한 곳을 보면 잘 부른 모델이 0점으로 찍힌다** — 그건 모델
+ *    한계가 아니라 우리 결함이고, 그 차이가 이 측정의 결론을 통째로 뒤집는다.
+ */
+export function extractToolCalls(result) {
+  const cands = [result?.tool_calls, result?.choices?.[0]?.message?.tool_calls,
+                 result?.message?.tool_calls, result?.output?.tool_calls];
+  for (const c of cands) if (Array.isArray(c) && c.length) return c;
+  return [];
+}
+
+/** tool call 한 건에서 (이름, 인자)를 꺼낸다 — 공급자마다 감싸는 모양이 다르다. */
+export function readCall(c) {
+  const name = c?.name ?? c?.function?.name;
+  let args = c?.arguments ?? c?.function?.arguments ?? c?.input ?? {};
+  if (typeof args === "string") { try { args = JSON.parse(args); } catch { args = {}; } }
+  return { name, args };
+}
+
 async function runModel(model, cse, products, env) {
   const messages = [
-    { role: "system", content:
-      "당신은 서울 공공데이터 API 안내자입니다. 데이터를 직접 조회하지 말고 반드시 도구를 사용하세요. " +
-      "SQL 을 작성하지 마세요 — 검증된 질의 패턴(run_pattern)을 고르고 파라미터만 채웁니다. " +
-      "먼저 list_products 로 제품을 고르고, describe_product 로 패턴을 확인한 뒤, runnable=true 인 패턴을 run_pattern 으로 실행하세요." },
+    { role: "system", content: SYSTEM },
     { role: "user", content: cse.question },
   ];
   const trace = [];
@@ -159,13 +182,11 @@ async function runModel(model, cse, products, env) {
     usage = { prompt: usage.prompt + (r.usage?.prompt_tokens || 0),
               completion: usage.completion + (r.usage?.completion_tokens || 0) };
 
-    const calls = r.tool_calls || [];
+    const calls = extractToolCalls(r);
     if (!calls.length) return { trace, answer: (r.response || "").slice(0, 200), usage, turns: turn + 1 };
 
     for (const c of calls) {
-      const name = c.name || c.function?.name;
-      let args = c.arguments ?? c.function?.arguments ?? {};
-      if (typeof args === "string") { try { args = JSON.parse(args); } catch { args = {}; } }
+      const { name, args } = readCall(c);
       trace.push({ name, args });
       const out = answerTool(name, args, products);
       if (out._terminal) return { trace, usage, turns: turn + 1 };
@@ -252,17 +273,32 @@ async function check(models, env) {
   if (!ok) return 3;
 
   // 도구 호출까지 되는지 — 여기서 막히면 모델은 살아 있어도 이 설계엔 못 쓴다.
+  // 본 측정과 **같은 시스템 프롬프트**를 쓴다 — 여기서만 약하게 물으면 "이 모델은 툴을
+  // 안 부른다"는 결론이 프롬프트 차이에서 나온 것인지 알 수 없다.
   const t = await json(`${API}/${env.account}/ai/run/${model}`, {
     method: "POST", headers: { ...auth, "content-type": "application/json" },
-    body: JSON.stringify({ messages: [{ role: "user", content: "서울 데이터 제품 목록 보여줘" }],
-                           tools: toOpenAITools(TOOLS), max_tokens: 200 }),
+    body: JSON.stringify({ messages: [{ role: "system", content: SYSTEM },
+                                      { role: "user", content: "서울 데이터 제품 목록 보여줘" }],
+                           tools: toOpenAITools(TOOLS), max_tokens: 400 }),
   });
-  const called = Boolean(t.body?.result?.tool_calls?.length);
   line(t.status === 200, `tools 파라미터 수용 — ${t.status === 200 ? "통과" : `HTTP ${t.status}`}`,
     `이 모델·API 가 tools 를 안 받는다: ${JSON.stringify(t.body).slice(0, 200)}`);
   if (t.status !== 200) return 3;
-  line(called, `도구 호출 실제 발생 — ${called ? t.body.result.tool_calls.map((c) => c.name || c.function?.name).join(", ") : "없음"}`,
-    "형식은 받는데 툴을 안 부른다. 프롬프트 문제일 수도, 모델 한계일 수도 있다 — 본 측정에서 갈린다");
+
+  const calls = extractToolCalls(t.body?.result);
+  line(calls.length, `도구 호출 실제 발생 — ${calls.length ? calls.map((c) => readCall(c).name).join(", ") : "없음"}`);
+  if (!calls.length) {
+    // 🔴 **추측하지 말고 보여 준다.** "안 불렀다"의 원인은 둘인데(모델이 안 부른 것 vs
+    //    우리 파서가 엉뚱한 곳을 본 것) 응답 모양을 봐야 갈린다. 응답에 tool 흔적이
+    //    보이는데 위가 "없음"이면 그건 모델 한계가 아니라 우리 결함이다.
+    const res = t.body?.result ?? {};
+    process.stderr.write(
+      `\n      응답 최상위 키: ${JSON.stringify(Object.keys(res))}\n` +
+      `      응답 본문(600자): ${JSON.stringify(res).slice(0, 600)}\n\n` +
+      "      위에 tool_calls·function·name 같은 흔적이 보이면 **파서 문제**다(찾는 자리를 늘린다).\n" +
+      "      순수 문장만 있으면 모델이 정말 안 부른 것이다 — 다른 모델로 --models 를 바꿔 본다.\n");
+    return 3;
+  }
 
   process.stderr.write("\n준비됐다. `npm run eval:model` 로 본 측정을 돌린다.\n");
   return 0;

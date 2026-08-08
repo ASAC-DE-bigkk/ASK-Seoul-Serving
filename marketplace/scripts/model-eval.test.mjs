@@ -107,3 +107,29 @@ test("채점 — 제품·패턴·파라미터를 따로 센다", () => {
   const missingParam = { trace: [{ name: "run_pattern", args: { product_id: "p", pattern_id: "q", params: { a: 1 } } }] };
   assert.equal(score(missingParam, cse).params, false);
 });
+
+// 🔴 2026-08-08: `--check` 가 "도구 호출 없음"을 냈는데, 원인이 모델인지 우리 파서인지
+// 갈리지 않았다. Workers AI 는 모델·버전에 따라 tool call 을 다른 자리에 싣는다 —
+// 한 자리만 보면 **잘 부른 모델이 0점으로 찍히고** 그건 모델 한계가 아니라 우리 결함이다.
+test("tool call 은 여러 자리에서 찾는다 — 공급자마다 감싸는 모양이 다르다", async () => {
+  const { extractToolCalls, readCall } = await import("./model-eval.mjs");
+  const call = { name: "list_products", arguments: {} };
+  for (const shape of [
+    { tool_calls: [call] },
+    { choices: [{ message: { tool_calls: [call] } }] },
+    { message: { tool_calls: [call] } },
+    { output: { tool_calls: [call] } },
+  ]) assert.equal(extractToolCalls(shape).length, 1, `못 찾은 모양: ${JSON.stringify(shape)}`);
+
+  assert.deepEqual(extractToolCalls({ response: "그냥 문장" }), []);
+  assert.deepEqual(extractToolCalls(null), []);
+});
+
+test("tool call 의 이름·인자를 모양에 관계없이 읽는다", async () => {
+  const { readCall } = await import("./model-eval.mjs");
+  assert.deepEqual(readCall({ name: "a", arguments: { x: 1 } }), { name: "a", args: { x: 1 } });
+  // OpenAI 계열은 function 으로 감싸고 arguments 를 **문자열**로 준다
+  assert.deepEqual(readCall({ function: { name: "a", arguments: '{"x":1}' } }), { name: "a", args: { x: 1 } });
+  // 깨진 JSON 이 와도 죽지 않는다 — 채점에서 파라미터 불일치로 잡히면 된다
+  assert.deepEqual(readCall({ function: { name: "a", arguments: "{oops" } }), { name: "a", args: {} });
+});
