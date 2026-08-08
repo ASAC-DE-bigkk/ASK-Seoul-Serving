@@ -228,14 +228,28 @@ async function callTool(name, args, ctx) {
     // 둘 다 `describe_product` 가 제품별로 이미 주는 것이므로, 여기서는 **개수만** 남긴다.
     // 개수를 남기는 이유: 0 이면 "아직 메타가 없는 제품"이라 고르는 판단에 쓰인다.
     // ⚠️ `/api/v1/catalog`(REST)는 건드리지 않는다 — 웹 카탈로그 화면이 상세를 쓴다.
+    // 🔴 다만 **전부 빼면 안 된다.** 패턴의 `question_ko` 431건은 소비자가 제품을 고르는
+    // **검색 신호**다 — "창업 후 오래 살아남는 업종"이 어느 제품인지 대표질문 57개로는
+    // 흐릿한데, 패턴 질문까지 있으면 정확히 걸린다(전수 평가에서 AI 가 이 텍스트를
+    // 키워드로 훑어 제품을 찾아냈다). 그 신호는 27KB 뿐이고, 버리는 200KB 는 목록 단계에서
+    // 쓰이지 않는 것들이다: `sql` 54.2%(AI 는 SQL 을 직접 실행하지 않는다 — run_pattern 이
+    // pattern_id 로 돌린다) · `insight_sample_ko`(실행 응답에 온다) · `requires`·`axes`
+    // (describe_product 와 400 안내가 말해 준다) · `verified_*`.
+    // 컬럼도 같다 — 이름은 "이 축으로 필터되나"를 목록에서 판단하게 하고, 설명은 상세의 몫이다.
+    const slimPattern = (u) => ({ pattern_id: u.pattern_id, question_ko: u.question_ko });
+    const slimColumn = (c) => c.name ?? c.column_name ?? null;
     if (Array.isArray(body.products)) {
       body.products = body.products.map(({ usage_patterns, columns, ...rest }) => ({
         ...rest,
-        pattern_count: Array.isArray(usage_patterns) ? usage_patterns.length : 0,
+        // 개수를 함께 두는 이유: 0 이면 "아직 메타가 게시되지 않은 제품"이라는 신호라
+        // 고르는 판단에 쓰인다. 목록이 비었다는 것과 필드가 없다는 것은 다른 뜻이다.
         column_count: Array.isArray(columns) ? columns.length : 0,
+        column_names: Array.isArray(columns) ? columns.map(slimColumn).filter(Boolean) : [],
+        pattern_count: Array.isArray(usage_patterns) ? usage_patterns.length : 0,
+        usage_patterns: Array.isArray(usage_patterns) ? usage_patterns.map(slimPattern) : [],
       }));
       body.detail_hint =
-        "컬럼 설명과 실행 가능한 질의 패턴은 describe_product(product_id) 로 확인하세요 — 목록에는 개수만 싣습니다.";
+        "목록에는 질의 패턴의 질문·id 와 컬럼 이름만 싣습니다. 컬럼 설명·필요 파라미터·실행 가능 여부(runnable)는 describe_product(product_id) 로 확인하세요.";
     }
     return okJson(body);
   }
