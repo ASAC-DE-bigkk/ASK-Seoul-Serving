@@ -18,6 +18,19 @@ const EXPECTED_PRODUCTS = [
 
 const OTHER_PUBLIC_PRODUCT = "culture_event_schedule";
 const TEST_API_KEY = `ask_${"0".repeat(32)}`;
+const SERVICE_API_KEY = `ask_${"1".repeat(32)}`;
+const SERVICE_SCOPE = "skill:seoul-weather-risk:read";
+
+const userKeyRow = {
+  key_hash: "test-key-hash",
+  key_prefix: "ask_0000",
+  email: "skill-test@example.test",
+  key_type: "user",
+  service_name: null,
+  scopes_json: null,
+  status: "active",
+  daily_quota: 1000,
+};
 
 function fixtureDb({
   metadataPublicationId = "active-publication",
@@ -35,8 +48,11 @@ function fixtureDb({
     ratio: 1,
     status: "passed",
   },
+  keyRow = userKeyRow,
 } = {}) {
   let usage = 0;
+  let burstWrites = 0;
+  let usageWrites = 0;
   const catalog = new Map([...EXPECTED_PRODUCTS, OTHER_PUBLIC_PRODUCT].map((productId) => [productId, {
     name: `gold_${productId}`,
     product_id: productId,
@@ -64,13 +80,10 @@ function fixtureDb({
         },
         async first() {
           if (sql.includes("FROM _keys WHERE key_hash")) {
-            return {
-              key_hash: "test-key-hash",
-              key_prefix: "ask_0000",
-              email: "skill-test@example.test",
-              status: "active",
-              daily_quota: 1000,
-            };
+            return keyRow.key_type === "user" ? keyRow : null;
+          }
+          if (sql.includes("FROM _service_keys WHERE key_hash")) {
+            return keyRow.key_type === "service" ? keyRow : null;
           }
           if (sql.includes("SELECT count FROM _burst")) return { count: 1 };
           if (sql.includes("FROM _catalog")) return catalog.get(params[0]) ?? null;
@@ -137,19 +150,28 @@ function fixtureDb({
           return { results: [] };
         },
         async run() {
-          if (sql.includes("INSERT INTO _usage")) usage += 1;
+          if (sql.includes("INSERT INTO _usage")) {
+            usage += 1;
+            usageWrites += 1;
+          }
+          if (sql.includes("INSERT INTO _burst")) burstWrites += 1;
           return {};
         },
       };
     },
+    stats: {
+      get burstWrites() { return burstWrites; },
+      get usageWrites() { return usageWrites; },
+    },
   };
 }
 
-async function fetchWorker(path, db) {
+async function fetchWorker(path, db, apiKey = TEST_API_KEY, method = "GET") {
   const pending = [];
   const response = await worker.fetch(
     new Request(`https://marketplace.example.test${path}`, {
-      headers: { authorization: `Bearer ${TEST_API_KEY}` },
+      method,
+      headers: { authorization: `Bearer ${apiKey}` },
     }),
     { DB: db, ASK_ENV: "dev" },
     { waitUntil(promise) { pending.push(promise); } },
@@ -157,6 +179,89 @@ async function fetchWorker(path, db) {
   await Promise.all(pending);
   return response;
 }
+
+test("scoped K-Skill proxy service key is limited to its declared skill read scope", async () => {
+  const scopedServiceKey = {
+    ...userKeyRow,
+    key_hash: "service-key-hash",
+    key_prefix: "ask_1111",
+    email: null,
+    key_type: "service",
+    service_name: "k-skill-proxy:seoul-weather-risk",
+    scopes_json: JSON.stringify([SERVICE_SCOPE]),
+  };
+  const db = fixtureDb({ evidence: true, keyRow: scopedServiceKey });
+
+  const skillResponse = await fetchWorker(
+    "/skill/v1/products/weather_place_risk_window/data?limit=1",
+    db,
+    SERVICE_API_KEY,
+  );
+  assert.equal(skillResponse.status, 200);
+
+  const marketplaceResponse = await fetchWorker("/api/v1/me", db, SERVICE_API_KEY);
+  const marketplaceBody = await marketplaceResponse.json();
+  assert.equal(marketplaceResponse.status, 403);
+  assert.equal(marketplaceBody.code, "service_key_scope_required");
+});
+
+test("service key with a missing K-Skill scope is rejected before burst or quota accounting", async () => {
+  const db = fixtureDb({
+    evidence: true,
+    keyRow: {
+      ...userKeyRow,
+      key_hash: "service-key-hash",
+      email: null,
+      key_type: "service",
+      service_name: "k-skill-proxy:seoul-weather-risk",
+      scopes_json: "[]",
+    },
+  });
+
+  const response = await fetchWorker(
+    "/skill/v1/bundles/seoul-weather-risk",
+    db,
+    SERVICE_API_KEY,
+  );
+  const body = await response.json();
+  assert.equal(response.status, 403);
+  assert.equal(body.code, "insufficient_scope");
+  assert.equal(body.required_scope, SERVICE_SCOPE);
+  assert.equal(db.stats.burstWrites, 0);
+  assert.equal(db.stats.usageWrites, 0);
+});
+
+test("revoked K-Skill proxy service key is rejected immediately", async () => {
+  const db = fixtureDb({
+    keyRow: {
+      ...userKeyRow,
+      key_hash: "service-key-hash",
+      email: null,
+      key_type: "service",
+      service_name: "k-skill-proxy:seoul-weather-risk",
+      scopes_json: JSON.stringify([SERVICE_SCOPE]),
+      status: "revoked",
+    },
+  });
+
+  const response = await fetchWorker(
+    "/skill/v1/bundles/seoul-weather-risk",
+    db,
+    SERVICE_API_KEY,
+  );
+  const body = await response.json();
+  assert.equal(response.status, 403);
+  assert.equal(body.code, "revoked_service_key");
+
+  const revokeRouteResponse = await fetchWorker(
+    "/api/v1/keys",
+    db,
+    SERVICE_API_KEY,
+    "DELETE",
+  );
+  assert.equal(revokeRouteResponse.status, 403);
+  assert.equal((await revokeRouteResponse.json()).code, "revoked_service_key");
+});
 
 test("skill bundle preserves the exact single-product allowlist and exposes blocked readiness", async () => {
   const response = await handleSkillBundle({ DB: fixtureDb() });

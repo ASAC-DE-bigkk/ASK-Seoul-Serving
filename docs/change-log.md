@@ -104,6 +104,18 @@
   같은 자리가 또 낡는다.
   📌 #161 의 change-log 누락분은 담당자(masondev)가 분리 작업과 함께 보강하기로 했다(#172).
 
+### K-Skill proxy service key — 사용자 key와 수명주기를 분리하고 최소 scope를 Worker에서 강제 (#194)
+
+- **의도·목표**: `seoul-weather-risk`를 hosted `k-skill-proxy`로 제공할 때 사용자 API Key
+  발급 부담을 없애되, proxy 키가 유출돼도 다른 Marketplace·MCP 표면으로 넓어지지 않게 한다.
+- **조치**: `_keys`를 ALTER하지 않고 `_service_keys` migration을 추가했다. service key는
+  `k-skill-proxy:seoul-weather-risk` principal과 `skill:seoul-weather-risk:read` scope를
+  가진 경우에만 `/skill/v1` 단일 제품 read route를 통과한다. scope 없는 일반 표면은 403으로
+  막고, scope 불일치·폐기는 burst/쿼터보다 먼저 거부한다. rotation은 새 key smoke 뒤 이전
+  key revoke, incident는 즉시 revoke로 정했다.
+- **결과**: 기존 일반 사용자 key의 `/api/v1`·`/skill/v1` 계약은 유지한다. 원격 D1 migration,
+  실제 key 등록, proxy/Worker 배포는 별도 승인 전에는 수행하지 않는다.
+
 ### 긴 표는 20행이 한 쪽 — 스크롤로 이어 받는다
 
 - **작업자**: @Exisign

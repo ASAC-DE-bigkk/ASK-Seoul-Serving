@@ -9,6 +9,7 @@
 import { countUsage, json, parseJsonArray, problem, quotaExceededProblem, quotaHeaders, safeRows } from "./shared.js";
 
 export const SKILL_BUNDLE_ID = "seoul-weather-risk";
+export const SKILL_SERVICE_SCOPE = "skill:seoul-weather-risk:read";
 
 // K-Skill이 노출하는 단일 제품. 카탈로그의 정렬이나 물리 테이블 이름에 의존하지 않는다.
 export const SKILL_PRODUCT_IDS = [
