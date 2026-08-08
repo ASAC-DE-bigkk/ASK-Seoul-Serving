@@ -44,6 +44,16 @@ const baseUrl = () => ($("baseUrl").value || "").trim().replace(/\/+$/, "");
 const clientId = () => ($("intent").value || "max20_fable").trim();
 const apiKey = () => ($("apiKey").value || "").trim();
 
+// 🔴 출처에 따라 REST 요청 헤더를 바꾼다. 교차 출처에서는 커스텀 헤더(x-ask-intent)가 CORS
+// 프리플라이트를 유발하는데 게이트웨이 OPTIONS 는 authorization·content-type 만 허용해 실패한다
+// ("Failed to fetch"). 동일 출처일 때만 식별자 헤더를 싣고, 교차 출처면 빼서 단순 요청으로 만든다.
+const intentHeaders = () => {
+  const b = baseUrl();
+  let same = true;
+  if (b) { try { same = new URL(b, location.href).origin === location.origin; } catch { same = false; } }
+  return same ? { "x-ask-intent": clientId() } : {};
+};
+
 // ── 도구 정의 ────────────────────────────────────────
 // f: 폼 필드. as: as-is/to-be 표식(라벨용). needsKey: 키 필요 여부.
 const F = {
@@ -192,7 +202,7 @@ async function sendRest(t) {
     for (const k of ["from", "to", "limit", "cursor"]) { const v = getField(k); if (v) qp.set(k, v); }
   }
   const url = baseUrl() + path + (qp.toString() ? "?" + qp.toString() : "");
-  const headers = { "x-ask-intent": clientId() };   // REST 식별자 마커(intent 컬럼)
+  const headers = { ...intentHeaders() };   // 동일 출처면 REST 식별자 마커(intent), 교차 출처면 생략
   if (apiKey()) headers.authorization = "Bearer " + apiKey();
   const res = await fetch(url, { method: "GET", headers });
   const text = await res.text();
@@ -345,7 +355,7 @@ $("connectBtn").addEventListener("click", async () => {
 $("loadCatalogBtn").addEventListener("click", async () => {
   $("connState").textContent = "제품 목록 불러오는 중…";
   try {
-    const res = await fetch(baseUrl() + "/api/v1/catalog", { headers: { "x-ask-intent": clientId() } });
+    const res = await fetch(baseUrl() + "/api/v1/catalog", { headers: intentHeaders() });
     const json = await res.json();
     state.catalog = json.products || [];
     $("connState").innerHTML = `제품 <b>${state.catalog.length}</b>종 로드됨`;

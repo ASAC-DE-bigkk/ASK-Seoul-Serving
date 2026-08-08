@@ -21,6 +21,28 @@
 - **서비스**는 이미 배포된 게이트웨이를 쓴다 — 계정·wrangler 불필요. **MCP 라이브까지 완전 동작**(동일 출처).
 - 모든 호출에 식별자 **`max20_fable`** 가 실린다 — 로그 확인은 §6.
 
+### 🔴 환경별 연결 규칙 (왜 base 가 환경마다 다른가)
+
+게이트웨이(`/api/v1`·`/mcp`)는 **`ask-seoul.kr`** 한 곳이다. 랩을 **어디서 여느냐**에 따라
+그 게이트웨이가 **같은 출처**인지 **다른 출처**인지가 갈리고, 브라우저 CORS 규칙이 달라진다.
+
+| 랩을 연 위치 | 게이트웨이와의 관계 | base 에 넣을 값 | REST(`/api/v1`) | MCP(`/mcp`) |
+| --- | --- | --- | --- | --- |
+| `ask-seoul.kr/qa-lab/` (마켓, 배포) | **동일 출처** | 비움 | ✅ | ✅ |
+| `localhost:8787/qa-lab/` (마켓, 로컬) | **동일 출처** | 비움 | ✅ | ✅ |
+| `ops.ask-seoul.kr/qa-lab/` (콘솔, 배포) | **교차 출처** | `https://ask-seoul.kr` | ✅(단순요청) | ❌ |
+| `localhost:8788/qa-lab/` (콘솔, 로컬) | **교차 출처**(포트 다름) | `http://localhost:8787` | ✅(단순요청) | ❌ |
+| 파일 더블클릭(file://) | **교차 출처** | `https://ask-seoul.kr` | ✅(단순요청) | ❌ |
+
+- **교차 출처 REST 는 된다** — `/api/v1/*` 응답에 `Access-Control-Allow-Origin: *` 가 있다.
+  단, 커스텀 헤더(`X-ASK-Intent`)를 실으면 **CORS 프리플라이트**가 뜨는데 게이트웨이 OPTIONS 가
+  `authorization`·`content-type` 만 허용해 **실패한다**("Failed to fetch"). 그래서 랩은 **교차
+  출처일 때 식별자 헤더를 자동으로 뺀다**(동일 출처에서만 실어 프리플라이트가 없다).
+  → 교차 출처(콘솔·파일열기)에서는 그 요청에 `max20_fable` 마커가 안 남는다. 마커는 동일 출처인
+  **마켓 랩**과 **MCP `initialize`** 가 남긴다(§6).
+- **교차 출처 MCP 는 안 된다** — `/mcp` 응답에는 CORS 헤더가 아예 없다. MCP 라이브는 **동일 출처**
+  (마켓 랩) 또는 **CLI 직접 연결**(§D, 브라우저가 아니라 CORS 무관)로 한다.
+
 ---
 
 ## 0. 준비물 (공통)
@@ -99,6 +121,52 @@ npm run dev            # → http://localhost:8788
    변환 미리보기가 바로 동작한다.
    - **제약**: MCP 라이브 호출(`/mcp`)은 응답에 CORS 헤더가 없어 **교차 출처(파일 열기 포함)에서 막힌다.**
      MCP 라이브까지 보려면 **A(배포본)** 또는 **B(로컬 동일 출처)** 로 연다.
+
+---
+
+# D. Claude Code(AI)로 직접 질의 — MCP CLI 등록 (방법 B)
+
+브라우저 랩과 별개로, **AI 클라이언트(Claude Code)** 에 MCP 서버를 붙여 자연어로 질의까지
+검증하는 경로. **CLI 는 브라우저가 아니라 CORS 제약이 없어** 배포 MCP 에 그대로 붙는다.
+
+### D-1. Claude Code CLI 설치 (Windows)
+아직 `claude` 명령이 없으면 설치한다(셋 중 하나):
+
+```powershell
+# PowerShell (권장)
+irm https://claude.ai/install.ps1 | iex
+# 또는 WinGet
+winget install Anthropic.ClaudeCode
+# 또는 npm (Node 22+)
+npm install -g @anthropic-ai/claude-code
+```
+> CMD 프롬프트(`C:\...>`)에서는 `irm` 이 안 된다 — PowerShell(`PS C:\...>`)에서 실행하거나
+> WinGet/npm 을 쓴다. 설치 후 **새 터미널**에서 `claude --version` 으로 확인.
+
+### D-2. MCP 서버 등록 (키 치환)
+```powershell
+claude mcp add --transport http --scope user ask-seoul https://ask-seoul.kr/mcp --header "Authorization: Bearer ask_진짜키"
+```
+- `ask_진짜키` 는 §3 에서 발급한 실제 키로 바꾼다.
+- `--scope user` = 모든 프로젝트 + VSCode 확장에서 공유. `project` 스코프는 키가 `.mcp.json` 에
+  커밋되니 **쓰지 않는다**.
+
+### D-3. 연결·질의
+```powershell
+claude mcp list          # ask-seoul … ✓ Connected 확인
+claude                   # 세션 시작(첫 실행은 브라우저 로그인)
+```
+세션 안에서 `/mcp` → `ask-seoul` connected + 도구 6종 확인 후 자연어로 질의:
+- "ask-seoul 에서 어떤 데이터 있는지 목록 보여줘" → `list_products`
+- "서울에서 창업 후 오래 살아남는 업종은?" → `run_pattern`/`query_product`
+- "내 키 오늘 사용량 얼마 남았어?" → `check_quota`
+
+### D-4. 관리
+```powershell
+claude mcp get ask-seoul      # 설정 확인
+claude mcp remove ask-seoul   # 제거
+```
+도구 호출에서 401 이 나면 헤더의 키가 틀린 것 → remove 후 실제 키로 다시 add.
 
 ---
 
