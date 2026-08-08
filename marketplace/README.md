@@ -182,8 +182,38 @@ route 가 403 이라, 원인이 D1 에도 로그에도 안 보인다(비공개 �
 npx wrangler d1 execute ask-seoul-prod-d1 --remote --command "<출력된 SQL>"
 ```
 
-원문을 잃으면 복구 경로가 없다 — 새로 발급하고 이전 행을 `revoked` 로 바꾼다(rotation 과
-같은 절차다).
+🔴 **SQL 에 큰따옴표가 한 글자도 없다** — `scopes_json` 을 `json_array('…')` 로 만들기 때문이다.
+2026-08-08 에 `'["skill:…:read"]'` 를 리터럴로 박았다가 **PowerShell 5.1 이 네이티브 인자의
+큰따옴표를 먹어** `[skill:…:read]`(`json_valid=0`)로 등록됐고, `serviceKeyScopes()` 가
+fail-closed 되어 **인증은 되는데 모든 경로가 403 인 죽은 키**가 나왔다. 원인이 D1 에도 로그에도
+안 보였다. 셸이 먹을 것을 아예 안 만드는 쪽으로 고쳤다.
+
+### 등록 뒤 반드시 확인한다 — 두 줄이면 된다
+
+```bash
+# ① 저장된 값이 유효한 JSON 인가 (is_valid 1 · len 33 이어야 한다)
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --command \
+  "SELECT key_prefix, length(scopes_json) AS len, json_valid(scopes_json) AS is_valid FROM _service_keys WHERE key_prefix = '<prefix>'"
+
+# ② 실제로 통과·차단되는가 (허용 200 · /api/v1 은 403)
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer <원문>" \
+  https://ask-seoul.kr/skill/v1/bundles/seoul-weather-risk
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer <원문>" \
+  https://ask-seoul.kr/api/v1/me
+```
+
+**②에서 401 이면 등록이 안 된 것이고, 200/200 이면 스코프 게이트가 안 걸린 것**이다. 위 실사고는
+①·② 어느 쪽으로도 즉시 잡혔을 문제였는데 그때는 확인 단계가 없었다.
+
+scope 만 어긋난 것이면 **키를 다시 발급할 필요가 없다** — 해시·prefix 는 멀쩡하다.
+
+```bash
+npx wrangler d1 execute ask-seoul-prod-d1 --remote --command \
+  "UPDATE _service_keys SET scopes_json = json_array('skill:seoul-weather-risk:read') WHERE key_prefix = '<prefix>'"
+```
+
+원문을 잃었을 때만 재발급이다 — 복구 경로가 없으므로 새로 발급하고 이전 행을 `revoked` 로
+바꾼다(rotation 과 같은 절차다).
 
 ## 페이지네이션 — offset 이 아니라 rowid 키셋 커서
 
