@@ -33,7 +33,7 @@
 그래서 이 문서의 형식이 목록이다. **"어디를 고쳐야 하나"에 한 곳으로 답할 수 있어야** 같은
 사고가 안 난다.
 
-## 1. 값 → 화면 문구 (`ROUTE_KO` 정본, 17종)
+## 1. 값 → 화면 문구 (`ROUTE_KO` 정본, 21종)
 
 `public/index.html` 의 `ROUTE_KO` 가 구현이고, 이 표가 정본이다.
 
@@ -47,6 +47,7 @@
 | `revoke` | 키 폐기 | 예전엔 `keys` 와 한 덩어리였다 |
 | `product` | 제품 번들 | ⚠️ **`v1_product` 아니다** — `ea28bcc`(#67) 개명 |
 | `glossary` | 용어 사전 | ⚠️ **`v1_glossary` 아니다** — 〃 |
+| `run_pattern` | 패턴 조회 | **SERVE** — 검증 패턴의 **사람용 문**(Serving PR#175). `mcp_run_pattern` 과 같은 함수·같은 쿼터, 문만 다르다 |
 | `skill_bundle` | 스킬 묶음 | |
 | `skill_data` | 스킬 데이터 조회 | **SERVE** |
 | `skill_product` | 스킬 제품 안내 | |
@@ -91,13 +92,22 @@
 ## 2. `SERVE` — 무엇을 "데이터를 서빙한 호출"로 세나
 
 ```js
-const SERVE_ROUTES = ["data", "skill_data", "mcp_query_product", "mcp_run_pattern"];
+const SERVE_ROUTES = ["data", "skill_data", "mcp_query_product", "mcp_run_pattern", "run_pattern"];
 const SERVE = "route IN (" + SERVE_ROUTES.map((r) => "'" + r + "'").join(", ") + ")";
 ```
 
 **판정 기준은 "데이터를 돌려주는가"이지 문이 아니다.** `mcp_run_pattern` 이 여기 들어간 것도
 새 판단이 아니라 이 기준의 적용이다 — 검증된 패턴 SQL 을 서버가 돌려 **행을 반환하고 쿼터를
 1회 차감한다.** 툴이 늘 때마다 이 문단이 답을 준다.
+
+`run_pattern`(2026-08-07 신설)이 같은 기준으로 들어왔다. **`mcp_run_pattern` 과 같은 함수를
+부르고 같은 쿼터를 깎는다 — 문만 둘이다.** 이 값이 붙는 이유는 게이트웨이가 문을 가른 데
+있고(Serving PR#175: MCP 오류 문구가 AI 를 겨냥해 쓰여 사람이 읽으면 없는 버튼을 가리키고,
+화면 클릭이 MCP 사용량에 섞이기 때문), 콘솔 쪽 판단은 **"둘 다 SERVE"** 하나뿐이다.
+
+> ⚠️ **수요 집계에서 둘을 미리 가르지 않는다**(Serving 결정, 2026-08-07). `pattern_id` 는
+> "무슨 질문을 시도하다 막혔나"를 세는 한 축으로 두고, AI/사람을 나눠 봐야 할 때 `route` 로
+> 가른다 — `route` 가 이미 컬럼이라 언제든 되고, 표본이 작을 때 미리 가르면 양쪽 다 노이즈다.
 
 **배열이 정본이고 SQL 은 거기서 만든다.** 화면에 알리는 `meta.serve_routes` 와 질의 조건을
 따로 적으면 언젠가 어긋나고, 그때 화면은 "이렇게 셌습니다"라고 **틀린 말**을 하게 된다.

@@ -81,13 +81,24 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
      받을 수 없다.** 에이전트라면 운영자에게 키를 받아 설정에 넣는 것이 정상 경로다.
    - **한 이메일에 키 하나**다. 옛 `POST /api/v1/keys` 는 폐지됐고 403 을 준다.
 4. `GET /api/v1/data/<product_id>?...` — 헤더 `Authorization: Bearer ask_…` 로 조회.
+   **맞는 검증 패턴이 있으면 4 대신 4′ 를 쓴다** — 필터를 직접 조립하는 것보다 낫다.
+
+4′. `GET /api/v1/patterns/<product_id>/<pattern_id>?<파라미터…>` — **동작이 확인된 질의 실행**.
+   카탈로그 `usage_patterns` 에서 **`runnable=true` 인 것**을 고르고 `:파라미터` 값만 넘긴다
+   (예: `?gu=강남구&n=10`). 도메인 오너가 게시하고 실제 게시본에 돌려 본 SQL 만 돌아간다.
+   **`/api/v1/data` 로는 못 하는 집계·랭킹·시계열이 여기서는 된다** — data 는 등가 필터와
+   기간뿐이다. 선언 안 된 파라미터를 보내면 400 이 사용 가능한 이름을 알려 주고, 아직
+   검증 전이면 409 다. 쿼터는 data 와 똑같이 1회 소모한다. (MCP 의 `run_pattern` 과 같은 문이다.)
 
 스키마를 더 자세히 봐야 하면 **2 와 4 사이**에 이 둘이 있다(Bearer 필요, 일일 쿼터 무과금):
 
 - `GET /api/v1/products/<product_id>` — 제품 번들. 컬럼 설명·grain·PK·시간축·질의 예시·
   출처/신선도를 한 번에. 카탈로그보다 자세하고, MCP 의 `describe_product` 와 같은 내용이다.
-- `GET /api/v1/glossary?vocabulary_id=<id>` — 코드값 사전. 응답의 코드가 무엇을 뜻하는지
-  (`code` → `label_ko`) 알아야 할 때. 아직 게시 전이면 `503`.
+- `GET /api/v1/glossary?vocabulary_id=<id>` — 코드값 사전(`code` → `label_ko`). 아직 게시 전이면 `503`.
+  ⚠️ **`vocabulary_id` 는 필수이고, 지금은 그 값을 알아낼 경로가 없다** — 컬럼이 자기 어휘를
+  선언하지 않고 어휘 목록 API 도 없다. **id 를 지어내지 말 것**(없으면 404 다). 이 문은
+  어휘 이름을 이미 아는 경우에만 쓴다. 코드값의 뜻이 필요하면 우선 컬럼 `description` 을 보고,
+  거기에 없으면 **모른다고 답하는 것이 맞다.** 계약 논의: Serving#180.
 
 ## /api/v1/data 문법
 

@@ -591,7 +591,10 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
   ).bind(productId, patternId).first();
   if (!pattern)
     return problem(404, "unknown pattern",
-      `'${patternId}' 는 '${productId}' 의 패턴에 없다 — describe_product 의 usage_patterns 에서 고를 것`);
+      // 문구가 **두 독자를 겸한다** — MCP 로 오는 AI 와, `/api/v1/patterns` 로 오는 사람.
+      // 전에는 `describe_product`(MCP 툴 이름)를 가리켰는데, 사람 쪽에는 그런 버튼이 없어
+      // 막다른 길이었다. 둘 다 결국 **카탈로그의 usage_patterns** 를 보므로 그걸 가리킨다.
+      `'${patternId}' 는 '${productId}' 의 패턴에 없다 — 카탈로그의 usage_patterns 에서 runnable 인 것을 고를 것`);
   // 미검증 패턴 실행은 "환각을 서버가 대행"하는 꼴이다(#118 ②) — 검증되면 저절로 열린다
   if (!pattern.verified_at)
     return problem(409, "pattern not verified",
@@ -649,7 +652,7 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
     // 패턴 SQL 이 게시본과 어긋난 경우(드리프트) — 소비자 잘못이 아니므로 그렇게 말한다
     trace.status = 500;
     return problem(500, "pattern execution failed",
-      "패턴이 현재 게시본과 어긋난다(드리프트) — 도메인 검증 사이클에서 잡힐 문제이니 다른 패턴이나 query_product 를 쓸 것");
+      "패턴이 현재 게시본과 어긋난다(드리프트) — 도메인 검증 사이클에서 잡힐 문제이니 다른 패턴이나 일반 데이터 조회를 쓸 것");
   }
   const rows = results.length > MAX_LIMIT ? results.slice(0, MAX_LIMIT) : results;
   trace.rows = rows.length;
@@ -817,6 +820,34 @@ async function route(request, env, url, trace, ctx) {
     return handleData(env, decodeURIComponent(dataMatch[1]), url.searchParams, keyRow, trace);
   }
 
+  // 검증 패턴 실행 — **사람용 문**. 로직은 `handleRunPattern` 하나이고 MCP 와 공유한다(#118).
+  // 왜 문을 따로 내나: 지금까지 이 기능은 `POST /mcp` 로만 닿아, **AI 는 155개 검증 패턴을
+  // 돌리는데 우리 화면에 온 사람은 못 돌렸다.** 브라우저가 `/mcp` 를 부를 수도 있지만
+  // ① 툴 설명·오류 문구가 AI 를 겨냥해 쓰여 있고 ② 우리 화면 클릭이 MCP 사용량에 섞이며
+  // ③ 화면이 남의 프로토콜 계약에 묶인다. 문을 가르면 셋 다 안 생긴다.
+  //
+  // GET 인 이유: 이 아래는 전부 조회 전용(위 405 가드)이라 예외를 안 판다. 덤으로
+  // **URL 이 곧 질의**라 "이 조회 해보세요"를 링크로 주고받을 수 있다.
+  // 쿼터·권리 게이트·미검증 409 는 `handleRunPattern` 안에 이미 있다 — 여기선 키와
+  // 버스트만 본다(`/api/v1/data` 와 같은 순서: 버스트가 쿼터보다 앞).
+  //
+  // 🔴 route 값 `run_pattern` 은 콘솔 계약(ops-dashboard `decision/0014`)에 **없던 값**이다.
+  //    거기 `SERVE_ROUTES` 배열과 `ROUTE_KO` 표에 같이 올라야 한다 — 안 오르면 데이터를
+  //    돌려주는 문인데 SERVE 로 안 세어지고, 화면에는 영문 그대로 뜬다. `mcp_run_pattern`
+  //    때 **배포가 반영보다 먼저 나간 사고**(#132→PR#138)가 정확히 이 순서 문제였다.
+  const patternMatch = path.match(/^\/api\/v1\/patterns\/([^/]+)\/([^/]+)$/);
+  if (patternMatch) {
+    trace.route = "run_pattern";
+    const { keyRow, error } = await authenticate(env, request);
+    if (error) return error;
+    trace.keyHash = keyRow.key_hash;
+    const burst = await checkBurst(env, "k:" + keyRow.key_hash);
+    if (burst.exceeded) return burstProblem(burst.retryAfter);
+    // 쿼리스트링이 곧 패턴 파라미터다(`:이름` 자리와 1:1). 선언 밖 이름은 400 으로 막힌다.
+    return handleRunPattern(env, decodeURIComponent(patternMatch[1]),
+      decodeURIComponent(patternMatch[2]), Object.fromEntries(url.searchParams), keyRow, trace);
+  }
+
   // ── /skill/v1 — seoul-weather-risk K-Skill 전용 API ──────────────────────
   // 제품 선택·응답 계약은 `/api/v1` 과 분리하지만, 키·버스트·오류·로그 정책은
   // 공유한다. K-Skill 신규 경로는 전부 Bearer 인증이며 메타 조회는 쿼터를 소모하지 않는다.
@@ -867,7 +898,8 @@ async function route(request, env, url, trace, ctx) {
 
   return problem(404, "not found",
     "GET /api/v1/catalog · /api/v1/preview/<table> · /api/v1/data/<table> · /api/v1/me · " +
-    "/api/v1/products/<product_id> · /api/v1/glossary, POST·DELETE /api/v1/keys · " +
+    "/api/v1/products/<product_id> · /api/v1/patterns/<product_id>/<pattern_id> · " +
+    "/api/v1/glossary, POST·DELETE /api/v1/keys · " +
     "GET /skill/v1/bundles/seoul-weather-risk, POST /mcp — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
 }
 
