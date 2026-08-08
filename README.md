@@ -63,6 +63,7 @@ dbt manifest·Airflow 메타DB를 직접 읽는 경로는 존재하지 않는다
 | [docs/change-log.md](docs/change-log.md) | **변경 이력** — 언제 무슨 의도로 코드에 닿았나(날짜·작업자·의도·조치·결과) |
 | [docs/setup.md](docs/setup.md) | 사전 준비(Node 20+)·OS별 설치·증상별 해결 |
 | [docs/environments.md](docs/environments.md) | 환경 **구조** — 설정 배치, local/prod 도메인·D1, 실행 파라미터 배분 |
+| [docs/k-skill-local-evaluation.md](docs/k-skill-local-evaluation.md) | K-Skill 등록 전 팀 내부 평가 — 사용자 key 직접 검증과 proxy 기반 스킬 체험의 경계 |
 
 **환경별 실행 매뉴얼** — 🔴 **두 프로젝트 다 띄우면 운영 D1 이다**
 (dev D1 폐기 — [decision/0015](ops-dashboard/docs/decision/0015-single-production-d1.md) · #85,

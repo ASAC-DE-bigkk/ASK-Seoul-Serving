@@ -40,6 +40,25 @@
 
 ## 2026-08-08
 
+### upstream 등록 전에도 팀이 데이터 계약과 스킬 경계를 나눠 검증한다 (#196)
+
+- **작업자**: @yooseongjin527
+- **의도 · 목표**: `seoul-weather-risk`는 upstream `k-skill`에 등록 신청 중이고, 최종
+  일반 설치는 proxy 배포와 npm asset 배포까지 기다려야 한다. 그 사이 팀원들이 개인
+  Marketplace key를 서비스 key처럼 공유하거나, 운영 D1에 붙는 로컬 Worker를 띄워
+  데이터·스킬 검증을 섞지 않도록 했다.
+- **조치**:
+  - `docs/k-skill-local-evaluation.md`에 팀원 개인 key로 실제 `/skill/v1` bundle·product·data
+    요약만 확인하는 **직접 데이터 계약 검증**을 만들었다. key 원문·Authorization·원문 행은
+    출력·기록하지 않는다.
+  - 포크 고정 revision에서 helper를 직접 실행하는 **proxy 계약 평가**를 따로 적고,
+    서비스-key scope migration·proxy route 배포 전에는 data 호출을 하지 않도록 막았다.
+  - upstream 병합·npm 배포 뒤에만 쓸 일반 `skills add` 경로를 분리했다. 포크 소스를
+    설치했다고 공식 npm CLI asset까지 생기는 것은 아니라는 현재 제약을 명시했다.
+  - README와 이 문서 지도에 입구를 추가했다.
+- **결과**: 문서만 변경했다. Marketplace Worker·D1·키·proxy 배포는 수행하지 않았고,
+  등록 준비(`registration_ready`)와 freshness 결과도 이 문서가 대신 판정하지 않는다.
+
 ### route 종 수가 세 번의 추가를 지나도록 '17종'에 멈춰 있었다 — 전수 보정 (PR#175 콘솔 검토 중 발견)
 
 - **작업자**: @Exisign

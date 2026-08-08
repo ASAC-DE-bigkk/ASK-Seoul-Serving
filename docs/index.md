@@ -62,6 +62,7 @@ DDL 을 전부 막는다. 정본 소유자는
 | 🔴 [manual-steps.md](manual-steps.md) | **수동 작업** — 코드·CI 가 대신 못 하는 것과 그 현재 상태(실측) |
 | [access-control.md](access-control.md) | 🔴 **접근 제어** — 어느 레이어에서 무엇을 막나 · 권한이 없어 못 하는 것 · 1인 프로젝트 재사용 |
 | [change-log.md](change-log.md) | **변경 이력** — 언제 무슨 의도로 코드에 닿았나 (날짜·작업자·의도·조치·결과) |
+| [k-skill-local-evaluation.md](k-skill-local-evaluation.md) | K-Skill upstream 등록 전 내부 평가 — 사용자 key 데이터 검증과 proxy 기반 스킬 체험 분리 |
 
 **environments.md 와 실행 매뉴얼의 관계**: 저쪽은 *구조와 배분*("왜 한 파일 안에서 갈리나"),
 여기 매뉴얼은 *절차*("무엇을 어떤 순서로 치나"). 규약을 바꾸면 저쪽이 먼저다.
