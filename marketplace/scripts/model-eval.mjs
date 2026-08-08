@@ -308,6 +308,18 @@ async function main(argv) {
       `${avg((x) => x.r.usage.prompt)} | ${avg((x) => x.r.usage.completion)} |`);
   }
   process.stdout.write(out.join("\n") + "\n");
+
+  // 🔑 **쓴 값을 눈에 보이게 한다.** "무료 안쪽이다"를 말로만 하면 다음 사람이 다시 걱정한다.
+  //    단가는 `decision/0006` 확인절차 ③ 과 같은 출처(Workers AI pricing, 2026-08-08).
+  const NEURONS_PER_MTOK = { in: 5500, out: 36400 };   // glm-4.7-flash 기준
+  const FREE_PER_DAY = 10000;
+  const tok = rows.reduce((a, x) => ({ in: a.in + x.r.usage.prompt, out: a.out + x.r.usage.completion }),
+    { in: 0, out: 0 });
+  const neurons = Math.round(tok.in / 1e6 * NEURONS_PER_MTOK.in + tok.out / 1e6 * NEURONS_PER_MTOK.out);
+  process.stderr.write(
+    `\n이번 실행: 입력 ${tok.in.toLocaleString()} · 출력 ${tok.out.toLocaleString()} 토큰 ` +
+    `≈ **${neurons.toLocaleString()} 뉴런**\n` +
+    `무료 할당 ${FREE_PER_DAY.toLocaleString()} 뉴런/일 기준 하루 약 ${Math.floor(FREE_PER_DAY / Math.max(neurons, 1))}회까지 무료다.\n`);
   return 0;
 }
 
