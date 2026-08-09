@@ -68,3 +68,32 @@ test("렌더가 기본값을 실제로 쓴다 — 함수만 있고 안 쓰면 �
   assert.match(render, /patternDefaults\(u\.sql\)/, "renderPick 이 기본값을 안 읽는다");
   assert.match(render, /value='"\s*\+\s*esc\(defs\[nm\]\)/, "읽어 놓고 input value 에 안 넣는다");
 });
+
+// ── 필터 값 후보 (#218 나머지) ────────────────────────────────────────────────
+// 컬럼은 골라 주면서 값은 지어내게 두던 것을 고친 자리다. 재료는 무인증 `preview` 5행이고,
+// 조용히 틀리는 방식은 둘이다: ① 제품마다 계속 부르거나 ② 컬럼을 바꿔도 옛 후보가 남는 것.
+// 후자는 **다른 컬럼의 값을 권하게** 되어 400 을 부른다.
+test("값 후보는 무인증 preview 에서 온다 — 새 API·키가 필요 없다", () => {
+  const fn = HTML.slice(HTML.indexOf("async function loadFilterValues"), HTML.indexOf("function fillValueHints"));
+  assert.match(fn, /\/api\/v1\/preview\//, "preview 를 안 쓴다");
+  assert.doesNotMatch(fn, /authorization|Bearer/i, "값 후보에 키를 쓰면 무인증 방문자가 못 본다");
+});
+
+test("제품당 한 번만 부른다 — 익명 경로라 IP 버스트를 쓴다", () => {
+  const fn = HTML.slice(HTML.indexOf("async function loadFilterValues"), HTML.indexOf("function fillValueHints"));
+  assert.match(fn, /if \(!table \|\| FILTER_VALUES\.has\(table\)\) return;/, "캐시 확인이 없다");
+  // 🔴 실패해도 다시 안 부르게 **먼저** 박아 둔다 — 안 그러면 404·429 때 매번 재요청한다
+  assert.ok(fn.indexOf("FILTER_VALUES.set(table, {})") < fn.indexOf("await fetch"),
+    "실패 시 무한 재요청이 된다");
+});
+
+test("컬럼이 바뀌면 후보도 간다 — 안 갈면 다른 컬럼 값을 권한다", () => {
+  const add = HTML.slice(HTML.indexOf("function addFilterRow"), HTML.indexOf("$(\"addFilter\")"));
+  assert.match(add, /\[data-fcol\]"\)\.addEventListener\("change", \(\) => fillValueHints/);
+  assert.match(add, /list='" \+ listId/, "input 이 datalist 에 안 묶였다");
+});
+
+test("후보를 못 얻어도 입력은 된다 — 편의가 없어질 뿐", () => {
+  const fn = HTML.slice(HTML.indexOf("async function loadFilterValues"), HTML.indexOf("function fillValueHints"));
+  assert.match(fn, /try \{[\s\S]*catch/, "preview 실패가 화면을 죽인다");
+});
