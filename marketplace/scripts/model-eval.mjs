@@ -240,7 +240,10 @@ async function runModel(model, cse, products, env, opts = {}) {
     const res = await fetch(`${API}/${env.account}/ai/run/${model}`, {
       method: "POST",
       headers: { authorization: `Bearer ${env.token}`, "content-type": "application/json" },
-      body: JSON.stringify({ messages, tools: toOpenAITools(TOOLS), max_tokens: 800 }),
+      // 🔴 800 은 **추론형 모델에 너무 작다.** qwen 은 실패 7건이 전부 `finish_reason:"length"` 에
+      //    `reasoning` 만 채운 채 끝났다 — 내부 추론에 예산을 다 쓰고 tool call 을 못 냈다.
+      //    모델 한계가 아니라 우리가 준 예산 문제이고, 그대로 두면 **추론형 모델이 전부 0점**이다.
+      body: JSON.stringify({ messages, tools: toOpenAITools(TOOLS), max_tokens: 3000 }),
     });
     if (!res.ok) {
       // 🔴 **본문을 버리지 않는다.** `HTTP 400` 만 남기면 모델이 거절한 건지 우리가 보낸
