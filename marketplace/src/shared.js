@@ -161,6 +161,29 @@ export async function checkBurst(env, bucket) {
   return { exceeded: used > BURST_PER_MIN, retryAfter: 60 - now.getUTCSeconds() };
 }
 
+// 하루 단위 상한 — 채팅 맛보기의 두 층(무인증 총량·IP 당 몫, decision/0006)이 쓴다.
+//
+// `_burst` 표를 재사용한다(새 표 없음 — 스키마 변경은 §2 절차가 필요하다). `checkBurst` 와
+// 같은 UPSERT 리셋인데 창이 분이 아니라 **KST 하루**다.
+//
+// 🔴 `window_start` 를 `<날짜>T23:59` 로 적는 이유 — 이 표에는 시간마다 도는 청소가 있다:
+//    `DELETE FROM _burst WHERE window_start < (now - 1h)`. 날짜만 적으면('YYYY-MM-DD')
+//    문자열 비교에서 그날 어느 시각보다도 작아 **첫 청소가 카운터를 지워 버린다** — 하루
+//    상한이 한 시간 상한이 된다. `T23:59` 로 적으면 그날이 끝날 때까지 살아남고, 자정을
+//    넘기면 청소가 걷어 간다(못 걷어도 UPSERT 가 날짜 불일치로 1 로 리셋하므로 무해).
+export async function checkDailyCap(env, bucket, cap) {
+  const window = kstDay() + "T23:59";
+  await env.DB.prepare(
+    "INSERT INTO _burst (bucket, window_start, count) VALUES (?, ?, 1) " +
+    "ON CONFLICT(bucket) DO UPDATE SET " +
+    "count = CASE WHEN _burst.window_start = excluded.window_start THEN _burst.count + 1 ELSE 1 END, " +
+    "window_start = excluded.window_start"
+  ).bind(bucket, window).run();
+  const row = await env.DB.prepare("SELECT count FROM _burst WHERE bucket = ?").bind(bucket).first();
+  const used = row ? row.count : 1;
+  return { exceeded: used > cap, used, cap };
+}
+
 // 초과 시 응답 — Retry-After 를 함께 준다. "언제 다시 오라"를 안 알려주면 클라이언트가
 // 곧바로 재시도해서 상황을 더 나쁘게 만든다.
 export const burstProblem = (retryAfter) =>
