@@ -168,3 +168,25 @@ test("--hint 는 describe 응답에만 next_action 을 얹고, 기본은 없다"
   // 힌트는 덧붙이는 것이지 원래 내용을 바꾸지 않는다
   assert.deepEqual(hinted.usage_patterns, plain.usage_patterns);
 });
+
+// `--product-given` (2026-08-09). 플레이그라운드는 사용자가 제품을 먼저 고른다 — 그러면
+// AI 가 할 일에서 **가장 자주 틀리던 단계(제품 선택)** 가 빠진다. 그 축을 뺀 좁은 과제가
+// 성립하는지 재는 스위치다.
+test("--product-given 은 제품과 패턴 목록을 대화에 미리 싣는다", async () => {
+  const m = await import("./model-eval.mjs");
+  const products = [{ product_id: "culture_event_schedule", usage_patterns: [
+    { pattern_id: "free_in_gu", question_ko: "무료 행사?", sql: "SELECT :gu, :n", verified_at: "d" },
+    { pattern_id: "unverified", question_ko: "미검증", sql: "SELECT 1", verified_at: null },
+  ] }];
+  const cse = { question: "무료 행사?", expect: { product_id: "culture_event_schedule", pattern_id: "free_in_gu" }, params: ["gu", "n"] };
+
+  // 내부 함수라 export 하지 않았다 — 대신 대화가 실제로 그렇게 만들어지는지 소스로 고정한다.
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile(new URL("./model-eval.mjs", import.meta.url), "utf8");
+  assert.match(src, /opts\.productGiven[\s\S]{0,80}givenProductMessages/, "플래그가 대화 구성을 안 가른다");
+  // 🔴 미검증 패턴은 목록에 없어야 한다 — 권하면 다음 호출이 409 다
+  assert.match(src, /filter\(\(u\) => u\.verified_at\)/, "미검증 패턴이 목록에 섞인다");
+  // list_products 를 안 부르는 것이 이 모드의 요점이다
+  assert.doesNotMatch(src.slice(src.indexOf("function givenProductMessages"), src.indexOf("async function runModel")),
+    /list_products/, "제품이 주어졌는데 목록 도구를 여전히 권한다");
+});

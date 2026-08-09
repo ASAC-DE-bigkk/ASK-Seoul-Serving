@@ -195,11 +195,36 @@ export function readCall(c) {
   return { name, args };
 }
 
-async function runModel(model, cse, products, env, opts = {}) {
-  const messages = [
-    { role: "system", content: SYSTEM },
+/** 제품이 **이미 정해진** 상태의 대화를 만든다 (`--product-given`).
+ *
+ * 🔑 플레이그라운드는 사용자가 제품을 먼저 고른다. 그러면 AI 가 할 일이 *"57종 중 고르기 →
+ * 패턴 고르기 → 파라미터"* 에서 **"패턴 고르기 → 파라미터"** 로 줄어든다. 실측에서 실패의
+ * 대부분이 **제품 선택**이었으므로(교통 질문에 `commerce_*` 를 뒤졌다), 이 축을 빼면 성립
+ * 여부가 달라진다. `list_products` 510KB 문제도 그 도구를 안 부르니 해당 없어진다.
+ *
+ * 패턴 목록을 대화에 **미리 싣는다** — 화면이 이미 카탈로그에서 갖고 있는 정보라, 실제
+ * 어댑터도 툴 왕복 없이 그냥 넣을 수 있다. 재는 대상을 실제 구현과 같은 모양으로 둔다.
+ */
+function givenProductMessages(cse, products, opts) {
+  const p = (products || []).find((x) => x.product_id === cse.expect.product_id);
+  const pats = (p?.usage_patterns || [])
+    .filter((u) => u.verified_at)
+    .map((u) => ({ pattern_id: u.pattern_id, question_ko: u.question_ko, params: declaredParams(u.sql) }));
+  return [
+    { role: "system", content:
+      "사용자가 데이터 제품을 이미 골랐습니다. 아래 실행 가능한 질의 패턴 중 질문에 맞는 것을 " +
+      "하나 골라 run_pattern 을 **지금 호출**하세요. SQL 을 작성하지 말고 파라미터만 채웁니다. " +
+      "설명만 하고 끝내지 마세요 — 실행해야 사용자가 답을 받습니다.\n\n" +
+      `product_id: ${cse.expect.product_id}\n` +
+      "실행 가능한 패턴:\n" + JSON.stringify(pats).slice(0, 6000) },
     { role: "user", content: cse.question },
   ];
+}
+
+async function runModel(model, cse, products, env, opts = {}) {
+  const messages = opts.productGiven
+    ? givenProductMessages(cse, products, opts)
+    : [{ role: "system", content: SYSTEM }, { role: "user", content: cse.question }];
   const trace = [];
   let usage = { prompt: 0, completion: 0 };
 
@@ -248,12 +273,13 @@ export function score(result, cse) {
 }
 
 function parseArgs(argv) {
-  const out = { models: DEFAULT_MODELS, n: 5, check: false, hint: false };
+  const out = { models: DEFAULT_MODELS, n: 5, check: false, hint: false, productGiven: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--models") out.models = argv[++i].split(",").map((s) => s.trim());
     else if (argv[i] === "--n") out.n = Number(argv[++i]);
     else if (argv[i] === "--check") out.check = true;
     else if (argv[i] === "--hint") out.hint = true;
+    else if (argv[i] === "--product-given") out.productGiven = true;
   }
   return out;
 }
@@ -348,7 +374,7 @@ async function main(argv) {
     process.stderr.write("CF_ACCOUNT_ID · CF_AI_TOKEN 환경변수가 필요하다 (원문을 인자로 넘기지 않는다)\n");
     return 2;
   }
-  const { models, n, check: checkOnly, hint } = parseArgs(argv);
+  const { models, n, check: checkOnly, hint, productGiven } = parseArgs(argv);
   if (checkOnly) return check(models, { account, token });
 
   const products = (await (await fetch(`${CATALOG}?cb=eval`)).json()).products;
@@ -358,7 +384,7 @@ async function main(argv) {
   const rows = [];
   for (const model of models) {
     for (const cse of cases) {
-      const r = await runModel(model, cse, products, { account, token }, { hint });
+      const r = await runModel(model, cse, products, { account, token }, { hint, productGiven });
       // 🔴 인증 실패는 **즉시 멈춘다.** 재시도해도 같고, 계속 돌면 0/5 표가 나와서
       //    "모델이 못 한다"로 읽힌다 — 실제로는 한 번도 물어본 적이 없는 것이다.
       if (/^HTTP 40[13]$/.test(r.error || "")) {
