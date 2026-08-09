@@ -296,16 +296,27 @@ GET /api/v1/data/culture_event_schedule?limit=1000&amp;cursor=NTAwQDIwMjYt…</c
           <tr><td class="nw"><b>400</b></td><td class="nw"><code>unknown filter</code></td><td>없는 컬럼으로 필터했습니다. 응답 <code>detail</code> 에 사용 가능한 컬럼 목록이 들어 있습니다.</td></tr>
           <tr><td class="nw">400</td><td class="nw"><code>no time axis</code></td><td>시간축이 없는 제품에 <code>from</code>/<code>to</code> 를 줬습니다. 기간을 빼고 부르세요.</td></tr>
           <tr><td class="nw">400</td><td class="nw"><code>invalid cursor</code></td><td>커서를 가공했거나 잘못 옮겼습니다. <code>next_cursor</code> 를 그대로 넣어야 합니다.</td></tr>
+          <tr><td class="nw">400</td><td class="nw"><code>invalid id</code></td><td><code>product_id</code>·<code>pattern_id</code> 가 형식(<code>^[a-z0-9_]+$</code>)에 맞지 않습니다.</td></tr>
+          <tr><td class="nw">400</td><td class="nw"><code>unknown parameter</code></td><td>그 패턴에 없는 파라미터를 보냈습니다. 응답 <code>detail</code> 에 <b>쓸 수 있는 이름 목록</b>이 들어 있습니다.</td></tr>
+          <tr><td class="nw">400</td><td class="nw"><code>missing parameter</code></td><td>패턴이 선언한 파라미터 값을 안 보냈습니다. 지금은 <b>모든 파라미터가 필수</b>입니다.</td></tr>
+          <tr><td class="nw">400</td><td class="nw"><code>invalid parameter</code></td><td>패턴 파라미터는 문자열·숫자만 받습니다. <code>:n</code>·<code>:limit</code>·<code>:top_n</code> 은 숫자여야 합니다.</td></tr>
+          <tr><td class="nw">400</td><td class="nw"><code>missing vocabulary_id</code></td><td><code>/api/v1/glossary</code> 에 <code>?vocabulary_id=</code> 를 안 주셨습니다.</td></tr>
           <tr><td class="nw"><b>401</b></td><td class="nw"><code>missing api key</code></td><td><code>Authorization</code> 헤더가 없거나 형식이 다릅니다.</td></tr>
           <tr><td class="nw">401</td><td class="nw"><code>unknown api key</code></td><td>등록되지 않은 키입니다. 오타이거나 삭제된 키입니다.</td></tr>
           <tr><td class="nw"><b>403</b></td><td class="nw"><code>email issuance disabled</code></td><td>폐지된 이메일 발급 경로를 부르셨습니다. 응답의 <code>auth_url</code> 이 열려 있는 경로를 알려 줍니다.</td></tr>
           <tr><td class="nw"><b>403</b></td><td class="nw"><code>revoked api key</code></td><td>폐기된 키입니다. 같은 계정으로 다시 로그인하시면 새 키를 받습니다.</td></tr>
           <tr><td class="nw"><b>404</b></td><td class="nw"><code>unknown table</code></td><td>없거나 공개되지 않은 제품입니다. 비공개 제품도 404 로 답합니다 — 403 이면 존재 여부를 알려주는 셈이라서입니다.</td></tr>
-          <tr><td class="nw"><b>405</b></td><td class="nw"><code>method not allowed</code></td><td>조회는 <code>GET</code> 만 받습니다.</td></tr>
+          <tr><td class="nw">404</td><td class="nw"><code>unknown product</code></td><td>위와 같은 뜻입니다. <code>/api/v1/products</code>·<code>/api/v1/patterns</code> 가 이 <code>title</code> 을 씁니다.</td></tr>
+          <tr><td class="nw">404</td><td class="nw"><code>unknown pattern</code></td><td>그 제품에 없는 <code>pattern_id</code> 입니다. 카탈로그의 <code>usage_patterns</code> 에서 고르세요.</td></tr>
+          <tr><td class="nw">404</td><td class="nw"><code>unknown vocabulary</code></td><td>그 <code>vocabulary_id</code> 의 용어가 없습니다.</td></tr>
+          <tr><td class="nw"><b>405</b></td><td class="nw"><code>method not allowed</code></td><td>조회는 <code>GET</code> 만 받습니다. MCP 만 <code>POST /mcp</code> 입니다.</td></tr>
           <tr><td class="nw"><b>409</b></td><td class="nw"><code>cursor expired</code></td><td>페이지를 넘기는 중 제품이 재발행됐습니다. 첫 페이지부터 다시 받으세요.</td></tr>
+          <tr><td class="nw">409</td><td class="nw"><code>pattern not verified</code></td><td>아직 검증되지 않은 패턴입니다(<code>runnable: false</code>). 고르기 전에 <code>runnable</code> 을 보시면 이 왕복을 피할 수 있습니다.</td></tr>
           <tr><td class="nw"><b>429</b></td><td class="nw"><code>burst rate limited</code></td><td>분당 60회 초과. <code>Retry-After</code> 초만큼 기다리세요.</td></tr>
           <tr><td class="nw">429</td><td class="nw"><code>daily quota exceeded</code></td><td>일일 1,000회 소진. 한국 시간 자정에 초기화됩니다.</td></tr>
           <tr><td class="nw">429</td><td class="nw"><code>issuance rate limited</code></td><td>키 발급이 IP당 시간당 5회를 넘었습니다.</td></tr>
+          <tr><td class="nw"><b>500</b></td><td class="nw"><code>pattern execution failed</code></td><td>게시된 패턴이 지금 데이터에서 깨졌습니다(스키마 변경 등). 저희가 고쳐야 하는 것이니 <code>request_id</code> 와 함께 알려 주세요.</td></tr>
+          <tr><td class="nw"><b>503</b></td><td class="nw"><code>glossary unavailable</code></td><td>용어 사전이 아직 게시되지 않았습니다. 파이프라인 게시 후 다시 시도하세요.</td></tr>
         </tbody>
       </table>
     </div>
