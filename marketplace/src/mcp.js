@@ -23,16 +23,21 @@ const SERVER_INFO = { name: "ask-seoul", version: "0.1.0" };
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const annotate = (title) => ({ title, ...READ_ONLY });
 
-// 🔴 설명에는 **서비스명("서울시 데이터")을 넣는다** (반려 사유 ②). 카탈로그에서 툴 하나가
-// 서버 이름과 떨어져 단독으로 읽히는 자리가 있어서, 문장만 보고 "무엇에 대한 도구인지"를
-// 알 수 있어야 한다. 기존 문장의 AI 지시(호출 순서·runnable 조건 등)는 그대로 둔다.
+// 🔴 설명에는 **서비스명을 글자 그대로 넣는다** (PlayMCP 반려 사유 ②).
+// ⚠️ 1차 수리에서 "서울시 데이터"만 넣었다가 **또 반려됐다**(2026-08-10). 검사기 문구
+// *"서비스명(서울시 데이터 패턴)"* 의 괄호 안이 **찾는 문자열 그 자체**였다 — "패턴"을
+// 수식어(= 정규식·패턴)로 읽은 것이 틀렸다. 지금은 `서울시 데이터 패턴` 전체를 넣는다.
+// 이 문자열은 "서울시 데이터"를 부분으로 포함하므로 두 해석을 동시에 만족한다.
+// 🔴 **줄이거나 바꾸지 말 것** — 한 글자만 달라도 여섯 툴이 한꺼번에 반려된다.
+// 기존 문장의 AI 지시(호출 순서·runnable 조건·data_context 안내)는 그대로 둔다.
+export const SERVICE_NAME = "서울시 데이터 패턴";
 export const TOOLS = [
   {
     name: "list_products",
     title: "서울시 데이터 제품 목록",
     annotations: annotate("서울시 데이터 제품 목록"),
     description:
-      "조회 가능한 서울시 데이터 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 어떤 서울시 데이터가 질문에 맞는지 고를 때 가장 먼저 호출하세요. 목록에는 컬럼 이름과 질의 패턴의 질문만 담기므로, 제품을 고른 뒤 describe_product 로 상세를 확인하세요.",
+      "서울시 데이터 패턴 서비스에서 조회 가능한 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 어떤 서울시 데이터가 질문에 맞는지 고를 때 가장 먼저 호출하세요. 목록에는 컬럼 이름과 질의 패턴의 질문만 담기므로, 제품을 고른 뒤 describe_product 로 상세를 확인하세요.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -40,7 +45,7 @@ export const TOOLS = [
     title: "제품 상세 — 컬럼·질의 패턴",
     annotations: annotate("제품 상세 — 컬럼·질의 패턴"),
     description:
-      "선택한 서울시 데이터 제품의 컬럼 설명·기준(grain)·시간축·질의 패턴(usage_patterns)을 보여줍니다. 조회 전에 스키마와 필터 가능한 컬럼을 확인하세요. usage_patterns 중 runnable=true 인 것만 run_pattern 으로 실행할 수 있습니다.",
+      "서울시 데이터 패턴 서비스의 제품 하나를 골라 컬럼 설명·기준(grain)·시간축·질의 패턴(usage_patterns)을 보여줍니다. 조회 전에 스키마와 필터 가능한 컬럼을 확인하세요. usage_patterns 중 runnable=true 인 것만 run_pattern 으로 실행할 수 있습니다.",
     inputSchema: {
       type: "object",
       properties: { product_id: { type: "string", description: "예: citydata_ppltn_dow_hour" } },
@@ -53,7 +58,7 @@ export const TOOLS = [
     title: "5행 미리보기",
     annotations: annotate("5행 미리보기"),
     description:
-      "서울시 데이터 5행을 미리 봅니다(일일 한도 무차감). 필터에 넣을 실제 값(장소명·코드 등)을 확인할 때 사용하세요.",
+      "서울시 데이터 패턴 서비스의 제품 데이터 5행을 미리 봅니다(일일 한도 무차감). 필터에 넣을 실제 값(장소명·코드 등)을 확인할 때 사용하세요.",
     inputSchema: {
       type: "object",
       properties: { product_id: { type: "string" } },
@@ -66,7 +71,7 @@ export const TOOLS = [
     title: "서울시 데이터 조회",
     annotations: annotate("서울시 데이터 조회"),
     description:
-      "서울시 데이터를 지역·기간·등가 필터로 조회합니다(sort/join/집계 불가, 커서로 페이지네이션). 응답의 data_context 에 집계 기준 시점(freshness)·출처(attribution)·주의사항(caution)이 함께 담깁니다.",
+      "서울시 데이터 패턴 서비스의 데이터를 지역·기간·등가 필터로 조회합니다(sort/join/집계 불가, 커서로 페이지네이션). 응답의 data_context 에 집계 기준 시점(freshness)·출처(attribution)·주의사항(caution)이 함께 담깁니다.",
     inputSchema: {
       type: "object",
       properties: {
@@ -95,7 +100,7 @@ export const TOOLS = [
     title: "검증된 질의 패턴 실행",
     annotations: annotate("검증된 질의 패턴 실행"),
     description:
-      "실제 서울시 데이터에 실행해 동작이 확인된 질의 패턴을 실행합니다. 질문에 맞는 패턴이 있으면 필터를 직접 조립하기보다 이 도구를 우선 사용하세요. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. 응답에는 insight_sample_ko(해석 예시)가 함께 제공됩니다.",
+      "서울시 데이터 패턴 서비스에서 실제 데이터에 실행해 동작이 확인된 질의 패턴을 실행합니다. 질문에 맞는 패턴이 있으면 필터를 직접 조립하기보다 이 도구를 우선 사용하세요. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. 응답에는 insight_sample_ko(해석 예시)가 함께 제공됩니다.",
     inputSchema: {
       type: "object",
       properties: {
@@ -115,7 +120,7 @@ export const TOOLS = [
     name: "check_quota",
     title: "사용량·남은 한도 확인",
     annotations: annotate("사용량·남은 한도 확인"),
-    description: "서울시 데이터 조회에 쓰는 내 API 키의 오늘 사용량과 남은 일일 한도를 확인합니다.",
+    description: "서울시 데이터 패턴 서비스 조회에 쓰는 내 API 키의 오늘 사용량과 남은 일일 한도를 확인합니다.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
 ];
