@@ -114,9 +114,27 @@ export async function handleProductBundle(env, productId, request, trace = {}) {
 
 export async function handleGlossary(env, vocabularyId, trace = {}) {
   trace.table = "d1_catalog_glossary";
-  if (!vocabularyId)
-    return problem(400, "missing vocabulary_id",
-      "vocabulary_id 쿼리 파라미터가 필요하다 — 예: /api/v1/glossary?vocabulary_id=commerce:major");
+
+  // 🔑 **파라미터가 없으면 목록을 준다**(#180). 예전엔 400 이었는데, `vocabulary_id` 를 알아낼
+  //    경로가 어디에도 없었다 — 컬럼이 자기 어휘를 선언하지 않으므로 소비자는 `commerce:<컬럼명>`
+  //    같은 규칙을 **지어내야** 했고 그 대부분이 404 였다. 목록을 열어 추측을 없앤다.
+  //    (컬럼이 어휘를 선언하는 본안은 공통 계약 사안이라 별건이다 — #180 에서 commerce 담당과
+  //    합의한 분담이고, 이쪽은 "게이트웨이 안에서 끝나는 것"으로 먼저 연다.)
+  if (!vocabularyId) {
+    const list = await safeRows(env.DB.prepare(
+      "SELECT vocabulary_id, origin, COUNT(*) AS term_count FROM d1_catalog_glossary " +
+      "GROUP BY vocabulary_id, origin ORDER BY vocabulary_id"
+    ));
+    if (list === null)
+      return problem(503, "glossary unavailable",
+        "용어 사전이 아직 게시되지 않았다 — 파이프라인 게시 후 다시 시도할 것");
+    trace.rows = list.length;
+    return json({
+      vocabularies: list,
+      // 목록만 주고 끝내면 "그래서 어떻게 쓰나"가 남는다. 다음 한 걸음을 응답이 말한다.
+      next: "GET /api/v1/glossary?vocabulary_id=<위 목록의 값> 으로 코드값을 받는다",
+    });
+  }
 
   const rows = await safeRows(env.DB.prepare(
     "SELECT code, label_ko, origin, source_type FROM d1_catalog_glossary " +
