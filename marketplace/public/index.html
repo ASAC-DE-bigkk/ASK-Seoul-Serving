@@ -12,7 +12,7 @@
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
 <meta property="og:description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 쌓아 시계열·공간계열 데이터로 제공합니다.">
 <meta name="twitter:card" content="summary">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b6e60'/%3E%3Ccircle cx='16' cy='11.2' r='3.1' fill='%23fff'/%3E%3Ccircle cx='16' cy='20.8' r='3.1' fill='%23fff'/%3E%3C/svg%3E">
 <script>
   /* 테마 확정 — 첫 페인트 전에 끝나야 한다. 이 블록이 </body> 쪽으로 내려가면
      라이트를 고른 사람에게 다크가 한 번 번쩍인 뒤 바뀐다(FOUC).
@@ -28,6 +28,8 @@
     document.documentElement.dataset.theme = t;
   })();
 </script>
+<!-- 이 페이지는 site.css 를 안 읽는다(자기 CSS) — 폰트만 직접 물린다. catalog 와 같은 이유 -->
+<link rel="stylesheet" href="/fonts/pretendard/pretendardvariable-dynamic-subset.css">
 <style>
   :root {
     /* 팔레트 — 라이트 기본. 액센트는 단청 청록을 낮춘 딥 그린 하나이고 **면을 칠하지 않는다**:
@@ -105,14 +107,10 @@
   /* ─── nav ─── */
   .nav { background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
   .nav-in { display:flex; align-items:center; gap:20px; height:56px; }
-  .brand { display:flex; align-items:center; gap:10px; }
-  .brand .logo { width:30px; height:30px; border-radius:7px;
-                 background:var(--accent); display:flex; align-items:center; justify-content:center;
-                 /* accent 면 위 글자는 --accent-ink — 다크 테마에선 accent 가 밝아져 흰 글자가 안 보인다 */
-                 font-weight:700; font-size:12.5px; letter-spacing:.02em; color:var(--accent-ink); }
-  .brand .nm { font-weight:700; font-size:14px; color:var(--ink); letter-spacing:-.01em; line-height:1.2; }
-  .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
-                color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
+  .brand { display:flex; align-items:center; }
+  /* 워드마크 — site.css 와 같은 규칙(이니셜 박스 폐기, 2026-08-09). 콜론만 accent. */
+  .brand .wm { font-weight:800; font-size:16.5px; line-height:1; letter-spacing:-.03em; color:var(--ink); }
+  .brand .wm em { font-style:normal; color:var(--accent-deep); padding:0 1.5px; }
   .nav-links { display:flex; gap:2px; margin-left:6px; }
   .nav-links a { font-size:13px; font-weight:500; color:var(--muted); padding:6px 12px; border-radius:6px; }
   .nav-links a:hover { background:var(--panel-2); color:var(--ink); }
@@ -139,7 +137,6 @@
   @media (max-width:760px){
     .nav-links a { display:none; }
     .nav-links a.keep { display:block; padding:6px 10px; }
-    .brand .sub { display:none; }
   }
 
   /* ─── hero: 공간축 격자 위 ───
@@ -349,7 +346,9 @@
 
 <nav class="nav"><!-- partials/nav.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
   <div class="wrap nav-in">
-    <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="logo" aria-hidden="true">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></a>
+    <!-- 워드마크 — 이니셜 박스("AS")를 버렸다. 콜론이 심볼이다: "질문 : 답".
+         em 은 시맨틱이 아니라 **콜론만 accent 로 칠하는 손잡이**다(스타일은 .brand .wm em). -->
+    <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="wm">ASK<em>:</em>SEOUL</span></a>
     <!-- 카탈로그 안의 섹션(플레이그라운드·API 키)은 헤더에 걸지 않는다 — 같은 문서로 가는
          링크가 여럿이 되기 때문. 섹션 이동은 카탈로그 사이드바 몫이고, 여기엔 별도 문서만 건다. -->
     <div class="nav-links">
