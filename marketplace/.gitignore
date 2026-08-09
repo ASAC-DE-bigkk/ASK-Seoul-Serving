@@ -9,3 +9,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# 모델 실측 산출물 — 매 실행마다 달라지는 값이라 레포에 남길 것이 아니다.
+# (PowerShell `>` 는 UTF-16 으로 쓰기까지 해서 diff 로도 못 읽는다.)
+eval*.md
