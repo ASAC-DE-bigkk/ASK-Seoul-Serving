@@ -96,11 +96,15 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
 
 - `GET /api/v1/products/<product_id>` — 제품 번들. 컬럼 설명·grain·PK·시간축·질의 예시·
   출처/신선도를 한 번에. 카탈로그보다 자세하고, MCP 의 `describe_product` 와 같은 내용이다.
-- `GET /api/v1/glossary?vocabulary_id=<id>` — 코드값 사전(`code` → `label_ko`). 아직 게시 전이면 `503`.
-  ⚠️ **`vocabulary_id` 는 필수이고, 지금은 그 값을 알아낼 경로가 없다** — 컬럼이 자기 어휘를
-  선언하지 않고 어휘 목록 API 도 없다. **id 를 지어내지 말 것**(없으면 404 다). 이 문은
-  어휘 이름을 이미 아는 경우에만 쓴다. 코드값의 뜻이 필요하면 우선 컬럼 `description` 을 보고,
-  거기에 없으면 **모른다고 답하는 것이 맞다.** 계약 논의: Serving#180.
+- `GET /api/v1/glossary` — **파라미터 없이 부르면 어휘 목록**(`vocabulary_id`·`origin`·
+  `term_count`)을 준다. 아직 게시 전이면 `503`.
+- `GET /api/v1/glossary?vocabulary_id=<id>` — 그 어휘의 코드값 사전(`code` → `label_ko`).
+  ⚠️ **id 를 지어내지 말 것.** 먼저 목록을 받아 **거기 있는 값만** 쓴다 — 어휘는 몇 종뿐이라
+  `<도메인>:<컬럼명>` 같은 규칙으로 짐작하면 대부분 404 다. 목록에 없는 컬럼은 **어휘가 없는
+  것**이므로, 코드값의 뜻이 필요하면 컬럼 `description` 을 보고 거기에도 없으면 **모른다고
+  답하는 것이 맞다.**
+  ⚠️ 컬럼이 자기 어휘를 선언하지는 **아직** 않는다 — 어느 컬럼이 어느 어휘를 쓰는지는 목록의
+  이름으로 유추해야 한다. 그 연결은 공통 계약 사안이다(Serving#180).
 
 ## /api/v1/data 문법
 
