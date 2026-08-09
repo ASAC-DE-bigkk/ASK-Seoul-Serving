@@ -767,8 +767,14 @@ export function logValues(trace, env) {
 
 // 아직 채우지 않는 하나 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
 //
-//   page_path       정적 페이지·기계 문서는 `run_worker_first` 밖이라 워커에 닿지 않는다.
-//                   관측하려면 §3-4 의 6경로를 워커로 통과시키는 결정이 먼저다(#63 ④).
+//   page_path       기계 문서 3종(`/llms.txt`·`/openapi.json`·`/skill-openapi.json`)이
+//                   `run_worker_first` 밖이라 워커에 닿지 않는다. 범위가 **3경로로 확정**됐다
+//                   (#177 · agreement §3-1-1) — 사람 페이지(`/`·`/catalog`)는 부팅에서
+//                   `/api/v1/catalog` 를 불러 **이미 `route=catalog` 로 세어지므로** 넣으면
+//                   같은 방문을 두 번 센다.
+//                   🔴 착수 전제: `[assets]` 에 `binding` 이 없다. 그대로 `run_worker_first`
+//                   에 더하면 워커가 그 경로를 아는 분기가 없어 problem+json 으로 떨어져
+//                   **문서 파일이 깨진다.** `binding = "ASSETS"` + `route="page"` 분기가 세트다.
 //
 // `pattern_id` 는 배선됐다 — "패턴 실행 API 가 아직 없다"가 미룬 이유였고 `run_pattern`(#132)
 // 이 그 소비자다. 이걸로 ASAC-DAG#642 의 로깅 키 `(product_id, pattern_id, publication_id)`
