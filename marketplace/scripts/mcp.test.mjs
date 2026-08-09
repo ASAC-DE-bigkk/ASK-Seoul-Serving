@@ -73,6 +73,31 @@ test("tools/list — 6개 툴", async () => {
   for (const t of body.result.tools) assert.ok(t.inputSchema && t.description);
 });
 
+// ── PlayMCP 심사 요건 (2026-08-09 반려 사유) ────────────────────────────────────
+// 두 가지로 반려됐다: ① 툴 annotations 미정의 ② description 에 서비스명 누락.
+// 둘 다 **툴을 하나 늘릴 때 같이 빠뜨리기 쉬운 것**이라 테스트로 못 박는다.
+
+test("모든 툴에 annotations 가 있다 — 여섯이 같은 성격(읽기 전용·닫힌 데이터셋)", async () => {
+  const tools = (await (await handleMcp(rpc("tools/list"), {}, {}, mkDeps())).json()).result.tools;
+  for (const t of tools) {
+    assert.ok(t.annotations, `${t.name}: annotations 없음`);
+    assert.equal(t.annotations.readOnlyHint, true, `${t.name}: 읽기 전용이 아니라고 신고했다`);
+    assert.equal(t.annotations.destructiveHint, false);
+    assert.equal(t.annotations.idempotentHint, true);
+    // 웹 검색처럼 예측 불가한 외부를 훑지 않는다 — 게시한 제품 안에서만 답한다
+    assert.equal(t.annotations.openWorldHint, false, `${t.name}: 열린 세계로 신고했다`);
+    assert.ok(t.annotations.title, `${t.name}: 사람이 읽을 이름 없음`);
+    assert.equal(t.title, t.annotations.title, `${t.name}: 표시 이름이 두 자리에서 갈렸다`);
+  }
+});
+
+test("모든 툴 description 에 서비스명이 들어 있다 — 카탈로그에서 단독으로 읽힌다", async () => {
+  const tools = (await (await handleMcp(rpc("tools/list"), {}, {}, mkDeps())).json()).result.tools;
+  for (const t of tools) {
+    assert.match(t.description, /서울시 데이터/, `${t.name}: 설명에 서비스명이 없다`);
+  }
+});
+
 test("tools/call list_products — 인증 후 handleCatalog 재사용", async () => {
   const res = await handleMcp(rpc("tools/call", { name: "list_products", arguments: {} }), {}, {}, mkDeps());
   const body = await res.json();
