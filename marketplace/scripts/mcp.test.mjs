@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { handleMcp, TOOLS } from "../src/mcp.js";
+import { handleMcp, TOOLS, SERVICE_NAME } from "../src/mcp.js";
 
 const rpc = (method, params, id = 1) =>
   new Request("http://x/mcp", {
@@ -91,10 +91,14 @@ test("모든 툴에 annotations 가 있다 — 여섯이 같은 성격(읽기 �
   }
 });
 
-test("모든 툴 description 에 서비스명이 들어 있다 — 카탈로그에서 단독으로 읽힌다", async () => {
+// 🔴 문자열이 **정확히** 들어가야 한다. 1차 수리에서 "서울시 데이터"만 넣었다가 또 반려됐다
+//    (2026-08-10) — 검사기 문구 "서비스명(서울시 데이터 패턴)" 의 괄호 안이 찾는 문자열
+//    자체였는데 "패턴"을 수식어로 읽었다. 한 글자만 달라도 여섯 툴이 한꺼번에 반려된다.
+test("모든 툴 description 에 서비스명이 글자 그대로 들어 있다", async () => {
   const tools = (await (await handleMcp(rpc("tools/list"), {}, {}, mkDeps())).json()).result.tools;
+  assert.equal(SERVICE_NAME, "서울시 데이터 패턴", "서비스명 상수가 바뀌었다 — PlayMCP 등록명과 대조할 것");
   for (const t of tools) {
-    assert.match(t.description, /서울시 데이터/, `${t.name}: 설명에 서비스명이 없다`);
+    assert.ok(t.description.includes(SERVICE_NAME), `${t.name}: 설명에 '${SERVICE_NAME}' 이 없다`);
   }
 });
 
