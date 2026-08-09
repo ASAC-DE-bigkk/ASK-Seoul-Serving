@@ -798,8 +798,37 @@ async function logRequest(env, trace) {
   }
 }
 
+// 한글이 든 정적 텍스트 — **charset 을 우리가 말해야 하는 파일들.**
+//
+// Assets 가 직접 서빙하면 운영에서 `Content-Type: text/plain` 만 붙고 charset 이 없다.
+// 그러면 브라우저가 자기 기본 인코딩(대개 windows-1252)으로 읽어 **한글이 전부 깨진다** —
+// `llms.txt` 는 한글이 123줄, `robots.txt` 는 8줄이다(2026-08-09 운영 제보).
+//
+// 🔴 `_headers` 로는 못 고친다. **덮지 않고 덧붙인다** — 로컬 실측에서
+//    `text/plain; charset=utf-8, text/plain; charset=euc-kr` 처럼 값 둘이 콤마로 붙은
+//    망가진 헤더가 나왔다. 운영에 나가면 지금보다 나빠진다.
+//
+// ⚠️ 그리고 **로컬은 이 버그가 안 보인다.** 로컬 workerd 는 `.txt` 에 charset 을 알아서
+//    붙여서, 규칙을 넣든 빼든 로컬 응답은 늘 정상이다. 정적 자산의 content-type 은
+//    **로컬이 운영의 증거가 되지 않는다** — 이 파일들을 만질 때 그걸 기억한다.
+const TEXT_ASSETS = new Set(["/llms.txt", "/robots.txt"]);
+
+async function serveTextAsset(request, env) {
+  const res = await env.ASSETS.fetch(request);
+  // 원본 응답을 그대로 두고 헤더만 바꾼다 — 본문·상태·`_headers` 의 보안 헤더가 다 살아야
+  // 한다. `new Response(res.body, res)` 가 그걸 보장한다(헤더 사본이 따라온다).
+  const out = new Response(res.body, res);
+  out.headers.set("content-type", "text/plain; charset=utf-8");
+  return out;
+}
+
 async function route(request, env, url, trace, ctx) {
   const path = url.pathname;
+
+  // 정적 텍스트는 게이트 앞이다 — 키도 쿼터도 없는 공개 문서고, 로깅도 아직 안 붙인다.
+  // (`route="page"` 로 세는 것은 콘솔 계약 반영이 먼저다 — #177 · agreement §3-1-1)
+  if (TEXT_ASSETS.has(path) && (request.method === "GET" || request.method === "HEAD"))
+    return serveTextAsset(request, env);
 
   // 폐지된 이메일 발급 경로. **경로 자체는 안내용으로 남긴다** — 지우면 아래 405 분기로
   // 떨어져 "왜 안 되는지"를 못 말하고, 같은 주소의 DELETE 는 살아 있어 더 헷갈린다.
