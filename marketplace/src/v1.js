@@ -40,8 +40,10 @@ export async function handleProductBundle(env, productId, request, trace = {}) {
   if (etag && request.headers.get("if-none-match") === etag)
     return new Response(null, { status: 304, headers: { etag, "access-control-allow-origin": "*" } });
 
-  // 보조 3종은 파이프라인이 게시하고 도메인별 진도가 다르다(#668) — 없으면 그 조각만 비운다
-  const [columns, ext, patterns] = await Promise.all([
+  // 보조 3종은 파이프라인이 게시하고 도메인별 진도가 다르다(#668) — 없으면 그 조각만 비운다.
+  // 파라미터 메타(P1 기본값·허용값 / P3 타입, #217)는 별도 표 d1_pattern_params 다(#706 전례:
+  // 공유 표에 컬럼을 더하면 구 실행기가 되돌린다). 표가 없으면 그 조각만 없이 동작한다.
+  const [columns, ext, patterns, paramMeta] = await Promise.all([
     safeRows(env.DB.prepare(
       "SELECT ordinal, column_name, type, description_ko FROM d1_catalog_columns " +
       "WHERE product_id = ? ORDER BY ordinal"
@@ -54,7 +56,19 @@ export async function handleProductBundle(env, productId, request, trace = {}) {
       "SELECT pattern_id, question_ko, axes, requires, verified_rows, verified_at, " +
       "allow_empty, insight_sample_ko FROM d1_usage_patterns WHERE product_id = ? ORDER BY pattern_id"
     ).bind(productId)),
+    safeRows(env.DB.prepare(
+      "SELECT pattern_id, param_defaults, param_enum, params FROM d1_pattern_params " +
+      "WHERE product_id = ?"
+    ).bind(productId)),
   ]);
+  // 기본값 파싱은 서버 이 한 곳이다(#217 결정) — 플레이그라운드의 `-- :n=10` 주석 파서(#219)는
+  // 이 응답의 선언값으로 대체된다. 못 읽는 JSON 은 그 항목만 버린다(없는 것과 같게).
+  const parseObj = (raw) => { try { const o = JSON.parse(raw); return o && typeof o === "object" ? o : undefined; } catch { return undefined; } };
+  const paramsByPattern = new Map((paramMeta || []).map((r) => [r.pattern_id, {
+    param_defaults: parseObj(r.param_defaults),
+    param_enum: parseObj(r.param_enum),
+    params: parseObj(r.params),
+  }]));
 
   const extRow = ext && ext.length ? ext[0] : null;
   const missing = [];
@@ -101,6 +115,10 @@ export async function handleProductBundle(env, productId, request, trace = {}) {
       runnable: Boolean(p.verified_at),
       allow_empty: Boolean(p.allow_empty),
       insight_sample_ko: p.insight_sample_ko,
+      // P1/P3 파라미터 메타(#217) — 선언된 패턴에만 실린다(undefined 는 JSON 에서 사라진다).
+      // param_defaults 가 있는 이름은 호출 시 생략 가능, param_enum 밖 값은 400,
+      // params 의 array 선언은 REST 에서 JSON 배열 문자열로 보낸다.
+      ...(paramsByPattern.get(p.pattern_id) || {}),
     })),
     meta: {
       // 없는 것을 빈 배열로 주면 "메타가 없다"와 "메타가 비었다"가 구분되지 않는다

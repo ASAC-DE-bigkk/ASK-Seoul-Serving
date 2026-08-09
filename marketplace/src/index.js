@@ -12,6 +12,8 @@ import {
   parseJsonArray, loadRedistributionRights, redistributionBlockers, rightsBlockedProblem,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
+import { denyGate } from "./pattern-audit.js";
+import { convertPattern, parseRestArrayParams } from "./run-pattern-ext.js";
 import {
   SKILL_BUNDLE_ID,
   SKILL_SERVICE_SCOPE,
@@ -616,10 +618,20 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
   trace.table = meta.name;
   trace.productId = meta.product_id;
   trace.publicationId = meta.publication_id ?? null;
-  const pattern = await env.DB.prepare(
-    "SELECT sql, question_ko, verified_rows, verified_at, allow_empty, insight_sample_ko " +
-    "FROM d1_usage_patterns WHERE product_id = ? AND pattern_id = ?"
-  ).bind(productId, patternId).first();
+  // 파라미터 메타(P1 기본값·허용값 / P3 타입 선언)는 **별도 표** `d1_pattern_params` 다 —
+  // 공유 핸드오프 표는 컬럼 집합 완전일치 검사(handoff_schema_is_current)라 컬럼을 더하면
+  // 구 실행기가 되돌린다(#706 d1_catalog_display 전례). 표가 아직 없거나(파이프라인 게시 전)
+  // 못 읽으면 **그 조각만 없이** 동작한다 — 기본값 없음 = 전 파라미터 필수(기존 계약 그대로).
+  const [pattern, paramMeta] = await Promise.all([
+    env.DB.prepare(
+      "SELECT sql, question_ko, verified_rows, verified_at, allow_empty, insight_sample_ko " +
+      "FROM d1_usage_patterns WHERE product_id = ? AND pattern_id = ?"
+    ).bind(productId, patternId).first(),
+    env.DB.prepare(
+      "SELECT param_defaults, param_enum, params FROM d1_pattern_params " +
+      "WHERE product_id = ? AND pattern_id = ?"
+    ).bind(productId, patternId).first().catch(() => null),
+  ]);
   if (!pattern) {
     // 문구는 **두 독자를 겸한다** — MCP 로 오는 AI 와 `/api/v1/patterns` 로 오는 사람.
     // 🔴 전에는 *"카탈로그의 usage_patterns 에서 runnable 인 것을 고를 것"* 이었는데
@@ -646,36 +658,28 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
   }
 
   // 저장된 SQL 만, 그리고 읽기만 — 검증기(serving_verify)와 같은 원칙이다.
-  // 주석을 먼저 벗긴다: 패턴 SQL 은 주석에 예시값(-- :n=10)을 적는 관례라, 안 벗기면
-  // 주석 속 :이름까지 자리로 세어 바인딩 개수가 어긋난다.
-  const sqlBody = String(pattern.sql).replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "").trim();
-  if (!/^(select|with)\b/i.test(sqlBody))
-    return problem(400, "pattern not runnable", "SELECT/WITH 패턴만 실행한다");
+  // 변환(주석 제거 → SELECT/WITH 확인 → :이름→? → 값 해석·클램프)은 run-pattern-ext.js 의
+  // convertPattern 하나가 맡는다(#217 P1·P3 — prep/run-pattern-ext.mjs 이식본).
+  const parseMeta = (raw) => { try { const o = JSON.parse(raw); return o && typeof o === "object" ? o : null; } catch { return null; } };
+  const defaults = paramMeta ? parseMeta(paramMeta.param_defaults) : null;
+  const enums = paramMeta ? parseMeta(paramMeta.param_enum) : null;
+  const spec = paramMeta ? parseMeta(paramMeta.params) : null;
+  // REST 쿼리스트링은 문자열뿐이라, 선언이 array 인 파라미터만 JSON 배열 문자열을 실배열로
+  // 해석한다(선언 없는 값은 그대로 스칼라 — json_each 관용구 하위 호환). MCP 는 typed JSON.
+  const supplied = parseRestArrayParams(
+    userParams && typeof userParams === "object" ? userParams : {}, spec);
+  const conv = convertPattern(pattern.sql, supplied,
+    { defaults: defaults || {}, enums: enums || {}, spec: spec || {}, maxLimit: MAX_LIMIT });
+  if (!conv.ok) return problem(conv.problem.status, conv.problem.title, conv.problem.detail);
+  const { converted, values } = conv;
 
-  // :이름 자리를 등장 순서대로 ? 로 바꾸고, 값은 사용자 params 에서만 받는다.
-  const binds = [];
-  const converted = sqlBody.replace(/:([a-z_][a-z0-9_]*)/gi, (_, nm) => { binds.push(nm); return "?"; });
-  const declared = [...new Set(binds)];
-  const supplied = userParams && typeof userParams === "object" ? userParams : {};
-  const extra = Object.keys(supplied).filter((k) => !declared.includes(k));
-  if (extra.length)
-    return problem(400, "unknown parameter", `선언되지 않은 파라미터: ${extra.join(", ")} — 이 패턴의 파라미터는 [${declared.join(", ")}] 뿐이다`);
-  const values = [];
-  for (const nm of binds) {
-    let v = supplied[nm];
-    if (v === undefined || v === null)
-      return problem(400, "missing parameter", `파라미터 :${nm} 값이 필요하다 — 이 패턴의 파라미터: [${declared.join(", ")}]`);
-    if (typeof v !== "string" && typeof v !== "number")
-      return problem(400, "invalid parameter", `:${nm} 은 문자열/숫자만 받는다`);
-    // 행수 파라미터는 서빙 상한을 넘지 못한다 — 상한은 query_product 와 같은 값 하나뿐이다.
-    // 문자열 "999999" 도 SQLite LIMIT 이 받아 D1 이 실제로 읽으므로(#132 사후 리뷰 ②)
-    // 타입과 무관하게 숫자로 강제한 뒤 눌러야 상한이 상한이다.
-    if (/^(n|limit|top_n)$/.test(nm)) {
-      const num = Number(v);
-      if (!Number.isFinite(num)) return problem(400, "invalid parameter", `:${nm} 은 숫자여야 한다`);
-      v = Math.min(num, MAX_LIMIT);
-    }
-    values.push(v);
+  // P0-a(#217 결정): 실행 직전 거부 목록 게이트 — 게이트웨이 자기 표(`_keys`·`_usage`·
+  // `d1_migrations` 등)와 `sqlite_*` 를 읽는 패턴은 게시자의 실수이므로 실행하지 않는다.
+  // 무과금(400) — countUsage 앞이어야 한다. 허용 목록(P0-b)은 게시 계약과 함께 2차.
+  const gate = denyGate(converted);
+  if (!gate.ok) {
+    trace.status = 400;
+    return problem(gate.problem.status, gate.problem.title, gate.problem.detail);
   }
 
   // 쿼터는 유효한 실행 직전만 소모 — 400/404/409 는 무과금 (query_product 와 같은 규약)

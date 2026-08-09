@@ -95,7 +95,7 @@ export const TOOLS = [
     title: "검증된 질의 패턴 실행",
     annotations: annotate("검증된 질의 패턴 실행"),
     description:
-      "실제 서울시 데이터에 실행해 동작이 확인된 질의 패턴을 실행합니다. 질문에 맞는 패턴이 있으면 필터를 직접 조립하기보다 이 도구를 우선 사용하세요. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. 응답에는 insight_sample_ko(해석 예시)가 함께 제공됩니다.",
+      "실제 서울시 데이터에 실행해 동작이 확인된 질의 패턴을 실행합니다. 질문에 맞는 패턴이 있으면 필터를 직접 조립하기보다 이 도구를 우선 사용하세요. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. param_defaults 가 선언된 파라미터는 생략하면 그 기본값으로 실행되고, param_enum 이 선언된 파라미터는 허용값 밖이면 400 입니다. params 선언이 array 인 파라미터는 실제 배열로 보내세요(원소별로 안전하게 바인딩됩니다). 응답에는 insight_sample_ko(해석 예시)가 함께 제공됩니다.",
     inputSchema: {
       type: "object",
       properties: {
@@ -103,8 +103,12 @@ export const TOOLS = [
         pattern_id: { type: "string", description: "describe_product 응답 usage_patterns 의 pattern_id" },
         params: {
           type: "object",
-          description: "패턴 SQL 의 :이름 파라미터 값 — 선언된 이름만 받는다(모자라면/넘치면 400 에 목록 안내)",
-          additionalProperties: { type: ["string", "number"] },
+          description: "패턴 SQL 의 :이름 파라미터 값 — 선언된 이름만 받는다(모자라면/넘치면 400 에 목록 안내). 기본값(param_defaults) 있는 이름은 생략 가능, 배열 선언(params.type=array)인 이름은 배열로",
+          additionalProperties: {
+            type: ["string", "number", "array"],
+            items: { type: ["string", "number"] },
+            maxItems: 100,
+          },
         },
       },
       required: ["product_id", "pattern_id"],
