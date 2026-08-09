@@ -246,7 +246,7 @@ async function runModel(model, cse, products, env, opts = {}) {
               completion: usage.completion + (r.usage?.completion_tokens || 0) };
 
     const calls = extractToolCalls(r);
-    if (!calls.length) return { trace, answer: (r.response || "").slice(0, 200), usage, turns: turn + 1 };
+    if (!calls.length) return { trace, answer: (r.response || "").slice(0, 200), last: r, usage, turns: turn + 1 };
 
     for (const [i, c] of calls.entries()) {
       const { name, args } = readCall(c);
@@ -276,7 +276,7 @@ function parseArgs(argv) {
   const out = { models: DEFAULT_MODELS, n: 5, check: false, hint: false, productGiven: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--models") out.models = argv[++i].split(",").map((s) => s.trim());
-    else if (argv[i] === "--n") out.n = Number(argv[++i]);
+    else if (argv[i] === "--n" || argv[i] === "-n") out.n = Number(argv[++i]);
     else if (argv[i] === "--check") out.check = true;
     else if (argv[i] === "--hint") out.hint = true;
     else if (argv[i] === "--product-given") out.productGiven = true;
