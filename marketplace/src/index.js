@@ -8,7 +8,7 @@
 // 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
 import {
   json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC, ATTRIBUTION,
-  authenticate, checkBurst, burstProblem, countUsage, refundUsage, clientAxes, normalizeIntent, safeRows,
+  authenticate, checkBurst, burstProblem, countUsage, refundUsage, checkDailyCap, clientAxes, normalizeIntent, safeRows,
   parseJsonArray, loadRedistributionRights, redistributionBlockers, rightsBlockedProblem,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
@@ -20,6 +20,10 @@ import {
   handleSkillProduct,
 } from "./skill.js";
 import { handleMcp } from "./mcp.js";
+import { TOOLS } from "./mcp.js";
+import {
+  runChat, CHAT_MODEL, CHAT_ANON_DAILY_TOTAL, CHAT_ANON_DAILY_PER_IP, CHAT_ANON_PRINCIPAL,
+} from "./chat.js";
 import {
   isConfigured, redirectUri, authorizeUrl, exchangeCode, makeState, verifyState,
   readIdTokenFromTokenEndpoint, stateCookie, readCookie, STATE_COOKIE,
@@ -830,6 +834,99 @@ async function serveTextAsset(request, env) {
   return out;
 }
 
+
+// ── 채팅 문(#159 · decision/0006) — 상한·인증·제품 찾기. 루프는 chat.js ─────────────
+//
+// 🔴 무인증 상한이 코드에 있기 전에는 채팅을 무인증에 열지 않는다(0006 게이트) — 이 함수가
+//    그 상한이다. 층 순서는 §2 규약 그대로: 버스트(속도) → 하루 몫(비용) → 실행.
+async function handleChat(request, env, trace, ctx) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return problem(400, "invalid request body", "JSON 본문이 필요하다 — { product_id, question }");
+  }
+  const productId = String(body?.product_id || "");
+  const question = String(body?.question || "").trim();
+  if (!productId || !question)
+    return problem(400, "missing fields", "product_id 와 question 이 모두 필요하다");
+  // 질문 길이 상한 — LLM 비용은 왕복 수만이 아니라 **넣는 길이**로도 자란다. 500자면
+  // 사람 질문으로 충분하고, 그 이상은 대개 붙여넣기(문서·코드)라 채팅의 용도가 아니다.
+  if (question.length > 500)
+    return problem(400, "question too long", "질문은 500자 이내 — 데이터에 대한 질문 하나를 적어 달라");
+
+  // 인증은 **선택**이다(0006 맛보기+키). 헤더가 있으면 정식 인증을 태우고 — 틀린 키에
+  // 조용히 익명 취급을 하면 사용자는 자기 키가 죽은 걸 모른다 — 없으면 맛보기다.
+  let keyRow = null;
+  if (request.headers.get("authorization")) {
+    const auth = await authenticate(env, request);
+    if (auth.error) return auth.error;
+    keyRow = auth.keyRow;
+    trace.keyHash = keyRow.key_hash;
+  }
+
+  if (keyRow) {
+    const burst = await checkBurst(env, "k:" + keyRow.key_hash);
+    if (burst.exceeded) return burstProblem(burst.retryAfter);
+    // 키 사용자의 채팅 1건 = 기존 일일 쿼터에서 1 (0006 — "기존 쿼터를 그대로 쓴다").
+    // LLM 왕복이 실제 비용이므로 질문 자체가 유효한 서빙이다. 패턴 실행은 안에서 따로
+    // 과금된다(진짜 데이터 서빙이라 이중이 아니라 각자 몫이다).
+    const usage = await countUsage(env, keyRow);
+    if (usage.exceeded) return quotaExceededProblem(usage.used, usage.quota);
+  } else {
+    const ip = request.headers.get("cf-connecting-ip") || "local";
+    const burst = await checkBurst(env, "ip:" + ip);
+    if (burst.exceeded) return burstProblem(burst.retryAfter);
+    // IP 몫은 해시 버킷으로 센다 — 분 버킷(위)은 1시간 안에 청소되지만 하루 버킷은 ~하루
+    // 산다. 원문 IP 를 그만큼 들고 있지 않는다(0001 값-최소화 — 발급 rate limit 의
+    // 일 회전 해시와 같은 판단). 날짜를 소금으로 섞어 날이 바뀌면 같은 IP 도 다른 버킷이다.
+    const ipBucket = "chatd:" + (await sha256hex(kstDay() + "|" + ip)).slice(0, 16);
+    const perIp = await checkDailyCap(env, ipBucket, CHAT_ANON_DAILY_PER_IP);
+    const total = await checkDailyCap(env, "chatd:total", CHAT_ANON_DAILY_TOTAL);
+    // 🔴 몫이 다 차면 429 가 아니라 **강등**이다(0006 — "채팅이 죽는 대신 내려앉는다").
+    //    LLM 만 안 부르고 후보 제시는 그대로 하므로, 문은 통과시키되 ai 를 안 준다.
+    if (perIp.exceeded || total.exceeded) {
+      const product = await findChatProduct(env, ctx, productId);
+      if (!product) return chatUnknownProduct(productId);
+      const r = await runChat({ product, question, tools: TOOLS,
+                                ctx: { env, request, keyRow: CHAT_ANON_PRINCIPAL, trace, deps: chatDeps(ctx) } });
+      return json({ ...r, reason: "anon_quota_exhausted",
+                    message: "오늘 체험 몫이 다 찼습니다. 로그인하시면 계속 쓰실 수 있어요." });
+    }
+  }
+
+  const product = await findChatProduct(env, ctx, productId);
+  if (!product) return chatUnknownProduct(productId);
+
+  // 🔴 여기는 env.AI 유무만 본다. 바인딩이 없으면(아직 안 켬 — 과금 스위치는 별도 PR)
+  //    어댑터가 후보 제시로 내려앉는다. 있으면 채택 모델로 감싼 함수 하나를 꽂는다 —
+  //    chat.js 는 끝까지 env.AI 를 모른다(테스트 가능성의 근거).
+  const ai = env.AI ? (payload) => env.AI.run(CHAT_MODEL, payload) : undefined;
+  const r = await runChat({ product, question, ai, tools: TOOLS,
+                            ctx: { env, request, keyRow: keyRow ?? CHAT_ANON_PRINCIPAL, trace, deps: chatDeps(ctx) } });
+  if (r.degraded && r.reason === "ai_unavailable")
+    r.message = "채팅 AI 가 아직 연결되지 않았습니다 — 질문과 비슷한 질의 패턴을 추천해 드려요.";
+  return json(r);
+}
+
+// 채팅의 도구 실행이 쓰는 shared 핸들러 묶음 — MCP 의 deps 와 같은 조립(내부 HTTP 재호출 없음).
+const chatDeps = (ctx) => ({
+  handleCatalog: (e) => handleCatalog(e, ctx),
+  handlePreview, handleData, handleMe, handleProductBundle, handleRunPattern,
+});
+
+// 채팅은 제품이 먼저다(측정 9/10 의 전제) — 카탈로그(캐시)에서 패턴까지 통째로 꺼낸다.
+async function findChatProduct(env, ctx, productId) {
+  const res = await handleCatalog(env, ctx);
+  if (res.status >= 400) return null;
+  const { products = [] } = await res.json();
+  return products.find((p) => p.product_id === productId) || null;
+}
+
+const chatUnknownProduct = (productId) =>
+  problem(404, "unknown product",
+    `'${productId}' 은 서빙 카탈로그에 없다 — GET /api/v1/catalog 로 목록을 확인할 것`);
+
 async function route(request, env, url, trace, ctx) {
   const path = url.pathname;
 
@@ -861,6 +958,12 @@ async function route(request, env, url, trace, ctx) {
     if (error) return error;
     trace.keyHash = keyRow.key_hash;
     return revokeKey(env, keyRow, url.searchParams.get("purge") === "true");
+  }
+  // 채팅 — 질문 하나를 검증된 패턴 실행으로 (#159 · decision/0006). 루프는 chat.js,
+  // 여기는 문(상한·인증·제품 찾기)만 지킨다.
+  if (path === "/api/v1/chat" && request.method === "POST") {
+    trace.route = "chat";
+    return handleChat(request, env, trace, ctx);
   }
   // MCP 서버 — Streamable HTTP, stateless POST /mcp (#26 P0). shared 핸들러 재사용(내부 HTTP X).
   if (path === "/mcp") {

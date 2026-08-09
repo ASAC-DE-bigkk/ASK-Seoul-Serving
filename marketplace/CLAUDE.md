@@ -38,6 +38,7 @@
 | `GET /api/v1/glossary` | 용어 사전 (`?vocabulary_id=`) — `d1_catalog_glossary` 를 읽는 유일한 문 | Bearer, 무과금 |
 | `GET /skill/v1/…` | K-Skill 전용 계약(번들·제품·데이터) — src/skill.js | Bearer |
 | `POST /mcp` | MCP 서버(JSON-RPC) — src/mcp.js 의 `TOOLS` 가 정본 | `tools/call` 부터 Bearer |
+| `POST /api/v1/chat` | 채팅(#159) — 문은 index.js `handleChat`, 루프는 src/chat.js | 선택(무인증 = 맛보기: 총량 100/일 · IP 5/일 · 소진 시 강등). 🔴 `env.AI` 미바인딩 상태 — 켜는 순간 과금이라 별도 PR |
 | 정적 | `/docs` `/legal` `/llms.txt` `/openapi.json` `/skill-openapi.json` | Assets 서빙 |
 
 구성은 이것이 전부다:

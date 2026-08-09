@@ -19,6 +19,19 @@ import { agentToolSpecs, slimProductList, buildDataContext } from "./agent-tools
 // 툴 호출형이라 한 질문이 여러 번 왕복하고, 루프가 돌면 1건이 100건어치 비용을 쓸 수 있다.
 export const CHAT_MAX_TURNS = 4;
 export const CHAT_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
+
+// 맛보기 상한 두 층(decision/0006 §C). ①총량이 최악의 날 비용 상한이고, ②IP 몫은 그 몫을
+// 나누는 축이다 — 총량만 두면 한 방문자가 100 을 다 쓸 수 있다(맛보기가 그 사람 것이 된다).
+// 상한은 올리기 쉽고 내리기 어렵다 — 실사용을 보고 올린다.
+export const CHAT_ANON_DAILY_TOTAL = 100;
+export const CHAT_ANON_DAILY_PER_IP = 5;
+
+// 무인증 실행의 합성 주체. 익명 채팅이 부르는 `run_pattern` 은 `countUsage` 를 지나므로
+// keyRow 가 필요한데, 익명에는 키가 없다. 이 주체로 실행을 **기록**하되(관측 재료),
+// 쿼터가 **게이트로 작동하지는 않게** 한다 — 진짜 게이트는 질문 상한 두 층이고, 이 값은
+// 그 층이 깨졌을 때의 마지막 방벽이다(총량 100 × 왕복 4 = 최대 400 실행 < 1000).
+export const CHAT_ANON_PRINCIPAL = { key_hash: "chat:anon", key_prefix: "chat:anon",
+                                     key_type: "anon", daily_quota: 1000 };
 // 🔴 800 은 추론형 모델에 너무 작다 — qwen 실측에서 실패 전건이 `finish_reason:"length"` 에
 //    내부 추론만 채우고 끝났다(1/10). 3000 으로 올리자 9/10. **이 값이 모델 선정의 결론을
 //    뒤집었다** — 줄이려면 같은 측정을 다시 돌린 뒤에 줄인다.
