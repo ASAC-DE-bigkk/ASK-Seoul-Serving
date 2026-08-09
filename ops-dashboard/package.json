@@ -8,7 +8,8 @@
     "migrate:list": "wrangler d1 migrations list ask-seoul-prod-d1 --remote",
     "d1": "node scripts/d1-query.mjs",
     "deploy:prod": "wrangler deploy --env production",
-    "check:hidden": "node scripts/check-hidden.mjs"
+    "check:hidden": "node scripts/check-hidden.mjs",
+    "check:response-display": "node scripts/response-status-display.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4"
