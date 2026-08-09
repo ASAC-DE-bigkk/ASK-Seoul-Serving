@@ -17,11 +17,19 @@ workers_dev = false
 
 [assets]
 directory = "public"
+# Worker 가 정적 자산을 **직접 꺼내 쓰기 위한** 바인딩. `run_worker_first` 로 가져온 경로는
+# Assets 가 대신 응답해 주지 않으므로, 없으면 그 경로가 라우터 끝의 problem+json 으로
+# 떨어져 **파일이 통째로 깨진다**. 지금 소비자는 `serveTextAsset`(llms.txt·robots.txt 의
+# charset 교정) 하나이고, `page_path` 관측(#177)도 이 바인딩이 전제다.
+binding = "ASSETS"
 # API 라우트는 Worker 로, 그 외 정적 파일은 Assets 가 서빙.
 # 새 API 네임스페이스를 만들면 **여기 먼저 등록**해야 한다 — 빠지면 요청이 워커에 닿지도
 # 못하고 정적 404 페이지로 떨어진다(경로가 없는 것처럼 보여 원인 찾기가 오래 걸린다).
 # /skill/v1/* 은 그 담당이 착수할 때 추가한다(ASAC-DAG#642 경로 분리).
-run_worker_first = ["/api/v1/*", "/skill/v1/*", "/mcp"]
+# `/llms.txt`·`/robots.txt` 가 여기 있는 이유는 API 라서가 아니라 **charset 때문**이다
+# (src/index.js 의 TEXT_ASSETS 주석 참조). 워커를 거치므로 이 둘은 엣지 캐시를 잃는다 —
+# 텍스트 두 개라 감수한다.
+run_worker_first = ["/api/v1/*", "/skill/v1/*", "/mcp", "/llms.txt", "/robots.txt"]
 # 없는 경로는 사람용 404 화면으로 — 이 설정이 없으면 정적 자산에 없는 모든 경로가
 # Worker 의 마지막 분기까지 흘러가 application/problem+json 으로 떨어진다.
 # 오타 URL 로 들어온 사람이 JSON 덩어리를 보게 되던 원인이었다(/api/* 는 그대로 JSON 이 맞다).
@@ -97,7 +105,14 @@ routes = [
 
 [env.production.assets]
 directory = "public"
-run_worker_first = ["/api/v1/*", "/skill/v1/*", "/mcp"]
+# 🔴 **env 섹션은 상속되지 않는다**(아래 `[env.production.vars]` 주석과 같은 이유).
+#    base 의 `binding` 이 여기까지 오지 않으므로 다시 쓴다 — 빠지면 배포본에서 `env.ASSETS`
+#    가 undefined 라 `/llms.txt` 요청이 그대로 던지고, **고치려던 그 파일이 500 이 된다.**
+binding = "ASSETS"
+# `/llms.txt`·`/robots.txt` 가 여기 있는 이유는 API 라서가 아니라 **charset 때문**이다
+# (src/index.js 의 TEXT_ASSETS 주석 참조). 워커를 거치므로 이 둘은 엣지 캐시를 잃는다 —
+# 텍스트 두 개라 감수한다.
+run_worker_first = ["/api/v1/*", "/skill/v1/*", "/mcp", "/llms.txt", "/robots.txt"]
 not_found_handling = "404-page"
 
 [[env.production.d1_databases]]
