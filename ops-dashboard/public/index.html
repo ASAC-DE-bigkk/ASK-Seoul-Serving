@@ -2010,11 +2010,14 @@ function render(d) {
 
   // 축은 product_id 가 정본이고 표명은 폴백이다(서버 PRODUCT_KEY). 화면에는 사람이 아는
   // 이름을 먼저 보이고, 없으면 식별자를 그대로 쓴다 — 빈칸으로 두면 무엇인지 알 수 없다.
-  const apiName = (r) => esc(r.table_name || r.product_id || r.product_key || "—");
+  const apiName = (r) => r.display_title
+    ? esc(r.display_title) + " <span class='pill dim'>" +
+      esc(r.table_name || r.product_id || r.product_key || "—") + "</span>"
+    : esc(r.table_name || r.product_id || r.product_key || "—");
   $("failures").innerHTML = table([
     { t:"이유", get:(r) => statePill(r.status >= 500 ? "bad" : "warn", STATUS_KO[r.status] || String(r.status)) },
     { t:"요청 종류", get:(r) => ROUTE_KO[r.route] || esc(r.route) },
-    { t:"대상 API", get:(r) => esc(r.table_name || "—"), name:true },
+    { t:"대상 API", get:apiName, name:true },
     { t:"건수", r:true, get:(r) => nf.format(r.hits) },
   ], s.failures, "답하지 못한 요청이 없습니다");
 

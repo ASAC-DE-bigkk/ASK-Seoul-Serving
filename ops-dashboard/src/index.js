@@ -435,7 +435,8 @@ async function summary(env, params, writable = false) {
     //    최다인데(실측 43건 — 표를 못 찾은 4xx) 그건 조용히 사라졌다.
     //    이제 분야 미상은 `domain: null` 로 남고, 화면이 그 몫을 따로 밝힌다.
     safeRows(env, topPerDomain(
-      "SELECT status, route, table_name, " + GW_DOM + " AS domain, COUNT(*) AS hits " +
+      "SELECT status, route, table_name, MAX(product_id) AS product_id, " +
+      GW_DOM + " AS domain, COUNT(*) AS hits " +
       "FROM _gateway_request_log " +
       "WHERE status >= 400 AND ts >= datetime('now', ?)" + gwW + " " +
       "GROUP BY status, route, table_name, domain", "hits DESC", 10), since),
@@ -667,7 +668,13 @@ async function summary(env, params, writable = false) {
     //   '<분야>'  그 분야 · null  분야 미상(제품에 안 묶이는 요청) · '*'  전 분야 합계
     // 화면은 지금 스코프에 맞는 버킷을 **고르기만** 한다 — 서버가 이미 갈라 놨다.
     serving: { routes: routes.rows, daily: daily.rows, products: products.rows,
-               failures: failures.rows, empty: empty.rows, keys: keys.rows,
+               // 이용자별 통계와 같은 게시본 표시명을 재사용한다. 미선언·과거 로그는 null 로
+               // 남겨 화면이 물리 식별자로 내려앉게 한다 — 표시명 때문에 실패 목록을 비우지 않는다.
+               failures: failures.rows.map((r) => ({
+                 ...r,
+                 display_title: (r.product_id && udisp.map.get(r.product_id)?.title) || null,
+               })),
+               empty: empty.rows, keys: keys.rows,
                totals: servTotals.rows,
                // 분야 축 내역(#162 🅐). `axis` 는 네 갈래의 건수, `not_found` 는 그중
                // 조치 대상만 **이름째로**. 카탈로그를 못 읽으면 둘 다 빈 채로 온다 —
