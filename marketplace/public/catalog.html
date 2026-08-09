@@ -1025,22 +1025,71 @@ function renderPick() {
 // 눌러 놓고 왜 안 걸리는지 모른다.
 const RESERVED_Q = new Set(["limit", "from", "to", "cursor"]);
 
+// ── 필터 값 후보 (#218) ───────────────────────────────────────────────────────
+//
+// 컬럼은 골라 주면서 **값은 지어내게** 두고 있었다 — `admin_dong_code` 를 고른 사람이
+// 행정동 코드 10자리를 외워야 했다. 질문 실행 쪽을 주석 기본값으로 고친 것과 같은 뿌리다.
+//
+// 🔑 **재료가 이미 있다.** `GET /api/v1/preview/<표>` 가 **무인증으로 5행**을 준다 — 그 안에
+//    모든 컬럼의 실제 값이 들어 있다. 새 API 도 키도 필요 없다.
+// ⚠️ 제품당 **한 번만** 부른다(익명 경로라 IP 버스트를 쓴다). 실패하면 후보 없이 자유 입력으로
+//    남는다 — 편의가 없어질 뿐 화면이 죽지 않는다.
+const FILTER_VALUES = new Map();   // 표 이름 → { 컬럼: [값…] }
+const MAX_VALUE_HINTS = 8;         // 목록이 길면 고르는 것이 아니라 읽는 일이 된다
+
+async function loadFilterValues(table) {
+  if (!table || FILTER_VALUES.has(table)) return;
+  FILTER_VALUES.set(table, {});    // 먼저 박아 둔다 — 실패해도 다시 안 부르게
+  try {
+    const res = await fetch("/api/v1/preview/" + encodeURIComponent(table));
+    if (!res.ok) return;
+    const byCol = {};
+    for (const row of (await res.json()).rows || [])
+      for (const [k, v] of Object.entries(row || {})) {
+        if (v === null || v === undefined || v === "") continue;
+        const s = String(v);
+        if (s.length > 60) continue;              // 긴 서술은 필터 값이 아니다
+        (byCol[k] = byCol[k] || []).push(s);
+      }
+    for (const k of Object.keys(byCol)) byCol[k] = [...new Set(byCol[k])].slice(0, MAX_VALUE_HINTS);
+    FILTER_VALUES.set(table, byCol);
+  } catch (e) { /* 후보는 덤이다 — 못 얻어도 입력은 된다 */ }
+}
+
+/** 지금 고른 컬럼의 값 후보를 그 행의 datalist 에 채운다. */
+function fillValueHints(row) {
+  const table = PICK && PICK.product && PICK.product.name;
+  const col = row.querySelector("[data-fcol]").value;
+  const vals = (FILTER_VALUES.get(table) || {})[col] || [];
+  row.querySelector("datalist").innerHTML =
+    vals.map((v) => "<option value='" + esc(v) + "'></option>").join("");
+  // 후보가 있으면 그렇게 말한다 — 빈 칸에 뭘 넣어야 하는지가 이 화면의 마찰이었다
+  row.querySelector("[data-fval]").placeholder = vals.length ? "값 (미리보기에서 고르기)" : "값";
+}
+
+let FROW_SEQ = 0;
+
 function addFilterRow() {
   const p = PICK && PICK.product;
   if (!p) return;
   const cols = (p.columns || []).filter((c) => !RESERVED_Q.has(c.name));
+  const listId = "fdl_" + (++FROW_SEQ);
   const row = document.createElement("div");
   row.className = "frow";
   row.innerHTML =
     "<select data-fcol>" +
     cols.map((c) => "<option value='" + esc(c.name) + "' title='" + esc(c.description || "") + "'>" +
       esc(c.name) + "</option>").join("") +
-    "</select><input data-fval placeholder='값' autocomplete='off'>" +
+    "</select><input data-fval placeholder='값' autocomplete='off' list='" + listId + "'>" +
+    "<datalist id='" + listId + "'></datalist>" +
     "<button class='del' type='button' title='이 조건 지우기' aria-label='이 조건 지우기'>×</button>";
   $("filterRows").appendChild(row);
   row.querySelector(".del").addEventListener("click", () => { row.remove(); resetPaging(); updatePreview(); });
   for (const el of row.querySelectorAll("select, input"))
     el.addEventListener("input", () => { resetPaging(); updatePreview(); });
+  // 컬럼이 바뀌면 후보도 바뀐다 — 안 갈면 **다른 컬럼의 값**을 권하게 된다
+  row.querySelector("[data-fcol]").addEventListener("change", () => fillValueHints(row));
+  loadFilterValues(p.name).then(() => fillValueHints(row));
   updatePreview();
 }
 
