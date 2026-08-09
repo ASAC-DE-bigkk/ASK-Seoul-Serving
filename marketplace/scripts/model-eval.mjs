@@ -141,8 +141,16 @@ export function answerTool(name, args, products, opts = {}) {
     }
     return out;
   }
-  // run_pattern·query_product·preview_product 는 **실행하지 않는다.** 여기까지 왔다는 것이
-  // 곧 측정하려던 결과이므로, 도달 사실만 남기고 대화를 끝낸다.
+  // 🔴 **미리보기는 대화를 끊지 않는다.** 실측에서 glm 이 `preview_product` 를 부른 문항이
+  //    실패로 찍혔는데, 그건 **합리적인 탐색**(값을 보고 파라미터를 정한다)이었고 끊은 건
+  //    우리 하네스였다. 종료 조건을 "측정 대상에 도달"이 아니라 "아무 실행 툴이나"로 둔
+  //    탓이다 — 재려던 것은 `run_pattern` 도달이지 툴 호출 일반이 아니다.
+  if (name === "preview_product") {
+    return { note: "이 측정에서는 미리보기 행을 제공하지 않습니다. " +
+      "위에 실린 실행 가능한 패턴 중 하나를 골라 run_pattern 을 호출하세요." };
+  }
+  // `run_pattern`·`query_product` 는 실행 툴이라 여기까지가 곧 결과다 — 실제로 돌리지 않고
+  // 도달 사실만 남긴다(D1·키·쿼터를 안 쓴다).
   return { _terminal: true };
 }
 
@@ -410,6 +418,10 @@ async function main(argv) {
       if (path) process.stderr.write(`${" ".repeat(23)}↳ ${path}\n`);
       if (r.answer) process.stderr.write(`${" ".repeat(23)}↳ [툴 대신 문장] ${r.answer.slice(0, 90)}\n`);
       if (r.errorBody) process.stderr.write(`${" ".repeat(23)}↳ ${r.errorBody}\n`);
+      // 🔴 툴도 안 부르고 문장도 없으면 **아무 줄도 안 나와** 원인이 안 보인다(2026-08-09).
+      //    두 모델이 같은 문항에서 똑같이 비었는데 그 이유를 확인할 방법이 없었다.
+      if (!path && !r.answer && !r.error)
+        process.stderr.write(`${" ".repeat(23)}↳ [빈 응답] ${JSON.stringify(r.last ?? {}).slice(0, 220)}\n`);
     }
     process.stderr.write("\n");
   }

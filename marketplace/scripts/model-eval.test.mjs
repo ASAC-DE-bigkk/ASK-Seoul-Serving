@@ -74,7 +74,8 @@ test("🔴 툴 응답은 카탈로그로만 만든다 — 실행 툴은 종료 �
   // 여기서 실제 조회를 하면 D1·키·쿼터를 쓰게 된다. 우리가 재는 건 실행이 아니라 선택이다.
   assert.equal(answerTool("run_pattern", { product_id: "x" }, PRODUCTS)._terminal, true);
   assert.equal(answerTool("query_product", {}, PRODUCTS)._terminal, true);
-  assert.equal(answerTool("preview_product", {}, PRODUCTS)._terminal, true);
+  // ⚠️ `preview_product` 는 여기서 빠졌다 — 아래 전용 테스트 참고. 이 단언이 있던 것이
+  //    2026-08-09 실측에서 탐색하던 모델을 실패로 찍은 원인이었다.
 });
 
 test("describe_product 는 runnable 을 verified_at 에서 만든다", () => {
@@ -189,4 +190,16 @@ test("--product-given 은 제품과 패턴 목록을 대화에 미리 싣는다"
   // list_products 를 안 부르는 것이 이 모드의 요점이다
   assert.doesNotMatch(src.slice(src.indexOf("function givenProductMessages"), src.indexOf("async function runModel")),
     /list_products/, "제품이 주어졌는데 목록 도구를 여전히 권한다");
+});
+
+// 🔴 2026-08-09 실측 회귀. glm 이 `preview_product` 를 부른 문항이 실패로 찍혔는데,
+// 값을 보고 파라미터를 정하려는 **합리적인 탐색**이었고 끊은 건 우리 하네스였다.
+// 재려던 것은 `run_pattern` 도달이지 툴 호출 일반이 아니다.
+test("미리보기는 대화를 끊지 않는다 — 실행 툴만 종료다", () => {
+  assert.equal(answerTool("preview_product", { product_id: "p" }, PRODUCTS)._terminal, undefined,
+    "미리보기가 대화를 끊으면 탐색하는 모델이 실패로 찍힌다");
+  assert.match(answerTool("preview_product", {}, PRODUCTS).note, /run_pattern/);
+  // 실행 툴은 여전히 종료다 — 거기 도달한 것이 곧 측정 결과다
+  assert.equal(answerTool("run_pattern", {}, PRODUCTS)._terminal, true);
+  assert.equal(answerTool("query_product", {}, PRODUCTS)._terminal, true);
 });
