@@ -10,8 +10,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const TOML = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
-const SRC = await readFile(new URL("../src/index.js", import.meta.url), "utf8");
+// 🔴 줄바꿈을 정규화한다. 저장소 blob 은 LF 인데 **Windows 체크아웃은 CRLF** 라
+//    `"\n[assets]\n"` 같은 검색이 로컬에서만 빗나간다. 리눅스 CI 는 LF 라 통과해서,
+//    **"CI 는 초록인데 내 기계에서만 실패"** 가 된다 — 실제로 그렇게 겪었다(2026-08-09).
+//    파일 구조를 문자열로 보는 테스트는 전부 이 정규화가 먼저다.
+const read = async (p) =>
+  (await readFile(new URL(p, import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+
+const TOML = await read("../wrangler.toml");
+const SRC = await read("../src/index.js");
 const PATHS = ["/llms.txt", "/robots.txt"];
 
 // `[assets]` 와 `[env.production.assets]` 처럼 **환경별로 따로 쓰는** 블록을 꺼낸다.
@@ -72,7 +79,7 @@ test("대상은 한글이 든 텍스트뿐이다 — 캐시를 잃는 대가가 
   for (const p of PATHS) assert.ok(set.includes(`"${p}"`));
   // 실제로 한글이 들어 있는지 확인 — 없는 파일을 넣으면 캐시만 잃고 얻는 게 없다.
   for (const p of PATHS) {
-    const body = await readFile(new URL(`../public${p}`, import.meta.url), "utf8");
+    const body = await read(`../public${p}`);
     assert.match(body, /[가-힣]/, `${p} 에 한글이 없다 — 워커를 태울 이유가 없다`);
   }
 });
