@@ -8,7 +8,7 @@
 // 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
 import {
   json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC, ATTRIBUTION,
-  authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent, safeRows,
+  authenticate, checkBurst, burstProblem, countUsage, refundUsage, clientAxes, normalizeIntent, safeRows,
   parseJsonArray, loadRedistributionRights, redistributionBlockers, rightsBlockedProblem,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
@@ -688,8 +688,16 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
   } catch (e) {
     // 패턴 SQL 이 게시본과 어긋난 경우(드리프트) — 소비자 잘못이 아니므로 그렇게 말한다
     trace.status = 500;
+    // 🔴 **말만 그렇게 하고 요금은 받고 있었다.** `countUsage` 는 읽기가 아니라 증가라
+    //    여기 닿은 시점에 이미 하루 몫이 하나 깎여 있다. 게시자가 깨뜨린 패턴을 소비자가
+    //    지불하는 꼴이고, 재시도하면 매번 깎인다. §2 의 "쿼터 과금은 유효한 서빙 직전만"
+    //    이 400/404/409 만 적어 둬서 이 자리가 새 있었다(ASK-Seoul-Serving#217 검토 중 발견).
+    const refunded = await refundUsage(env, keyRow, usage.day);
     return problem(500, "pattern execution failed",
-      "패턴이 현재 게시본과 어긋난다(드리프트) — 도메인 검증 사이클에서 잡힐 문제이니 다른 패턴이나 일반 데이터 조회를 쓸 것");
+      "패턴이 현재 게시본과 어긋난다(드리프트) — 도메인 검증 사이클에서 잡힐 문제이니 다른 패턴이나 일반 데이터 조회를 쓸 것" +
+      // 되돌리기가 실패했으면 **말하지 않는다.** 틀린 안내는 안내가 없는 것보다 나쁘다.
+      (refunded ? ". 이 실패는 오늘 쿼터를 소모하지 않았다" : ""),
+      refunded ? { quota_charged: false } : {});
   }
   const rows = results.length > MAX_LIMIT ? results.slice(0, MAX_LIMIT) : results;
   trace.rows = rows.length;
@@ -767,8 +775,14 @@ export function logValues(trace, env) {
 
 // 아직 채우지 않는 하나 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
 //
-//   page_path       정적 페이지·기계 문서는 `run_worker_first` 밖이라 워커에 닿지 않는다.
-//                   관측하려면 §3-4 의 6경로를 워커로 통과시키는 결정이 먼저다(#63 ④).
+//   page_path       기계 문서 3종(`/llms.txt`·`/openapi.json`·`/skill-openapi.json`)이
+//                   `run_worker_first` 밖이라 워커에 닿지 않는다. 범위가 **3경로로 확정**됐다
+//                   (#177 · agreement §3-1-1) — 사람 페이지(`/`·`/catalog`)는 부팅에서
+//                   `/api/v1/catalog` 를 불러 **이미 `route=catalog` 로 세어지므로** 넣으면
+//                   같은 방문을 두 번 센다.
+//                   🔴 착수 전제: `[assets]` 에 `binding` 이 없다. 그대로 `run_worker_first`
+//                   에 더하면 워커가 그 경로를 아는 분기가 없어 problem+json 으로 떨어져
+//                   **문서 파일이 깨진다.** `binding = "ASSETS"` + `route="page"` 분기가 세트다.
 //
 // `pattern_id` 는 배선됐다 — "패턴 실행 API 가 아직 없다"가 미룬 이유였고 `run_pattern`(#132)
 // 이 그 소비자다. 이걸로 ASAC-DAG#642 의 로깅 키 `(product_id, pattern_id, publication_id)`
@@ -792,8 +806,37 @@ async function logRequest(env, trace) {
   }
 }
 
+// 한글이 든 정적 텍스트 — **charset 을 우리가 말해야 하는 파일들.**
+//
+// Assets 가 직접 서빙하면 운영에서 `Content-Type: text/plain` 만 붙고 charset 이 없다.
+// 그러면 브라우저가 자기 기본 인코딩(대개 windows-1252)으로 읽어 **한글이 전부 깨진다** —
+// `llms.txt` 는 한글이 123줄, `robots.txt` 는 8줄이다(2026-08-09 운영 제보).
+//
+// 🔴 `_headers` 로는 못 고친다. **덮지 않고 덧붙인다** — 로컬 실측에서
+//    `text/plain; charset=utf-8, text/plain; charset=euc-kr` 처럼 값 둘이 콤마로 붙은
+//    망가진 헤더가 나왔다. 운영에 나가면 지금보다 나빠진다.
+//
+// ⚠️ 그리고 **로컬은 이 버그가 안 보인다.** 로컬 workerd 는 `.txt` 에 charset 을 알아서
+//    붙여서, 규칙을 넣든 빼든 로컬 응답은 늘 정상이다. 정적 자산의 content-type 은
+//    **로컬이 운영의 증거가 되지 않는다** — 이 파일들을 만질 때 그걸 기억한다.
+const TEXT_ASSETS = new Set(["/llms.txt", "/robots.txt"]);
+
+async function serveTextAsset(request, env) {
+  const res = await env.ASSETS.fetch(request);
+  // 원본 응답을 그대로 두고 헤더만 바꾼다 — 본문·상태·`_headers` 의 보안 헤더가 다 살아야
+  // 한다. `new Response(res.body, res)` 가 그걸 보장한다(헤더 사본이 따라온다).
+  const out = new Response(res.body, res);
+  out.headers.set("content-type", "text/plain; charset=utf-8");
+  return out;
+}
+
 async function route(request, env, url, trace, ctx) {
   const path = url.pathname;
+
+  // 정적 텍스트는 게이트 앞이다 — 키도 쿼터도 없는 공개 문서고, 로깅도 아직 안 붙인다.
+  // (`route="page"` 로 세는 것은 콘솔 계약 반영이 먼저다 — #177 · agreement §3-1-1)
+  if (TEXT_ASSETS.has(path) && (request.method === "GET" || request.method === "HEAD"))
+    return serveTextAsset(request, env);
 
   // 폐지된 이메일 발급 경로. **경로 자체는 안내용으로 남긴다** — 지우면 아래 405 분기로
   // 떨어져 "왜 안 되는지"를 못 말하고, 같은 주소의 DELETE 는 살아 있어 더 헷갈린다.

@@ -96,6 +96,11 @@
   유실됐던 실사고 — 그 재발 방지가 장부의 존재 이유다).
 - **쿼터 과금은 유효한 서빙 직전만** — 400/404/409 는 무과금. 버스트는 쿼터보다 앞에서
   본다(오류로 끝날 요청도 서버를 미는 건 같다).
+  🔴 **5xx 도 무과금이다** — 다만 방식이 다르다. 4xx 는 깎기 전에 끝나지만 5xx 는 이미
+  깎은 뒤 실패하므로 **`refundUsage` 로 되돌린다**(`run_pattern` 드리프트 500 이 첫 사례).
+  `countUsage` 는 이름과 달리 **읽기가 아니라 증가**라, 부른 자리가 곧 과금 지점이다.
+  ⚠️ 되돌리기가 실패하면 **"안 깎였다"고 말하지 않는다** — 틀린 안내는 안내가 없는 것보다
+  나쁘다. `quota_charged: false` 는 되돌리기가 성공했을 때만 실린다.
 - **비밀값·토큰·실키를 출력·커밋하지 않는다.**
 
 ## 3. 코드 규약
@@ -195,7 +200,7 @@ _gateway_request_log 컬럼 추가       → 새 ALTER 파일 + 시드 체인 + 
 > |---|---|
 > | `agent_verified` | ✅ **배선됨**(#111, 2026-08-06). prod 실측으로 0·NULL 확정, `1` 은 검증된 크롤러 도착 시 |
 > | `pattern_id` | ✅ **배선됨** — `run_pattern`(#132)이 소비자다. `(product_id, pattern_id, publication_id)` 로깅 키 세 축이 한 행에 모였다(ASAC-DAG#642). 400 은 안 남기고(형식 검사 통과 뒤에 넣는다) **404·409 는 남긴다** — 무슨 패턴을 부르다 막혔나가 곧 수요 신호다 |
-> | `page_path` | ⏸ 정적 페이지가 `run_worker_first` 밖이라 워커에 닿지 않는다 — §3-4 의 6경로를 통과시키는 결정이 먼저. **이제 이것만 남았다** |
+> | `page_path` | ⏸ **범위는 확정됐다 — 기계 문서 3종**(`/llms.txt`·`/openapi.json`·`/skill-openapi.json`, #177 · agreement §3-1-1). 사람 페이지는 부팅 API 호출로 **이미 `route=catalog` 로 세어져** 넣으면 중복이다. 🔴 착수 전제: `[assets]` 에 `binding` 이 없어 그대로 `run_worker_first` 에 더하면 **그 문서들이 깨진다**(`binding = "ASSETS"` + `route="page"` 분기가 세트). 콘솔은 `route="page"` 를 `decision/0014` 에 먼저 올려야 한다. **이제 이것만 남았다** |
 >
 > **`agent_name`·`agent_mode` 는 UA 말고 두 번째 출처가 생겼다**(#111 후속) — MCP `initialize`
 > 의 `clientInfo` 다. 출처는 `agent_mode` 가 말한다(`crawler`·`on_demand` = UA / `mcp_client`

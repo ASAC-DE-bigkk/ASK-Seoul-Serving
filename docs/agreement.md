@@ -233,7 +233,7 @@ npx wrangler d1 execute <D1> --remote [--env production] --command \
 | `agent_verified` | **NULL 로 시작** — 검증 수단 없음 ≠ 검증 실패 | #9 ④ · #78 `F-3` |
 | `country` · `asn` | 남용 판정 축 (원문 IP 대신) | #9 ① |
 | `referer_host` | 호스트만. 전체 Referer 아님 | #9 |
-| `page_path` | 핵심 페이지 + 기계 문서 3종만 | #9 ② |
+| `page_path` | **기계 문서 3종만** (§3-1-1) | #9 ② · #177 |
 | `intent` | `X-ASK-Intent` 슬러그. **질문 원문 아님** | #3 |
 | `pattern_id` · `publication_id` | 패턴 실행 API 로깅 키 | ASAC-DAG#642 |
 | `env` | `local` / `prod` — 지표가 조용히 섞이는 것을 막는다 | §6-2 |
@@ -246,6 +246,35 @@ npx wrangler d1 execute <D1> --remote [--env production] --command \
 > ⚠️ **배선 전까지 `env`·`intent`·`pattern_id`·#9 8종은 전량 NULL 이다.**
 > 콘솔은 이걸 **`0` 으로 그리지 않는다** — "재지 않은 것"과 "재서 0"을 섞으면 관측 공백이
 > "이상 없음"으로 위장된다(#78 `F-3`, ASAC-DAG#619 에서 겪은 자리).
+
+#### 3-1-1. `page_path` 의 범위 — **기계 문서 3종** (#177, 2026-08-09)
+
+원래 문구는 *"핵심 페이지 + 기계 문서 3종만"* 이었는데, **사람 페이지를 넣으면 같은 방문을
+두 번 센다.** `/` 와 `/catalog` 는 부팅에서 `/api/v1/catalog` 를 부르므로 그 방문이 이미
+`route=catalog` 로 한 행씩 남고 `referer_host`·`ua_class` 까지 붙는다(실측: `public/index.html`
+· `public/catalog.html` 각 1건, 그 외 정적 페이지 0건).
+
+| 경로 | 지금 관측되나 | `page_path` 대상 |
+|---|---|---|
+| `/` · `/catalog` | ✅ `route=catalog` 로 이미 남는다 | ❌ 중복 계수 |
+| `/llms.txt` · `/openapi.json` · `/skill-openapi.json` | ❌ 워커에 닿지 않는다 | ✅ **이 셋** |
+| `/docs` · `/legal` | ❌ | ⏸ 보류 — 값이 낮다 |
+
+**기계 문서를 고르는 건 취향이 아니라 #9 §3 의 설계 의도다.** `cli` 가 함정이라 *"어떤 AI 가
+무엇을 했나"* 의 절반은 여정 분석(`llms.txt`/`openapi.json` 접근 → 키 발급 → 카탈로그 → 데이터
+호출)인데, **그 사슬의 첫 마디가 통째로 안 보인다.** 이건 웹 애널리틱스가 아니라 *"AI 가 우리를
+어떻게 발견하나"* 다.
+
+착수 전제 둘 — 어느 쪽도 설정 한 줄이 아니다.
+
+- 🔴 **게이트웨이**: `[assets]` 에 `binding` 이 없다. 지금 `run_worker_first` 에 `/llms.txt` 를
+  더하면 워커가 그 경로를 아는 분기가 없어 problem+json 으로 떨어져 **파일이 깨진다.**
+  `binding = "ASSETS"` + `route="page"` 분기(로깅 후 `env.ASSETS.fetch`)가 같이 가야 한다.
+- 🔴 **콘솔**: `route` 값 `page` 를 `decision/0014` 의 `SERVE_ROUTES`·`ROUTE_KO` 에 **먼저**
+  올린다. `run_pattern` 때 배포가 반영보다 먼저 나간 사고(#132 → PR#138)가 같은 순서였다.
+
+⚠️ 3경로만 채우면 콘솔 카드가 **사람 페이지를 0 으로** 보이게 한다 — 위 `F-3` 함정이 카드
+안쪽으로 옮겨간 것이다. 카드가 관측 범위를 스스로 밝혀야 한다.
 
 ### 3-2. IP 축 — **`_gateway_request_log` 에는 (A) 미저장**
 
