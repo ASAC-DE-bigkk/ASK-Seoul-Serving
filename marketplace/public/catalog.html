@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>데이터 카탈로그 — ASK: SEOUL 데이터 플랫폼</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b6e60'/%3E%3Ccircle cx='16' cy='11.2' r='3.1' fill='%23fff'/%3E%3Ccircle cx='16' cy='20.8' r='3.1' fill='%23fff'/%3E%3C/svg%3E">
 <script>
   /* 테마 확정 — 첫 페인트 전. 내려가면 라이트 사용자에게 다크가 번쩍인다(FOUC).
      저장값이 없으면 OS 로 해석하되 저장하지 않는다 — 저장 여부가 "직접 골랐는가"의
@@ -18,6 +18,8 @@
     document.documentElement.dataset.theme = t;
   })();
 </script>
+<!-- 이 페이지는 site.css 를 안 읽는다(자기 CSS) — 폰트만 직접 물린다 -->
+<link rel="stylesheet" href="/fonts/pretendard/pretendardvariable-dynamic-subset.css">
 <style>
   :root {
     /* 팔레트는 랜딩(index.html)의 :root 와 같은 값이다 — 어긋나면 다른 서비스로 보인다.
@@ -80,16 +82,9 @@
           border-right:1px solid var(--sidebar-line); }
   .side .brand { display:flex; align-items:center; gap:10px; padding:6px 18px 16px;
                  border-bottom:1px solid var(--sidebar-line); margin-bottom:8px; }
-  /* 브랜드는 랜딩(index.html .brand)과 동일 규칙 — 로고 글자색은 accent 면 위 전용
-     토큰(--accent-ink)을 쓴다. 하드코딩하면 한쪽 테마에서 대비가 깨진다(라이트에서
-     딥 그린 위 #04211b 이 남아 있던 실사고). */
-  .side .brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
-                       background:var(--accent);
-                       display:flex; align-items:center; justify-content:center;
-                       font-weight:700; font-size:12.5px; color:var(--accent-ink); letter-spacing:.02em; }
-  .side .brand .nm { font-weight:700; font-size:14px; color:var(--ink); letter-spacing:-.01em; line-height:1.2; }
-  .side .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
-                      color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
+  /* 워드마크 — site.css·index 와 같은 규칙(이니셜 박스 폐기, 2026-08-09). 콜론만 accent. */
+  .side .brand .wm { font-weight:800; font-size:16.5px; line-height:1; letter-spacing:-.03em; color:var(--ink); }
+  .side .brand .wm em { font-style:normal; color:var(--accent-deep); padding:0 1.5px; }
   .side .group { padding:16px 18px 6px; font-size:10.5px; font-weight:700; letter-spacing:.1em;
                  color:var(--sidebar-dim); }
   .dnav { list-style:none; padding:0 8px; }
@@ -472,7 +467,7 @@
 <div class="shell">
 
   <aside class="side">
-    <div class="brand" onclick="location.href='/'" style="cursor:pointer" title="홈으로"><span class="logo">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></div>
+    <div class="brand" onclick="location.href='/'" style="cursor:pointer" title="홈으로"><span class="wm">ASK<em>:</em>SEOUL</span></div>
     <div class="group">도메인</div>
     <ul class="dnav" id="dnav"></ul>
     <div class="group">이 페이지 안에서</div>
