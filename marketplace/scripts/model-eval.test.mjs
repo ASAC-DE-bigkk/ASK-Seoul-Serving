@@ -203,3 +203,23 @@ test("미리보기는 대화를 끊지 않는다 — 실행 툴만 종료다", (
   assert.equal(answerTool("run_pattern", {}, PRODUCTS)._terminal, true);
   assert.equal(answerTool("query_product", {}, PRODUCTS)._terminal, true);
 });
+
+// 🔴 2026-08-09 qwen 실측. 구조화 필드는 비어 있고 `content` 안에 `<tool_call>{…}` 이
+// 들어 있었다. 안 읽으면 **모델은 옳게 불렀는데 우리가 못 들은 것**이 된다 — 실제 어댑터도
+// 같은 문제를 겪으므로(못 읽으면 운영에서도 그 호출이 사라진다) 여기서 재는 것이 맞다.
+test("본문의 <tool_call> 태그도 읽는다 — 못 읽으면 옳은 호출이 사라진다", async () => {
+  const { extractToolCalls, readCall } = await import("./model-eval.mjs");
+  const body = '<tool_call>\n{"name": "run_pattern", "arguments": {"product_id": "p", "pattern_id": "q"}}\n</tool_call>';
+
+  for (const shape of [{ response: body }, { choices: [{ message: { content: body } }] }]) {
+    const calls = extractToolCalls(shape);
+    assert.equal(calls.length, 1, `못 읽은 모양: ${JSON.stringify(shape).slice(0, 60)}`);
+    assert.deepEqual(readCall(calls[0]), { name: "run_pattern", args: { product_id: "p", pattern_id: "q" } });
+  }
+
+  // 구조화 필드가 있으면 그쪽이 우선 — 본문을 뒤질 이유가 없다
+  assert.equal(extractToolCalls({ tool_calls: [{ name: "a" }], response: body })[0].name, "a");
+  // 잘린 JSON 은 조용히 버린다. 반쪽 호출을 지어내는 것보다 없는 게 낫다
+  assert.deepEqual(extractToolCalls({ response: '<tool_call>{"name": "run_' }), []);
+  assert.deepEqual(extractToolCalls({ response: "그냥 문장" }), []);
+});

@@ -169,7 +169,20 @@ export function extractToolCalls(result) {
   const cands = [result?.tool_calls, result?.choices?.[0]?.message?.tool_calls,
                  result?.message?.tool_calls, result?.output?.tool_calls];
   for (const c of cands) if (Array.isArray(c) && c.length) return c;
-  return [];
+
+  // 🔴 **본문에 `<tool_call>` 태그로 실려 오는 경우가 있다**(2026-08-09 qwen 실측). 구조화
+  //    필드가 비어 있고 `content` 안에 JSON 이 들어 있는데, 이걸 안 읽으면 **모델은 옳게
+  //    불렀는데 우리가 못 들은 것**이 된다. 실제 어댑터도 같은 문제를 겪으므로 여기서 재는
+  //    것이 맞다 — 못 읽으면 그 호출은 운영에서도 사라진다.
+  const text = result?.response ?? result?.choices?.[0]?.message?.content ?? "";
+  const out = [];
+  for (const m of String(text).matchAll(/<tool_call>\s*([\s\S]*?)\s*(?:<\/tool_call>|$)/g)) {
+    try {
+      const j = JSON.parse(m[1]);
+      if (j && j.name) out.push(j);
+    } catch { /* 잘린 JSON — 못 읽으면 그냥 없는 것으로 둔다 */ }
+  }
+  return out;
 }
 
 /** 툴 왕복을 **OpenAI 표준 모양으로** 대화에 되민다.
