@@ -393,9 +393,12 @@
   /* 필터 행 — 컬럼 고르기 + 값. `min-width:0` 이 있어야 긴 컬럼명이 칸을 밀지 않는다
      (이 페이지에서 세 번 겪은 그 함정이다 — scripts/responsive-audit.js). */
   .lnote { font-weight:400; letter-spacing:0; color:var(--faint); text-transform:none; }
-  .frow { display:flex; gap:6px; margin-bottom:6px; align-items:center; }
-  .frow select { flex:1 1 45%; min-width:0; }
-  .frow input { flex:1 1 55%; min-width:0; }
+  /* 🔴 컬럼 드롭다운은 **한 줄을 통째로** 쓴다(#218). 값 칸과 나눠 쓰면 `admin_dong_code`
+     같은 이름이 `admi…` 로 잘려 **무엇을 골랐는지 알 수 없다** — 사이드바 폭에서 45% 는
+     100px 남짓이다. `min-width:0` 은 부모를 안 밀게 하는 장치이지 폭을 정하는 값이 아니다. */
+  .frow { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; align-items:center; }
+  .frow select { flex:1 1 100%; min-width:0; }
+  .frow input { flex:1 1 0; min-width:0; }
   .frow .del { flex:none; width:28px; height:30px; padding:0; font-size:15px; line-height:1;
                color:var(--muted); background:var(--panel); border:1px solid var(--line-strong); }
   .frow .del:hover { color:var(--red-ink); border-color:var(--red-ink); }
@@ -941,6 +944,24 @@ function patternParams(sql) {
   return [...new Set([...body.matchAll(/:([a-z_][a-z0-9_]*)/gi)].map((m) => m[1]))];
 }
 
+// 🔑 **벗긴 주석을 버리지 않는다** (#218). 도메인 오너가 예시값을 거기 적어 두는 관례가 있다:
+//
+//     -- :metric='rename', :factor=2, :min_biz=100, :n=10
+//
+// 지금까지 이름만 챙기고 값은 흘렸다. 그래서 사용자가 `:metric` 에 무엇을 넣어야 하는지
+// 화면 어디에도 없었고, **질문을 골랐는데 내부 식별자 넷을 지어내야** 했다 — 질문 중심
+// 전환(#175)이 노린 것의 정반대다.
+//
+// ⚠️ 따옴표는 벗긴다. 주석은 SQL 리터럴 표기(`'rename'`)인데 서버는 값을 **바인딩**하므로
+//    `rename` 이 들어가야 한다. `'rename'` 을 그대로 보내면 따옴표까지 값이 된다.
+function patternDefaults(sql) {
+  const out = {};
+  for (const line of String(sql || "").match(/--[^\n]*/g) || [])
+    for (const m of line.matchAll(/:([a-z_][a-z0-9_]*)\s*=\s*('([^']*)'|"([^"]*)"|[^\s,;)]+)/gi))
+      out[m[1]] = m[3] ?? m[4] ?? m[2];
+  return out;
+}
+
 function pickProduct(p, pattern) {
   PICK = p ? { product: p, pattern: pattern || null } : null;
   resetPaging();
@@ -976,12 +997,17 @@ function renderPick() {
     $("limitField").style.display = "none";
     $("rangeField").style.display = "none";
     $("filterField").style.display = "none";   // 패턴은 자기 WHERE 를 갖고 있다
+    // 주석의 예시값으로 **미리 채운다**(#218). 그래야 질문을 고른 사람이 아무것도 안 채우고
+    // 바로 「호출」을 누를 수 있다 — 바꾸고 싶은 것만 바꾸면 된다.
+    const defs = patternDefaults(u.sql);
     for (const nm of patternParams(u.sql)) {
+      const has = Object.prototype.hasOwnProperty.call(defs, nm);
       const f = document.createElement("div");
       f.className = "field param";
       f.innerHTML = "<label for='prm_" + nm + "'><code>:" + esc(nm) + "</code>" +
-        "<span class='hint'>패턴이 요구하는 값</span></label>" +
-        "<input id='prm_" + nm + "' data-prm='" + esc(nm) + "' autocomplete='off'>";
+        "<span class='hint'>" + (has ? "예시값 — 바꿔도 됩니다" : "패턴이 요구하는 값") + "</span></label>" +
+        "<input id='prm_" + nm + "' data-prm='" + esc(nm) + "' autocomplete='off'" +
+        (has ? " value='" + esc(defs[nm]) + "'" : "") + ">";
       params.appendChild(f);
       f.querySelector("input").addEventListener("input", updatePreview);
     }
