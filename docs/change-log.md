@@ -40,6 +40,22 @@
 
 ## 2026-08-09
 
+### run_pattern 표현력 1차 — P0-a 거부 게이트 · P1 기본값 · P3 배열 IN (#217)
+
+- **작업자**: @Exisign
+- **의도 · 목표**: #217 팀 합의(2026-08-09)로 run_pattern 1차 범위(P0-a·P1·P3)를 적용한다.
+  DAGS/DBT 가 병행으로 게시 메타(`d1_pattern_params`)를 올리는 중이라, 그 표가 **없거나 뒤늦게
+  와도 기존 계약 그대로** 동작해야 한다("모른다 ≠ 막힘").
+- **조치**: 변환부를 `run-pattern-ext.js`(`convertPattern`)로 빼 **P1**(기본값 `param_defaults`·
+  허용값 `param_enum`)·**P3**(배열 `:x`→`?,?,?`)를 담고, 실행 직전 `pattern-audit.js` 의
+  **`denyGate`(P0-a)** 를 세웠다 — 내부표(`_`·`sqlite_` 접두)·`pragma_*`·`d1_migrations` 를 읽는
+  패턴은 게시자 실수이므로 무과금 400. 메타는 `d1_pattern_params`(도메인 export, 없으면
+  `.catch→null` 강등)에서 읽고 `v1.js`(describe_product)·`mcp.js`(배열 스키마)가 소비자에게
+  알린다. **P0-b(allowlist)·P2·P6 은 게시 계약·보류로 미배선**(코어는 감사기에 있음, prep/#232).
+  감사기는 적대적 3라운드 검증본(괄호 친 테이블·CTE 스코프 오염 우회 수정, sqlite3 authorizer 오라클).
+- **결과**: 마켓 `npm test` 통과(감사기 128 + 변환 11 신규). 값은 전부 `?` bind — 인젝션 표면 0.
+  게시 메타가 아직 없는 패턴은 예전과 동일(전 파라미터 필수, 스칼라만).
+
 ### PlayMCP 반려 수리 — 툴 annotations 와 설명 속 서비스명 (#210)
 
 - **작업자**: @kang-gyeongmin

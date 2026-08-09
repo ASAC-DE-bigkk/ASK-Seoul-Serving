@@ -132,6 +132,7 @@
 | `_issuance_log` | **여기** | 없음 |
 | `_gateway_request_log` | **여기** (`migrations/0005`) | 읽기 전용 |
 | `_catalog` + 제품 테이블 | 스키마는 여기, 내용은 도메인 export (meta.serving 계약) | 읽기 전용 |
+| `d1_usage_patterns`·`d1_pattern_params`·`d1_catalog_*` | 도메인 export (meta.serving 계약) | 읽기 전용 — `run_pattern` 이 소비. `d1_pattern_params`(#217 P1/P3 메타)는 **없어도 강등**해 돈다 |
 | ~~`_request_log`~~ (4컬럼) | **transit 워커** — 우리 것이 아니다 | 읽지도 쓰지도 않음 |
 
 `_request_log` 는 이름이 겹쳤을 뿐 **남의 표다.** 원격에 먼저 있었고 transit 이 계속 쓰므로

@@ -176,6 +176,100 @@ test("카탈로그 통과 시 trace 에 table·publication_id 가 남는다 (#13
   assert.equal(trace.publicationId, "pub1");
 });
 
+// ── #217 1차: P0-a(거부 목록) · P1(기본값·허용값) · P3(배열) ─────────────────────────
+// 파라미터 메타는 별도 표 d1_pattern_params 다 — paramRow 로 흉내낸다(컬럼은 JSON TEXT).
+
+function extEnv(patternRow, paramRow, dataRows) {
+  const env = fullEnv(patternRow, dataRows);
+  const base = env.DB.prepare;
+  env.DB.prepare = (sql) => sql.includes("d1_pattern_params")
+    ? { bind: () => ({ first: async () => paramRow }) }
+    : base(sql);
+  return env;
+}
+
+test("P1: param_defaults 가 미전달 파라미터를 채운다 — ?major 만으로 실행", async () => {
+  const env = extEnv({ ...PATTERN, sql: "SELECT a FROM t WHERE m = :major AND (:gu = 'ALL' OR g = :gu)" },
+    { param_defaults: '{"gu":"ALL"}', param_enum: null, params: null });
+  const res = await handleRunPattern(env, "p", "pat", { major: "health" }, keyRow, {});
+  assert.equal(res.status, 200);
+  assert.deepEqual(env.seen.binds, ["health", "ALL", "ALL"]);   // :gu 2회 등장 — 두 자리 다 기본값
+});
+
+test("P1: 소비자 값이 기본값을 덮는다", async () => {
+  const env = extEnv({ ...PATTERN, sql: "SELECT a FROM t WHERE g = :gu LIMIT :n" },
+    { param_defaults: '{"gu":"ALL","n":10}', param_enum: null, params: null });
+  await handleRunPattern(env, "p", "pat", { gu: "서초구" }, keyRow, {});
+  assert.deepEqual(env.seen.binds, ["서초구", 10]);
+});
+
+test("P1: param_enum 밖 값은 400 — 조용한 0행이 아니라 허용값 안내", async () => {
+  const env = extEnv({ ...PATTERN, sql: "SELECT a FROM t WHERE d = :dir" },
+    { param_defaults: null, param_enum: '{"dir":["asc","desc"]}', params: null });
+  const res = await handleRunPattern(env, "p", "pat", { dir: "up" }, keyRow, {});
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).detail, /asc, desc/);
+  assert.equal(env.seen.sql, null, "검증 실패인데 실행됨");
+});
+
+test("P3: spec array 선언 + REST JSON 배열 문자열 → ?,?,? 전개", async () => {
+  const env = extEnv({ ...PATTERN, sql: "SELECT a FROM t WHERE g IN (:gus)" },
+    { param_defaults: null, param_enum: null, params: '{"gus":{"type":"array","item":"string","max_len":100}}' });
+  const res = await handleRunPattern(env, "p", "pat", { gus: '["강남구","서초구"]' }, keyRow, {});
+  assert.equal(res.status, 200);
+  assert.match(env.seen.sql, /IN \(\?,\?\)/);
+  assert.deepEqual(env.seen.binds, ["강남구", "서초구"]);
+});
+
+test("P3: 선언 없는 파라미터의 JSON 문자열은 스칼라 그대로 — json_each 관용구 무회귀", async () => {
+  const env = extEnv({ ...PATTERN, sql: "SELECT a FROM t WHERE g IN (SELECT value FROM json_each(:gus))" }, null);
+  const res = await handleRunPattern(env, "p", "pat", { gus: '["강남구","서초구"]' }, keyRow, {});
+  assert.equal(res.status, 200);
+  assert.match(env.seen.sql, /json_each\(\?\)/);
+  assert.deepEqual(env.seen.binds, ['["강남구","서초구"]']);
+});
+
+test("메타 표를 못 읽어도(표 없음 등) 기존 계약 그대로 동작한다 — 전 파라미터 필수", async () => {
+  const env = fullEnv(PATTERN);
+  const base = env.DB.prepare;
+  env.DB.prepare = (sql) => sql.includes("d1_pattern_params")
+    ? { bind: () => ({ first: async () => { throw new Error("no such table"); } }) }
+    : base(sql);
+  const missing = await handleRunPattern(env, "p", "pat", { gu: "x" }, keyRow, {});
+  assert.equal(missing.status, 400);                       // :n 누락 — 기본값 없음
+  const ok = await handleRunPattern(env, "p", "pat", { gu: "x", n: 1 }, keyRow, {});
+  assert.equal(ok.status, 200);
+});
+
+test("P0-a: 게시된 SQL 이 내부 표(_keys)를 읽으면 400 pattern out of scope — 실행 없음", async () => {
+  const env = fullEnv({ ...PATTERN, sql: "SELECT a FROM t, _keys" });
+  const res = await handleRunPattern(env, "p", "pat", {}, keyRow, {});
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).title, "pattern out of scope");
+  assert.equal(env.seen.sql, null, "거부된 패턴이 실행됨");
+});
+
+test("P0-a: WITH 접두 쓰기(WITH x AS(…) DELETE)는 SELECT/WITH 정규식을 지나도 게이트가 잡는다", async () => {
+  const env = fullEnv({ ...PATTERN, sql: "WITH x AS (SELECT 1) DELETE FROM t" });
+  const res = await handleRunPattern(env, "p", "pat", {}, keyRow, {});
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).title, "pattern out of scope");
+  assert.equal(env.seen.sql, null);
+});
+
+test("P0-a: d1_migrations(거부 목록 명시 항목)도 막는다", async () => {
+  const env = fullEnv({ ...PATTERN, sql: "SELECT a FROM t JOIN d1_migrations ON 1=1" });
+  const res = await handleRunPattern(env, "p", "pat", {}, keyRow, {});
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).title, "pattern out of scope");
+});
+
+test("P0-a: 형제 서빙 표 참조는 막지 않는다 — 거부 목록의 의도된 경계(P0-b 소관)", async () => {
+  const env = fullEnv({ ...PATTERN, sql: "SELECT a FROM t JOIN d1_sibling ON 1=1" });
+  const res = await handleRunPattern(env, "p", "pat", {}, keyRow, {});
+  assert.equal(res.status, 200);
+});
+
 test("행수 상한은 문자열로도 못 넘는다 — '999999' → 5000 (#132 리뷰 ②)", async () => {
   const env = fullEnv(PATTERN);
   await handleRunPattern(env, "p", "pat", { gu: "x", n: "999999" }, keyRow, {});
