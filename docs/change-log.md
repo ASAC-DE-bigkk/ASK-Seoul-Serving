@@ -40,6 +40,31 @@
 
 ## 2026-08-09
 
+### llms.txt 가 운영에서만 깨져 있었다 — charset 미지정 (#237)
+
+- **작업자**: @yooseongjin527
+- **의도 · 목표**: `ask-seoul.kr/llms.txt` 가 브라우저에서 한글이 전부 깨진다는 제보.
+  **파일은 멀쩡한 UTF-8 이고 응답 헤더가 문제**였다 — 운영이 `Content-Type: text/plain` 만
+  붙이고 charset 을 안 말한다. 그러면 브라우저가 자기 기본 인코딩(대개 windows-1252)으로
+  읽는데, `_headers` 의 **`X-Content-Type-Options: nosniff` 가 이걸 되돌릴 수 없게** 만든다.
+  보안 헤더와 세트로 터진 형태다. 대상은 둘 — `llms.txt`(한글 123줄)·`robots.txt`(8줄).
+- **조치**: `run_worker_first` 에 두 경로를 넣고 워커가 헤더를 직접 붙인다
+  (`serveTextAsset`). `[assets] binding = "ASSETS"` 를 신설했다 — **#177 에서 `page_path`
+  착수 전제로 짚어 둔 그 항목**이라 한 번에 둘이 풀린다.
+  🔴 **`_headers` 로는 못 고친다 — 덮지 않고 덧붙인다.** 로컬 실측에서
+  `text/plain; charset=utf-8, text/plain; charset=euc-kr` 처럼 값 둘이 콤마로 붙은 망가진
+  헤더가 나왔다. 그 안을 먼저 만들었다가 이 실측으로 버렸다.
+- **결과**: 테스트 7건 신설 · 전체 **281 PASS**. 로컬 실측 — `text/plain; charset=utf-8` ·
+  nosniff·X-Frame-Options 생존 · 본문 12,132B 온전.
+  ⚠️ **이 버그는 로컬에서 재현되지 않는다.** 로컬 workerd 는 `.txt` 에 charset 을 알아서
+  붙이고 운영 엣지는 안 붙인다 — **정적 자산의 content-type 은 로컬이 운영의 증거가
+  되지 않는다.** 그래서 `_headers` 안을 로컬에서 검증했으면 *"고쳤다"* 고 보고할 뻔했다
+  (규칙을 꺼도 로컬 응답은 똑같았다). 워커를 실제로 타는지는 임시 마커 헤더로 확인했다.
+  🔴 **`[env.production.assets]` 에 바인딩을 따로 써야 한다** — env 섹션은 상속되지 않아,
+  빠지면 배포본에서 `env.ASSETS` 가 undefined 라 **고치려던 파일이 500 이 된다.**
+  처음에 실제로 빠뜨렸고 테스트가 두 블록을 각각 단언한다.
+  📌 `page_path` 로깅은 안 붙였다 — 콘솔 `route="page"` 반영이 먼저다(#177).
+
 ### 드리프트 500 이 쿼터를 태우고 있었다 (#235)
 
 - **작업자**: @yooseongjin527
