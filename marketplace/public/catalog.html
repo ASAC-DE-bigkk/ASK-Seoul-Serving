@@ -445,6 +445,24 @@
   .spin { display:inline-block; width:12px; height:12px; margin-right:7px; vertical-align:-2px;
           border:2px solid rgba(128,128,128,.32); border-top-color:currentColor;
           border-radius:50%; animation:spin .7s linear infinite; }
+
+  /* 채팅(#159) — 로그는 대화가 생기기 전엔 자리도 안 차지한다(빈 상자가 먼저 뜨면
+     "여기 뭐가 나오는 건가"를 만든다). 말풍선 없이 발화자 라벨만 — 이 화면의 문서형
+     톤과 맞추고, 색 대비 관리 지점을 안 늘린다. */
+  .chat-log { display:none; border:1px solid var(--line); border-radius:6px; background:var(--panel-2);
+              padding:9px 11px; margin-bottom:8px; max-height:260px; overflow-y:auto; font-size:13px; }
+  .chat-log.on { display:block; }
+  .chat-msg { margin:6px 0; line-height:1.55; }
+  .chat-msg .who { font-size:10.5px; font-weight:700; letter-spacing:.06em; color:var(--faint);
+                   display:block; margin-bottom:2px; }
+  .chat-msg.me .who { color:var(--accent-deep); }
+  .chat-msg.note { color:var(--muted); font-size:12.5px; }
+  /* 후보 칩 — 누르면 위 「질문 실행」에 그 패턴이 실린다. 링크가 아니라 버튼이다(상태 변경) */
+  .chat-cands { display:flex; flex-wrap:wrap; gap:6px; margin-top:5px; }
+  .chat-cands button { font-size:12px; padding:4px 9px; border-radius:99px;
+                       border:1px solid var(--accent-line); background:var(--panel);
+                       color:var(--accent-deep); cursor:pointer; }
+  .chat-cands button:hover { border-color:var(--accent); }
   .empty .spin { border-top-color:var(--accent); }
   @keyframes spin { to { transform:rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .spin { display:none; } }
@@ -570,6 +588,20 @@
               <button class="btn-g btn-sm" id="addFilter" type="button">+ 조건 추가</button>
             </div>
             <button class="btn-p" id="runBtn" style="width:100%">호출</button>
+            <!-- 채팅(#159) — 제품을 고른 뒤에만 연다. 측정이 그렇게 말했다: 57종 중 고르게
+                 하면 0/5, 제품이 정해져 있으면 9/10(decision/0006). 파라미터 칸이 어려운
+                 사람에게 "질문으로 묻는 길"을 하나 더 주는 것이지, 위 실행 UI 의 대체가
+                 아니다 — AI 미연결(현 배포 상태)이어도 후보 추천으로 동작한다. -->
+            <div class="field" id="chatField" style="display:none">
+              <label for="chatQ">아니면, 질문으로 물어보기
+                <span class="lnote">AI 가 검증된 질의 패턴을 골라 실행합니다 — SQL 을 짓지 않습니다</span></label>
+              <div class="chat-log" id="chatLog" aria-live="polite"></div>
+              <div class="row">
+                <input type="text" id="chatQ" maxlength="500"
+                  placeholder="예: 이번 주말 이 근처 무료 행사 있어?" autocomplete="off">
+                <button class="btn-g" id="chatSend">질문</button>
+              </div>
+            </div>
           </div>
           <div>
             <div class="endpoint-wrap">
@@ -1010,11 +1042,88 @@ function patternDefaults(sql) {
 }
 
 function pickProduct(p, pattern) {
+  // 제품이 바뀌면 대화를 비운다 — 채팅은 제품 문맥 위의 대화라, 남겨 두면 이전 제품에
+  // 대한 답이 새 제품의 답처럼 읽힌다. 같은 제품 안에서 패턴만 바꾸는 건 문맥이 같으니 둔다.
+  if (!p || !PICK || PICK.product !== p) { $("chatLog").innerHTML = ""; $("chatLog").className = "chat-log"; }
   PICK = p ? { product: p, pattern: pattern || null } : null;
   resetPaging();
   renderPick();
   updatePreview();
 }
+
+// ── 채팅(#159) — 질문으로 묻는 길. 실행 UI 의 대체가 아니라 별도 입구다 ─────────────
+function chatAppend(cls, who, html) {
+  const log = $("chatLog");
+  log.className = "chat-log on";
+  const div = document.createElement("div");
+  div.className = "chat-msg " + cls;
+  div.innerHTML = "<span class='who'>" + who + "</span>" + html;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+function chatCandidates(cands) {
+  if (!cands || !cands.length) return "";
+  // 후보 칩 — 누르면 위 「질문 실행」에 그 패턴이 실린다. 채팅이 실행까지 못 간 상황
+  // (AI 미연결·몫 소진·데이터 없는 답)에서 **다음 걸음이 화면에 있게** 하는 장치다.
+  return "<div class='chat-cands'>" + cands.map((c) =>
+    "<button type='button' data-chatpat='" + esc(c.pattern_id) + "'>" +
+    esc(c.question_ko || c.pattern_id) + "</button>").join("") + "</div>";
+}
+
+async function sendChat() {
+  const q = $("chatQ").value.trim();
+  if (!q || !PICK) return;
+  const btn = $("chatSend");
+  chatAppend("me", "나", esc(q));
+  $("chatQ").value = "";
+  busy(btn, "질문 중…");
+  // 생각 중 표시 — 응답이 오면 지운다. LLM 왕복은 수 초라 무표시면 죽은 것처럼 보인다(#229)
+  const thinking = chatAppend("note", "응답", "<span class='spin' aria-hidden='true'></span>생각하는 중…");
+  try {
+    const key = $("pKey").value.trim();
+    const res = await fetch("/api/v1/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json",
+                 ...(key ? { authorization: "Bearer " + key } : {}) },
+      body: JSON.stringify({ product_id: PICK.product.product_id, question: q }),
+    });
+    const body = await res.json();
+    thinking.remove();
+    if (!res.ok) {
+      chatAppend("note", "응답", esc(friendly(res.status, body) || body.detail || "요청이 실패했어요."));
+      return;
+    }
+    if (body.answer) {
+      // 실행 없이 지은 답(steps 0 + candidates)은 그렇다고 말한다 — 데이터가 밑에 없는
+      // 문장을 데이터 답처럼 읽게 두지 않는다(서버가 그 구분을 위해 후보를 실어 준다).
+      const note = body.steps && body.steps.length
+        ? "<div class='chat-msg note'>검증된 질의 " + body.steps.length + "회 실행 결과입니다</div>"
+        : "<div class='chat-msg note'>⚠️ 데이터 조회 없이 만든 답변입니다 — 아래 질문을 직접 돌려 확인하세요</div>";
+      chatAppend("bot", "응답", esc(body.answer) + note + chatCandidates(body.candidates));
+      return;
+    }
+    // 답 없이 끝난 경우들 — 서버가 이유와 다음 걸음(message·candidates)을 실어 준다
+    chatAppend("note", "응답", esc(body.message || "지금은 답을 만들지 못했어요.") + chatCandidates(body.candidates));
+  } catch (e) {
+    thinking.remove();
+    chatAppend("note", "응답", "연결에 실패했어요 — 잠시 뒤 다시 시도해 주세요.");
+  } finally {
+    unbusy(btn);
+    refreshQuota();   // 키 사용자는 질문 1건 = 쿼터 1 — 남은 몫이 바로 보여야 한다
+  }
+}
+
+// 후보 칩 → 위 「질문 실행」에 싣는다. 채팅 로그는 위임으로 받는다(칩은 매번 새로 생긴다)
+$("chatLog").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-chatpat]");
+  if (!b || !PICK) return;
+  const u = (PICK.product.usage_patterns || []).find((x) => x.pattern_id === b.dataset.chatpat);
+  if (u) pickProduct(PICK.product, u);
+});
+$("chatSend").addEventListener("click", sendChat);
+$("chatQ").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
 
 function renderPick() {
   const box = $("pickBox"), params = $("paramFields");
@@ -1025,10 +1134,12 @@ function renderPick() {
     $("limitField").style.display = "none";
     $("rangeField").style.display = "none";
     $("filterField").style.display = "none";
+    $("chatField").style.display = "none";   // 채팅도 제품이 먼저다 — 문맥 없는 질문을 안 받는다
     $("runBtn").disabled = true;
     return;
   }
   const { product: p, pattern: u } = PICK;
+  $("chatField").style.display = "";   // 제품이 정해졌으니 질문으로 묻는 길을 연다
   box.className = "pick";
   $("runBtn").disabled = false;
   box.innerHTML = u
