@@ -12,6 +12,8 @@ import {
   parseJsonArray, loadRedistributionRights, redistributionBlockers, rightsBlockedProblem,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
+import { denyGate } from "./pattern-audit.js";
+import { convertPattern, parseRestArrayParams } from "./run-pattern-ext.js";
 import {
   SKILL_BUNDLE_ID,
   SKILL_SERVICE_SCOPE,
@@ -24,6 +26,7 @@ import { TOOLS } from "./mcp.js";
 import {
   runChat, CHAT_MODEL, CHAT_ANON_DAILY_TOTAL, CHAT_ANON_DAILY_PER_IP, CHAT_ANON_PRINCIPAL,
 } from "./chat.js";
+import { searchProducts } from "./agent-tools.js";
 import {
   isConfigured, redirectUri, authorizeUrl, exchangeCode, makeState, verifyState,
   readIdTokenFromTokenEndpoint, stateCookie, readCookie, STATE_COOKIE,
@@ -620,10 +623,20 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
   trace.table = meta.name;
   trace.productId = meta.product_id;
   trace.publicationId = meta.publication_id ?? null;
-  const pattern = await env.DB.prepare(
-    "SELECT sql, question_ko, verified_rows, verified_at, allow_empty, insight_sample_ko " +
-    "FROM d1_usage_patterns WHERE product_id = ? AND pattern_id = ?"
-  ).bind(productId, patternId).first();
+  // 파라미터 메타(P1 기본값·허용값 / P3 타입 선언)는 **별도 표** `d1_pattern_params` 다 —
+  // 공유 핸드오프 표는 컬럼 집합 완전일치 검사(handoff_schema_is_current)라 컬럼을 더하면
+  // 구 실행기가 되돌린다(#706 d1_catalog_display 전례). 표가 아직 없거나(파이프라인 게시 전)
+  // 못 읽으면 **그 조각만 없이** 동작한다 — 기본값 없음 = 전 파라미터 필수(기존 계약 그대로).
+  const [pattern, paramMeta] = await Promise.all([
+    env.DB.prepare(
+      "SELECT sql, question_ko, verified_rows, verified_at, allow_empty, insight_sample_ko " +
+      "FROM d1_usage_patterns WHERE product_id = ? AND pattern_id = ?"
+    ).bind(productId, patternId).first(),
+    env.DB.prepare(
+      "SELECT param_defaults, param_enum, params FROM d1_pattern_params " +
+      "WHERE product_id = ? AND pattern_id = ?"
+    ).bind(productId, patternId).first().catch(() => null),
+  ]);
   if (!pattern) {
     // 문구는 **두 독자를 겸한다** — MCP 로 오는 AI 와 `/api/v1/patterns` 로 오는 사람.
     // 🔴 전에는 *"카탈로그의 usage_patterns 에서 runnable 인 것을 고를 것"* 이었는데
@@ -650,36 +663,28 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
   }
 
   // 저장된 SQL 만, 그리고 읽기만 — 검증기(serving_verify)와 같은 원칙이다.
-  // 주석을 먼저 벗긴다: 패턴 SQL 은 주석에 예시값(-- :n=10)을 적는 관례라, 안 벗기면
-  // 주석 속 :이름까지 자리로 세어 바인딩 개수가 어긋난다.
-  const sqlBody = String(pattern.sql).replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "").trim();
-  if (!/^(select|with)\b/i.test(sqlBody))
-    return problem(400, "pattern not runnable", "SELECT/WITH 패턴만 실행한다");
+  // 변환(주석 제거 → SELECT/WITH 확인 → :이름→? → 값 해석·클램프)은 run-pattern-ext.js 의
+  // convertPattern 하나가 맡는다(#217 P1·P3 — prep/run-pattern-ext.mjs 이식본).
+  const parseMeta = (raw) => { try { const o = JSON.parse(raw); return o && typeof o === "object" ? o : null; } catch { return null; } };
+  const defaults = paramMeta ? parseMeta(paramMeta.param_defaults) : null;
+  const enums = paramMeta ? parseMeta(paramMeta.param_enum) : null;
+  const spec = paramMeta ? parseMeta(paramMeta.params) : null;
+  // REST 쿼리스트링은 문자열뿐이라, 선언이 array 인 파라미터만 JSON 배열 문자열을 실배열로
+  // 해석한다(선언 없는 값은 그대로 스칼라 — json_each 관용구 하위 호환). MCP 는 typed JSON.
+  const supplied = parseRestArrayParams(
+    userParams && typeof userParams === "object" ? userParams : {}, spec);
+  const conv = convertPattern(pattern.sql, supplied,
+    { defaults: defaults || {}, enums: enums || {}, spec: spec || {}, maxLimit: MAX_LIMIT });
+  if (!conv.ok) return problem(conv.problem.status, conv.problem.title, conv.problem.detail);
+  const { converted, values } = conv;
 
-  // :이름 자리를 등장 순서대로 ? 로 바꾸고, 값은 사용자 params 에서만 받는다.
-  const binds = [];
-  const converted = sqlBody.replace(/:([a-z_][a-z0-9_]*)/gi, (_, nm) => { binds.push(nm); return "?"; });
-  const declared = [...new Set(binds)];
-  const supplied = userParams && typeof userParams === "object" ? userParams : {};
-  const extra = Object.keys(supplied).filter((k) => !declared.includes(k));
-  if (extra.length)
-    return problem(400, "unknown parameter", `선언되지 않은 파라미터: ${extra.join(", ")} — 이 패턴의 파라미터는 [${declared.join(", ")}] 뿐이다`);
-  const values = [];
-  for (const nm of binds) {
-    let v = supplied[nm];
-    if (v === undefined || v === null)
-      return problem(400, "missing parameter", `파라미터 :${nm} 값이 필요하다 — 이 패턴의 파라미터: [${declared.join(", ")}]`);
-    if (typeof v !== "string" && typeof v !== "number")
-      return problem(400, "invalid parameter", `:${nm} 은 문자열/숫자만 받는다`);
-    // 행수 파라미터는 서빙 상한을 넘지 못한다 — 상한은 query_product 와 같은 값 하나뿐이다.
-    // 문자열 "999999" 도 SQLite LIMIT 이 받아 D1 이 실제로 읽으므로(#132 사후 리뷰 ②)
-    // 타입과 무관하게 숫자로 강제한 뒤 눌러야 상한이 상한이다.
-    if (/^(n|limit|top_n)$/.test(nm)) {
-      const num = Number(v);
-      if (!Number.isFinite(num)) return problem(400, "invalid parameter", `:${nm} 은 숫자여야 한다`);
-      v = Math.min(num, MAX_LIMIT);
-    }
-    values.push(v);
+  // P0-a(#217 결정): 실행 직전 거부 목록 게이트 — 게이트웨이 자기 표(`_keys`·`_usage`·
+  // `d1_migrations` 등)와 `sqlite_*` 를 읽는 패턴은 게시자의 실수이므로 실행하지 않는다.
+  // 무과금(400) — countUsage 앞이어야 한다. 허용 목록(P0-b)은 게시 계약과 함께 2차.
+  const gate = denyGate(converted);
+  if (!gate.ok) {
+    trace.status = 400;
+    return problem(gate.problem.status, gate.problem.title, gate.problem.detail);
   }
 
   // 쿼터는 유효한 실행 직전만 소모 — 400/404/409 는 무과금 (query_product 와 같은 규약)
@@ -909,6 +914,29 @@ async function handleChat(request, env, trace, ctx) {
   return json(r);
 }
 
+// 질문 하나로 제품을 찾는다 — 랜딩 챗봇의 첫 답이 여기서 나온다(LLM 없음).
+// 🔴 **여기서 `export` 를 붙이지 않는다.** 진입 모듈의 named export 는 workerd 가 전부
+//    Workers 엔트리포인트로 검사해서, 숫자를 내보내면 런타임이 아예 안 뜬다(실측:
+//    "Incorrect type for map entry 'SEARCH_Q_MAX': not of type 'function or ExportedHandler'").
+//    값 자체를 계약으로 고정할 일이 있으면 shared.js 로 옮기거나 동작(400)으로 검증한다.
+const SEARCH_Q_MAX = 200;   // 화면 입력 상한과 같은 값(catalog 채팅은 500 — 여긴 실행이 없어 더 짧다)
+const SEARCH_LIMIT = 3;     // 후보 셋 — 근거를 붙여 사람이 고르게 한다(하나만 주면 틀렸을 때 길이 없다)
+
+async function handleSearch(env, ctx, q, trace) {
+  const query = String(q ?? "").trim();
+  // 빈 질의는 400 이다 — 빈 결과로 답하면 "맞는 게 없다"로 읽힌다(모른다 ≠ 없다).
+  if (!query) return problem(400, "missing query", "질문을 q 파라미터로 보내 달라 — 예: /api/v1/search?q=주차장 자리 있나");
+  if (query.length > SEARCH_Q_MAX)
+    return problem(400, "query too long", `질문은 ${SEARCH_Q_MAX}자 이내 — 찾고 싶은 데이터를 한 문장으로 적어 달라`);
+
+  const res = await handleCatalog(env, ctx);
+  if (res.status >= 400) return res;   // 카탈로그가 안 서면 검색도 성립하지 않는다 — 그 오류를 그대로 전한다
+  const body = await res.json();
+  const r = searchProducts(body, query, SEARCH_LIMIT);
+  trace.rows = r.matched;   // 몇 건을 찾아 줬나 — "0건이 잦은 질문"이 곧 카탈로그의 구멍 신호다
+  return json(r);
+}
+
 // 채팅의 도구 실행이 쓰는 shared 핸들러 묶음 — MCP 의 deps 와 같은 조립(내부 HTTP 재호출 없음).
 const chatDeps = (ctx) => ({
   handleCatalog: (e) => handleCatalog(e, ctx),
@@ -979,6 +1007,21 @@ async function route(request, env, url, trace, ctx) {
   }
   if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/v1/keys)");
   if (path === "/api/v1/catalog") { trace.route = "catalog"; return handleCatalog(env, ctx); }
+
+  // 질문 문장 → 맞는 제품 찾기 (#159 후속 — 랜딩 챗봇의 1단계).
+  //
+  // 🔴 **데이터를 조회하지 않는다.** 카탈로그를 읽어 "어느 제품이 답할 수 있나"만 답하므로
+  //    무인증·무과금이고 LLM 도 안 부른다. 랜딩 방문마다 도는 자리라 그게 전제다 —
+  //    여기서 LLM 을 부르면 구경꾼이 무인증 채팅 몫(100/일)을 다 태운다.
+  // 🔴 검색기는 `mcp.js` 의 `search_products` 와 **같은 함수**다(agent-tools). 사본을 만들면
+  //    사람이 보는 순위와 AI 가 보는 순위가 갈린다.
+  if (path === "/api/v1/search") {
+    trace.route = "search";
+    const ip = request.headers.get("cf-connecting-ip") || "local";
+    const burst = await checkBurst(env, "ip:" + ip);
+    if (burst.exceeded) return burstProblem(burst.retryAfter);
+    return handleSearch(env, ctx, url.searchParams.get("q"), trace);
+  }
 
   const previewMatch = path.match(/^\/api\/v1\/preview\/([^/]+)$/);
   if (previewMatch) {

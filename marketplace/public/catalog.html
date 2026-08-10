@@ -14,7 +14,7 @@
 <meta property="og:image" content="https://ask-seoul.kr/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="ASK:SEOUL — 흩어진 서울 공공데이터를 같은 두 축 위에">
+<meta property="og:image:alt" content="ASK:SEOUL — 흩어진 서울 공공데이터를 질문 하나로">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b6e60'/%3E%3Ccircle cx='16' cy='11.2' r='3.1' fill='%23fff'/%3E%3Ccircle cx='16' cy='20.8' r='3.1' fill='%23fff'/%3E%3C/svg%3E">
 <script>
@@ -829,12 +829,29 @@ async function boot() {
   // 설명·표시명이 없어도 카탈로그는 그대로 뜬다 — 부가 정보라 실패를 삼킨다
   // 검증된 질의 예시(usage) — 라이브 d1_usage_patterns(commerce) + culture Phase 0 검증분.
   // #600 채택 시 이 정적 자산은 게시 테이블 조회(안 B 번들)로 교체된다.
-  const q0 = new URLSearchParams(location.search).get("q");
+  const params = new URLSearchParams(location.search);
+  const q0 = params.get("q");
   if (q0) { $("q").value = q0; query = q0.trim().toLowerCase(); }
+
+  // 랜딩 챗봇에서 넘어온 승계(#159 1단계) — `?product=`(+선택 `?pat=`).
+  // 🔴 **자동 실행하지 않는다.** 제품·패턴만 실어 두고 버튼은 사람이 누른다 — 랜딩에서
+  //    흘러온 트래픽이 쿼터를 저절로 태우면 안 된다. 목록도 그 제품으로 좁혀 두어
+  //    "어디서 온 화면인지"가 보이게 한다(빈 목록에 떨어지면 맥락이 사라진다).
+  const pid = params.get("product");
+  const carried = pid ? PRODUCTS.find((p) => p.product_id === pid) : null;
+  if (carried) {
+    $("q").value = carried.name; query = carried.name.toLowerCase();
+    const patId = params.get("pat");
+    const pat = patId ? (carried.usage_patterns || []).find((u) => u.pattern_id === patId) : null;
+    pickProduct(carried, pat || null);
+  }
+
   renderNav(); renderStart(); renderList(); renderPick();
   updatePreview();
   restoreKey();   // 렌더 뒤라야 미리보기·쿼터가 복원된 키를 반영한다
-  if (location.hash) goHash(location.hash, "auto");   // 렌더가 끝난 뒤라야 위치가 맞는다
+  // 승계로 왔으면 플레이그라운드가 목적지다 — 주소에 hash 가 없어도 그리로 데려간다
+  if (location.hash) goHash(location.hash, "auto");
+  else if (carried) goHash("#playground", "auto");
 }
 
 function renderNav() {

@@ -194,7 +194,7 @@
       "get": {
         "tags": ["data"],
         "summary": "검증된 질의 패턴 실행",
-        "description": "도메인 오너가 게시하고 실제 게시본에 돌려 동작을 확인한 SQL 만 실행한다 — 질의를 이 API 로 '짓는' 방법은 없다. 그래서 /api/v1/data 로는 못 하는 집계·랭킹·시계열이 여기서는 된다.\n\n패턴 목록은 카탈로그 각 제품의 usage_patterns 에 있다. runnable=true 인 것만 실행되고, 아직 검증 전이면 409 pattern not verified.\n\n스키마에 없는 쿼리 파라미터는 패턴 SQL 의 :이름 자리에 그대로 바인딩된다(예: ?gu=강남구&n=10). 선언되지 않은 이름을 보내면 400 unknown parameter 가 사용 가능한 파라미터 목록과 함께 온다.",
+        "description": "도메인 오너가 게시하고 실제 게시본에 돌려 동작을 확인한 SQL 만 실행한다 — 질의를 이 API 로 '짓는' 방법은 없다. 그래서 /api/v1/data 로는 못 하는 집계·랭킹·시계열이 여기서는 된다.\n\n패턴 목록은 카탈로그 각 제품의 usage_patterns 에 있다. runnable=true 인 것만 실행되고, 아직 검증 전이면 409 pattern not verified.\n\n스키마에 없는 쿼리 파라미터는 패턴 SQL 의 :이름 자리에 그대로 바인딩된다(예: ?gu=강남구&n=10). 선언되지 않은 이름을 보내면 400 unknown parameter 가 사용 가능한 파라미터 목록과 함께 온다.\n\n파라미터 계약(#217): 제품 번들(/api/v1/products/{product_id})의 각 패턴에 param_defaults 가 있으면 그 파라미터는 **생략 가능**하고 생략 시 그 기본값으로 실행된다. param_enum 이 있으면 허용값 밖은 400 이다(조용한 0행이 아니라 목록을 알려 준다). params 선언이 array 인 파라미터는 JSON 배열 문자열로 보낸다(예: ?gus=[\"강남구\",\"서초구\"]) — 원소별로 안전하게 바인딩된다. 게시된 SQL 이 게이트웨이 내부 표를 읽으면 실행 전에 400 pattern out of scope 로 거부된다(소비자 잘못이 아니라 게시 오류다).",
         "operationId": "runPattern",
         "parameters": [
           { "$ref": "#/components/parameters/Table" },
@@ -490,7 +490,10 @@
                 "verified_at": { "type": ["string", "null"], "format": "date-time" },
                 "runnable": { "type": "boolean", "description": "verified_at 파생값. false 면 실행 시 409 pattern not verified — 고르기 전에 걸러 쓰라고 미리 준다" },
                 "allow_empty": { "type": "boolean", "description": "0행이 정상인 패턴(이상 감지 스크린 등)" },
-                "insight_sample_ko": { "type": ["string", "null"], "description": "검증 당시의 해석 문장 — 현재값이 아니다" }
+                "insight_sample_ko": { "type": ["string", "null"], "description": "검증 당시의 해석 문장 — 현재값이 아니다" },
+                "param_defaults": { "type": "object", "additionalProperties": { "type": ["string", "number"] }, "description": "선언된 패턴에만 실린다(#217 P1). 여기 있는 파라미터는 호출 시 생략 가능 — 생략하면 이 값으로 실행된다" },
+                "param_enum": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": ["string", "number"] } }, "description": "허용값 집합(#217 P1). 밖의 값은 400 — 센티널 오타가 조용한 0행이 되지 않는다" },
+                "params": { "type": "object", "additionalProperties": { "type": "object", "properties": { "type": { "type": "string", "enum": ["string", "number", "array"] }, "item": { "type": "string", "enum": ["string", "number"] }, "max_len": { "type": "integer" } } }, "description": "파라미터 타입 선언(#217 P3). type=array 인 파라미터는 REST 에선 JSON 배열 문자열, MCP 에선 실배열로 보낸다" }
               }
             }
           },
@@ -524,7 +527,7 @@
     },
     "responses": {
       "BadRequest": {
-        "description": "invalid id · invalid product id · unknown filter · no time axis · invalid cursor · invalid email · unknown parameter(패턴에 선언되지 않은 이름 — detail 에 쓸 수 있는 이름 목록) · missing vocabulary_id",
+        "description": "invalid id · invalid product id · unknown filter · no time axis · invalid cursor · invalid email · unknown parameter(패턴에 선언되지 않은 이름 — detail 에 쓸 수 있는 이름 목록) · missing parameter(기본값 없는 파라미터 생략) · invalid parameter(타입·허용값 위반) · pattern out of scope(게시 SQL 이 내부 표를 참조 — 게시 오류) · missing vocabulary_id",
         "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
       },
       "Unauthorized": {
