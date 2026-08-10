@@ -45,7 +45,13 @@
 - **작업자**: @masondev1024
 - **의도 · 목표**: upstream merge/npm release를 기다리지 않고 발표 환경의 Codex·Claude Code에서 ASK 서울 운영 `/skill/v1` 실호출을 재현한다.
 - **조치**: organization fork의 고정 commit에서 standalone artifact를 export하고 provenance/hash 검증을 추가했다. `/skill-demo`에 설치, memory-only API Key, bundle/product/data readiness, 자연어 질문 handoff를 연결하고 성공 `X-Request-Id` 계약을 문서화했다. 화면은 기존 `site.css`와 문서형 `header.page`/`nav.toc` 구조로 맞추고 light/dark 두 테마, 44px 조작 영역, 전체 너비 설치 명령, 단일 보조 정보 영역으로 정리했다.
-- **결과**: 집중 테스트 20건과 최신 `dev` 병합 후 Marketplace 전체 테스트 401건, 운영 read-only smoke가 통과했다. Windows CRLF와 Linux LF checkout에서도 artifact hash가 같도록 LF 정규화 회귀 테스트를 포함한다. `320/375/768/960/1280px` 실측에서 가로 overflow가 없고 light/dark 데스크톱·모바일 렌더를 확인했다. 실측 publication은 현재 1행 응답과 bundle/product/data request ID를 반환했다. artifact 설치 URL은 원격에서 조회 가능한 Serving commit `909354e4a4ec5e95f5bde3db5aa6f20d5b2ad8b0`으로 고정했다. Codex·Claude Code 각 2회 E2E는 배포 전 최종 검증으로 남긴다.
+- **결과**: 집중 테스트 20건과 최신 `dev` 병합 후 Marketplace 전체 테스트 402건, 운영 read-only smoke가 통과했다. Windows CRLF와 Linux LF checkout에서도 artifact hash가 같도록 LF 정규화 회귀 테스트를 포함한다. `320/375/768/960/1280px` 실측에서 가로 overflow가 없고 light/dark 데스크톱·모바일 렌더를 확인했다. 실측 publication은 현재 1행 응답과 bundle/product/data request ID를 반환했다. artifact 설치 URL은 원격에서 조회 가능한 Serving commit `909354e4a4ec5e95f5bde3db5aa6f20d5b2ad8b0`으로 고정했다. Codex·Claude Code 각 2회 E2E는 배포 전 최종 검증으로 남긴다.
+
+### `skills` CLI가 commit archive를 설치하도록 고정
+
+- **의도 · 목표**: `/tree/<commit>/skills/...` URL은 `skills@1.5.22`가 commit을 branch 이름으로 오해해 설치에 실패했다. 발표용 설치 명령은 실제 CLI가 해석하는 경로여야 한다.
+- **조치**: 설치 URL을 동일 commit의 GitHub archive `.../archive/<commit>.tar.gz`로 바꾸고, archive 형식 및 기존 tree 형식 금지를 회귀 테스트로 고정했다.
+- **결과**: Codex·Claude Code 격리 home에 archive URL 설치 성공, vendored 4개 파일 일치, 설치본에서 운영 API 1회씩 호출 성공(`row_count` 4/3, `registration_ready=true`).
 
 ### `search_products` 가 미검증 초안을 추천할 뻔했다 (#256 리뷰 반영)
 

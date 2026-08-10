@@ -31,10 +31,19 @@ test("copied install commands and natural-language prompt cannot contain a key",
 test("install commands pin one reachable Serving artifact commit", () => {
   const source = HTML + INSTALL_GUIDE;
   assert.doesNotMatch(source, /ARTIFACT_COMMIT_PLACEHOLDER/);
-  const refs = [...source.matchAll(/ASK-Seoul-Serving\/tree\/([0-9a-f]{40})\/skills\/seoul-weather-risk/g)]
+  const refs = [...source.matchAll(/ASK-Seoul-Serving\/archive\/([0-9a-f]{40})\.tar\.gz/g)]
     .map((match) => match[1]);
   assert.equal(refs.length, 4);
   assert.equal(new Set(refs).size, 1);
+});
+
+test("install commands use a skills-cli-compatible commit archive", () => {
+  const source = HTML + INSTALL_GUIDE;
+  const refs = [...source.matchAll(/ASK-Seoul-Serving\/archive\/([0-9a-f]{40})\.tar\.gz/g)]
+    .map((match) => match[1]);
+  assert.equal(refs.length, 4);
+  assert.equal(new Set(refs).size, 1);
+  assert.doesNotMatch(source, /ASK-Seoul-Serving\/tree\/[0-9a-f]{40}\/skills\/seoul-weather-risk/);
 });
 
 test("readiness runs bundle, product, then one-row data and preserves request ids", () => {
