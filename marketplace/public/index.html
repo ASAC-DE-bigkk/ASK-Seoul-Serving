@@ -1198,14 +1198,16 @@ async function bootCatalog() {
   // 박아두면 그날 거짓이 된다.
   const patterns = products.reduce((n, p) => n + ((p.usage_patterns || []).length), 0);
   setStat("statPatterns", nf.format(patterns) + "<span class='u'>개</span>");
-  // 🔴 검증본과 초안을 **갈라 말한다.** 값(전체)만 두고 라벨에 "검증된 질문"이라고 적었더니
-  //    저작 스윕으로 초안이 섞인 날 그 문장이 거짓이 됐다. 둘 다 세어 라벨이 사실을 말한다 —
-  //    초안이 스탬프되면 이 줄이 저절로 따라간다(스탬프 진행이 화면에 보이는 부수 효과).
+  // 🔴 라벨은 **설명 문구**다(숫자 쪼개기가 아니라). 다만 값(전체)에 초안이 섞여 있으므로
+  //    전부를 "검증된"이라고 부르면 거짓이 된다 — 저작 스윕으로 초안이 들어온 날 실제로
+  //    그렇게 됐다. 그래서 초안이 하나라도 있으면 **초안을 품는 문구**를 쓰고, 전부
+  //    스탬프되면 더 강한 문구로 저절로 올라간다(스탬프 진행이 화면에 보이는 부수 효과).
+  //    ⚠️ 초안은 `verified_at` 이 없어 실행하면 409 다 — "검증된"에 포함시키면 안 된다.
   const verified = products.reduce(
     (n, p) => n + (p.usage_patterns || []).filter((u) => u.verified_at).length, 0);
   $("statPatternsK").textContent = patterns === verified
-    ? "전부 실제로 돌려보고 행 수까지 확인함"
-    : "검증 " + nf.format(verified) + " · 저작 초안 " + nf.format(patterns - verified);
+    ? "전부 실제로 돌려보고 행 수까지 확인한 질문"
+    : "검증된 질의 패턴 · 저작 중인 초안 포함";
   const stamps = products.map((p) => p.exported_at).filter(Boolean).sort();
   const newest = stamps[stamps.length - 1];
   setStat("statFresh", (newest && relTime(newest)) || "—");
