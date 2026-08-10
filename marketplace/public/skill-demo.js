@@ -132,11 +132,12 @@ function init() {
   const status = byId("skillStatus");
   const result = byId("skillResult");
   const liveHandoff = byId("liveHandoff");
+  const verificationDetails = byId("verificationDetails");
   let sessionApiKey = "";
 
   keyInput.addEventListener("input", () => {
     sessionApiKey = keyInput.value;
-    status.textContent = sessionApiKey ? "키는 이 탭의 메모리에서만 사용됩니다." : "API Key를 입력해 주세요.";
+    status.textContent = sessionApiKey ? "키는 이 탭의 메모리에서만 사용됩니다." : "API 키를 입력해 주세요.";
   });
 
   resetButton.addEventListener("click", () => {
@@ -144,7 +145,9 @@ function init() {
     keyInput.value = "";
     result.hidden = true;
     liveHandoff.hidden = true;
-    status.textContent = "키와 검증 결과를 초기화했습니다.";
+    verificationDetails.hidden = true;
+    verificationDetails.open = false;
+    status.textContent = "입력한 키와 연결 확인 결과를 지웠습니다.";
     keyInput.focus();
   });
 
@@ -157,17 +160,21 @@ function init() {
     verifyButton.disabled = true;
     result.hidden = true;
     liveHandoff.hidden = true;
-    status.textContent = "bundle → product → data 준비도를 확인하고 있습니다.";
+    verificationDetails.hidden = true;
+    verificationDetails.open = false;
+    status.textContent = "AI에서 사용할 날씨 데이터가 준비되어 있는지 확인하고 있습니다.";
     try {
       const verified = await runSkillDemo({ apiKey: sessionApiKey });
       byId("resultPublication").textContent = verified.publicationId || "없음";
       byId("resultRows").textContent = String(verified.rowCount);
       byId("resultRequest").textContent = verified.requestIds.data || "헤더 없음";
       byId("resultSample").textContent = JSON.stringify(verified.sample, null, 2);
-      status.textContent = "운영 K-Skill API 실호출을 통과했습니다.";
+      status.textContent = "연결 확인이 완료되었습니다. 이제 AI에 질문해 보세요.";
       result.hidden = false;
       liveHandoff.hidden = false;
-      result.focus();
+      verificationDetails.hidden = false;
+      verificationDetails.open = true;
+      liveHandoff.focus();
     } catch (error) {
       status.textContent = formatError(error);
       if (error instanceof SkillDemoError && error.code === "unauthorized") keyInput.focus();
