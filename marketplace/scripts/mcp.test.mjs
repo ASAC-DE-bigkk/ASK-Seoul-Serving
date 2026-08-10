@@ -537,13 +537,13 @@ const SEARCH_CATALOG = {
       product_question: "서울 주요 장소 121곳에는 어떤 성별·나이대가 언제 몰립니까?",
       display: { title: "장소별 성·연령" }, freshness: "2026-08-08",
       usage_patterns: [
-        { pattern_id: "top_places_for_segment", question_ko: "토요일 14시 20대가 가장 많은 지역은?" },
-        { pattern_id: "gender_mix", question_ko: "이 장소 이 요일·시간의 성별 구성은?" },
+        { pattern_id: "top_places_for_segment", question_ko: "토요일 14시 20대가 가장 많은 지역은?", verified_at: "2026-08-01" },
+        { pattern_id: "gender_mix", question_ko: "이 장소 이 요일·시간의 성별 구성은?", verified_at: "2026-08-01" },
       ] },
     { product_id: "commerce_cohort_survival", name: "d1_cohort",
       product_question: "창업 후 몇 년을 버티나(코호트 생존율)?",
       display: { title: "창업 코호트 생존율" },
-      usage_patterns: [{ pattern_id: "category_k_matrix", question_ko: "업종 × 경과연차 생존율 매트릭스는?" }] },
+      usage_patterns: [{ pattern_id: "category_k_matrix", question_ko: "업종 × 경과연차 생존율 매트릭스는?", verified_at: "2026-08-01" }] },
   ],
 };
 const search = async (args) => {
@@ -596,4 +596,94 @@ test("search_products — 응답이 목록보다 훨씬 작다(도구의 존재 
     rpc("tools/call", { name: "list_products", arguments: {} }), {}, {},
     mkDeps({ handleCatalog: async () => jsonRes(SEARCH_CATALOG) }))).json()).result.content[0].text);
   assert.ok(JSON.stringify(out).length < JSON.stringify(listed).length);
+});
+
+// 🔴 흔한 낱말이 점수를 지배하면 검색이 뒤집힌다 (운영 실측 2026-08-10).
+// 첫 판은 겹친 낱말 **수**만 셌더니 "요즘 전시 많이 열리는 동네가 어디야?" 의 1등이
+// `동네가·어디야·많이` 세 개가 걸린 상권 제품이었고, 정작 `전시` 를 가진 문화 제품이 밀렸다.
+test("search_products — 흔한 낱말보다 드문 낱말이 이긴다(idf)", async () => {
+  const generic = { question_ko: "어디야 많이 동네가", verified_at: "2026-08-01" };
+  const deps = mkDeps({
+    handleCatalog: async () => jsonRes({
+      products: [
+        // 흔한 낱말 셋을 가진 제품들 — 개수로는 이쪽이 이겨 버렸다
+        { product_id: "generic_a", usage_patterns: [generic] },
+        { product_id: "generic_b", usage_patterns: [generic] },
+        { product_id: "generic_c", usage_patterns: [generic] },
+        // 결정적인 낱말 하나만 가진 제품
+        { product_id: "culture_activity_by_dong",
+          usage_patterns: [{ pattern_id: "exhibition_dongs", question_ko: "전시 많이 열리는 동네는?", verified_at: "2026-08-01" }] },
+      ],
+    }),
+  });
+  const res = await handleMcp(
+    rpc("tools/call", { name: "search_products", arguments: { query: "전시 많이 열리는 동네가 어디야" } }),
+    {}, {}, deps);
+  const out = JSON.parse((await res.json()).result.content[0].text);
+  assert.equal(out.products[0].product_id, "culture_activity_by_dong",
+    "흔한 낱말 수로 이기면 검색이 뒤집힌다");
+});
+
+// ── ping — 사양의 표준 유틸리티 (2026-08-10) ──────────────────────────────────
+// 없으면 -32601 이 나간다. 기능적 필요는 작지만(stateless HTTP), 적합성 검사에는
+// 그대로 결함으로 잡힌다 — `annotations` 로 이미 겪은 부류다(#228 반려).
+test("ping — 빈 결과로 답한다 · 키를 요구하지 않는다", async () => {
+  let authed = 0;
+  const deps = mkDeps({ authenticate: async () => { authed++; return { keyRow: {} }; } });
+  const body = await (await handleMcp(rpc("ping"), {}, {}, deps)).json();
+  assert.deepEqual(body.result, {}, "사양은 빈 결과를 요구한다");
+  assert.equal(body.error, undefined);
+  assert.equal(authed, 0, "생존 확인에 키를 요구하면 그 자체가 장애로 읽힌다");
+});
+
+test("ping — 데이터·쿼터에 닿지 않는다", async () => {
+  let called = 0;
+  const trace = {};
+  const deps = mkDeps({
+    handleCatalog: async () => { called++; return jsonRes({}); },
+    checkBurst: async () => { called++; return { exceeded: false, retryAfter: 60 }; },
+  });
+  await handleMcp(rpc("ping"), {}, trace, deps);
+  assert.equal(called, 0);
+  assert.equal(trace.status, undefined, "성공한 생존 확인이 오류로 기록되면 안 된다");
+});
+
+// 🔴 검증 안 된 초안을 추천하면 "지어내고 404" 가 "추천받고 409" 로 바뀔 뿐이다.
+// 지금 카탈로그는 640패턴 전부 검증돼 무해하지만, ASAC-DBT#489 가 초안 230건을 내보내는
+// 순간 조용히 회귀하는 구조다(Exisign 리뷰, #256). 채팅은 이미 같은 이유로 거른다.
+test("search_products — 미검증 패턴은 추천하지 않는다", async () => {
+  const deps = mkDeps({
+    handleCatalog: async () => jsonRes({
+      products: [{
+        product_id: "culture_activity_by_dong",
+        usage_patterns: [
+          { pattern_id: "exhibition_dongs", question_ko: "전시 많이 열리는 동네는?", verified_at: "2026-07-31" },
+          { pattern_id: "draft_only", question_ko: "전시 초안 질문", verified_at: null },
+        ],
+      }],
+    }),
+  });
+  const out = JSON.parse((await (await handleMcp(
+    rpc("tools/call", { name: "search_products", arguments: { query: "전시 동네" } }), {}, {}, deps)).json())
+    .result.content[0].text);
+  const p = out.products[0];
+  assert.deepEqual(p.matched_patterns.map((x) => x.pattern_id), ["exhibition_dongs"],
+    "미검증 pattern_id 를 추천하면 AI 가 409 를 맞는다");
+  // 두 수는 뜻이 다르다 — 전체는 "메타가 게시됐나", runnable 은 "지금 고를 수 있나"
+  assert.equal(p.pattern_count, 2);
+  assert.equal(p.runnable_pattern_count, 1);
+});
+
+test("search_products — 제품이 적어도 매칭이 사라지지 않는다(idf 하한)", async () => {
+  // 모든 제품에 있는 낱말을 정확히 0 으로 만들면, 카탈로그가 작을 때 걸린 낱말이 통째로
+  // 사라진다. 흔한 말은 **누르는 것**이지 지우는 것이 아니다.
+  const deps = mkDeps({
+    handleCatalog: async () => jsonRes({
+      products: [{ product_id: "solo", usage_patterns: [{ pattern_id: "p", question_ko: "전시 동네", verified_at: "x" }] }],
+    }),
+  });
+  const out = JSON.parse((await (await handleMcp(
+    rpc("tools/call", { name: "search_products", arguments: { query: "전시 동네" } }), {}, {}, deps)).json())
+    .result.content[0].text);
+  assert.equal(out.matched, 1);
 });

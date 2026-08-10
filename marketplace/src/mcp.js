@@ -407,6 +407,15 @@ export async function handleMcp(request, env, trace, deps) {
   }
   if (method === "notifications/initialized" || method === "notifications/cancelled")
     return new Response(null, { status: 202 });
+  // 생존 확인 — 사양의 표준 유틸리티다. **빈 결과로 즉시** 답한다(그게 규격이다).
+  //
+  // 우리는 stateless HTTP 라 연결 상태라는 게 없어 기능적 필요는 작다. 그런데도 받는 이유는
+  // **없으면 `-32601 method not found` 가 나가기 때문**이다 — 적합성 검사를 도는 쪽에는 그게
+  // 그대로 결함으로 잡힌다. 같은 부류를 이미 겪었다: `annotations` 도 사양에선 선택인데
+  // PlayMCP 심사는 필수로 봤고 그것으로 반려됐다(#228).
+  // 인증을 요구하지 않는다 — 살아 있는지 묻는 데 키를 요구하면 그 자체가 장애로 읽힌다.
+  // 데이터에 닿지 않으므로 쿼터·버스트도 세지 않는다(발견 단계와 같은 취급).
+  if (method === "ping") return rpcResult(id, {});
   if (method === "tools/list") return rpcResult(id, { tools: TOOLS });
 
   if (method === "tools/call") {
