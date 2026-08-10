@@ -11,7 +11,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import worker from "../src/index.js";
+import worker, { LOG_COLUMNS } from "../src/index.js";
 import { CHAT_MODEL } from "../src/chat.js";
 
 const TEST_API_KEY = `ask_${"0".repeat(32)}`;
@@ -62,7 +62,14 @@ function fixtureDb(seen = {}, opts = {}) {
               return { results: [{ gu: "강남구" }] };
             },
             async run() {
-              if (sql.includes("_gateway_request_log")) seen.logBinds = binds;
+              // 🔴 표 이름만 보면 안 된다 — `logRequest` 는 INSERT 말고 **낡은 행 청소
+              //    DELETE 도 같은 표에** 쏜다(`Math.random() < 0.02`). 표 이름으로만
+              //    잡으면 2% 확률로 청소의 바인딩(`[cutoff]` 한 개)이 INSERT 의 21개를
+              //    덮어써, `logBinds[1]` 이 undefined 가 된다 — 같은 커밋인데 CI 가
+              //    갈리는 간헐 실패의 정체였다(@kang-gyeongmin 제보, 2026-08-10).
+              //    바로 아래 두 줄과 patterns-route.test.mjs 는 처음부터 INSERT 로
+              //    좁혀 놨다. 이 줄만 빠져 있었다.
+              if (sql.includes("INSERT INTO _gateway_request_log")) seen.logBinds = binds;
               if (sql.includes("INSERT INTO _usage")) seen.usageCharges = (seen.usageCharges || 0) + 1;
               if (sql.includes("INSERT INTO _burst")) (seen.burstBuckets ??= []).push(String(binds[0]));
               return {};
@@ -212,5 +219,9 @@ test("route 값은 'chat' 으로 남는다 — MCP 값에 섞지 않는다(0006 
   const seen = {};
   await call({ product_id: "p", question: "q" }, {}, seen);
   assert.ok(seen.logBinds, "요청 로그가 안 남았다");
+  // 잡은 게 정말 로그 INSERT 인지 먼저 못 박는다 — 아니면 다음 사람도 `undefined` 하나만
+  // 보고 "로깅이 안 됐다"로 읽는다(실제로 그렇게 읽혔다). 길이가 어긋나면 그렇게 말한다.
+  assert.equal(seen.logBinds.length, LOG_COLUMNS.length,
+    "로그 INSERT 가 아닌 문을 잡았다 — 픽스처가 같은 표의 다른 문까지 삼키고 있다");
   assert.equal(seen.logBinds[1], "chat");   // LOG_COLUMNS 순서: ts, route, …
 });
