@@ -245,7 +245,13 @@ pre .s { color:#f5c197; }   /* 문자열 */
          border:1px solid var(--teal-line); letter-spacing:.04em; }
 .ep .m.post { background:var(--accent-soft); color:var(--accent-deep); border-color:var(--accent-line); }
 .ep .m.del { background:var(--red-soft); color:var(--red-ink); border-color:var(--red-line); }
-.ep .p { font-family:var(--mono); font-size:13.5px; font-weight:600; color:var(--ink); }
+/* 🐛 경로는 공백 없는 한 토큰이다 — `/api/v1/patterns/{product_id}/{pattern_id}` 가
+   320px 뷰포트에서 332px 라 flex 항목의 min-width:auto 가 축소를 막고 **페이지를 36px
+   밀었다**(2026-08-10 실측 · CLAUDE.md §5 가 경고한 바로 그 원인). min-width:0 이 축소를
+   허락하고 overflow-wrap:anywhere 가 토큰 중간 줄바꿈을 허락한다 — 넓은 화면에서는 줄바꿈
+   기회가 필요 없어 아무것도 안 바뀐다. */
+.ep .p { font-family:var(--mono); font-size:13.5px; font-weight:600; color:var(--ink);
+         min-width:0; overflow-wrap:anywhere; }
 .ep .auth { font-size:11.5px; color:var(--faint); margin-left:auto; white-space:nowrap; }
 
 .updated { margin-top:44px; padding-top:16px; border-top:1px solid var(--line);
