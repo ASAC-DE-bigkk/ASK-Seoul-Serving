@@ -597,3 +597,29 @@ test("search_products — 응답이 목록보다 훨씬 작다(도구의 존재 
     mkDeps({ handleCatalog: async () => jsonRes(SEARCH_CATALOG) }))).json()).result.content[0].text);
   assert.ok(JSON.stringify(out).length < JSON.stringify(listed).length);
 });
+
+// 🔴 흔한 낱말이 점수를 지배하면 검색이 뒤집힌다 (운영 실측 2026-08-10).
+// 첫 판은 겹친 낱말 **수**만 셌더니 "요즘 전시 많이 열리는 동네가 어디야?" 의 1등이
+// `동네가·어디야·많이` 세 개가 걸린 상권 제품이었고, 정작 `전시` 를 가진 문화 제품이 밀렸다.
+test("search_products — 흔한 낱말보다 드문 낱말이 이긴다(idf)", async () => {
+  const generic = { question_ko: "어디야 많이 동네가" };
+  const deps = mkDeps({
+    handleCatalog: async () => jsonRes({
+      products: [
+        // 흔한 낱말 셋을 가진 제품들 — 개수로는 이쪽이 이겨 버렸다
+        { product_id: "generic_a", usage_patterns: [generic] },
+        { product_id: "generic_b", usage_patterns: [generic] },
+        { product_id: "generic_c", usage_patterns: [generic] },
+        // 결정적인 낱말 하나만 가진 제품
+        { product_id: "culture_activity_by_dong",
+          usage_patterns: [{ pattern_id: "exhibition_dongs", question_ko: "전시 많이 열리는 동네는?" }] },
+      ],
+    }),
+  });
+  const res = await handleMcp(
+    rpc("tools/call", { name: "search_products", arguments: { query: "전시 많이 열리는 동네가 어디야" } }),
+    {}, {}, deps);
+  const out = JSON.parse((await res.json()).result.content[0].text);
+  assert.equal(out.products[0].product_id, "culture_activity_by_dong",
+    "흔한 낱말 수로 이기면 검색이 뒤집힌다");
+});
