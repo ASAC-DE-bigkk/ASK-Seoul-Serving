@@ -5,24 +5,24 @@
 // product_id 로 통일하고, 물리 테이블명 해석은 shared 해석기(decision/0003)에 맡긴다.
 // stateless — 세션 상태 없음(과거 SSE 재접속 폭주 위험 회피).
 //
-// 툴(6): list_products · describe_product · preview_product · query_product · run_pattern ·
+// 툴(7): search_products · list_products · describe_product · preview_product · query_product · run_pattern ·
 // check_quota. run_pattern 은 #118 실행 계약(2026-08-07 확정)으로 P1 에서 승격.
 
 import { burstProblem, normalizeIntent, normalizeMcpClient, ATTRIBUTION } from "./shared.js";
 // AI 소비자 공용 성형 — 채팅(#159)과 같은 모양을 보게 한다. `TOOLS` 는 여기가 정본이고
 // 저쪽은 인자로 받아 읽기만 한다(순환 없음).
-import { slimProductList, buildDataContext } from "./agent-tools.js";
+import { slimProductList, buildDataContext, searchProducts } from "./agent-tools.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "ask-seoul", version: "0.1.0" };
 
 // 툴 주석(annotations) — MCP 사양의 선택 필드지만 **PlayMCP 심사는 필수로 본다**
 // (2026-08-09 반려 사유 ①: "툴 annotations 가 정의되지 않았습니다").
-// 여섯 툴 모두 성격이 같다: 저장된 데이터를 **읽기만** 하고(readOnly), 아무것도 지우지
+// 모든 툴이 성격이 같다: 저장된 데이터를 **읽기만** 하고(readOnly), 아무것도 지우지
 // 않으며(destructive 아님), 같은 인자로 다시 부르면 같은 결과다(idempotent — 게시본이
 // 바뀌기 전까지). `openWorldHint: false` 는 **닫힌 데이터셋**이라는 뜻이다 — 웹 검색처럼
 // 예측 불가한 외부를 훑지 않고 우리가 게시한 57종 안에서만 답한다.
-// 값을 툴마다 손으로 적지 않는 이유: 여섯이 같은 성격인데 따로 적으면 하나만 어긋난다.
+// 값을 툴마다 손으로 적지 않는 이유: 전부 같은 성격인데 따로 적으면 하나만 어긋난다.
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const annotate = (title) => ({ title, ...READ_ONLY });
 
@@ -31,16 +31,35 @@ const annotate = (title) => ({ title, ...READ_ONLY });
 // *"서비스명(서울시 데이터 패턴)"* 의 괄호 안이 **찾는 문자열 그 자체**였다 — "패턴"을
 // 수식어(= 정규식·패턴)로 읽은 것이 틀렸다. 지금은 `서울시 데이터 패턴` 전체를 넣는다.
 // 이 문자열은 "서울시 데이터"를 부분으로 포함하므로 두 해석을 동시에 만족한다.
-// 🔴 **줄이거나 바꾸지 말 것** — 한 글자만 달라도 여섯 툴이 한꺼번에 반려된다.
+// 🔴 **줄이거나 바꾸지 말 것** — 한 글자만 달라도 전 툴이 한꺼번에 반려된다.
 // 기존 문장의 AI 지시(호출 순서·runnable 조건·data_context 안내)는 그대로 둔다.
 export const SERVICE_NAME = "서울시 데이터 패턴";
 export const TOOLS = [
+  // 🔴 **목록보다 앞에 둔다.** AI 는 위에서부터 읽고 첫 도구를 먼저 부르는 경향이 있는데,
+  // 실측(2026-08-08)에서 `list_products` 142KB 를 다 못 읽고 없는 제품 이름을 9분에 13번
+  // 지어냈다. 질문으로 바로 찾게 하면 그 왕복이 통째로 없어진다.
+  {
+    name: "search_products",
+    title: "질문으로 제품 찾기",
+    annotations: annotate("질문으로 제품 찾기"),
+    description:
+      "사용자 질문 문장을 그대로 넣어 서울시 데이터 패턴 서비스에서 맞는 제품을 찾습니다. 어떤 데이터를 써야 할지 모를 때 목록 전체를 훑는 대신 이 도구를 먼저 부르세요. 제품마다 왜 걸렸는지(matched_terms)와 바로 실행할 수 있는 질의 패턴(matched_patterns)이 함께 옵니다.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "사용자 질문 그대로. 예: 토요일 낮에 20대 많은 장소" },
+        limit: { type: "integer", minimum: 1, maximum: 10, description: "돌려받을 제품 수(기본 5)" },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
   {
     name: "list_products",
     title: "서울시 데이터 제품 목록",
     annotations: annotate("서울시 데이터 제품 목록"),
     description:
-      "서울시 데이터 패턴 서비스에서 조회 가능한 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 어떤 서울시 데이터가 질문에 맞는지 고를 때 가장 먼저 호출하세요. 목록에는 컬럼 이름과 질의 패턴의 질문만 담기므로, 제품을 고른 뒤 describe_product 로 상세를 확인하세요.",
+      "서울시 데이터 패턴 서비스에서 조회 가능한 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 전체를 훑어야 할 때 쓰고, 질문에 맞는 제품을 고르는 것이 목적이면 search_products 가 빠릅니다. 목록에는 컬럼 이름과 질의 패턴의 질문만 담기므로, 제품을 고른 뒤 describe_product 로 상세를 확인하세요.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -241,6 +260,15 @@ async function unknownPatternWithList(env, deps, request, productId, patternId, 
 async function callTool(name, args, ctx) {
   const { env, request, keyRow, trace, deps } = ctx;
   args = args || {};
+  if (name === "search_products") {
+    if (!args.query) return errText("query 가 필요합니다 — 사용자 질문 문장을 그대로 넣으세요.");
+    // 목록과 **같은 카탈로그**를 읽는다(SWR 캐시) — 검색 전용 색인을 따로 만들면 카탈로그가
+    // 바뀔 때 둘이 갈린다. 무과금: 데이터가 아니라 고르기 위한 판단 재료다(list_products 와 같은 규칙).
+    const res = await deps.handleCatalog(env);
+    if (res.status >= 400) return toToolResult(res, trace);
+    const limit = Math.min(Math.max(Number(args.limit) || 5, 1), 10);
+    return okJson(searchProducts(await res.json(), args.query, limit));
+  }
   if (name === "list_products") {
     const res = await deps.handleCatalog(env);
     if (res.status >= 400) return toToolResult(res, trace);

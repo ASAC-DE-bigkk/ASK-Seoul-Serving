@@ -97,3 +97,79 @@ export function buildDataContext(meta) {
     caution: meta.description ?? null, // 제품 주의사항("공식 특보 아님" 등)
   };
 }
+
+/**
+ * 질문 하나로 **57종을 가로질러** 맞는 제품을 고른다 — 목록을 다 읽히지 않기 위한 도구.
+ *
+ * 왜 필요한가(실측 2026-08-08): `list_products` 가 142KB(약 4만 토큰)라 AI 가 다 읽지 못하고
+ * **없는 제품 이름을 9분 안에 13번 지어냈다**(`citydata_ppltn_age`·`_demo`·`_demography` …).
+ * 목록을 더 줄이면 고르는 근거가 사라지므로, 줄이는 대신 **서버가 골라 준다.**
+ *
+ * 무엇으로 맞추나 — 가장 구체적인 신호는 **질의 패턴의 질문 431건**이다. 대표질문 57개는
+ * 제품 하나를 한 줄로 요약하지만, 패턴 질문은 "그 제품으로 답할 수 있는 진짜 질문"이라
+ * 사용자 문장과 직접 겹친다. 그래서 패턴에서 맞으면 가중치를 준다.
+ *
+ * 🔴 **LLM 을 쓰지 않는다.** 낱말 겹침이면 충분하고(chat.js `matchPatterns` 와 같은 계열),
+ * 무엇보다 이 도구는 **고르기 전 단계**라 과금·지연이 붙으면 존재 이유가 없다.
+ * 정확도의 한계는 응답이 스스로 말한다(`matched_terms`) — 왜 걸렸는지 보이면 AI 가 틀린
+ * 후보를 스스로 버린다.
+ */
+const HAY_WEIGHT = { pattern: 3, question: 2, text: 1 };
+
+// 한국어는 조사가 붙어 낱말이 어긋난다("장소가" vs "장소"). 형태소 분석기를 넣을 자리는
+// 아니므로 **꼬리 한 글자를 떼어 본다** — 조사 대부분이 1음절이라 이것만으로 크게 는다.
+const forms = (tok) => (tok.length >= 3 ? [tok, tok.slice(0, -1)] : [tok]);
+
+export function searchProducts(body, query, limit = 5) {
+  const products = Array.isArray(body?.products) ? body.products : [];
+  const tokens = String(query || "").toLowerCase()
+    .split(/[^0-9a-z가-힣]+/).filter((w) => w.length >= 2);
+
+  const scored = products.map((p) => {
+    const patterns = Array.isArray(p.usage_patterns) ? p.usage_patterns : [];
+    const question = String(p.product_question || "").toLowerCase();
+    const text = [p.display?.title, p.display?.summary, p.description,
+      String(p.product_id || "").replace(/_/g, " ")].join(" ").toLowerCase();
+
+    const hits = new Set();
+    let score = 0;
+    const matchedPatterns = [];
+    for (const pat of patterns) {
+      const q = String(pat.question_ko || "").toLowerCase();
+      const on = tokens.filter((t) => forms(t).some((f) => q.includes(f)));
+      if (on.length) {
+        matchedPatterns.push({ pattern_id: pat.pattern_id, question_ko: pat.question_ko, hit: on.length });
+        on.forEach((t) => hits.add(t));
+        score += on.length * HAY_WEIGHT.pattern;
+      }
+    }
+    for (const t of tokens) {
+      const f = forms(t);
+      if (f.some((x) => question.includes(x))) { score += HAY_WEIGHT.question; hits.add(t); }
+      if (f.some((x) => text.includes(x))) { score += HAY_WEIGHT.text; hits.add(t); }
+    }
+    matchedPatterns.sort((a, b) => b.hit - a.hit);
+    return { p, score, hits, matchedPatterns };
+  }).filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || String(a.p.product_id).localeCompare(String(b.p.product_id)))
+    .slice(0, limit);
+
+  return {
+    query: String(query || ""),
+    total_products: products.length,
+    matched: scored.length,
+    products: scored.map(({ p, hits, matchedPatterns }) => ({
+      product_id: p.product_id,
+      title: p.display?.title ?? p.name ?? p.product_id,
+      product_question: p.product_question ?? null,
+      freshness: p.freshness ?? null,
+      pattern_count: Array.isArray(p.usage_patterns) ? p.usage_patterns.length : 0,
+      // 왜 걸렸는지 보여 준다 — 근거가 없으면 AI 가 틀린 후보를 못 버린다
+      matched_terms: [...hits],
+      matched_patterns: matchedPatterns.slice(0, 3).map(({ pattern_id, question_ko }) => ({ pattern_id, question_ko })),
+    })),
+    hint: scored.length
+      ? "고른 제품은 describe_product 로 컬럼·파라미터를 확인하고, matched_patterns 의 pattern_id 는 run_pattern 으로 바로 실행할 수 있습니다."
+      : "맞는 제품을 못 찾았습니다 — 낱말을 바꿔 다시 부르거나 list_products 로 전체를 확인하세요. 제품 이름을 지어내지 마세요.",
+  };
+}
