@@ -123,9 +123,18 @@ const forms = (tok) => (tok.length >= 3 ? [tok, tok.slice(0, -1)] : [tok]);
 const tokenize = (s) => String(s || "").toLowerCase()
   .split(/[^0-9a-z가-힣]+/).filter((w) => w.length >= 2);
 
+// 🔴 **고를 수 있는 패턴만 신호로 쓴다.** 검증 스탬프가 없는 초안까지 매칭에 넣으면,
+// AI 가 추천받은 `pattern_id` 로 `run_pattern` 을 불렀다가 **409 pattern not verified** 를
+// 맞는다 — 이 도구가 없애려던 "지어내고 404" 왕복이 "추천받고 409" 왕복으로 바뀔 뿐이다.
+// 채팅의 후보 추천이 같은 이유로 이미 거른다(`chat.js` `productGivenMessages`).
+// 지금 카탈로그는 640패턴 전부 검증돼 있어 무해하지만, ASAC-DBT#489 가 초안 230건을
+// 내보내는 순간 **조용히 회귀**하는 구조다(Exisign 리뷰, #256). 그때 고치면 늦다.
+const runnablePatterns = (p) =>
+  (Array.isArray(p.usage_patterns) ? p.usage_patterns : []).filter((u) => u.verified_at || u.runnable);
+
 // 제품 하나가 가진 말뭉치 — 어디서 걸렸는지에 따라 무게가 다르다.
 function haystacks(p) {
-  const patterns = Array.isArray(p.usage_patterns) ? p.usage_patterns : [];
+  const patterns = runnablePatterns(p);
   return {
     patterns,
     question: String(p.product_question || "").toLowerCase(),
@@ -155,8 +164,11 @@ function idfOf(tokens, products) {
     const df = hays.filter((h) =>
       hitsIn(tok, h.question) || hitsIn(tok, h.text) ||
       h.patterns.some((pat) => hitsIn(tok, String(pat.question_ko || "").toLowerCase()))).length;
-    // df=N(전부에 있음) → 0 에 수렴 · df=1(한 제품에만) → 최대. +1 로 0 나눗셈을 막는다.
-    idf.set(tok, Math.log((N + 1) / (df + 1)));
+    // df=N(전부에 있음) → 작아지고 · df=1(한 제품에만) → 커진다.
+    // 🔴 `log((N+1)/(df+1))` 이 아니라 `log(1 + N/df)` 를 쓴다 — 전자는 **모든 제품에 있는
+    //    낱말을 정확히 0 으로** 만들어, 제품이 적을 때(테스트·소규모 카탈로그) 걸린 낱말이
+    //    통째로 사라진다. 흔한 말을 **누르는 것**이 목적이지 지우는 것이 아니다.
+    idf.set(tok, Math.log(1 + N / Math.max(df, 1)));
   }
   return idf;
 }
@@ -206,7 +218,10 @@ export function searchProducts(body, query, limit = 5) {
       title: p.display?.title ?? p.name ?? p.product_id,
       product_question: p.product_question ?? null,
       freshness: p.freshness ?? null,
+      // 두 수를 따로 싣는다 — 전체는 "메타가 게시됐나", runnable 은 "지금 고를 수 있나"라
+      // 뜻이 다르다. 하나로 합치면 초안만 있는 제품이 "메타 없음"으로 오독된다.
       pattern_count: Array.isArray(p.usage_patterns) ? p.usage_patterns.length : 0,
+      runnable_pattern_count: runnablePatterns(p).length,
       // 왜 걸렸는지 보여 준다 — 근거가 없으면 AI 가 틀린 후보를 못 버린다
       matched_terms: [...hits],
       matched_patterns: matchedPatterns.slice(0, 3).map(({ pattern_id, question_ko }) => ({ pattern_id, question_ko })),
