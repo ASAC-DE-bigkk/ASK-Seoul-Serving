@@ -16,6 +16,7 @@
         "responses": {
           "200": {
             "description": "제품별 registration_ready와 blockers",
+            "headers": { "X-Request-Id": { "description": "요청 추적 식별자", "schema": { "type": "string" } } },
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Bundle" } } }
           },
           "401": { "$ref": "#/components/responses/Unauthorized" },
@@ -32,6 +33,7 @@
         "responses": {
           "200": {
             "description": "제품 메타데이터. 이전 발행본 보조 메타는 metadata.meta_of=previous_publication으로 표시한다.",
+            "headers": { "X-Request-Id": { "description": "요청 추적 식별자", "schema": { "type": "string" } } },
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Product" } } }
           },
           "401": { "$ref": "#/components/responses/Unauthorized" },
@@ -54,7 +56,7 @@
           { "$ref": "#/components/parameters/Cursor" }
         ],
         "responses": {
-          "200": { "description": "공개 projection 행과 다음 페이지 cursor", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DataPage" } } } },
+          "200": { "description": "공개 projection 행과 다음 페이지 cursor", "headers": { "X-Request-Id": { "description": "요청 추적 식별자", "schema": { "type": "string" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DataPage" } } } },
           "400": { "$ref": "#/components/responses/InvalidRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },

@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K-Skill 데모 · ASK: SEOUL</title>
+<meta name="description" content="seoul-weather-risk를 Codex·Claude Code에 설치하고 ASK 서울 운영 API를 실호출하는 데모입니다.">
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem("theme"); } catch (e) { /* private mode */ }
+    if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
+<link rel="stylesheet" href="/site.css">
+<style>
+  .demo-grid { display:grid; grid-template-columns:1fr; gap:20px; align-items:start; padding-bottom:58px; }
+  .demo-main { min-width:0; display:grid; gap:14px; }
+  .demo-card { border:1px solid var(--line); border-radius:9px; background:var(--panel); padding:17px; box-shadow:var(--shadow-xs); }
+  .demo-card h2 { font-size:18px; margin-bottom:8px; }
+  .step-label { display:inline-flex; align-items:center; gap:7px; color:var(--accent-deep); font:700 11px/1 var(--mono); letter-spacing:.08em; }
+  .step-label b { display:grid; place-items:center; width:23px; height:23px; border-radius:50%; background:var(--accent-soft); }
+  .install-list { display:grid; gap:10px; margin-top:15px; }
+  .install-row { min-width:0; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:end; border-top:1px solid var(--line); padding-top:14px; }
+  .install-row:first-child { border-top:0; padding-top:0; }
+  .install-command { min-width:0; }
+  .install-command h3 { margin:0 0 7px; font-size:14px; }
+  .install-command pre { min-width:0; margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .code-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:start; margin-top:10px; }
+  .code-row pre { min-width:0; margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .copy-btn, .action-btn { min-height:44px; border:1px solid var(--line); border-radius:7px; background:var(--panel); color:var(--ink); padding:9px 12px; font-weight:650; cursor:pointer; }
+  .action-btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .action-btn:disabled { opacity:.55; cursor:wait; }
+  .field { display:grid; gap:7px; margin-top:14px; }
+  .field label { font-weight:700; }
+  .field input { width:100%; min-width:0; border:1px solid var(--line-strong); border-radius:8px; background:var(--bg); color:var(--ink); padding:12px; font:14px var(--mono); }
+  .field input:focus, button:focus-visible, a:focus-visible { outline:3px solid var(--accent-soft); outline-offset:2px; }
+  .help, .muted { color:var(--muted); font-size:13px; line-height:1.55; }
+  .readiness-checks { list-style:none; margin:15px 0 0; padding:0; border-top:1px solid var(--line); }
+  .readiness-checks li { display:grid; grid-template-columns:88px minmax(0,1fr); gap:12px; margin:0; padding:10px 0; border-bottom:1px solid var(--line); color:var(--muted); font-size:13px; }
+  .readiness-checks code { color:var(--ink); font-weight:650; }
+  .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .status { margin-top:13px; min-height:44px; padding:12px 14px; border-radius:8px; background:var(--wash); font-size:13px; line-height:1.55; }
+  .result { margin-top:14px; border-top:1px solid var(--line); padding-top:14px; }
+  .result dl { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:7px 12px; font-size:13px; }
+  .result dt { color:var(--muted); }
+  .result dd { min-width:0; overflow-wrap:anywhere; font-family:var(--mono); }
+  .result pre { max-height:230px; overflow:auto; white-space:pre-wrap; }
+  .support-panel { border:1px solid var(--line); border-radius:9px; background:var(--panel); padding:17px; box-shadow:var(--shadow-xs); }
+  .support-panel > h2 { margin:0; font-size:16px; }
+  .support-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:13px; border-top:1px solid var(--line); }
+  .support-item { min-width:0; padding:14px 16px 0; border-left:1px solid var(--line); }
+  .support-item:first-child { padding-left:0; border-left:0; }
+  .support-item:last-child { padding-right:0; }
+  .support-item h3 { margin:0 0 5px; font-size:13px; }
+  .support-item.warning h3 { color:var(--amber-ink); }
+  .support-item p { margin:0; font-size:12.5px; }
+  .handoff { border-color:var(--accent-line); background:var(--accent-soft); }
+  [hidden] { display:none !important; }
+  @media (max-width:760px) {
+    .demo-card { padding:15px; }
+    .support-grid { grid-template-columns:1fr; }
+    .support-item, .support-item:first-child, .support-item:last-child { padding:12px 0; border-left:0; border-top:1px solid var(--line); }
+    .support-item:first-child { border-top:0; }
+  }
+  @media (max-width:640px) {
+    .install-row, .code-row { grid-template-columns:1fr; }
+    .copy-btn { width:100%; }
+    .actions { display:grid; grid-template-columns:1fr; }
+    .actions .action-btn { width:100%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior:auto !important; transition:none !important; animation:none !important; }
+  }
+</style>
+</head>
+<body>
+<nav class="nav"><!-- partials/nav.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
+  <div class="nav-in">
+    <!-- 워드마크 — 이니셜 박스("AS")를 버렸다. 콜론이 심볼이다: "질문 : 답".
+         em 은 시맨틱이 아니라 **콜론만 accent 로 칠하는 손잡이**다(스타일은 .brand .wm em). -->
+    <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="wm">ASK<em>:</em>SEOUL</span></a>
+    <!-- 카탈로그 안의 섹션(플레이그라운드·API 키)은 헤더에 걸지 않는다 — 같은 문서로 가는
+         링크가 여럿이 되기 때문. 섹션 이동은 카탈로그 사이드바 몫이고, 여기엔 별도 문서만 건다. -->
+    <div class="nav-links">
+      <a href="/catalog">카탈로그</a>
+      <a href="/docs">API 문서</a>
+      <a href="/guide">가이드</a>
+      <a href="/status">상태</a>
+    </div>
+    <span class="spacer"></span>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
+      <svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+      <svg class="moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+    </button>
+    <a class="nav-cta" href="/catalog#auth">API Key 발급</a>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap wide">
+    <h1>서울 기상 위험을 내 AI에 연결하기</h1>
+    <p class="lede">upstream 등록을 기다리지 않고 <code>seoul-weather-risk</code>를 Codex·Claude Code에 설치한 뒤, ASK 서울의 실제 publication을 읽어 자연어 질문에 답합니다.</p>
+    <nav class="toc" aria-label="데모 진행 단계">
+      <a href="#install">1. 설치</a>
+      <a href="#connect">2. 연결</a>
+      <a href="#verify">3. 검증</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap wide">
+
+  <div class="demo-grid">
+    <div class="demo-main">
+      <section class="demo-card" id="install" aria-labelledby="installTitle">
+        <div class="step-label"><b>1</b> Install</div>
+        <h2 id="installTitle">AI 환경에 standalone skill 설치</h2>
+        <p class="muted">설치 URL은 Serving이 검증한 artifact commit에 고정됩니다. 공개 npm K-Skill을 다시 호출하지 않습니다.</p>
+        <div class="install-list">
+          <article class="install-row">
+            <div class="install-command">
+              <h3>Codex</h3>
+              <pre id="codexInstall"><code>npx skills add https://github.com/ASAC-DE-bigkk/ASK-Seoul-Serving/tree/909354e4a4ec5e95f5bde3db5aa6f20d5b2ad8b0/skills/seoul-weather-risk --global --agent codex --copy --yes</code></pre>
+            </div>
+            <button class="copy-btn" type="button" data-copy-source="codexInstall" aria-label="Codex 설치 명령 복사">복사</button>
+          </article>
+          <article class="install-row">
+            <div class="install-command">
+              <h3>Claude Code</h3>
+              <pre id="claudeInstall"><code>npx skills add https://github.com/ASAC-DE-bigkk/ASK-Seoul-Serving/tree/909354e4a4ec5e95f5bde3db5aa6f20d5b2ad8b0/skills/seoul-weather-risk --global --agent claude-code --copy --yes</code></pre>
+            </div>
+            <button class="copy-btn" type="button" data-copy-source="claudeInstall" aria-label="Claude Code 설치 명령 복사">복사</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="demo-card" id="connect" aria-labelledby="keyTitle">
+        <div class="step-label"><b>2</b> Authenticate</div>
+        <h2 id="keyTitle">Marketplace API Key 연결</h2>
+        <p class="muted">아직 키가 없다면 <a href="/catalog#auth" target="_blank" rel="noopener">새 탭에서 발급</a>하세요. 입력값은 이 탭의 JavaScript 메모리에서만 사용하며 저장하거나 복사 명령에 넣지 않습니다.</p>
+        <div class="field">
+          <label for="skillApiKey">Marketplace API Key</label>
+          <input id="skillApiKey" type="password" inputmode="text" autocomplete="off" spellcheck="false" aria-describedby="skillKeyHelp">
+          <div class="help" id="skillKeyHelp">요청 미리보기: <code>Authorization: Bearer ••••••••</code></div>
+        </div>
+        <div class="note">
+          <b>AI 실행 환경은 별도로 연결합니다.</b> 페이지에 입력한 키는 Codex·Claude로 전달되지 않습니다. 아래 값은 AI를 실행할 프로젝트의 <code>.env</code>에 직접 저장하세요.
+        </div>
+        <div class="code-row">
+          <pre id="envTemplate"><code>KSKILL_LOCAL_DIRECT=1
+ASK_SEOUL_SKILL_API_BASE_URL=https://ask-seoul.kr
+MARKETPLACE_API_KEY=&lt;PASTE_LOCALLY&gt;</code></pre>
+          <button class="copy-btn" type="button" data-copy-source="envTemplate" aria-label="로컬 환경 변수 예시 복사">복사</button>
+        </div>
+      </section>
+
+      <section class="demo-card" id="verify" aria-labelledby="verifyTitle">
+        <div class="step-label"><b>3</b> Verify</div>
+        <h2 id="verifyTitle">운영 publication readiness 검증</h2>
+        <p class="muted">아래 세 요청이 모두 통과할 때만 publication 증거와 자연어 질문 예시를 표시합니다.</p>
+        <ol class="readiness-checks" aria-label="검증 항목">
+          <li><code>bundle</code><span><code>registration_ready=true</code></span></li>
+          <li><code>product</code><span><code>registration_ready=true</code></span></li>
+          <li><code>data</code><span><code>row_count &gt; 0</code> 및 샘플 한 행</span></li>
+        </ol>
+        <div class="actions">
+          <button class="action-btn primary" id="verifySkill" type="button">운영 readiness 실검증</button>
+          <button class="action-btn" id="resetSkillKey" type="button">키·결과 지우기</button>
+        </div>
+        <output class="status" id="skillStatus" aria-live="polite">API Key를 입력해 주세요.</output>
+        <div class="result" id="skillResult" tabindex="-1" hidden>
+          <dl>
+            <dt>publication_id</dt><dd id="resultPublication"></dd>
+            <dt>row_count</dt><dd id="resultRows"></dd>
+            <dt>request_id</dt><dd id="resultRequest"></dd>
+          </dl>
+          <pre id="resultSample"></pre>
+        </div>
+      </section>
+
+      <section class="demo-card handoff" id="liveHandoff" aria-labelledby="askTitle" hidden>
+        <div class="step-label">Ready to ask</div>
+        <h2 id="askTitle">설치한 AI에서 자연어로 질문</h2>
+        <p>아래 질문에는 API Key나 내부 <code>place_id</code>가 없습니다. skill이 행정동을 결정적으로 매핑해 실제 데이터를 읽습니다.</p>
+        <div class="code-row">
+          <pre id="samplePrompt"><code>성수2가3동의 이번 주 기상 위험 시간대를 알려줘.</code></pre>
+          <button class="copy-btn" type="button" data-copy-source="samplePrompt" aria-label="자연어 질문 예시 복사">복사</button>
+        </div>
+      </section>
+    </div>
+
+    <aside class="support-panel" aria-labelledby="supportTitle">
+      <h2 id="supportTitle">시연 전에 확인하세요</h2>
+      <div class="support-grid">
+        <article class="support-item">
+          <h3>키 처리</h3>
+          <p>브라우저 입력값은 현재 탭의 메모리에서만 사용하고 저장하지 않습니다.</p>
+        </article>
+        <article class="support-item warning">
+          <h3>답변 범위</h3>
+          <p><code>weather_place_risk_window</code> 예보 기반 위험 후보이며 기상청 공식 특보가 아닙니다.</p>
+        </article>
+        <article class="support-item">
+          <h3>통과 증거</h3>
+          <p>publication ID, 양수 row count와 세 요청의 request ID를 함께 확인합니다.</p>
+        </article>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<footer><!-- partials/footer.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
+  <!-- 계약 버전·배치 시각·내부 이슈 번호는 우리 사정이다. 이용자에게 남는 정보만 둔다. -->
+  <div class="foot-in">
+    <div class="fcol">
+      <b>ASK: SEOUL</b>
+      <!-- ⚠️ "행정동 코드 하나로"라고 쓰지 않는다(2026-08-07 정정). 실측: 공개 55종 중
+           행정동 축은 23종(42%)뿐이고 자치구 축이 32종(58%)으로 더 많으며, 21종(38%)은
+           조인 축이 아예 없다. 축이 셋인데 하나처럼 말하면 카탈로그를 여는 순간 어긋난다.
+           시간 축도 빼지 않는다 — 히어로가 "시간과 공간 두 축"이라고 말한다. -->
+      <span>서울 공공데이터를 시간·공간 같은 축 위에 올린 API 허브</span>
+    </div>
+    <div class="fcol">
+      <b>서비스</b>
+      <a href="/catalog">데이터 카탈로그</a>
+      <a href="/docs">API 문서</a>
+      <a href="/status">서비스 상태</a>
+    </div>
+    <div class="fcol">
+      <b>이용</b>
+      <a href="/guide">가이드</a>
+      <a href="/skill-demo">K-Skill 데모</a>
+      <a href="/guide#faq">자주 묻는 질문</a>
+      <a href="/support">문의하기</a>
+    </div>
+    <div class="fcol">
+      <b>정책</b>
+      <a href="/attribution">데이터 출처</a>
+      <a href="/terms">이용약관</a>
+      <a href="/privacy">개인정보 처리방침</a>
+    </div>
+  </div>
+  <div class="foot-btm">
+    <span>© 2026 ASK: SEOUL</span>
+  </div>
+</footer>
+<script src="/theme.js" defer></script>
+<script type="module" src="/skill-demo.js?v=20260810"></script>
+</body>
+</html>
