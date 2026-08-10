@@ -9,8 +9,9 @@
 // check_quota. run_pattern 은 #118 실행 계약(2026-08-07 확정)으로 P1 에서 승격.
 
 import { burstProblem, normalizeIntent, normalizeMcpClient, ATTRIBUTION } from "./shared.js";
-// 교차 제품 검색기 — AI 소비자 공용 층(#159 ②). `TOOLS` 는 여기가 정본이고 저쪽은 읽기만 한다.
-import { searchProducts } from "./agent-tools.js";
+// AI 소비자 공용 성형 — 채팅(#159)과 같은 모양을 보게 한다. `TOOLS` 는 여기가 정본이고
+// 저쪽은 인자로 받아 읽기만 한다(순환 없음).
+import { slimProductList, buildDataContext, searchProducts } from "./agent-tools.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "ask-seoul", version: "0.1.0" };
@@ -296,22 +297,9 @@ async function callTool(name, args, ctx) {
     // pattern_id 로 돌린다) · `insight_sample_ko`(실행 응답에 온다) · `requires`·`axes`
     // (describe_product 와 400 안내가 말해 준다) · `verified_*`.
     // 컬럼도 같다 — 이름은 "이 축으로 필터되나"를 목록에서 판단하게 하고, 설명은 상세의 몫이다.
-    const slimPattern = (u) => ({ pattern_id: u.pattern_id, question_ko: u.question_ko });
-    const slimColumn = (c) => c.name ?? c.column_name ?? null;
-    if (Array.isArray(body.products)) {
-      body.products = body.products.map(({ usage_patterns, columns, ...rest }) => ({
-        ...rest,
-        // 개수를 함께 두는 이유: 0 이면 "아직 메타가 게시되지 않은 제품"이라는 신호라
-        // 고르는 판단에 쓰인다. 목록이 비었다는 것과 필드가 없다는 것은 다른 뜻이다.
-        column_count: Array.isArray(columns) ? columns.length : 0,
-        column_names: Array.isArray(columns) ? columns.map(slimColumn).filter(Boolean) : [],
-        pattern_count: Array.isArray(usage_patterns) ? usage_patterns.length : 0,
-        usage_patterns: Array.isArray(usage_patterns) ? usage_patterns.map(slimPattern) : [],
-      }));
-      body.detail_hint =
-        "목록에는 질의 패턴의 질문·id 와 컬럼 이름만 싣습니다. 컬럼 설명·필요 파라미터·실행 가능 여부(runnable)는 describe_product(product_id) 로 확인하세요.";
-    }
-    return okJson(body);
+    // 성형은 **AI 소비자 공용 층**이 한다(agent-tools.js) — 채팅도 같은 모양을 봐야 하고,
+    // 두 벌이 되면 한쪽만 고쳐진다(#159 ②, MCP 담당 조건).
+    return okJson(slimProductList(body));
   }
   if (name === "check_quota") {
     // /api/v1/me 는 본인에게 주는 응답이라 이메일을 담지만, MCP 결과는 LLM 컨텍스트·제3자
@@ -358,17 +346,8 @@ async function callTool(name, args, ctx) {
     // D1 왕복을 안 늘린다). product_meta 는 운반용이라 밖으로는 data_context 로만 나간다.
     const meta = body.product_meta;
     delete body.product_meta;
-    if (meta) {
-      body.data_context = {
-        freshness: meta.freshness ?? null,          // 이 게시본의 원천 기준 시각 — "지금"이 아니다
-        serving_status: meta.serving_status ?? null,
-        ...(meta.serving_status && meta.serving_status !== "published"
-          ? { warning: `serving_status='${meta.serving_status}' — 원천 수집 지연 등으로 최신성이 보장되지 않는다` }
-          : {}),
-        attribution: ATTRIBUTION,  // 정본 한 벌(shared) — "답변에 반영" 지시는 툴 description 몫
-        caution: meta.description ?? null,          // 제품 주의사항("공식 특보 아님" 등)이 여기 있다
-      };
-    }
+    const ctx = buildDataContext(meta);
+    if (ctx) body.data_context = ctx;
     return okJson(body);
   }
   if (name === "run_pattern") {

@@ -11,8 +11,16 @@
 <meta property="og:site_name" content="ASK: SEOUL">
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
 <meta property="og:description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 쌓아 시계열·공간계열 데이터로 제공합니다.">
-<meta name="twitter:card" content="summary">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f6f68'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3EAS%3C/text%3E%3C/svg%3E">
+<!-- OG 이미지 — 스크레이퍼는 상대 경로를 못 푸므로 **절대 URL 이어야** 한다. 원본은
+     public/og.png(1200×630, 62KB). 고치려면 그리는 코드가 정본이다: 히어로의 시각 언어
+     (워드마크 콜론 accent · 헤드라인 두 줄 위계 · 도메인 6색 점 · 426격자 모티프)를
+     캔버스로 그린 것 — docs/og-image.md 에 재생성 절차가 있다. -->
+<meta property="og:image" content="https://ask-seoul.kr/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="ASK:SEOUL — 흩어진 서울 공공데이터를 같은 두 축 위에">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b6e60'/%3E%3Ccircle cx='16' cy='11.2' r='3.1' fill='%23fff'/%3E%3Ccircle cx='16' cy='20.8' r='3.1' fill='%23fff'/%3E%3C/svg%3E">
 <script>
   /* 테마 확정 — 첫 페인트 전에 끝나야 한다. 이 블록이 </body> 쪽으로 내려가면
      라이트를 고른 사람에게 다크가 한 번 번쩍인 뒤 바뀐다(FOUC).
@@ -28,6 +36,8 @@
     document.documentElement.dataset.theme = t;
   })();
 </script>
+<!-- 이 페이지는 site.css 를 안 읽는다(자기 CSS) — 폰트만 직접 물린다. catalog 와 같은 이유 -->
+<link rel="stylesheet" href="/fonts/pretendard/pretendardvariable-dynamic-subset.css">
 <style>
   :root {
     /* 팔레트 — 라이트 기본. 액센트는 단청 청록을 낮춘 딥 그린 하나이고 **면을 칠하지 않는다**:
@@ -44,6 +54,14 @@
     --accent-soft:rgba(11,110,96,.06); --accent-line:rgba(11,110,96,.22);
     --teal:#0b6e60; --teal-deep:#0b6e60;
     --teal-soft:rgba(11,110,96,.06); --teal-line:rgba(11,110,96,.22);
+    /* 도메인 6색 — **점·배지 전용이다. 면을 칠하지 않는다**(단일 액센트 절제 유지).
+       왜: 도메인 6개가 전부 같은 색 점이면 "지금 어느 도메인인가"를 글자로만 알 수 있다.
+       격자 점(여기) → 카탈로그 사이드바 점 → 제품 행 점이 같은 색으로 이어진다.
+       초록 계열은 일부러 비웠다 — 초록은 브랜드·액션(accent)의 몫이라, 도메인에 주면
+       "이 도메인이 특별하다"로 읽힌다. 카탈로그와 **같은 6값**이어야 한다
+       (catalog.html 은 이 CSS 를 안 읽는다 — scripts/domain-colors.test.mjs 가 대조). */
+    --dom-culture:#8a5878; --dom-citydata:#9a7222; --dom-transit:#3e6ca6;
+    --dom-commerce:#b05c40; --dom-weather:#2f7f9e; --dom-traffic:#6e5ca6;
     --green-ink:#15803d; --green-soft:rgba(21,128,61,.08);
     --red-ink:#b91c1c; --red-soft:rgba(185,28,28,.07);
     /* 터미널 — 이제 **유일하게** 두 모드 모두 어두운 면이다. 코드 표면이 어두운 건 표준이고,
@@ -73,6 +91,9 @@
     --accent-soft:rgba(53,168,146,.12); --accent-line:rgba(53,168,146,.30);
     --teal:#35a892; --teal-deep:#5fceb6;
     --teal-soft:rgba(53,168,146,.12); --teal-line:rgba(53,168,146,.30);
+    /* 도메인 6색 다크 — 라이트 값을 밝힌 같은 색상(accent-deep 과 같은 방향의 반전) */
+    --dom-culture:#c99bb8; --dom-citydata:#d3b06a; --dom-transit:#8fb3e0;
+    --dom-commerce:#dd9b82; --dom-weather:#7fc2d9; --dom-traffic:#a99ee0;
     --green-ink:#4ade80; --green-soft:rgba(74,222,128,.10);
     --red-ink:#f87171; --red-soft:rgba(248,113,113,.10);
     --term:#0a100f; --term-2:#111917;
@@ -105,14 +126,10 @@
   /* ─── nav ─── */
   .nav { background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
   .nav-in { display:flex; align-items:center; gap:20px; height:56px; }
-  .brand { display:flex; align-items:center; gap:10px; }
-  .brand .logo { width:30px; height:30px; border-radius:7px;
-                 background:var(--accent); display:flex; align-items:center; justify-content:center;
-                 /* accent 면 위 글자는 --accent-ink — 다크 테마에선 accent 가 밝아져 흰 글자가 안 보인다 */
-                 font-weight:700; font-size:12.5px; letter-spacing:.02em; color:var(--accent-ink); }
-  .brand .nm { font-weight:700; font-size:14px; color:var(--ink); letter-spacing:-.01em; line-height:1.2; }
-  .brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
-                color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
+  .brand { display:flex; align-items:center; }
+  /* 워드마크 — site.css 와 같은 규칙(이니셜 박스 폐기, 2026-08-09). 콜론만 accent. */
+  .brand .wm { font-weight:800; font-size:16.5px; line-height:1; letter-spacing:-.03em; color:var(--ink); }
+  .brand .wm em { font-style:normal; color:var(--accent-deep); padding:0 1.5px; }
   .nav-links { display:flex; gap:2px; margin-left:6px; }
   .nav-links a { font-size:13px; font-weight:500; color:var(--muted); padding:6px 12px; border-radius:6px; }
   .nav-links a:hover { background:var(--panel-2); color:var(--ink); }
@@ -139,7 +156,14 @@
   @media (max-width:760px){
     .nav-links a { display:none; }
     .nav-links a.keep { display:block; padding:6px 10px; }
-    .brand .sub { display:none; }
+  }
+  /* 320 실측(2026-08-10): 카드 300px 을 고친 뒤에도 13px 이 남았다 — 범인은 헤더다.
+     워드마크 89 + 카탈로그 링크 + 테마 버튼 + '시작하기'가 안폭 272px 을 넘는다.
+     항목을 숨기는 대신 간격·패딩만 줄인다 — 320 에서도 네 가지가 다 눌리는 게 맞다. */
+  @media (max-width:380px){
+    .nav-in { gap:8px; }
+    .nav-links { margin-left:0; }
+    .nav-cta { padding:7px 10px; }
   }
 
   /* ─── hero: 공간축 격자 위 ───
@@ -208,7 +232,10 @@
   .sec-head .more:hover { text-decoration:underline; text-underline-offset:3px; }
 
   /* product cards */
-  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+  /* 🐛 minmax(300px, …) 의 300 이 **최소폭 명령**이라 320px 뷰포트(안폭 272px)에서 카드가
+     페이지를 16px 밀었다(2026-08-09 실측 — 워드마크 무죄 증명 때 발견). min(100%,300px) 은
+     "300px, 단 그릇보다 크면 그릇만큼"이라 넓은 화면은 픽셀 하나 안 변하고 좁은 화면만 접힌다. */
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr)); gap:14px; }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px;
           box-shadow:var(--shadow-xs); display:flex; flex-direction:column; gap:8px;
           transition:border-color .12s, box-shadow .12s, transform .12s; }
@@ -218,6 +245,13 @@
   .card .meta { display:flex; gap:12px; font-size:12px; color:var(--faint);
                 font-variant-numeric:tabular-nums; border-top:1px solid var(--line); padding-top:9px; }
   .card .meta b { color:var(--ink); font-weight:600; }
+  /* 신선도 점 — "돌고 있는 데이터"를 글자보다 먼저 말한다. 켜짐(초록)의 경계는 48시간:
+     relTime() 이 시간 단위로 말하는 구간과 **같은 경계**라, 점과 글자가 서로 다른 말을
+     하지 않는다. 발행 주기는 도메인마다 달라(매시간~매일) 이보다 좁히면 정상 제품이
+     꺼진 것처럼 보인다. exported_at 이 없으면 점도 글자도 안 그린다 — 모른다 ≠ 오래됨. */
+  .card .meta .fresh i { display:inline-block; width:6px; height:6px; border-radius:50%;
+                         background:var(--line-strong); margin-right:5px; vertical-align:1px; }
+  .card .meta .fresh i.on { background:var(--green-ink); }
   .card .meta .free { margin-left:auto; color:var(--green-ink); font-weight:600; }
 
   /* domains — 카드 대신 촘촘한 줄 */
@@ -232,8 +266,19 @@
   .dom .t { font-weight:700; font-size:13.5px; display:flex; align-items:baseline; gap:7px; }
   .dom .t i { width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none;
               align-self:center; }
+  /* 도메인 고유색 — data-dom 은 렌더러가 DOMAINS.id 를 그대로 싣는다. 목록에 없는 id 는
+     위 accent 폴백으로 내려앉는다(모르는 도메인에 색을 지어내지 않는다) */
+  .dom[data-dom="culture"]  .t i { background:var(--dom-culture); }
+  .dom[data-dom="citydata"] .t i { background:var(--dom-citydata); }
+  .dom[data-dom="transit"]  .t i { background:var(--dom-transit); }
+  .dom[data-dom="commerce"] .t i { background:var(--dom-commerce); }
+  .dom[data-dom="weather"]  .t i { background:var(--dom-weather); }
+  .dom[data-dom="traffic"]  .t i { background:var(--dom-traffic); }
   .dom .t .c { margin-left:auto; font-size:11.5px; font-weight:600; color:var(--muted);
                font-variant-numeric:tabular-nums; white-space:nowrap; }
+  /* soon 의 회색이 고유색을 이겨야 한다 — 자리만 있고 제품이 없는 도메인에 색을 켜면
+     "있다"로 읽힌다. 특이도가 고유색 규칙과 같으므로(0,2,2) **뒤에 서는 것**이 곧 우선이다 —
+     이 두 규칙을 고유색 규칙 위로 올리면 조용히 깨진다 */
   .dom.soon .t { color:var(--muted); } .dom.soon .t i { background:var(--line-strong); }
   .dom .d { font-size:12px; color:var(--faint); }
   /* 지역을 나누는 단위 — 도메인마다 다르다는 사실이 이 서비스의 정직한 지점이라 카드에 남긴다.
@@ -349,7 +394,9 @@
 
 <nav class="nav"><!-- partials/nav.html 에서 생성 — 여기가 아니라 partial 을 고치고 `npm run sync` -->
   <div class="wrap nav-in">
-    <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="logo" aria-hidden="true">AS</span><span class="nm">ASK SEOUL<span class="sub">Data API Hub</span></span></a>
+    <!-- 워드마크 — 이니셜 박스("AS")를 버렸다. 콜론이 심볼이다: "질문 : 답".
+         em 은 시맨틱이 아니라 **콜론만 accent 로 칠하는 손잡이**다(스타일은 .brand .wm em). -->
+    <a class="brand" href="/" aria-label="ASK SEOUL 홈"><span class="wm">ASK<em>:</em>SEOUL</span></a>
     <!-- 카탈로그 안의 섹션(플레이그라운드·API 키)은 헤더에 걸지 않는다 — 같은 문서로 가는
          링크가 여럿이 되기 때문. 섹션 이동은 카탈로그 사이드바 몫이고, 여기엔 별도 문서만 건다. -->
     <div class="nav-links">
@@ -994,8 +1041,10 @@ async function bootCatalog() {
         "<span class='c'>" + (n ? "제품 " + n + "개" : "준비 중") + "</span></span>" +
       "<span class='d'>" + esc(d.desc) + "</span>" +
       (d.unit ? "<span class='u' title=\"" + esc(d.note || d.unit) + "\">" + esc(d.unit) + "</span>" : "");
-    return n ? "<a class='dom' href='/catalog'>" + inner + "</a>"
-             : "<div class='dom soon'>" + inner + "</div>";
+    // data-dom = 도메인 고유색 훅(CSS). d.id 는 이 파일의 DOMAINS 상수라 esc 불필요지만
+    // 규칙을 하나로 유지한다 — 값이 카탈로그 응답에서 오는 catalog.html 쪽과 같은 모양
+    return n ? "<a class='dom' data-dom='" + esc(d.id) + "' href='/catalog'>" + inner + "</a>"
+             : "<div class='dom soon' data-dom='" + esc(d.id) + "'>" + inner + "</div>";
   }).join("");
 
   const sorted = [...products].sort((a, b) => (b.row_count || 0) - (a.row_count || 0));
@@ -1007,11 +1056,21 @@ async function bootCatalog() {
     // 기술명·시간축 컬럼명은 카드에 싣지 않는다 — 호출 직전 정보라 카탈로그 상세·docs 의
     // 몫이고, 시간축 컬럼명은 제품마다 달라(18종) 랜딩 어휘가 흩어진다. "기간으로 자를 수
     // 있다"는 그레인 줄(행정동 × 날짜 …)이 이미 사람 말로 전달한다.
+    // 신선도 — 점(48시간 이내 = 초록)과 상대 시각을 같이 싣고, 정확한 시각은 title 로.
+    // exported_at 이 없거나 못 읽으면 통째로 생략한다 — 회색 점을 그리면 "오래됐다"는
+    // 주장이 되는데 실제로는 모르는 것이다(agreement §4: 모른다 ≠ 0).
+    const rel = p.exported_at ? relTime(p.exported_at) : null;
+    const freshHtml = rel
+      ? "<span class='fresh' title=\"마지막 갱신 " + esc(kstStamp(p.exported_at)) + "\">" +
+        "<i class='" + (Date.now() - new Date(p.exported_at).getTime() < 48 * 3600000 ? "on" : "") +
+        "' aria-hidden='true'></i>" + esc(rel) + "</span>"
+      : "";
     return "<a class='card' href='/catalog?q=" + encodeURIComponent(p.name) + "'>" +
       "<span class='t'>" + esc(titleOf(p)) + "</span>" +
       // 질문형 대신 설명 문장 — 카탈로그 목록과 같은 우선순위(쉬운 문장 desc 우선)
       "<span class='q'>" + esc(d.summary || fb(p).desc || p.description || p.product_question || "—") + "</span>" +
       "<span class='meta'><span><b>" + nf.format(p.row_count || 0) + "</b> 행</span>" +
+      freshHtml +
       "<span class='free'>미리보기</span></span></span></a>";
   }).join("");
 }

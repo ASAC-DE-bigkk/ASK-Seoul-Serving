@@ -6,6 +6,12 @@
    테마: **라이트가 기본**이고 :root[data-theme="dark"] 가 토큰만 덮는다. 적용은 각 페이지
    <head> 의 인라인 조각이 페인트 전에 하고, 버튼 배선은 /theme.js 한 벌이 맡는다. */
 
+/* 서체 실장 — --sans 가 Pretendard 를 **선언만** 하고 파일이 없어서 Windows 에서 맑은
+   고딕으로 떨어지고 있었다(관공서 인상의 주범). CSP 가 외부 폰트를 막으므로 셀프호스트
+   (public/fonts/) 가 유일한 경로다. dynamic subset 이라 화면에 있는 글자 범위만 내려받는다.
+   ⚠️ index.html·catalog.html 은 site.css 를 안 읽는다(자기 CSS) — 각자 <head> 에 <link> 로 따로 물려 있다. */
+@import url("/fonts/pretendard/pretendardvariable-dynamic-subset.css");
+
 :root {
   /* index.html 의 :root 와 같은 값이다 — 갈리면 다른 서비스로 보인다.
      액센트는 단청 청록을 낮춘 딥 그린 하나이고 면을 칠하지 않는다(링크·버튼·상태만). */
@@ -82,15 +88,13 @@ code { font-family:var(--mono); font-size:.9em; background:var(--panel-2); paddi
        position:sticky; top:0; z-index:20; }
 .nav-in { display:flex; align-items:center; gap:20px; height:56px; max-width:1080px;
           margin:0 auto; padding:0 24px; }
-.brand { display:flex; align-items:center; gap:10px; color:var(--ink); }
+.brand { display:flex; align-items:center; color:var(--ink); }
 .brand:hover { text-decoration:none; }
-.brand .logo { width:30px; height:30px; flex:none; border-radius:7px;
-               background:var(--accent); display:flex; align-items:center; justify-content:center;
-               /* accent 면 위 글자는 --accent-ink — 다크 테마에선 accent 가 밝아져 흰 글자가 안 보인다 */
-               font-weight:700; font-size:12.5px; letter-spacing:.02em; color:var(--accent-ink); }
-.brand .nm { font-weight:700; font-size:14px; line-height:1.2; letter-spacing:-.01em; }
-.brand .sub { display:block; font-family:var(--mono); font-weight:500; font-size:9.5px;
-              color:var(--faint); letter-spacing:.1em; text-transform:uppercase; }
+/* 워드마크 — 박스 없이 글자가 로고다. 콜론만 accent(질문 : 답). 이니셜 박스("AS")와
+   자간 벌린 대문자 서브 라벨은 2026-08-09 에 걷었다 — 그 조합이 곧 "AI 가 만든 로고"의
+   전형이라는 피드백. em 은 시맨틱이 아니라 콜론 칠하기용 손잡이다. */
+.brand .wm { font-weight:800; font-size:16.5px; line-height:1; letter-spacing:-.03em; }
+.brand .wm em { font-style:normal; color:var(--accent-deep); padding:0 1.5px; }
 /* `min-width:0` 이 없으면 플렉스 항목이 **내용 폭 아래로 줄지 않는다**(min-width:auto 가 기본).
    그래서 좁은 화면에서 링크 묶음이 220px 를 그대로 차지하고 오른쪽 버튼을 화면 밖으로 민다. */
 .nav-links { display:flex; gap:2px; margin-left:6px; min-width:0; }
@@ -119,7 +123,7 @@ code { font-family:var(--mono); font-size:.9em; background:var(--panel-2); paddi
 :root[data-theme="dark"] .theme-btn .sun { display:block; }
 :root[data-theme="dark"] .theme-btn .moon { display:none; }
 @media (max-width:900px){ .env-pill { display:none; } .nav-in { gap:12px; } }
-@media (max-width:720px){ .nav-links a { padding:6px 9px; font-size:12.5px; } .brand .sub { display:none; } }
+@media (max-width:720px){ .nav-links a { padding:6px 9px; font-size:12.5px; } }
 /* 좁은 화면 — 링크를 **지우지 않고** 가로 스크롤로 흘린다. 720px 아래 규칙이 없어서
    375px 에서 필요 폭이 418px 이 되고, 넘친 43px 만큼 테마 버튼이 화면 밖으로 나갔다.
    링크를 숨기면 그 페이지로 가는 길이 헤더에서 사라지므로(푸터에만 남는다) 숨기지 않는다.
@@ -241,7 +245,13 @@ pre .s { color:#f5c197; }   /* 문자열 */
          border:1px solid var(--teal-line); letter-spacing:.04em; }
 .ep .m.post { background:var(--accent-soft); color:var(--accent-deep); border-color:var(--accent-line); }
 .ep .m.del { background:var(--red-soft); color:var(--red-ink); border-color:var(--red-line); }
-.ep .p { font-family:var(--mono); font-size:13.5px; font-weight:600; color:var(--ink); }
+/* 🐛 경로는 공백 없는 한 토큰이다 — `/api/v1/patterns/{product_id}/{pattern_id}` 가
+   320px 뷰포트에서 332px 라 flex 항목의 min-width:auto 가 축소를 막고 **페이지를 36px
+   밀었다**(2026-08-10 실측 · CLAUDE.md §5 가 경고한 바로 그 원인). min-width:0 이 축소를
+   허락하고 overflow-wrap:anywhere 가 토큰 중간 줄바꿈을 허락한다 — 넓은 화면에서는 줄바꿈
+   기회가 필요 없어 아무것도 안 바뀐다. */
+.ep .p { font-family:var(--mono); font-size:13.5px; font-weight:600; color:var(--ink);
+         min-width:0; overflow-wrap:anywhere; }
 .ep .auth { font-size:11.5px; color:var(--faint); margin-left:auto; white-space:nowrap; }
 
 .updated { margin-top:44px; padding-top:16px; border-top:1px solid var(--line);

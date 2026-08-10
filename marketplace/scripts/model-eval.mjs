@@ -46,6 +46,10 @@
  */
 import { pathToFileURL } from "node:url";
 import { TOOLS } from "../src/mcp.js";
+// 파서 3종은 어댑터(src/chat.js)로 **이동**했다 — 측정이 겪은 공급자 함정이 실제
+// 어댑터가 겪을 함정 그 자체라서다. 하네스는 가져다 쓰고 re-export 만 한다(기존 테스트 호환).
+import { extractToolCalls, readCall, echoMessages } from "../src/chat.js";
+export { extractToolCalls, readCall, echoMessages };
 
 const API = "https://api.cloudflare.com/client/v4/accounts";
 const CATALOG = "https://ask-seoul.kr/api/v1/catalog";
@@ -158,63 +162,8 @@ const SYSTEM = "당신은 서울 공공데이터 API 안내자입니다. 데이�
   "SQL 을 작성하지 마세요 — 검증된 질의 패턴(run_pattern)을 고르고 파라미터만 채웁니다. " +
   "먼저 list_products 로 제품을 고르고, describe_product 로 패턴을 확인한 뒤, runnable=true 인 패턴을 run_pattern 으로 실행하세요.";
 
-/** 응답 어디에 tool call 이 실렸는지 **찾아서** 돌려준다.
- *
- * 🔴 한 자리만 보고 "안 불렀다"고 판정하지 않는다. Workers AI 는 모델·버전에 따라
- *    `result.tool_calls` 이기도 하고 OpenAI 호환 `result.choices[0].message.tool_calls`
- *    이기도 하다. **파서가 엉뚱한 곳을 보면 잘 부른 모델이 0점으로 찍힌다** — 그건 모델
- *    한계가 아니라 우리 결함이고, 그 차이가 이 측정의 결론을 통째로 뒤집는다.
- */
-export function extractToolCalls(result) {
-  const cands = [result?.tool_calls, result?.choices?.[0]?.message?.tool_calls,
-                 result?.message?.tool_calls, result?.output?.tool_calls];
-  for (const c of cands) if (Array.isArray(c) && c.length) return c;
 
-  // 🔴 **본문에 `<tool_call>` 태그로 실려 오는 경우가 있다**(2026-08-09 qwen 실측). 구조화
-  //    필드가 비어 있고 `content` 안에 JSON 이 들어 있는데, 이걸 안 읽으면 **모델은 옳게
-  //    불렀는데 우리가 못 들은 것**이 된다. 실제 어댑터도 같은 문제를 겪으므로 여기서 재는
-  //    것이 맞다 — 못 읽으면 그 호출은 운영에서도 사라진다.
-  const text = result?.response ?? result?.choices?.[0]?.message?.content ?? "";
-  const out = [];
-  for (const m of String(text).matchAll(/<tool_call>\s*([\s\S]*?)\s*(?:<\/tool_call>|$)/g)) {
-    try {
-      const j = JSON.parse(m[1]);
-      if (j && j.name) out.push(j);
-    } catch { /* 잘린 JSON — 못 읽으면 그냥 없는 것으로 둔다 */ }
-  }
-  return out;
-}
 
-/** 툴 왕복을 **OpenAI 표준 모양으로** 대화에 되민다.
- *
- * 🔴 모델이 돌려준 모양을 **그대로 되밀면 안 된다.** glm 은 `{name, arguments}` 로 주는데
- *    그걸 그대로 넣으면 qwen 쪽 엔드포인트가 거절한다(2026-08-08 실측):
- *
- *      'ChatCompletionMessageFunctionToolCallParam' 'id'       Field required
- *      'ChatCompletionMessageFunctionToolCallParam' 'function' Field required
- *
- *    **읽을 때는 관대하게, 되밀 때는 표준으로.** 안 그러면 모델 비교가 아니라
- *    "누가 우리 형식 실수를 봐주나"를 재게 된다.
- */
-export function echoMessages(id, name, args, out) {
-  return [
-    // ⚠️ `content` 는 **빈 문자열**이다. OpenAI 표준은 tool call 을 실은 assistant 메시지에
-    //    `null` 을 쓰지만 Workers AI 스키마는 문자열을 요구한다(2026-08-09 실측):
-    //      Type mismatch of '/messages/2/content', 'string' not in 'null'
-    //    빈 문자열은 양쪽 다 받는다.
-    { role: "assistant", content: "",
-      tool_calls: [{ id, type: "function", function: { name, arguments: JSON.stringify(args) } }] },
-    { role: "tool", tool_call_id: id, name, content: JSON.stringify(out).slice(0, 6000) },
-  ];
-}
-
-/** tool call 한 건에서 (이름, 인자)를 꺼낸다 — 공급자마다 감싸는 모양이 다르다. */
-export function readCall(c) {
-  const name = c?.name ?? c?.function?.name;
-  let args = c?.arguments ?? c?.function?.arguments ?? c?.input ?? {};
-  if (typeof args === "string") { try { args = JSON.parse(args); } catch { args = {}; } }
-  return { name, args };
-}
 
 /** 제품이 **이미 정해진** 상태의 대화를 만든다 (`--product-given`).
  *

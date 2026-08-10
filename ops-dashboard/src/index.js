@@ -435,7 +435,8 @@ async function summary(env, params, writable = false) {
     //    최다인데(실측 43건 — 표를 못 찾은 4xx) 그건 조용히 사라졌다.
     //    이제 분야 미상은 `domain: null` 로 남고, 화면이 그 몫을 따로 밝힌다.
     safeRows(env, topPerDomain(
-      "SELECT status, route, table_name, " + GW_DOM + " AS domain, COUNT(*) AS hits " +
+      "SELECT status, route, table_name, MAX(product_id) AS product_id, " +
+      GW_DOM + " AS domain, COUNT(*) AS hits " +
       "FROM _gateway_request_log " +
       "WHERE status >= 400 AND ts >= datetime('now', ?)" + gwW + " " +
       "GROUP BY status, route, table_name, domain", "hits DESC", 10), since),
@@ -667,7 +668,13 @@ async function summary(env, params, writable = false) {
     //   '<분야>'  그 분야 · null  분야 미상(제품에 안 묶이는 요청) · '*'  전 분야 합계
     // 화면은 지금 스코프에 맞는 버킷을 **고르기만** 한다 — 서버가 이미 갈라 놨다.
     serving: { routes: routes.rows, daily: daily.rows, products: products.rows,
-               failures: failures.rows, empty: empty.rows, keys: keys.rows,
+               // 이용자별 통계와 같은 게시본 표시명을 재사용한다. 미선언·과거 로그는 null 로
+               // 남겨 화면이 물리 식별자로 내려앉게 한다 — 표시명 때문에 실패 목록을 비우지 않는다.
+               failures: failures.rows.map((r) => ({
+                 ...r,
+                 display_title: (r.product_id && udisp.map.get(r.product_id)?.title) || null,
+               })),
+               empty: empty.rows, keys: keys.rows,
                totals: servTotals.rows,
                // 분야 축 내역(#162 🅐). `axis` 는 네 갈래의 건수, `not_found` 는 그중
                // 조치 대상만 **이름째로**. 카탈로그를 못 읽으면 둘 다 빈 채로 온다 —
@@ -1074,7 +1081,7 @@ async function usage(env, params) {
   // 별칭 붙은 질의라 `_R` 을 쓴다(#64).
   const gwWR = gwWhereR(env);
 
-  const [apis, domains, monthly, disp] = await Promise.all([
+  const [apis, domains, monthly, disp, cov, pmeta, rpu] = await Promise.all([
     safeRows(env,
       "SELECT c.name, c.product_id, " + DOMAIN_EXPR + " AS domain, c.description, c.row_count AS rows_total, " +
       "COUNT(r.rowid) AS calls, " +
@@ -1103,11 +1110,41 @@ async function usage(env, params) {
       "WHERE r.ts >= datetime('now', ?)" + gwWR +
       " GROUP BY month, domain ORDER BY month, calls DESC", since),
     displayMap(env),
+    // ── 신설형(검증 패턴) 현황 (Serving#217) ─────────────────────────────────
+    // 검증 커버리지: 도메인이 게시한 패턴 중 몇이 검증(verified_at)됐나. **미검증도 분모에**
+    // 남긴다("모른다≠0" — agreement §4). d1_usage_patterns 는 도메인 export 라 환경 스코프가 없다.
+    safeRows(env,
+      "SELECT COUNT(*) AS total, " +
+      "SUM(CASE WHEN verified_at IS NOT NULL THEN 1 ELSE 0 END) AS verified " +
+      "FROM d1_usage_patterns"),
+    // 파라미터 메타(P1 기본값·P3 배열) 선언 수 — DAG d1_pattern_params(#751). 아직 게시 전이면
+    // 표가 없어 safeRows 가 null 로 강등한다(카드는 '수집 전'으로 내려앉는다).
+    safeRows(env, "SELECT COUNT(*) AS with_meta FROM d1_pattern_params"),
+    // run_pattern 사용·오류·드리프트 — 사람용 문 `run_pattern` + AI 문 `mcp_run_pattern`
+    // 둘 다(decision/0014 §2). 드리프트 = status 500(게이트웨이가 '패턴이 게시본과 어긋남'을
+    // 500 으로 돌려준다 — Serving handleRunPattern). 환경 스코프는 다른 서빙 질의와 같은 조각(#64).
+    safeRows(env,
+      "SELECT COALESCE(SUM(route IN ('run_pattern','mcp_run_pattern')), 0) AS calls, " +
+      "COALESCE(SUM((route IN ('run_pattern','mcp_run_pattern')) AND status >= 400), 0) AS errors, " +
+      "COALESCE(SUM((route IN ('run_pattern','mcp_run_pattern')) AND status = 500), 0) AS drift " +
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwWhere(env), since),
   ]);
 
   // 표시 메타는 조인이 아니라 여기서 붙인다(DISPLAY_COLS 주석). 미선언은 null 그대로 간다.
   const apiRows = apis.rows.map((r) => ({ ...r, display: disp.map.get(r.product_id) || null }));
   const undeclared = apiRows.filter((r) => !r.display).length;
+
+  // 신설형 현황을 한 조각으로 조립한다. 표가 없으면(게시 전) 그 조각만 null 로 두고 화면이 밝힌다.
+  const covRow = cov.ok && cov.rows.length ? cov.rows[0] : null;
+  const rpuRow = rpu.ok && rpu.rows.length ? rpu.rows[0] : null;
+  const patterns = {
+    total: covRow ? covRow.total : null,
+    verified: covRow ? covRow.verified : null,
+    with_meta: pmeta.ok && pmeta.rows.length ? pmeta.rows[0].with_meta : null,
+    usage: rpuRow ? { calls: rpuRow.calls, errors: rpuRow.errors, drift: rpuRow.drift } : null,
+    // 무엇을 못 읽었나 — 화면이 "없는 것"과 "아직 게시 전"을 가른다.
+    missing: [...(cov.ok ? [] : ["coverage"]), ...(pmeta.ok ? [] : ["param_meta"]), ...(rpu.ok ? [] : ["usage"])],
+  };
 
   return json({
     window_days: days,
@@ -1127,6 +1164,7 @@ async function usage(env, params) {
     domains: domains.rows,
     apis: apiRows,
     monthly: monthly.rows,
+    patterns,
   });
 }
 

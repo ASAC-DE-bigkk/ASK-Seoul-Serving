@@ -14,7 +14,8 @@
   "tags": [
     { "name": "catalog", "description": "제품 목록과 스키마 — 인증 불필요" },
     { "name": "data", "description": "데이터 조회 — 인증 필요" },
-    { "name": "keys", "description": "API 키 발급·폐기·삭제" }
+    { "name": "keys", "description": "API 키 발급·폐기·삭제" },
+    { "name": "mcp", "description": "MCP 서버 — JSON-RPC 2.0 단일 엔드포인트" }
   ],
   "security": [{ "bearerAuth": [] }],
   "paths": {
@@ -61,6 +62,82 @@
           "400": { "$ref": "#/components/responses/BadRequest" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/api/v1/products/{product_id}": {
+      "get": {
+        "tags": ["catalog"],
+        "summary": "제품 하나의 전체 메타",
+        "description": "한 제품의 컬럼 설명·그레인·기본키·시간축·신선도와 **검증된 질의 패턴 목록**을 한 번에 돌려준다. /api/v1/catalog 가 전 제품의 얕은 목록이라면 이쪽은 한 제품의 깊은 설명이라, 조회 전에 한 번 부르면 필터에 쓸 컬럼과 쓸 수 있는 패턴을 함께 확인할 수 있다.\n\n메타 조회라 **일일 한도를 소모하지 않는다**(분당 한도만 적용). ETag 는 publication_id 라, If-None-Match 로 되물으면 내용이 그대로일 때 304 를 돌려준다.\n\n보조 메타는 도메인별 게시 진도가 달라 없을 수 있다 — 없는 조각은 meta.unavailable 에 이름으로 알린다(빈 배열로 덮지 않는다).",
+        "operationId": "getProductBundle",
+        "parameters": [{ "$ref": "#/components/parameters/Table" }],
+        "responses": {
+          "200": {
+            "description": "제품 메타 번들",
+            "headers": {
+              "ETag": { "schema": { "type": "string" }, "description": "이 제품의 publication_id. 내용이 바뀔 때만 값이 바뀐다" },
+              "X-Request-Id": { "$ref": "#/components/headers/XRequestId" }
+            },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProductBundle" } } }
+          },
+          "304": { "description": "If-None-Match 가 현재 ETag 와 같다 — 본문 없음" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/api/v1/glossary": {
+      "get": {
+        "tags": ["catalog"],
+        "summary": "코드값 용어 사전",
+        "description": "제품 응답에 숫자·약어로 들어오는 코드값의 뜻을 돌려준다(예: 요일 코드, 혼잡도 등급).\n\n메타 조회라 **일일 한도를 소모하지 않는다**(분당 한도만 적용).\n\n⚠️ 지금은 vocabulary_id 를 알아낼 방법이 마땅치 않다 — 컬럼이 자기 어휘를 선언하지 않고 어휘 목록을 주는 경로도 없어서, 실질적으로는 어휘 이름을 이미 아는 경우에만 쓸 수 있다. 계약을 고치는 논의는 #180.",
+        "operationId": "getGlossary",
+        "parameters": [{
+          "name": "vocabulary_id", "in": "query", "required": true,
+          "description": "어휘 식별자. 없으면 400 missing vocabulary_id.",
+          "schema": { "type": "string" },
+          "example": "commerce:major"
+        }],
+        "responses": {
+          "200": {
+            "description": "어휘의 전 코드값",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/XRequestId" } },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "vocabulary_id": { "type": "string" },
+                    "terms": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": { "type": "string" },
+                          "label_ko": { "type": "string" },
+                          "origin": { "type": ["string", "null"] },
+                          "source_type": { "type": ["string", "null"] }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "503": {
+            "description": "glossary unavailable — 용어 사전이 아직 게시되지 않았다",
+            "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
+          }
         }
       }
     },
@@ -197,7 +274,7 @@
         "responses": {
           "302": { "description": "Google 로그인 화면으로 이동" },
           "503": {
-            "description": "이 배포에는 Google 로그인이 설정돼 있지 않다 — POST /api/v1/keys 를 쓴다",
+            "description": "oauth disabled(GOOGLE_CLIENT_ID·GOOGLE_CLIENT_SECRET 미설정) · issuance disabled(ISSUANCE_SALT 미설정) — 이 배포에는 발급 경로가 열려 있지 않다. 이메일 발급은 폐지돼 대안이 아니다(POST /api/v1/keys 는 403).",
             "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
           }
         }
@@ -232,6 +309,61 @@
             }
           },
           "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "tags": ["mcp"],
+        "summary": "MCP 서버 (Streamable HTTP · JSON-RPC 2.0)",
+        "description": "Model Context Protocol 서버다. Claude·Cursor 같은 MCP 클라이언트에 등록하면 에이전트가 스스로 제품을 찾아 질의한다. REST 와 **같은 키·같은 한도**를 쓴다.\n\n도구는 여섯 개다 — list_products · describe_product · preview_product · query_product · run_pattern · check_quota. 각 도구의 인자 스키마는 tools/list 응답이 정본이라 여기 중복해 싣지 않는다.\n\n인증 경계: initialize · tools/list 는 키 없이 되고, 데이터를 만지는 **tools/call 부터 키가 필요하다.**\n\n⚠️ **도구 실패는 HTTP 200 이다.** JSON-RPC 는 오류도 봉투에 담으므로, 상태 코드가 아니라 봉투 안의 isError: true 와 그 내용을 읽어야 한다.",
+        "operationId": "postMcp",
+        "security": [],
+        "externalDocs": { "description": "연결 방법과 도구별 설명", "url": "/guide" },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "JSON-RPC 2.0 요청",
+                "properties": {
+                  "jsonrpc": { "type": "string", "const": "2.0" },
+                  "id": { "type": ["string", "integer", "null"] },
+                  "method": { "type": "string", "examples": ["initialize", "tools/list", "tools/call"] },
+                  "params": { "type": "object", "additionalProperties": true }
+                },
+                "required": ["jsonrpc", "method"]
+              },
+              "example": {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": { "name": "run_pattern", "arguments": { "product_id": "culture_activity_by_dong", "pattern_id": "exhibition_dongs", "params": { "n": 10 } } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JSON-RPC 응답. 도구 실패도 여기로 온다 — result.isError 를 확인할 것.",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/XRequestId" } },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jsonrpc": { "type": "string", "const": "2.0" },
+                    "id": { "type": ["string", "integer", "null"] },
+                    "result": { "type": "object", "additionalProperties": true, "description": "도구 실패 시 isError: true 와 안내가 들어 있다" },
+                    "error": { "type": "object", "additionalProperties": true, "description": "프로토콜 수준 오류(잘못된 method 등)" }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "method not allowed — MCP 는 POST 만 받는다",
+            "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
+          }
         }
       }
     }
@@ -311,6 +443,72 @@
           "rows": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
         }
       },
+      "ProductBundle": {
+        "type": "object",
+        "description": "한 제품의 전체 메타. columns·structure·patterns 는 도메인별 게시 진도가 달라 비어 있을 수 있고, 그때 meta.unavailable 에 어느 조각이 없는지 이름으로 들어온다.",
+        "properties": {
+          "product_id": { "type": "string" },
+          "table_name": { "type": "string", "description": "물리 테이블명. 경로 인자로는 product_id 를 쓴다" },
+          "publication_id": { "type": ["string", "null"], "description": "ETag 와 같은 값" },
+          "description": { "type": ["string", "null"] },
+          "product_question": { "type": ["string", "null"] },
+          "freshness": { "type": ["string", "null"] },
+          "row_count": { "type": ["integer", "null"] },
+          "exported_at": { "type": ["string", "null"], "format": "date-time" },
+          "structure": {
+            "type": ["object", "null"],
+            "properties": {
+              "grain": { "type": ["string", "null"] },
+              "primary_key": { "type": "array", "items": { "type": "string" } },
+              "time_axis": { "type": ["string", "null"] },
+              "tier": { "type": ["string", "null"] },
+              "rollup_rule": { "type": ["string", "null"] }
+            }
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" },
+                "description_ko": { "type": ["string", "null"] }
+              }
+            }
+          },
+          "patterns": {
+            "type": "array",
+            "description": "이 제품의 검증된 질의 패턴. GET /api/v1/patterns/{product_id}/{pattern_id} 로 실행한다.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pattern_id": { "type": "string" },
+                "question_ko": { "type": ["string", "null"], "description": "이 패턴이 답하는 질문 — 고르는 기준이다" },
+                "axes": { "type": ["string", "null"] },
+                "requires": { "type": "array", "items": { "type": "string" }, "description": "이 질의가 쓰는 SQL 능력(sort·aggregate·group_by 등)" },
+                "verified_rows": { "type": ["integer", "null"] },
+                "verified_at": { "type": ["string", "null"], "format": "date-time" },
+                "runnable": { "type": "boolean", "description": "verified_at 파생값. false 면 실행 시 409 pattern not verified — 고르기 전에 걸러 쓰라고 미리 준다" },
+                "allow_empty": { "type": "boolean", "description": "0행이 정상인 패턴(이상 감지 스크린 등)" },
+                "insight_sample_ko": { "type": ["string", "null"], "description": "검증 당시의 해석 문장 — 현재값이 아니다" }
+              }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "unavailable": {
+                "type": "array", "items": { "type": "string", "enum": ["columns", "structure", "patterns"] },
+                "description": "게시되지 않은 조각의 이름. 없으면 이 필드 자체가 없다 — '메타가 없다'와 '메타가 비었다'를 구분하기 위해서다"
+              },
+              "meta_of": {
+                "type": "string", "const": "previous_publication",
+                "description": "보조 메타가 데이터보다 이전 발행본일 때만 실린다. 무변경 밴드 게이트로 스킵된 제품의 정상 상태이지 오류가 아니다"
+              }
+            }
+          }
+        }
+      },
       "Problem": {
         "type": "object",
         "description": "RFC 7807. status 가 아니라 title 로 분기할 것 — 같은 상태 코드에 원인이 여럿이다.",
@@ -326,7 +524,7 @@
     },
     "responses": {
       "BadRequest": {
-        "description": "invalid id · unknown filter · no time axis · invalid cursor · invalid email",
+        "description": "invalid id · invalid product id · unknown filter · no time axis · invalid cursor · invalid email · unknown parameter(패턴에 선언되지 않은 이름 — detail 에 쓸 수 있는 이름 목록) · missing vocabulary_id",
         "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
       },
       "Unauthorized": {
@@ -338,11 +536,11 @@
         "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
       },
       "NotFound": {
-        "description": "unknown product — 비공개 제품도 404 로 답한다(403 이면 존재 여부를 알려주는 셈이라서)",
+        "description": "unknown product · unknown table · unknown vocabulary — 비공개 제품도 404 로 답한다(403 이면 존재 여부를 알려주는 셈이라서)",
         "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
       },
       "Conflict": {
-        "description": "cursor expired(재발행) · rotate confirmation required(기존 키 존재)",
+        "description": "cursor expired(재발행) · pattern not verified(verified_at 없음 — runnable=false 인 패턴) · rotate confirmation required(기존 키 존재)",
         "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
       },
       "TooManyRequests": {
