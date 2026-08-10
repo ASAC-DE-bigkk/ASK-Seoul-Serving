@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ASK: SEOUL — 서울 데이터 API 허브</title>
-<meta name="description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 쌓아 시계열·공간계열 데이터로 제공하는 API 허브. 미리보기는 키 없이, 키 발급은 Google 로그인으로.">
+<meta name="description" content="흩어진 서울 공공데이터를 질문 하나로. 문화·인구·교통·상권·날씨를 시간과 공간 두 축 위에 모아, 표 이름을 몰라도 문장으로 물으면 답할 수 있는 데이터를 찾아 주는 API 허브. 미리보기는 키 없이, 키 발급은 Google 로그인으로.">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0d1211" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ASK: SEOUL">
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
-<meta property="og:description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 쌓아 시계열·공간계열 데이터로 제공합니다.">
+<meta property="og:description" content="흩어진 서울 공공데이터를 질문 하나로. 문화·인구·교통·상권·날씨를 시간과 공간 두 축 위에 모았습니다 — 표 이름을 몰라도 문장으로 물으면 답할 수 있는 데이터를 찾아 드립니다.">
 <!-- OG 이미지 — 스크레이퍼는 상대 경로를 못 푸므로 **절대 URL 이어야** 한다. 원본은
      public/og.png(1200×630, 62KB). 고치려면 그리는 코드가 정본이다: 히어로의 시각 언어
      (워드마크 콜론 accent · 헤드라인 두 줄 위계 · 도메인 6색 점 · 426격자 모티프)를
@@ -18,7 +18,7 @@
 <meta property="og:image" content="https://ask-seoul.kr/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="ASK:SEOUL — 흩어진 서울 공공데이터를 같은 두 축 위에">
+<meta property="og:image:alt" content="ASK:SEOUL — 흩어진 서울 공공데이터를 질문 하나로">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b6e60'/%3E%3Ccircle cx='16' cy='11.2' r='3.1' fill='%23fff'/%3E%3Ccircle cx='16' cy='20.8' r='3.1' fill='%23fff'/%3E%3C/svg%3E">
 <script>
@@ -203,9 +203,62 @@
                         border:0; border-radius:8px; padding:0 20px; cursor:pointer; }
   .search-hero button:hover { background:var(--accent-hover); }
   .hot { display:flex; gap:6px; flex-wrap:wrap; margin-top:13px; align-items:center; }
-  .hot a { font-size:12px; font-weight:500; color:var(--muted); padding:3px 10px;
-           border:1px solid var(--line-strong); border-radius:999px; background:var(--panel); }
-  .hot a:hover { border-color:var(--accent-line); color:var(--accent-deep); }
+  /* 칩은 이제 링크가 아니라 버튼이다 — 다른 문서로 가는 게 아니라 **이 자리에서** 묻는다 */
+  .hot button { font:inherit; font-size:12px; font-weight:500; color:var(--accent-deep); padding:5px 11px;
+                border:1px solid var(--accent-line); border-radius:999px; background:var(--panel);
+                cursor:pointer; }
+  .hot button:hover { border-color:var(--accent); }
+
+  /* ─── 히어로 챗봇(1단계) — 검색창을 대신한다. 실행은 없고 "어느 제품이 답하나"만 답한다 ─── */
+  .chatbox { margin-top:26px; display:flex; gap:8px; max-width:560px; }
+  .chatbox .box { flex:1; position:relative; min-width:0; }
+  .chatbox input { width:100%; font:inherit; font-size:15px; padding:14px 14px 14px 42px;
+                   border-radius:10px; border:1px solid var(--line-strong);
+                   background:var(--panel); color:var(--ink); outline:none;
+                   transition:border-color .12s, box-shadow .12s; }
+  .chatbox input::placeholder { color:var(--faint); }
+  .chatbox input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .chatbox .ico { position:absolute; left:14px; top:50%; transform:translateY(-50%);
+                  color:var(--accent); display:flex; }
+  .chatbox button { font:inherit; font-size:14px; font-weight:600; color:var(--accent-ink);
+                    background:var(--accent); border:0; border-radius:10px; padding:0 22px;
+                    cursor:pointer; white-space:nowrap; }
+  .chatbox button:hover { background:var(--accent-hover); }
+  .chatbox button[disabled] { opacity:.65; cursor:default; }
+  .chatnote { font-size:11.5px; color:var(--faint); margin-top:10px; }
+
+  /* 답 — 질문 전에는 자리도 차지하지 않는다 */
+  .answer { display:none; margin-top:16px; max-width:560px; }
+  .answer.on { display:block; }
+  .answer .said { font-size:14px; color:var(--ink); line-height:1.65; }
+  .answer .said b { color:var(--accent-deep); font-weight:600; }
+  .answer .hits { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+                  margin-top:11px; overflow:hidden; box-shadow:var(--shadow-sm); }
+  .answer .hit { border-top:1px solid var(--line); padding:11px 13px; }
+  .answer .hit:first-child { border-top:0; }
+  .answer .hit .h { display:flex; align-items:center; gap:8px; }
+  /* 도메인 점 — 카탈로그·격자와 같은 6색(색 체계가 여기서 한 번 더 일한다) */
+  .answer .hit i.d { width:7px; height:7px; border-radius:50%; background:var(--line-strong); flex:none; }
+  .answer .hit[data-dom="culture"]  i.d { background:var(--dom-culture); }
+  .answer .hit[data-dom="citydata"] i.d { background:var(--dom-citydata); }
+  .answer .hit[data-dom="transit"]  i.d { background:var(--dom-transit); }
+  .answer .hit[data-dom="commerce"] i.d { background:var(--dom-commerce); }
+  .answer .hit[data-dom="weather"]  i.d { background:var(--dom-weather); }
+  .answer .hit[data-dom="traffic"]  i.d { background:var(--dom-traffic); }
+  .answer .hit .t { font-size:13.5px; font-weight:600; }
+  .answer .hit .meta { margin-left:auto; font-size:11.5px; color:var(--faint); white-space:nowrap; }
+  .answer .pats { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
+  .answer .pat { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink);
+                 border:1px solid var(--accent-line); border-radius:8px; padding:8px 11px;
+                 background:var(--panel); text-decoration:none; }
+  .answer .pat:hover { border-color:var(--accent); }
+  .answer .pat .go { margin-left:auto; font-size:11.5px; color:var(--muted); white-space:nowrap; }
+  /* 🔴 "찾았다"와 "돌려봤다"를 섞지 않는다 — 이 줄이 그 선이다 */
+  .answer .caveat { display:flex; gap:8px; align-items:flex-start; margin-top:11px; padding:9px 12px;
+                    border:1px dashed var(--line-strong); border-radius:8px;
+                    font-size:11.5px; color:var(--muted); line-height:1.55; }
+  .answer .caveat b { color:var(--ink); font-weight:600; }
+  @media (max-width:520px){ .chatbox { flex-wrap:wrap; } .chatbox button { width:100%; padding:12px 0; } }
 
   /* ─── 계기 스트립 (통계) — 카드 4장 대신 구획된 한 줄 ─── */
   .strip { background:var(--panel); border:1px solid var(--line-strong); border-radius:10px;
@@ -425,7 +478,14 @@
            실측(2026-08-03, /api/v1/catalog): 62종 중 공간 조인 키 42 · 시간축 33 · 둘 다 28 ·
            둘 다 없는 명부형 15. 시간축 컬럼명은 제품마다 달라(18종) 하나로 못 부른다 —
            그래서 컬럼명이 아니라 "기간"이라고 쓴다. 제품별 실제 축은 카드의 배지가 밝힌다. -->
-      <h1>흩어진 서울 공공데이터를<span class="l2">같은 두 축 위에</span></h1>
+      <!-- 2026-08-10 — 뒷줄만 갈았다: "같은 두 축 위에" → "질문 하나로".
+           근거: 이 서비스가 파는 것은 데이터 더미가 아니라 **답**이고, 그걸 첫 화면에서
+           증명할 수단(질문 → 맞는 제품)이 이제 생겼다(`/api/v1/search`).
+           🔴 **앞줄은 그대로 둔다.** "흩어진 서울 공공데이터를"이 이 서비스가 푸는 문제를
+           말하는 자리이고, 실측 정정을 여러 번 거친 문장이다(아래 주석들). 뒷줄만 바꾸면
+           문제 제기(흩어져 있다)와 해법(질문 하나로)이 한 문장으로 이어진다 — 전에는
+           해법이 "같은 두 축"이라는 **우리 사정**이었다. 축 이야기는 sub 로 내렸다. -->
+      <h1>흩어진 서울 공공데이터를<span class="l2">질문 하나로</span></h1>
       <!-- 축을 동사로 풀어 쓰던 것("행정동 코드로 붙이고 기간으로 자릅니다")을 한 층 올려
            결과물의 이름으로 요약한다 — 시계열·공간계열. 축 이름과 조작 방법은 카탈로그와
            문서가 말할 자리이고, 히어로는 무엇을 얻는지만 말하면 된다.
@@ -450,58 +510,76 @@
            아니라 도메인 자체로 읽힌다.
            교통은 대중교통과 도로 소통 둘을 덮는 말이다. 수를 말하지 않으므로(전에는 헤드라인이
            "여섯"이라고 세서 목록도 여섯이어야 했다) 이렇게 묶어도 아래 도메인 격자와 어긋나지 않는다. -->
-      <p class="sub"><b>문화·인구·교통·상권·날씨</b> 데이터를 시간과 공간 두 축으로 쌓아
-         <b>시계열·공간계열</b> 데이터로 제공합니다.</p>
-      <form class="search-hero" id="heroSearch">
+      <!-- 🔴 "표 이름을 몰라도 됩니다"는 **실제로 참인 말**이다 — 검색이 제품명뿐 아니라
+           검증된 질문(usage_patterns.question_ko)까지 훑기 때문이다. 카탈로그 검색이 이미
+           그렇고(searchhint 가 같은 말을 한다), 히어로 챗봇은 `search_products` 로 한 겹 더
+           간다(낱말 겹침 + IDF). 검색 표면이 좁아지면 이 문장부터 거짓이 되므로 같이 본다.
+           ⚠️ 숫자(57종·질문 640개)는 여기 안 쓴다 — 패턴이 871개로 늘 예정이고
+           (ASAC-DBT#484→#489), 정적 HTML 에 박으면 그날 거짓이 된다. 숫자의 자리는
+           바로 아래 계기 스트립이다(카탈로그 응답에서 실측으로 센다). -->
+      <p class="sub"><b>문화·인구·교통·상권·날씨</b>를 시간과 공간 <b>두 축</b> 위에
+         모았습니다. 표 이름을 몰라도 됩니다 — 궁금한 것을 문장으로 적으면 답할 수 있는
+         데이터를 찾아 드립니다.</p>
+      <!-- 히어로 챗봇 1단계 — **LLM 을 부르지 않는다.**
+           `/api/v1/search` 가 카탈로그만 읽어 "어느 제품이 답할 수 있나"를 돌려주므로
+           무인증·무과금·즉시다. 랜딩은 방문자 전원이 지나는 자리라 그게 전제다 —
+           여기서 LLM 을 부르면 구경꾼이 무인증 채팅 몫(100/일)을 다 태운다.
+           실제 실행(숫자)은 「돌려보기」가 카탈로그 플레이그라운드로 넘긴다. -->
+      <form class="chatbox" id="heroSearch">
         <div class="box">
           <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span>
-          <!-- ⚠️ placeholder 의 예시어는 **실제로 결과가 나오는 말**이어야 한다. 예전엔
-               "박스오피스"를 권했는데 카탈로그 검색 결과가 0건이었다 — 제품 이름이
-               "공연 예매 랭킹"이라 그 낱말이 어디에도 없었다(2026-08-07 실측). -->
-          <input type="search" id="heroQ" placeholder="행사, 혼잡, 상권, 날씨…" aria-label="데이터 검색">
+          <!-- ⚠️ placeholder 는 **실제로 결과가 나오는 말**이어야 한다("박스오피스 → 0건" 사고).
+               이제 검색기가 문장을 받으므로 문장으로 적되, 아래 칩과 같은 기준으로 고른다. -->
+          <input id="heroQ" maxlength="200" autocomplete="off"
+                 placeholder="이런 데이터 받을 수 있나요?" aria-label="데이터 질문">
         </div>
-        <button type="submit">검색</button>
+        <button type="submit">묻기</button>
       </form>
-      <!-- 🔴 칩은 **라벨이 약속한 것과 결과가 맞아야** 한다. 2026-08-07 실측으로 둘을 갈았다:
-             "박스오피스"(q=박스오피스) → **0건**. 제품명이 "공연 예매 랭킹"이라 그 낱말이
-                 제목·요약·질문·설명·활용예시 어디에도 없었다.
-             "동네 상권"(q=외식) → 1건, 그것도 commerce 가 아니라 culture 제품이었다.
-                 라벨은 상권 22종을 기대하게 하는데 결과가 딴판이다.
-           지금 넷은 결과 수와 도메인 분포를 함께 보고 골랐다 — 넷을 누르면 6개 도메인이
-           모두 한 번씩 나온다(예전엔 전체의 40%인 commerce 가 한 번도 안 나왔다).
-           ⚠️ 검색어를 바꿀 때는 **결과가 0 이 아닌지 먼저 확인**한다. -->
-      <div class="hot">
-        <a href="/catalog?q=행사">행사 일정</a>
-        <a href="/catalog?q=혼잡">동네 혼잡</a>
-        <a href="/catalog?q=폐업">상권 변화</a>
-        <a href="/catalog?q=날씨">날씨 영향</a>
+      <!-- 🔴 칩은 **라벨이 약속한 것과 결과가 맞아야** 한다(2026-08-07 "박스오피스 → 0건" 사고).
+           이제 문장을 받는 검색기라 칩도 질문 문장이고, 셋 다 실측으로 골랐다 —
+           1등 제품이 질문과 실제로 맞는 것만 남겼다(2026-08-10):
+             "주차장 자리 있나?"    → 지금 주차장 만차 위험
+             "비 오는 날 매출 어때?" → 동네 혼잡 × 날씨
+             "요즘 뜨는 상권"        → 행정동별 업종 구성
+           ⚠️ 칩을 바꿀 때는 `/api/v1/search?q=` 를 눌러 1등이 말이 되는지 먼저 본다. -->
+      <div class="hot" id="heroChips">
+        <button type="button">주차장 자리 있나?</button>
+        <button type="button">비 오는 날 매출 어때?</button>
+        <button type="button">요즘 뜨는 상권</button>
       </div>
+      <!-- 답이 들어설 자리 — 질문 전에는 비어 있다(빈 상자가 먼저 뜨면 "여기 뭐가 나오나"를 만든다) -->
+      <div class="answer" id="heroAnswer" aria-live="polite"></div>
+      <div class="chatnote">키 없이 · 로그인 없이 물어볼 수 있습니다</div>
     </div>
   </div>
 </header>
 
 <div class="wrap">
   <div class="strip">
-    <!-- 라벨은 한국어 — 히어로·카드·카탈로그가 전부 한국어인데 스트립만 영어면 어휘가
-         갈린다. 공간축·시간축은 히어로 문구("시간과 공간 두 축")를 그대로 받는 이름이다. -->
-    <div class="cell"><div class="lab ko">데이터 제품</div><div class="v sk" id="statProducts">0종</div><div class="k">제공 중인 데이터 제품</div></div>
+    <!-- 라벨은 한국어 — 히어로·카드·카탈로그가 전부 한국어인데 스트립만 영어면 어휘가 갈린다. -->
+    <!-- 분야 수는 별도 칸을 안 만들고 이 라벨이 흡수한다 — 바로 아래 도메인 격자가
+         여섯을 이미 보여주므로 칸을 하나 더 쓰면 같은 말을 두 번 하는 셈이다. -->
+    <div class="cell"><div class="lab ko">데이터 제품</div><div class="v sk" id="statProducts">0종</div><div class="k" id="statProductsK">제공 중인 데이터 제품</div></div>
     <!-- 여기에 "426개 행정동"을 커버리지로 적었었는데, 그건 culture 한 도메인의 커버리지다.
          citydata 는 실시간 관측 121곳, weather 는 KMA 격자 80칸이라 플랫폼 공통값이 아니다.
          공통인 것은 커버리지가 아니라 **조인 축**(행정동 코드, #48 합의)이라 그것만 적는다.
          도메인별 실측 커버리지는 아래 도메인 격자에서 각각 밝힌다. 총 행수도 쓰지 않는다 —
          그레인이 다른 제품을 더한 값이라 의미가 없다(제품별 행수는 카드에 유지) -->
-    <!-- 두 축을 나란히 둔다 — 히어로가 "붙이고 자릅니다"라고 주장하는 그 둘이다.
-         공간축은 이름이 하나라 이름을 적고(행정동 코드), 시간축은 컬럼명이 제품마다 달라
-         (실측 18종) 이름 대신 "몇 종에 걸리는가"를 적는다. 둘의 표시가 다른 건 값의
-         성질이 달라서지 일관성이 없어서가 아니다.
-         여기 있던 Daily quota(1,000회/일)를 시간축으로 갈았다 — 한도는 키를 받은 뒤의
-         이야기고, 처음 온 사람이 재는 건 "무엇으로 자를 수 있나"다. 한도는 /docs 와
-         카탈로그에 그대로 있다. -->
-    <!-- 공간축도 시간축처럼 "몇 종에 걸리는가"를 값으로 적는다 — 행정동 코드 보유
-         30/62(실측)라 이름만 적으면 전 제품이 되는 것처럼 읽힌다. 카운트는 하드코딩하지
-         않고 카탈로그 columns 에서 센다(시간축과 같은 이유 — 박아두면 조용히 거짓이 된다). -->
-    <div class="cell"><div class="lab ko">공간축</div><div class="v sk num" id="statDong">0종</div><div class="k">행정동(동네) 단위로 다른 데이터와 붙일 수 있는 제품</div></div>
-    <div class="cell"><div class="lab ko">시간축</div><div class="v sk num" id="statTimed">0종</div><div class="k">원하는 기간만 잘라 받을 수 있는 제품</div></div>
+    <!-- 🔴 2026-08-10 — 공간축·시간축 두 칸을 걷었다. **스키마 사실이지 사용자의 질문이
+         아니었다** — 방문자는 "행정동 조인 키를 가진 제품이 몇 종인가"를 궁금해하지 않는다.
+         숫자도 불리하게 읽혔다: 24/57 · 30/57 이라 분모를 아는 사람에겐 "절반도 안 되네"가
+         된다. 강점을 말하려던 칸이 약점을 말하고 있었다(오너 지적).
+         축 정보를 감춘 게 아니라 자리를 옮긴 것이다 — sub 가 "시간과 공간 두 축"이라고
+         말하고, 제품별 실제 축은 카탈로그 배지가 밝힌다.
+         ⚠️ 예전에 여기 있던 Daily quota(1,000회/일)를 되돌린 게 아니다 — 그건 **키를 받은
+         뒤**의 이야기라 뺐고, 아래 '미리보기 무료'는 **키를 받기 전** 이야기다. 다른 값이다.
+
+         네 칸이 첫 방문의 네 질문에 답한다: 얼마나 있나 · 뭘 물어볼 수 있나 · 돈 드나 ·
+         살아 있나. 숫자는 전부 카탈로그 응답에서 센다(박아두면 조용히 거짓이 된다). -->
+    <div class="cell"><div class="lab ko">검증된 질문</div><div class="v sk num" id="statPatterns">0개</div><div class="k">실제로 돌려보고 행 수까지 확인한 질문</div></div>
+    <!-- '무료'는 셀 값이 아니라 사실이라 스켈레톤(sk)을 안 붙인다 — 카탈로그를 기다릴
+         이유가 없고, 기다리게 하면 첫 화면에서 이 칸만 늦게 채워진다. -->
+    <div class="cell"><div class="lab ko">미리보기</div><div class="v">무료</div><div class="k">전 제품 5행 · 키 없이</div></div>
     <div class="cell"><div class="lab ko">갱신</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
   </div>
 </div>
@@ -987,10 +1065,79 @@ async function bootDemo() {
   playDemo(0);
 }
 
-$("heroSearch").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const q = $("heroQ").value.trim();
-  location.href = q ? "/catalog?q=" + encodeURIComponent(q) : "/catalog";
+// ── 히어로 챗봇(1단계) ────────────────────────────────────────────────────────
+// 🔴 **LLM 을 부르지 않는다.** `/api/v1/search` 는 카탈로그만 읽어 "어느 제품이 답할 수
+//    있나"를 돌려준다 — 무인증·무과금·즉시. 랜딩은 방문자 전원이 지나므로 그게 전제다.
+// 실제 숫자는 「돌려보기」가 카탈로그 플레이그라운드로 넘긴다(거기서 쿼터가 든다).
+let heroBusy = false;
+
+async function askHero(q) {
+  const query = String(q || "").trim();
+  if (!query || heroBusy) return;
+  heroBusy = true;
+  const btn = $("heroSearch").querySelector("button");
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = "찾는 중…";
+  const box = $("heroAnswer");
+  box.classList.add("on");
+  box.innerHTML = "<div class='said'><span class='sk' style='display:inline-block;width:190px;height:14px'></span></div>";
+  try {
+    const res = await fetch("/api/v1/search?q=" + encodeURIComponent(query));
+    const b = await res.json();
+    if (!res.ok) { box.innerHTML = "<div class='said'>" + esc(b.detail || "지금은 찾을 수 없습니다.") + "</div>"; return; }
+    renderHeroAnswer(b);
+  } catch {
+    box.innerHTML = "<div class='said'>연결에 실패했습니다 — 잠시 뒤 다시 시도해 주세요.</div>";
+  } finally {
+    heroBusy = false; btn.disabled = false; btn.textContent = old;
+  }
+}
+
+function renderHeroAnswer(b) {
+  const box = $("heroAnswer");
+  box.classList.add("on");   // 보이게 하는 책임을 여기서 진다 — 호출 순서에 기대면 조용히 안 뜬다
+  const hits = b.products || [];
+  if (!hits.length) {
+    // 🔴 0건을 "없다"로 단정하지 않는다 — 낱말이 안 겹쳤을 뿐일 수 있다(검색기는 겹침 기반).
+    box.innerHTML = "<div class='said'>맞는 데이터를 못 찾았습니다 — 낱말을 바꿔 보시거나 " +
+      "<a href='/catalog' style='color:var(--accent-deep);font-weight:600'>카탈로그 전체</a>에서 직접 보실 수 있습니다.</div>";
+    return;
+  }
+  // 걸린 낱말을 밝힌다 — 근거가 있어야 사용자가 틀린 후보를 스스로 버린다(matched_terms 는
+  // search_products 가 이미 주는 값이라 공짜다). 1등의 근거만 말한다: 셋을 다 늘어놓으면 소음이다.
+  // ⚠️ 낱말 뒤에 조사를 붙이지 않는다 — 이/가·은/는은 받침에 따라 갈리는데 값이 원천에서
+  //    오므로 고를 수 없다("날씨 이 걸렸어요"가 된다). 콜론으로 끊어 조사 자체를 없앤다.
+  const terms = (hits[0].matched_terms || []).slice(0, 4);
+  box.innerHTML =
+    "<div class='said'>답할 수 있는 데이터가 <b>" + hits.length + "종</b> 있습니다" +
+      (terms.length ? " · 걸린 낱말 <b>" + terms.map(esc).join(" · ") + "</b>" : "") + "</div>" +
+    "<div class='hits'>" + hits.map((p, i) => {
+      const dom = String(p.product_id || "").split("_")[0];
+      const pats = (p.matched_patterns || []).slice(0, i === 0 ? 2 : 0);   // 1등만 실행 후보를 편다
+      return "<div class='hit' data-dom='" + esc(dom) + "'>" +
+        "<div class='h'><i class='d' aria-hidden='true'></i><span class='t'>" + esc(p.title) + "</span>" +
+        "<span class='meta'>" + (domName(dom) || "") +
+          (p.pattern_count ? " · 질문 " + p.pattern_count + "건" : "") + "</span></div>" +
+        (pats.length
+          ? "<div class='pats'>" + pats.map((x) =>
+              // 카탈로그로 넘길 때 질문을 들고 간다 — 사용자가 같은 문장을 두 번 치지 않게.
+              "<a class='pat' href='/catalog?product=" + encodeURIComponent(p.product_id) +
+              "&pat=" + encodeURIComponent(x.pattern_id) + "'>" + esc(x.question_ko) +
+              "<span class='go'>돌려보기 →</span></a>").join("") + "</div>"
+          : "") +
+        "</div>";
+    }).join("") + "</div>" +
+    // 🔴 "찾았다"와 "돌려봤다"를 섞지 않는다 — 안 밝히면 사용자는 위 카드를 조회 결과로 읽는다.
+    "<div class='caveat'><span aria-hidden='true'>ⓘ</span><span>데이터를 조회하지 않고 " +
+    "<b>카탈로그에서 찾은 결과</b>입니다 — 실제 숫자는 「돌려보기」에서 나옵니다.</span></div>";
+}
+
+$("heroSearch").addEventListener("submit", (e) => { e.preventDefault(); askHero($("heroQ").value); });
+$("heroChips").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  $("heroQ").value = b.textContent;   // 칩을 누르면 입력칸에도 남는다 — 무엇을 물었는지 보여야 고쳐 물을 수 있다
+  askHero(b.textContent);
 });
 
 function setStat(id, text) {
@@ -1010,7 +1157,7 @@ async function bootCatalog() {
   await fallbackReady;
   products = await catalogReady;
   if (!products) {
-    setStat("statProducts", "—"); setStat("statDong", "—"); setStat("statTimed", "—"); setStat("statFresh", "—");
+    setStat("statProducts", "—"); setStat("statPatterns", "—"); setStat("statFresh", "—");
     $("statFreshK").textContent = "마지막 갱신 · 확인 불가";
     failState("domains", "도메인 정보를 불러오지 못했습니다");
     failState("cards", "제품 목록을 불러오지 못했습니다");
@@ -1018,14 +1165,15 @@ async function bootCatalog() {
   }
 
   setStat("statProducts", products.length + "<span class='u'>종</span>");
-  // 두 축의 수는 세어서 넣는다 — 하드코딩하면 제품이 늘 때 조용히 거짓이 된다.
-  // 공간축 = 행정동 코드(#48 합의 조인 키) 보유 제품. 구 단위(gu_code)만 있는 제품은
-  // 동 단위로 못 붙으므로 세지 않는다(실측 30/62 — 구까지 치면 42).
-  const dong = products.filter((p) => (p.columns || []).some((c) => c.name === "admin_dong_code")).length;
-  setStat("statDong", dong + "<span class='u'>종</span>");
-  // time_axis 가 null 인 제품(명부형)은 기간 필터를 못 걸므로 세지 않는다.
-  const timed = products.filter((p) => p.time_axis).length;
-  setStat("statTimed", timed + "<span class='u'>종</span>");
+  // 분야 수는 라벨이 아니라 **세어서** 넣는다 — 도메인이 늘거나 줄면 따라간다.
+  // domainOf 는 product_id 앞머리라 DOMAINS 상수와 무관하게 실물을 센다.
+  const domCount = new Set(products.map(domainOf)).size;
+  $("statProductsK").textContent = domCount + "개 분야에 걸쳐 제공 중";
+  // 검증된 질문 — 이 서비스가 가진 것 중 가장 강한 자산이고, 히어로 챗봇이 쓰는 바로 그
+  // 값이다. **하드코딩하지 않는다**: 지금 640 이지만 871 로 늘 예정이라(ASAC-DBT#484→#489)
+  // 박아두면 그날 거짓이 된다.
+  const patterns = products.reduce((n, p) => n + ((p.usage_patterns || []).length), 0);
+  setStat("statPatterns", nf.format(patterns) + "<span class='u'>개</span>");
   const stamps = products.map((p) => p.exported_at).filter(Boolean).sort();
   const newest = stamps[stamps.length - 1];
   setStat("statFresh", (newest && relTime(newest)) || "—");
