@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ASK: SEOUL — 서울 데이터 API 허브</title>
-<meta name="description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 쌓아 시계열·공간계열 데이터로 제공하는 API 허브. 미리보기는 키 없이, 키 발급은 Google 로그인으로.">
+<meta name="description" content="흩어진 서울 공공데이터를 질문 하나로. 문화·인구·교통·상권·날씨를 시간과 공간 두 축 위에 모아, 표 이름을 몰라도 문장으로 물으면 답할 수 있는 데이터를 찾아 주는 API 허브. 미리보기는 키 없이, 키 발급은 Google 로그인으로.">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0d1211" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ASK: SEOUL">
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
-<meta property="og:description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 쌓아 시계열·공간계열 데이터로 제공합니다.">
+<meta property="og:description" content="흩어진 서울 공공데이터를 질문 하나로. 문화·인구·교통·상권·날씨를 시간과 공간 두 축 위에 모았습니다 — 표 이름을 몰라도 문장으로 물으면 답할 수 있는 데이터를 찾아 드립니다.">
 <!-- OG 이미지 — 스크레이퍼는 상대 경로를 못 푸므로 **절대 URL 이어야** 한다. 원본은
      public/og.png(1200×630, 62KB). 고치려면 그리는 코드가 정본이다: 히어로의 시각 언어
      (워드마크 콜론 accent · 헤드라인 두 줄 위계 · 도메인 6색 점 · 426격자 모티프)를
@@ -18,7 +18,7 @@
 <meta property="og:image" content="https://ask-seoul.kr/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="ASK:SEOUL — 흩어진 서울 공공데이터를 같은 두 축 위에">
+<meta property="og:image:alt" content="ASK:SEOUL — 흩어진 서울 공공데이터를 질문 하나로">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b6e60'/%3E%3Ccircle cx='16' cy='11.2' r='3.1' fill='%23fff'/%3E%3Ccircle cx='16' cy='20.8' r='3.1' fill='%23fff'/%3E%3C/svg%3E">
 <script>
@@ -478,12 +478,14 @@
            실측(2026-08-03, /api/v1/catalog): 62종 중 공간 조인 키 42 · 시간축 33 · 둘 다 28 ·
            둘 다 없는 명부형 15. 시간축 컬럼명은 제품마다 달라(18종) 하나로 못 부른다 —
            그래서 컬럼명이 아니라 "기간"이라고 쓴다. 제품별 실제 축은 카드의 배지가 밝힌다. -->
-      <!-- 2026-08-10 — 헤드라인이 "무엇을 쌓았나"에서 "무엇을 물어볼 수 있나"로 바뀌었다.
+      <!-- 2026-08-10 — 뒷줄만 갈았다: "같은 두 축 위에" → "질문 하나로".
            근거: 이 서비스가 파는 것은 데이터 더미가 아니라 **답**이고, 그걸 첫 화면에서
            증명할 수단(질문 → 맞는 제품)이 이제 생겼다(`/api/v1/search`).
-           🔴 "두 축"을 버린 게 아니라 **한 층 내렸다** — 바로 아래 sub 가 그대로 말한다.
-           그 문구는 실측 정정을 여러 번 거친 자산이라(아래 주석들) 지우지 않는다. -->
-      <h1>서울에 대해<span class="l2">물어보세요</span></h1>
+           🔴 **앞줄은 그대로 둔다.** "흩어진 서울 공공데이터를"이 이 서비스가 푸는 문제를
+           말하는 자리이고, 실측 정정을 여러 번 거친 문장이다(아래 주석들). 뒷줄만 바꾸면
+           문제 제기(흩어져 있다)와 해법(질문 하나로)이 한 문장으로 이어진다 — 전에는
+           해법이 "같은 두 축"이라는 **우리 사정**이었다. 축 이야기는 sub 로 내렸다. -->
+      <h1>흩어진 서울 공공데이터를<span class="l2">질문 하나로</span></h1>
       <!-- 축을 동사로 풀어 쓰던 것("행정동 코드로 붙이고 기간으로 자릅니다")을 한 층 올려
            결과물의 이름으로 요약한다 — 시계열·공간계열. 축 이름과 조작 방법은 카탈로그와
            문서가 말할 자리이고, 히어로는 무엇을 얻는지만 말하면 된다.
@@ -508,8 +510,16 @@
            아니라 도메인 자체로 읽힌다.
            교통은 대중교통과 도로 소통 둘을 덮는 말이다. 수를 말하지 않으므로(전에는 헤드라인이
            "여섯"이라고 세서 목록도 여섯이어야 했다) 이렇게 묶어도 아래 도메인 격자와 어긋나지 않는다. -->
-      <p class="sub"><b>문화·인구·교통·상권·날씨</b> 데이터를 시간과 공간 <b>두 축</b> 위에
-         올려 뒀습니다 — 어떤 데이터가 답할 수 있는지 찾아 드립니다.</p>
+      <!-- 🔴 "표 이름을 몰라도 됩니다"는 **실제로 참인 말**이다 — 검색이 제품명뿐 아니라
+           검증된 질문(usage_patterns.question_ko)까지 훑기 때문이다. 카탈로그 검색이 이미
+           그렇고(searchhint 가 같은 말을 한다), 히어로 챗봇은 `search_products` 로 한 겹 더
+           간다(낱말 겹침 + IDF). 검색 표면이 좁아지면 이 문장부터 거짓이 되므로 같이 본다.
+           ⚠️ 숫자(57종·질문 640개)는 여기 안 쓴다 — 패턴이 871개로 늘 예정이고
+           (ASAC-DBT#484→#489), 정적 HTML 에 박으면 그날 거짓이 된다. 숫자의 자리는
+           바로 아래 계기 스트립이다(카탈로그 응답에서 실측으로 센다). -->
+      <p class="sub"><b>문화·인구·교통·상권·날씨</b>를 시간과 공간 <b>두 축</b> 위에
+         모았습니다. 표 이름을 몰라도 됩니다 — 궁금한 것을 문장으로 적으면 답할 수 있는
+         데이터를 찾아 드립니다.</p>
       <!-- 히어로 챗봇 1단계 — **LLM 을 부르지 않는다.**
            `/api/v1/search` 가 카탈로그만 읽어 "어느 제품이 답할 수 있나"를 돌려주므로
            무인증·무과금·즉시다. 랜딩은 방문자 전원이 지나는 자리라 그게 전제다 —
