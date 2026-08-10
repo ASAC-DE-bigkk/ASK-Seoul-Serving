@@ -11,6 +11,24 @@ OUT = Path(__file__).resolve().parent.parent / "out"
 MCP_TOOLS = ("list_products", "search_products", "describe_product",
              "preview_product", "query_product", "run_pattern", "check_quota")
 
+# 질문유형 — 우선순위 순서로 첫 매치 하나만 부여
+QUESTION_TYPES = [
+    ("예보·미래형", r"미리|예보|내일|모레|예측|올지|막힐지|붐빌지|비가 올|그칠지"),
+    ("실시간·현재형", r"지금|현재|오늘"),
+    ("경로·방법형", r"가는 길|가려면|타는 게|노선|경로|환승|방법|뭐가 더 빠|뭐가 덜"),
+    ("시간대·패턴형", r"몇 시|시간대|요일|배차|첫차|막차|새벽|출퇴근 시간"),
+    ("순위·비교형", r"제일|가장|어디가|어느 (동네|구|곳)|1위|톱|상위"),
+    ("일정·목록형", r"언제 어디서|일정|열리는지|하는지|있는지|있을까|있나"),
+    ("추이·이력형", r"추이|요즘|최근|어떻게 (변|달라)|흐름"),
+]
+
+
+def question_type(q: str) -> str:
+    for name, pat in QUESTION_TYPES:
+        if re.search(pat, q):
+            return name
+    return "기타"
+
 
 def main() -> None:
     personas = {p["uuid"]: p for p in
@@ -31,6 +49,7 @@ def main() -> None:
             "페르소나UUID": a["persona_uuid"],
             "페르소나": f"{p['age']}세 {p['sex']} · {p['district'].replace('서울-', '')} · {p['occupation']}",
             "질문": a["question"],
+            "질문유형": question_type(a["question"]),
             "답변": answer,
             "사용한 API": " → ".join(tools) or "(없음)",
             "사용한 서빙 데이터(답변 명시 기준)": ", ".join(sorted(set(product_re.findall(answer)))) or "(미표기)",
