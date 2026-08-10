@@ -17,11 +17,47 @@ const LIMIT_PARAM = /^(n|limit|top_n)$/i;
 const ARRAY_HARD_CAP = 100;              // 카티전 팬아웃 상한 — spec.max_len 은 이걸 넘을 수 없다
 const problem = (status, title, detail) => ({ ok: false, problem: { status, title, detail } });
 
+// ── 동적 기본값(상대 날짜) ─────────────────────────────────────────────────────
+// 날짜/기간 파라미터의 기본값은 **정적 상수면 낡는다**(어제 게시한 :from='2026-07-01' 이 계속
+// 나옴). 그래서 게시자가 `{ rel: "-30d", as: date }` 처럼 **지금 기준 상대 표현**으로 선언하면
+// 게이트웨이가 **실행 시점 KST '오늘'** 을 기준으로 해석해 bind 한다("최근 30일" 이 매일 이동).
+//
+// 보안: 표현은 게시자 선언 상수(소비자 입력 아님)이고 해석 결과도 값 스칼라라 ? bind 를 그대로
+//   통과한다 — 정적 기본값과 인젝션 표면이 같다(0). 소비자가 값을 주면 여전히 override.
+// KST: 데이터의 날짜 축은 한국 시간 기준(docs 기본규격)이라 UTC+9 벽시계로 계산한다.
+export const REL_RE = /^([+-]?\d+)(d|w|M|y)$/;   // 일·주·월(M)·년
+export const REL_AS = new Set(["date", "datetime", "ym", "year"]);
+export const isRelativeDefault = (v) =>
+  v && typeof v === "object" && !Array.isArray(v) && typeof v.rel === "string" && typeof v.as === "string";
+
+// { rel, as } + 기준시각(ms) → { val } | { err }. now 미지정 시 실행 시점(테스트는 주입).
+export function resolveRelativeDefault(d, nowMs) {
+  const m = REL_RE.exec(String(d.rel || ""));
+  if (!m) return { err: `rel 형식 오류 '${d.rel}' — 예: -30d, -4w, -6M, -1y` };
+  if (!REL_AS.has(d.as)) return { err: `as 형식 오류 '${d.as}' — ${[...REL_AS].join("/")} 중 하나` };
+  const n = parseInt(m[1], 10), unit = m[2];
+  const base = Number.isFinite(nowMs) ? nowMs : Date.now();
+  const t = new Date(base + 9 * 3600 * 1000);    // KST 벽시계로 읽으려고 UTC 필드에 +9h 를 실는다
+  if (unit === "d") t.setUTCDate(t.getUTCDate() + n);
+  else if (unit === "w") t.setUTCDate(t.getUTCDate() + n * 7);
+  else if (unit === "M") t.setUTCMonth(t.getUTCMonth() + n);
+  else if (unit === "y") t.setUTCFullYear(t.getUTCFullYear() + n);
+  const p2 = (x) => String(x).padStart(2, "0");
+  const Y = t.getUTCFullYear(), Mo = p2(t.getUTCMonth() + 1), Da = p2(t.getUTCDate());
+  if (d.as === "date") return { val: `${Y}-${Mo}-${Da}` };
+  if (d.as === "ym") return { val: `${Y}-${Mo}` };
+  if (d.as === "year") return { val: `${Y}` };
+  // datetime: 오프셋 0 은 '지금'(시각까지), 그 외는 그 날 00:00:00(기간 경계).
+  const hms = n === 0 ? `${p2(t.getUTCHours())}:${p2(t.getUTCMinutes())}:${p2(t.getUTCSeconds())}` : "00:00:00";
+  return { val: `${Y}-${Mo}-${Da} ${hms}` };
+}
+
 // sql + 소비자 값 + 게시 메타 → { ok, converted, values, declared, defaulted } | { ok:false, problem }
 //   opts.defaults: { name: scalar }            — P1 미전달 시 이 상수로 bind
 //   opts.enums:    { name: [scalar, …] }       — P1 허용값 밖이면 400(센티널 오타의 조용한 0행 제거)
 //   opts.spec:     { name: {type, item, max_len} } — P3 타입 선언(array 는 ?,?,? 전개)
 //   opts.maxLimit: 행수 파라미터(n/limit/top_n) 클램프 상한 — index.js MAX_LIMIT 을 그대로 받는다
+//   opts.nowMs:    상대 날짜 기본값 해석 기준(ms). 미지정 시 Date.now()(테스트는 고정값 주입)
 export function convertPattern(sql, supplied, opts = {}) {
   supplied = supplied && typeof supplied === "object" ? supplied : {};
   let defaults = opts.defaults && typeof opts.defaults === "object" ? opts.defaults : {};
@@ -54,6 +90,13 @@ export function convertPattern(sql, supplied, opts = {}) {
     const has = Object.prototype.hasOwnProperty.call(supplied, nm) && supplied[nm] !== undefined && supplied[nm] !== null;
     let v = has ? supplied[nm] : (Object.prototype.hasOwnProperty.call(defaults, nm) ? defaults[nm] : undefined);
     if (!has && v !== undefined) defaulted.push(nm);
+    // 동적 기본값: 소비자가 안 줬고 기본값이 상대 날짜 표현이면 실행 시점 기준으로 해석한다.
+    // (소비자가 값을 주면 has=true 라 이 분기를 안 타 override 가 유지된다.)
+    if (!has && isRelativeDefault(v)) {
+      const r = resolveRelativeDefault(v, opts.nowMs);
+      if (r.err) return problem(400, "invalid default", `:${nm} 기본값(상대 날짜) — ${r.err}`);
+      v = r.val;
+    }
     if (v === undefined || v === null)
       return problem(400, "missing parameter", `파라미터 :${nm} 값이 필요하다 — 이 패턴의 파라미터: [${declared.join(", ")}]`
         + (optional.length ? ` (기본값이 있어 생략 가능: [${optional.join(", ")}])` : ""));
