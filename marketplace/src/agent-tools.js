@@ -97,3 +97,137 @@ export function buildDataContext(meta) {
     caution: meta.description ?? null, // 제품 주의사항("공식 특보 아님" 등)
   };
 }
+
+/**
+ * 질문 하나로 **57종을 가로질러** 맞는 제품을 고른다 — 목록을 다 읽히지 않기 위한 도구.
+ *
+ * 왜 필요한가(실측 2026-08-08): `list_products` 가 142KB(약 4만 토큰)라 AI 가 다 읽지 못하고
+ * **없는 제품 이름을 9분 안에 13번 지어냈다**(`citydata_ppltn_age`·`_demo`·`_demography` …).
+ * 목록을 더 줄이면 고르는 근거가 사라지므로, 줄이는 대신 **서버가 골라 준다.**
+ *
+ * 무엇으로 맞추나 — 가장 구체적인 신호는 **질의 패턴의 질문 431건**이다. 대표질문 57개는
+ * 제품 하나를 한 줄로 요약하지만, 패턴 질문은 "그 제품으로 답할 수 있는 진짜 질문"이라
+ * 사용자 문장과 직접 겹친다. 그래서 패턴에서 맞으면 가중치를 준다.
+ *
+ * 🔴 **LLM 을 쓰지 않는다.** 낱말 겹침이면 충분하고(chat.js `matchPatterns` 와 같은 계열),
+ * 무엇보다 이 도구는 **고르기 전 단계**라 과금·지연이 붙으면 존재 이유가 없다.
+ * 정확도의 한계는 응답이 스스로 말한다(`matched_terms`) — 왜 걸렸는지 보이면 AI 가 틀린
+ * 후보를 스스로 버린다.
+ */
+const HAY_WEIGHT = { pattern: 3, question: 2, text: 1 };
+
+// 한국어는 조사가 붙어 낱말이 어긋난다("장소가" vs "장소"). 형태소 분석기를 넣을 자리는
+// 아니므로 **꼬리 한 글자를 떼어 본다** — 조사 대부분이 1음절이라 이것만으로 크게 는다.
+const forms = (tok) => (tok.length >= 3 ? [tok, tok.slice(0, -1)] : [tok]);
+
+const tokenize = (s) => String(s || "").toLowerCase()
+  .split(/[^0-9a-z가-힣]+/).filter((w) => w.length >= 2);
+
+// 🔴 **고를 수 있는 패턴만 신호로 쓴다.** 검증 스탬프가 없는 초안까지 매칭에 넣으면,
+// AI 가 추천받은 `pattern_id` 로 `run_pattern` 을 불렀다가 **409 pattern not verified** 를
+// 맞는다 — 이 도구가 없애려던 "지어내고 404" 왕복이 "추천받고 409" 왕복으로 바뀔 뿐이다.
+// 채팅의 후보 추천이 같은 이유로 이미 거른다(`chat.js` `productGivenMessages`).
+// 지금 카탈로그는 640패턴 전부 검증돼 있어 무해하지만, ASAC-DBT#489 가 초안 230건을
+// 내보내는 순간 **조용히 회귀**하는 구조다(Exisign 리뷰, #256). 그때 고치면 늦다.
+const runnablePatterns = (p) =>
+  (Array.isArray(p.usage_patterns) ? p.usage_patterns : []).filter((u) => u.verified_at || u.runnable);
+
+// 제품 하나가 가진 말뭉치 — 어디서 걸렸는지에 따라 무게가 다르다.
+function haystacks(p) {
+  const patterns = runnablePatterns(p);
+  return {
+    patterns,
+    question: String(p.product_question || "").toLowerCase(),
+    text: [p.display?.title, p.display?.summary, p.description,
+      String(p.product_id || "").replace(/_/g, " ")].join(" ").toLowerCase(),
+  };
+}
+
+const hitsIn = (tok, hay) => forms(tok).some((f) => hay.includes(f));
+
+/**
+ * 🔴 **흔한 낱말은 값이 없다.** 첫 판은 겹친 낱말 수만 셌더니 *"서울에서 요즘 전시 많이
+ * 열리는 동네가 어디야?"* 의 1등이 `commerce_dong_category_matrix` 였다 — `동네가`·`어디야`·
+ * `많이` 세 개가 걸려서, 정작 결정적인 `전시` 하나만 가진 `culture_activity_by_dong` 을
+ * 눌렀다(운영 실측 2026-08-10). 질문마다 붙는 `서울에서`·`어디야` 는 57종 거의 전부에
+ * 있으므로 **정보가 0에 가깝다.**
+ *
+ * 그래서 낱말마다 **몇 개 제품에 나타나는지(df)** 를 세어 흔할수록 무게를 깎는다(idf).
+ * 불용어 목록을 손으로 들지 않는 이유는 그 목록이 늘 실물보다 늦기 때문이다 — 카탈로그가
+ * 바뀌면 무엇이 흔한지도 같이 바뀌고, df 는 그걸 저절로 따라간다.
+ */
+function idfOf(tokens, products) {
+  const N = Math.max(products.length, 1);
+  const hays = products.map(haystacks);
+  const idf = new Map();
+  for (const tok of tokens) {
+    const df = hays.filter((h) =>
+      hitsIn(tok, h.question) || hitsIn(tok, h.text) ||
+      h.patterns.some((pat) => hitsIn(tok, String(pat.question_ko || "").toLowerCase()))).length;
+    // df=N(전부에 있음) → 작아지고 · df=1(한 제품에만) → 커진다.
+    // 🔴 `log((N+1)/(df+1))` 이 아니라 `log(1 + N/df)` 를 쓴다 — 전자는 **모든 제품에 있는
+    //    낱말을 정확히 0 으로** 만들어, 제품이 적을 때(테스트·소규모 카탈로그) 걸린 낱말이
+    //    통째로 사라진다. 흔한 말을 **누르는 것**이 목적이지 지우는 것이 아니다.
+    idf.set(tok, Math.log(1 + N / Math.max(df, 1)));
+  }
+  return idf;
+}
+
+export function searchProducts(body, query, limit = 5) {
+  const products = Array.isArray(body?.products) ? body.products : [];
+  const tokens = [...new Set(tokenize(query))];
+  const idf = idfOf(tokens, products);
+
+  const scored = products.map((p) => {
+    const h = haystacks(p);
+    const hits = new Set();
+    let score = 0;
+    const matchedPatterns = [];
+    for (const pat of h.patterns) {
+      const q = String(pat.question_ko || "").toLowerCase();
+      const on = tokens.filter((t) => hitsIn(t, q));
+      if (on.length) {
+        matchedPatterns.push({
+          pattern_id: pat.pattern_id, question_ko: pat.question_ko,
+          weight: on.reduce((s, t) => s + (idf.get(t) || 0), 0),
+        });
+      }
+    }
+    // 한 낱말이 여러 곳에서 걸려도 **한 번만** 센다 — 패턴 22개짜리 제품이 이기는 것을 막는다.
+    for (const t of tokens) {
+      const w = idf.get(t) || 0;
+      if (w <= 0) continue;
+      const where = h.patterns.some((pat) => hitsIn(t, String(pat.question_ko || "").toLowerCase()))
+        ? HAY_WEIGHT.pattern
+        : hitsIn(t, h.question) ? HAY_WEIGHT.question
+        : hitsIn(t, h.text) ? HAY_WEIGHT.text : 0;
+      if (where) { score += where * w; hits.add(t); }
+    }
+    matchedPatterns.sort((a, b) => b.weight - a.weight);
+    return { p, score, hits, matchedPatterns };
+  }).filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || String(a.p.product_id).localeCompare(String(b.p.product_id)))
+    .slice(0, limit);
+
+  return {
+    query: String(query || ""),
+    total_products: products.length,
+    matched: scored.length,
+    products: scored.map(({ p, hits, matchedPatterns }) => ({
+      product_id: p.product_id,
+      title: p.display?.title ?? p.name ?? p.product_id,
+      product_question: p.product_question ?? null,
+      freshness: p.freshness ?? null,
+      // 두 수를 따로 싣는다 — 전체는 "메타가 게시됐나", runnable 은 "지금 고를 수 있나"라
+      // 뜻이 다르다. 하나로 합치면 초안만 있는 제품이 "메타 없음"으로 오독된다.
+      pattern_count: Array.isArray(p.usage_patterns) ? p.usage_patterns.length : 0,
+      runnable_pattern_count: runnablePatterns(p).length,
+      // 왜 걸렸는지 보여 준다 — 근거가 없으면 AI 가 틀린 후보를 못 버린다
+      matched_terms: [...hits],
+      matched_patterns: matchedPatterns.slice(0, 3).map(({ pattern_id, question_ko }) => ({ pattern_id, question_ko })),
+    })),
+    hint: scored.length
+      ? "고른 제품은 describe_product 로 컬럼·파라미터를 확인하고, matched_patterns 의 pattern_id 는 run_pattern 으로 바로 실행할 수 있습니다."
+      : "맞는 제품을 못 찾았습니다 — 낱말을 바꿔 다시 부르거나 list_products 로 전체를 확인하세요. 제품 이름을 지어내지 마세요.",
+  };
+}
