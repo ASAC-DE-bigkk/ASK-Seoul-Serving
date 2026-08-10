@@ -557,9 +557,18 @@
 <div class="wrap">
   <div class="strip">
     <!-- 라벨은 한국어 — 히어로·카드·카탈로그가 전부 한국어인데 스트립만 영어면 어휘가 갈린다. -->
-    <!-- 분야 수는 별도 칸을 안 만들고 이 라벨이 흡수한다 — 바로 아래 도메인 격자가
-         여섯을 이미 보여주므로 칸을 하나 더 쓰면 같은 말을 두 번 하는 셈이다. -->
-    <div class="cell"><div class="lab ko">데이터 제품</div><div class="v sk" id="statProducts">0종</div><div class="k" id="statProductsK">제공 중인 데이터 제품</div></div>
+    <!-- 🔴 순서는 **범주 → 규모 → 활용 → 신선도**다(오너 결정). 분야가 맨 앞인 이유는
+         방문자의 첫 질문이 "무슨 데이터가 있나"이기 때문이다 — 57종이라는 규모는 그
+         다음이다. 예전엔 분야 수를 제품 칸 라벨이 흡수했는데, 그러면 **이름이 안 보여서**
+         "무슨 데이터"에 답을 못 한다(도메인 격자는 한참 아래다).
+         ⚠️ 이 자리는 다섯 번 갈았다 — 공간축·시간축(스키마 사실) · 미리보기 "무료"(전부
+         무료라 정보 없음) · 공공 원천(세는 기준이 판단이고 손 사본) · 컬럼 설명(우리 자랑) ·
+         한 번은 칸을 비우기까지. 실패한 넷의 공통점은 **우리가 아는 사실이지 방문자의
+         질문이 아니었다**는 것이다. 칸을 늘릴 때 그 선을 먼저 본다.
+         ⚠️ 수는 카탈로그에서 세고 이름만 DOMAINS 에서 가져온다 — 목록에 없는 새 접두사는
+         수에만 잡히고 이름에서 빠진다(모르는 분야를 지어내지 않는다). -->
+    <div class="cell"><div class="lab ko">분야</div><div class="v sk num" id="statDomains">0개</div><div class="k" id="statDomainsK">수집 중인 데이터 분야</div></div>
+    <div class="cell"><div class="lab ko">데이터 제품</div><div class="v sk" id="statProducts">0종</div><div class="k">제공 중인 데이터 제품</div></div>
     <!-- 여기에 "426개 행정동"을 커버리지로 적었었는데, 그건 culture 한 도메인의 커버리지다.
          citydata 는 실시간 관측 121곳, weather 는 KMA 격자 80칸이라 플랫폼 공통값이 아니다.
          공통인 것은 커버리지가 아니라 **조인 축**(행정동 코드, #48 합의)이라 그것만 적는다.
@@ -571,15 +580,15 @@
          된다. 강점을 말하려던 칸이 약점을 말하고 있었다(오너 지적).
          축 정보를 감춘 게 아니라 자리를 옮긴 것이다 — sub 가 "시간과 공간 두 축"이라고
          말하고, 제품별 실제 축은 카탈로그 배지가 밝힌다.
-         ⚠️ 예전에 여기 있던 Daily quota(1,000회/일)를 되돌린 게 아니다 — 그건 **키를 받은
-         뒤**의 이야기라 뺐고, 아래 '미리보기 무료'는 **키를 받기 전** 이야기다. 다른 값이다.
-
-         네 칸이 첫 방문의 네 질문에 답한다: 얼마나 있나 · 뭘 물어볼 수 있나 · 돈 드나 ·
-         살아 있나. 숫자는 전부 카탈로그 응답에서 센다(박아두면 조용히 거짓이 된다). -->
-    <div class="cell"><div class="lab ko">검증된 질문</div><div class="v sk num" id="statPatterns">0개</div><div class="k">실제로 돌려보고 행 수까지 확인한 질문</div></div>
-    <!-- '무료'는 셀 값이 아니라 사실이라 스켈레톤(sk)을 안 붙인다 — 카탈로그를 기다릴
-         이유가 없고, 기다리게 하면 첫 화면에서 이 칸만 늦게 채워진다. -->
-    <div class="cell"><div class="lab ko">미리보기</div><div class="v">무료</div><div class="k">전 제품 5행 · 키 없이</div></div>
+         네 칸이 첫 방문의 네 질문에 답한다: 무슨 데이터가 있나 · 얼마나 있나 ·
+         뭘 물어볼 수 있나 · 살아 있나. 숫자는 전부 카탈로그에서 센다(박아두면 조용히
+         거짓이 된다). 이 자리의 교체 이력은 **분야 칸 위 주석 한 곳**에 모아 뒀다. -->
+    <!-- ⚠️ 값은 **선언된 질의 패턴 전체**다(검증본 + 저작 초안). 라벨이 "실제로 돌려보고
+         행 수까지 확인한"이었는데, 2026-08-10 전 도메인 저작 스윕으로 **초안이 섞이면서
+         거짓이 됐다**(795 중 73이 미검증 — culture 47·transit 14·citydata 12). 초안은
+         `verified_at` 이 없어 실행하면 409 다. 그래서 라벨이 둘을 갈라 말한다 —
+         숫자도 카탈로그에서 각각 센다(박아두면 스탬프가 진행될 때 조용히 거짓이 된다). -->
+    <div class="cell"><div class="lab ko">질의 패턴</div><div class="v sk num" id="statPatterns">0개</div><div class="k" id="statPatternsK">제품에 선언된 질문</div></div>
     <div class="cell"><div class="lab ko">갱신</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
   </div>
 </div>
@@ -710,17 +719,17 @@ const HOME_CARDS = 6;  // 홈은 큐레이션 — 나머지는 카탈로그에�
 // 원래는 unit 자리에 "행정동"·"관측 121곳"을 그대로 적었는데, 라벨 없이 값만 있어
 // 처음 보는 사람에게는 무슨 축인지 안 읽혔다(사용자 피드백).
 const DOMAINS = [
-  { id:"culture",    name:"문화·행사", desc:"공연·전시·축제·예매",     unit:"동네 단위 · 서울 전역",
+  { id:"culture",    name:"문화·행사", short:"문화", desc:"공연·전시·축제·예매",     unit:"동네 단위 · 서울 전역",
     note:"행정동 단위 — 서울 426개 동 전역" },
-  { id:"citydata",   name:"인구·도시", desc:"실시간 인구·도시데이터",   unit:"주요 지점 121곳",
+  { id:"citydata",   name:"인구·도시", short:"인구", desc:"실시간 인구·도시데이터",   unit:"주요 지점 121곳",
     note:"서울시 실시간 도시데이터 관측 장소 121곳" },
-  { id:"transit",    name:"대중교통",  desc:"버스·지하철 접근성",       unit:"동네 단위",
+  { id:"transit",    name:"대중교통", short:"교통",  desc:"버스·지하철 접근성",       unit:"동네 단위",
     note:"행정동 단위" },
-  { id:"commerce",   name:"상권",      desc:"업종·매출 분석",           unit:"동네 단위",
+  { id:"commerce",   name:"상권", short:"상권",      desc:"업종·매출 분석",           unit:"동네 단위",
     note:"행정동 단위" },
-  { id:"weather",    name:"날씨",      desc:"기상 관측·예보",           unit:"기상 구역 80곳",
+  { id:"weather",    name:"날씨", short:"날씨",      desc:"기상 관측·예보",           unit:"기상 구역 80곳",
     note:"기상청 예보 격자 80칸" },
-  { id:"traffic",    name:"도로 소통",  desc:"속도·정체·돌발",           unit:"도로 구간 단위",
+  { id:"traffic",    name:"도로 소통", short:"도로",  desc:"속도·정체·돌발",           unit:"도로 구간 단위",
     note:"TOPIS 도로 링크 단위 — 6종 중 5종(돌발×기상만 행정동)" },
 ];
 
@@ -1158,7 +1167,7 @@ async function bootCatalog() {
   await fallbackReady;
   products = await catalogReady;
   if (!products) {
-    setStat("statProducts", "—"); setStat("statPatterns", "—"); setStat("statFresh", "—");
+    setStat("statProducts", "—"); setStat("statDomains", "—"); setStat("statPatterns", "—"); setStat("statFresh", "—");
     $("statFreshK").textContent = "마지막 갱신 · 확인 불가";
     failState("domains", "도메인 정보를 불러오지 못했습니다");
     failState("cards", "제품 목록을 불러오지 못했습니다");
@@ -1168,13 +1177,31 @@ async function bootCatalog() {
   setStat("statProducts", products.length + "<span class='u'>종</span>");
   // 분야 수는 라벨이 아니라 **세어서** 넣는다 — 도메인이 늘거나 줄면 따라간다.
   // domainOf 는 product_id 앞머리라 DOMAINS 상수와 무관하게 실물을 센다.
-  const domCount = new Set(products.map(domainOf)).size;
-  $("statProductsK").textContent = domCount + "개 분야에 걸쳐 제공 중";
+  // 분야 — **수는 카탈로그에서 세고 이름만 DOMAINS 에서 가져온다.** 새 접두사가 오면
+  // 수에는 잡히고 이름에서만 빠진다(모르는 분야의 한글 이름을 지어내지 않는다).
+  // 이름은 제품이 많은 순서다 — 아래 도메인 격자와 같은 정렬이라 두 곳이 안 어긋난다.
+  const domIds = new Set(products.map(domainOf));
+  setStat("statDomains", domIds.size + "<span class='u'>개</span>");
+  const domCounts = {};
+  for (const p of products) domCounts[domainOf(p)] = (domCounts[domainOf(p)] || 0) + 1;
+  const domNames = [...domIds]
+    .sort((a, b) => (domCounts[b] || 0) - (domCounts[a] || 0))
+    .map((id) => (DOMAINS.find((d) => d.id === id) || {}).short)
+    .filter(Boolean);
+  $("statDomainsK").textContent = domNames.join(" · ") || "수집 중인 데이터 분야";
   // 검증된 질문 — 이 서비스가 가진 것 중 가장 강한 자산이고, 히어로 챗봇이 쓰는 바로 그
   // 값이다. **하드코딩하지 않는다**: 지금 640 이지만 871 로 늘 예정이라(ASAC-DBT#484→#489)
   // 박아두면 그날 거짓이 된다.
   const patterns = products.reduce((n, p) => n + ((p.usage_patterns || []).length), 0);
   setStat("statPatterns", nf.format(patterns) + "<span class='u'>개</span>");
+  // 🔴 검증본과 초안을 **갈라 말한다.** 값(전체)만 두고 라벨에 "검증된 질문"이라고 적었더니
+  //    저작 스윕으로 초안이 섞인 날 그 문장이 거짓이 됐다. 둘 다 세어 라벨이 사실을 말한다 —
+  //    초안이 스탬프되면 이 줄이 저절로 따라간다(스탬프 진행이 화면에 보이는 부수 효과).
+  const verified = products.reduce(
+    (n, p) => n + (p.usage_patterns || []).filter((u) => u.verified_at).length, 0);
+  $("statPatternsK").textContent = patterns === verified
+    ? "전부 실제로 돌려보고 행 수까지 확인함"
+    : "검증 " + nf.format(verified) + " · 저작 초안 " + nf.format(patterns - verified);
   const stamps = products.map((p) => p.exported_at).filter(Boolean).sort();
   const newest = stamps[stamps.length - 1];
   setStat("statFresh", (newest && relTime(newest)) || "—");
