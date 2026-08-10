@@ -1189,9 +1189,13 @@ async function bootCatalog() {
         "<span class='c'>" + (n ? "제품 " + n + "개" : "준비 중") + "</span></span>" +
       "<span class='d'>" + esc(d.desc) + "</span>" +
       (d.unit ? "<span class='u' title=\"" + esc(d.note || d.unit) + "\">" + esc(d.unit) + "</span>" : "");
+    // 🐛 예전엔 여섯 타일이 전부 `/catalog` 로 갔다 — **어느 것을 눌러도 같은 화면**이라
+    //    "제품 22개"라고 적어 놓고 57종을 보여줬다(2026-08-10 오너 제보).
+    //    `?domain=` 을 실어 카탈로그가 그 분야만 남기게 한다.
     // data-dom = 도메인 고유색 훅(CSS). d.id 는 이 파일의 DOMAINS 상수라 esc 불필요지만
     // 규칙을 하나로 유지한다 — 값이 카탈로그 응답에서 오는 catalog.html 쪽과 같은 모양
-    return n ? "<a class='dom' data-dom='" + esc(d.id) + "' href='/catalog'>" + inner + "</a>"
+    return n ? "<a class='dom' data-dom='" + esc(d.id) + "' href='/catalog?domain=" +
+                 encodeURIComponent(d.id) + "'>" + inner + "</a>"
              : "<div class='dom soon' data-dom='" + esc(d.id) + "'>" + inner + "</div>";
   }).join("");
 
