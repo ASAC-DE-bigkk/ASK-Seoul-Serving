@@ -24,6 +24,7 @@ import { TOOLS } from "./mcp.js";
 import {
   runChat, CHAT_MODEL, CHAT_ANON_DAILY_TOTAL, CHAT_ANON_DAILY_PER_IP, CHAT_ANON_PRINCIPAL,
 } from "./chat.js";
+import { searchProducts } from "./agent-tools.js";
 import {
   isConfigured, redirectUri, authorizeUrl, exchangeCode, makeState, verifyState,
   readIdTokenFromTokenEndpoint, stateCookie, readCookie, STATE_COOKIE,
@@ -909,6 +910,29 @@ async function handleChat(request, env, trace, ctx) {
   return json(r);
 }
 
+// 질문 하나로 제품을 찾는다 — 랜딩 챗봇의 첫 답이 여기서 나온다(LLM 없음).
+// 🔴 **여기서 `export` 를 붙이지 않는다.** 진입 모듈의 named export 는 workerd 가 전부
+//    Workers 엔트리포인트로 검사해서, 숫자를 내보내면 런타임이 아예 안 뜬다(실측:
+//    "Incorrect type for map entry 'SEARCH_Q_MAX': not of type 'function or ExportedHandler'").
+//    값 자체를 계약으로 고정할 일이 있으면 shared.js 로 옮기거나 동작(400)으로 검증한다.
+const SEARCH_Q_MAX = 200;   // 화면 입력 상한과 같은 값(catalog 채팅은 500 — 여긴 실행이 없어 더 짧다)
+const SEARCH_LIMIT = 3;     // 후보 셋 — 근거를 붙여 사람이 고르게 한다(하나만 주면 틀렸을 때 길이 없다)
+
+async function handleSearch(env, ctx, q, trace) {
+  const query = String(q ?? "").trim();
+  // 빈 질의는 400 이다 — 빈 결과로 답하면 "맞는 게 없다"로 읽힌다(모른다 ≠ 없다).
+  if (!query) return problem(400, "missing query", "질문을 q 파라미터로 보내 달라 — 예: /api/v1/search?q=주차장 자리 있나");
+  if (query.length > SEARCH_Q_MAX)
+    return problem(400, "query too long", `질문은 ${SEARCH_Q_MAX}자 이내 — 찾고 싶은 데이터를 한 문장으로 적어 달라`);
+
+  const res = await handleCatalog(env, ctx);
+  if (res.status >= 400) return res;   // 카탈로그가 안 서면 검색도 성립하지 않는다 — 그 오류를 그대로 전한다
+  const body = await res.json();
+  const r = searchProducts(body, query, SEARCH_LIMIT);
+  trace.rows = r.matched;   // 몇 건을 찾아 줬나 — "0건이 잦은 질문"이 곧 카탈로그의 구멍 신호다
+  return json(r);
+}
+
 // 채팅의 도구 실행이 쓰는 shared 핸들러 묶음 — MCP 의 deps 와 같은 조립(내부 HTTP 재호출 없음).
 const chatDeps = (ctx) => ({
   handleCatalog: (e) => handleCatalog(e, ctx),
@@ -979,6 +1003,21 @@ async function route(request, env, url, trace, ctx) {
   }
   if (request.method !== "GET") return problem(405, "method not allowed", "조회 전용 API (폐기는 DELETE /api/v1/keys)");
   if (path === "/api/v1/catalog") { trace.route = "catalog"; return handleCatalog(env, ctx); }
+
+  // 질문 문장 → 맞는 제품 찾기 (#159 후속 — 랜딩 챗봇의 1단계).
+  //
+  // 🔴 **데이터를 조회하지 않는다.** 카탈로그를 읽어 "어느 제품이 답할 수 있나"만 답하므로
+  //    무인증·무과금이고 LLM 도 안 부른다. 랜딩 방문마다 도는 자리라 그게 전제다 —
+  //    여기서 LLM 을 부르면 구경꾼이 무인증 채팅 몫(100/일)을 다 태운다.
+  // 🔴 검색기는 `mcp.js` 의 `search_products` 와 **같은 함수**다(agent-tools). 사본을 만들면
+  //    사람이 보는 순위와 AI 가 보는 순위가 갈린다.
+  if (path === "/api/v1/search") {
+    trace.route = "search";
+    const ip = request.headers.get("cf-connecting-ip") || "local";
+    const burst = await checkBurst(env, "ip:" + ip);
+    if (burst.exceeded) return burstProblem(burst.retryAfter);
+    return handleSearch(env, ctx, url.searchParams.get("q"), trace);
+  }
 
   const previewMatch = path.match(/^\/api\/v1\/preview\/([^/]+)$/);
   if (previewMatch) {
