@@ -120,35 +120,78 @@ const HAY_WEIGHT = { pattern: 3, question: 2, text: 1 };
 // 아니므로 **꼬리 한 글자를 떼어 본다** — 조사 대부분이 1음절이라 이것만으로 크게 는다.
 const forms = (tok) => (tok.length >= 3 ? [tok, tok.slice(0, -1)] : [tok]);
 
+const tokenize = (s) => String(s || "").toLowerCase()
+  .split(/[^0-9a-z가-힣]+/).filter((w) => w.length >= 2);
+
+// 제품 하나가 가진 말뭉치 — 어디서 걸렸는지에 따라 무게가 다르다.
+function haystacks(p) {
+  const patterns = Array.isArray(p.usage_patterns) ? p.usage_patterns : [];
+  return {
+    patterns,
+    question: String(p.product_question || "").toLowerCase(),
+    text: [p.display?.title, p.display?.summary, p.description,
+      String(p.product_id || "").replace(/_/g, " ")].join(" ").toLowerCase(),
+  };
+}
+
+const hitsIn = (tok, hay) => forms(tok).some((f) => hay.includes(f));
+
+/**
+ * 🔴 **흔한 낱말은 값이 없다.** 첫 판은 겹친 낱말 수만 셌더니 *"서울에서 요즘 전시 많이
+ * 열리는 동네가 어디야?"* 의 1등이 `commerce_dong_category_matrix` 였다 — `동네가`·`어디야`·
+ * `많이` 세 개가 걸려서, 정작 결정적인 `전시` 하나만 가진 `culture_activity_by_dong` 을
+ * 눌렀다(운영 실측 2026-08-10). 질문마다 붙는 `서울에서`·`어디야` 는 57종 거의 전부에
+ * 있으므로 **정보가 0에 가깝다.**
+ *
+ * 그래서 낱말마다 **몇 개 제품에 나타나는지(df)** 를 세어 흔할수록 무게를 깎는다(idf).
+ * 불용어 목록을 손으로 들지 않는 이유는 그 목록이 늘 실물보다 늦기 때문이다 — 카탈로그가
+ * 바뀌면 무엇이 흔한지도 같이 바뀌고, df 는 그걸 저절로 따라간다.
+ */
+function idfOf(tokens, products) {
+  const N = Math.max(products.length, 1);
+  const hays = products.map(haystacks);
+  const idf = new Map();
+  for (const tok of tokens) {
+    const df = hays.filter((h) =>
+      hitsIn(tok, h.question) || hitsIn(tok, h.text) ||
+      h.patterns.some((pat) => hitsIn(tok, String(pat.question_ko || "").toLowerCase()))).length;
+    // df=N(전부에 있음) → 0 에 수렴 · df=1(한 제품에만) → 최대. +1 로 0 나눗셈을 막는다.
+    idf.set(tok, Math.log((N + 1) / (df + 1)));
+  }
+  return idf;
+}
+
 export function searchProducts(body, query, limit = 5) {
   const products = Array.isArray(body?.products) ? body.products : [];
-  const tokens = String(query || "").toLowerCase()
-    .split(/[^0-9a-z가-힣]+/).filter((w) => w.length >= 2);
+  const tokens = [...new Set(tokenize(query))];
+  const idf = idfOf(tokens, products);
 
   const scored = products.map((p) => {
-    const patterns = Array.isArray(p.usage_patterns) ? p.usage_patterns : [];
-    const question = String(p.product_question || "").toLowerCase();
-    const text = [p.display?.title, p.display?.summary, p.description,
-      String(p.product_id || "").replace(/_/g, " ")].join(" ").toLowerCase();
-
+    const h = haystacks(p);
     const hits = new Set();
     let score = 0;
     const matchedPatterns = [];
-    for (const pat of patterns) {
+    for (const pat of h.patterns) {
       const q = String(pat.question_ko || "").toLowerCase();
-      const on = tokens.filter((t) => forms(t).some((f) => q.includes(f)));
+      const on = tokens.filter((t) => hitsIn(t, q));
       if (on.length) {
-        matchedPatterns.push({ pattern_id: pat.pattern_id, question_ko: pat.question_ko, hit: on.length });
-        on.forEach((t) => hits.add(t));
-        score += on.length * HAY_WEIGHT.pattern;
+        matchedPatterns.push({
+          pattern_id: pat.pattern_id, question_ko: pat.question_ko,
+          weight: on.reduce((s, t) => s + (idf.get(t) || 0), 0),
+        });
       }
     }
+    // 한 낱말이 여러 곳에서 걸려도 **한 번만** 센다 — 패턴 22개짜리 제품이 이기는 것을 막는다.
     for (const t of tokens) {
-      const f = forms(t);
-      if (f.some((x) => question.includes(x))) { score += HAY_WEIGHT.question; hits.add(t); }
-      if (f.some((x) => text.includes(x))) { score += HAY_WEIGHT.text; hits.add(t); }
+      const w = idf.get(t) || 0;
+      if (w <= 0) continue;
+      const where = h.patterns.some((pat) => hitsIn(t, String(pat.question_ko || "").toLowerCase()))
+        ? HAY_WEIGHT.pattern
+        : hitsIn(t, h.question) ? HAY_WEIGHT.question
+        : hitsIn(t, h.text) ? HAY_WEIGHT.text : 0;
+      if (where) { score += where * w; hits.add(t); }
     }
-    matchedPatterns.sort((a, b) => b.hit - a.hit);
+    matchedPatterns.sort((a, b) => b.weight - a.weight);
     return { p, score, hits, matchedPatterns };
   }).filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score || String(a.p.product_id).localeCompare(String(b.p.product_id)))
