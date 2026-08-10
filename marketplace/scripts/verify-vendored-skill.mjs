@@ -12,6 +12,11 @@ const REQUIRED_FILES = new Set([
   "references/admin-dong-place-map.json",
 ]);
 
+export function canonicalTextSha256(content) {
+  const text = Buffer.isBuffer(content) ? content.toString("utf8") : String(content);
+  return createHash("sha256").update(text.replace(/\r\n?/g, "\n"), "utf8").digest("hex");
+}
+
 export async function verifyVendoredSkill(provenancePath) {
   const absoluteProvenance = resolve(provenancePath);
   const skillRoot = dirname(absoluteProvenance);
@@ -22,6 +27,9 @@ export async function verifyVendoredSkill(provenancePath) {
   }
   if (provenance?.source?.commit !== EXPECTED_COMMIT) {
     throw new Error("unexpected source commit");
+  }
+  if (provenance?.hash_normalization !== "lf") {
+    throw new Error("unsupported provenance hash normalization");
   }
 
   const entries = Object.entries(provenance.files ?? {});
@@ -38,7 +46,7 @@ export async function verifyVendoredSkill(provenancePath) {
       throw new Error(`provenance path escapes artifact root: ${relativePath}`);
     }
     const content = await readFile(absolutePath);
-    const actualHash = createHash("sha256").update(content).digest("hex");
+    const actualHash = canonicalTextSha256(content);
     if (actualHash !== expectedHash) {
       throw new Error(`sha256 mismatch: ${relativePath}`);
     }

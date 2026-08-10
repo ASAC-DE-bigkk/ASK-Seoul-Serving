@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { canonicalTextSha256 } from "./verify-vendored-skill.mjs";
 
 const ROOT = new URL("../../", import.meta.url);
 const SKILL = new URL("../../skills/seoul-weather-risk/", import.meta.url);
@@ -18,10 +18,15 @@ test("vendored artifact is pinned to the reviewed organization-fork commit", asy
 
 test("every exported file matches its recorded sha256", async () => {
   const provenance = JSON.parse(await readFile(PROVENANCE, "utf8"));
+  assert.equal(provenance.hash_normalization, "lf");
   for (const [path, expected] of Object.entries(provenance.files)) {
     const content = await readFile(new URL(path, SKILL));
-    assert.equal(createHash("sha256").update(content).digest("hex"), expected, path);
+    assert.equal(canonicalTextSha256(content), expected, path);
   }
+});
+
+test("artifact hashes are identical on LF and CRLF checkouts", () => {
+  assert.equal(canonicalTextSha256("line 1\nline 2\n"), canonicalTextSha256("line 1\r\nline 2\r\n"));
 });
 
 test("standalone skill never calls the unpublished npm skill at runtime", async () => {

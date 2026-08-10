@@ -10,10 +10,11 @@
     "standalone SKILL.md frontmatter and direct Python command export",
     "successful X-Request-Id response header preservation"
   ],
+  "hash_normalization": "lf",
   "files": {
-    "SKILL.md": "c0267339dc2776a269e6d8a52d69ce407258fd7cc0955a97af85328caacdc3ed",
+    "SKILL.md": "7e48dd825694ea7ef2b7ae4032b83a375c0d8f547cc35807a89d46454fa070cf",
     "NOTICE": "c44d28c486a732a450f947ed751674163aad71fdb421605dee9f4fc8270d1332",
-    "scripts/seoul_weather_risk.py": "7ace0abcab6a1b20fa280ec58e96642f627881076b1d53a52df3fda037f3446f",
-    "references/admin-dong-place-map.json": "bcfc3d0afb5147d446d969c5a5d76229fe8830f35bec5e328e23dbe1980b550c"
+    "scripts/seoul_weather_risk.py": "184d3c9ab74fdbaa96de137a7f1db902e3a28d6d7c5fbe3a01297a4612e21a5f",
+    "references/admin-dong-place-map.json": "d0f99bd96aff19684ede2ec8700f9bf6086a2b48208166d91a37126b147aaf23"
   }
 }
