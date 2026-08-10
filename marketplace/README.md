@@ -138,6 +138,18 @@ SLO 를 한 화면에서 본다.
 - **폐기된 키로도 이 엔드포인트는 통과한다**(`authenticate(..., {allowRevoked:true})`).
   폐기가 삭제의 문을 닫으면 "지울 권리"가 폐기 순서에 걸려 사라진다.
 - **요청 로그는 남는다**(30일 보존 그대로). 다만 purge 로 해시→이메일 대응이 사라지므로
+
+## K-Skill proxy 서비스 키 — 사용자 키와 분리
+
+`k-skill-proxy:seoul-weather-risk`는 사용자가 발급받는 key가 아니라 운영자가 등록하는
+비인간 service key다. 허용 scope는 `skill:seoul-weather-risk:read` 하나이며,
+`/skill/v1`의 단일 Weather bundle/product/data read route에서만 통과한다. `/api/v1`,
+`/mcp`, key 관리 route는 같은 key로 호출할 수 없다.
+
+서비스 key는 `_service_keys`에 hash·prefix·principal·scope·상태만 저장한다. 원문은 proxy
+운영 환경에만 두고, 사고 시 `status='revoked'`로 즉시 차단한다. rotation은 새 scoped key
+등록 → proxy secret 교체·smoke → 이전 key revoke 순서다. 자세한 계약은
+[decision/0005](docs/decision/0005-k-skill-service-key-scope.md)를 따른다.
   남은 `key_hash` 는 사람과 연결되지 않는다. 처리방침에 그대로 적었다.
 
 남용 대응 폐기(약관의 "사전 통지 없이")는 공개 엔드포인트가 아니라 운영자의 D1 조작이다 —
