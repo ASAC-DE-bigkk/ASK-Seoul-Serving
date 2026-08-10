@@ -36,6 +36,7 @@ const PAGES = {
   "docs.html":    { navIn: "nav-in",      active: "/docs",   keep: [],           cta: ["/catalog#auth", "키 발급"] },
   "guide.html":   { navIn: "nav-in",      active: "/guide",  keep: [],           cta: ["/catalog#auth", "시작하기"] },
   "status.html":  { navIn: "nav-in",      active: "/status", keep: [],           cta: null },
+  "skill-demo.html": { navIn: "nav-in",   active: null,      keep: [],           cta: ["/catalog#auth", "API Key 발급"] },
   "support.html": { navIn: "nav-in",      active: null,      keep: [],           cta: null },
   "legal.html":   { navIn: "nav-in",      active: null,      keep: [],           cta: null },
   // 정책 3종은 각각 한 화면이다(2026-08-07). `legal.html` 은 옛 `/legal#…` 링크가 착지할
