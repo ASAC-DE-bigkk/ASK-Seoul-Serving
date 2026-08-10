@@ -588,7 +588,7 @@
          거짓이 됐다**(795 중 73이 미검증 — culture 47·transit 14·citydata 12). 초안은
          `verified_at` 이 없어 실행하면 409 다. 그래서 라벨이 둘을 갈라 말한다 —
          숫자도 카탈로그에서 각각 센다(박아두면 스탬프가 진행될 때 조용히 거짓이 된다). -->
-    <div class="cell"><div class="lab ko">질의 패턴</div><div class="v sk num" id="statPatterns">0개</div><div class="k" id="statPatternsK">제품에 선언된 질문</div></div>
+    <div class="cell"><div class="lab ko">검증된 질문</div><div class="v sk num" id="statPatterns">0개</div><div class="k">실제로 돌려보고 행 수까지 확인한 질문</div></div>
     <div class="cell"><div class="lab ko">갱신</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
   </div>
 </div>
@@ -1196,20 +1196,15 @@ async function bootCatalog() {
   // 검증된 질문 — 이 서비스가 가진 것 중 가장 강한 자산이고, 히어로 챗봇이 쓰는 바로 그
   // 값이다. **하드코딩하지 않는다**: 지금 640 이지만 871 로 늘 예정이라(ASAC-DBT#484→#489)
   // 박아두면 그날 거짓이 된다.
-  const patterns = products.reduce((n, p) => n + ((p.usage_patterns || []).length), 0);
-  setStat("statPatterns", nf.format(patterns) + "<span class='u'>개</span>");
-  // 🔴 라벨은 **설명 문구**다(숫자 쪼개기가 아니라). 다만 값(전체)에 초안이 섞여 있으므로
-  //    전부를 "검증된"이라고 부르면 거짓이 된다 — 저작 스윕으로 초안이 들어온 날 실제로
-  //    그렇게 됐다. 그래서 초안이 하나라도 있으면 **초안을 품는 문구**를 쓰고, 전부
-  //    스탬프되면 더 강한 문구로 저절로 올라간다(스탬프 진행이 화면에 보이는 부수 효과).
-  //    ⚠️ 초안은 `verified_at` 이 없어 실행하면 409 다 — **"검증된"이라는 말을 라벨에서
-  //    아예 뺀 이유가 이것이다.** 초안이 섞인 동안에는 패턴이 **무엇인지**만 말한다
-  //    (질문 + 그 답을 내는 질의). 전부 스탬프되면 그때 "확인했다"고 말한다.
-  const verified = products.reduce(
+  // 🔴 **검증본만 센다.** 외부 제품에 올리는 것은 검증본뿐이라는 게 정책이고(오너 확인,
+  //    2026-08-10), 라벨도 그렇게 말한다. 전체(초안 포함)를 세면서 "검증된"이라고 부르면
+  //    거짓이 되므로 **말과 수를 같은 쪽에 맞췄다.**
+  //    ⚠️ 지금 카탈로그에는 저작 스윕(ASAC-DBT#489)이 실은 미검증 초안이 남아 있다 —
+  //    `verified_at` 이 없어 실행하면 409 다. 그 초안들이 스탬프되면 이 수가 저절로 오른다.
+  //    초안을 아예 안 싣는 것은 도메인 계약의 몫이다(traffic_weather 가 #489 에서 그렇게 했다).
+  const patterns = products.reduce(
     (n, p) => n + (p.usage_patterns || []).filter((u) => u.verified_at).length, 0);
-  $("statPatternsK").textContent = patterns === verified
-    ? "전부 실제로 돌려보고 행 수까지 확인한 질문"
-    : "제품마다 준비된 질문과 조회 질의";
+  setStat("statPatterns", nf.format(patterns) + "<span class='u'>개</span>");
   const stamps = products.map((p) => p.exported_at).filter(Boolean).sort();
   const newest = stamps[stamps.length - 1];
   setStat("statFresh", (newest && relTime(newest)) || "—");
