@@ -576,10 +576,23 @@
 
          네 칸이 첫 방문의 네 질문에 답한다: 얼마나 있나 · 뭘 물어볼 수 있나 · 돈 드나 ·
          살아 있나. 숫자는 전부 카탈로그 응답에서 센다(박아두면 조용히 거짓이 된다). -->
-    <div class="cell"><div class="lab ko">검증된 질문</div><div class="v sk num" id="statPatterns">0개</div><div class="k">실제로 돌려보고 행 수까지 확인한 질문</div></div>
+    <!-- ⚠️ 값은 **선언된 질의 패턴 전체**다(검증본 + 저작 초안). 라벨이 "실제로 돌려보고
+         행 수까지 확인한"이었는데, 2026-08-10 전 도메인 저작 스윕으로 **초안이 섞이면서
+         거짓이 됐다**(795 중 73이 미검증 — culture 47·transit 14·citydata 12). 초안은
+         `verified_at` 이 없어 실행하면 409 다. 그래서 라벨이 둘을 갈라 말한다 —
+         숫자도 카탈로그에서 각각 센다(박아두면 스탬프가 진행될 때 조용히 거짓이 된다). -->
+    <div class="cell"><div class="lab ko">질의 패턴</div><div class="v sk num" id="statPatterns">0개</div><div class="k" id="statPatternsK">제품에 선언된 질문</div></div>
     <!-- '무료'는 셀 값이 아니라 사실이라 스켈레톤(sk)을 안 붙인다 — 카탈로그를 기다릴
          이유가 없고, 기다리게 하면 첫 화면에서 이 칸만 늦게 채워진다. -->
-    <div class="cell"><div class="lab ko">미리보기</div><div class="v">무료</div><div class="k">전 제품 5행 · 키 없이</div></div>
+    <!-- 🔴 "미리보기 무료"를 걷었다 — **이 서비스는 전부 무료라 정보가 없는 칸**이었다
+         (오너 지적, 2026-08-10). 대신 첫 화면에 없던 축을 세운다: **신뢰**.
+         나머지 셋이 "얼마나 · 뭘 물어보나 · 살아 있나"이고, "이 데이터 어디서 왔나"에
+         답하는 자리가 없었다.
+         ⚠️ 기관 이름은 `/attribution` 이 정본이다 — 여기 셋은 그중 알아보기 쉬운 것만
+         고른 발췌이고, 원천이 바뀌면 그 페이지가 먼저 바뀐다(여기는 "외"로 열어 둔다).
+         숫자를 안 쓴 이유: 원천 수는 카탈로그가 안 내려줘 박아야 하는데, 박은 수는
+         조용히 거짓이 된다(스트립의 다른 값은 전부 실측이라 규칙을 깨고 싶지 않다). -->
+    <div class="cell"><div class="lab ko">공공 원천</div><div class="v">공식 기관</div><div class="k">기상청 · KOPIS · 영화진흥위원회 외</div></div>
     <div class="cell"><div class="lab ko">갱신</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
   </div>
 </div>
@@ -1174,6 +1187,14 @@ async function bootCatalog() {
   // 박아두면 그날 거짓이 된다.
   const patterns = products.reduce((n, p) => n + ((p.usage_patterns || []).length), 0);
   setStat("statPatterns", nf.format(patterns) + "<span class='u'>개</span>");
+  // 🔴 검증본과 초안을 **갈라 말한다.** 값(전체)만 두고 라벨에 "검증된 질문"이라고 적었더니
+  //    저작 스윕으로 초안이 섞인 날 그 문장이 거짓이 됐다. 둘 다 세어 라벨이 사실을 말한다 —
+  //    초안이 스탬프되면 이 줄이 저절로 따라간다(스탬프 진행이 화면에 보이는 부수 효과).
+  const verified = products.reduce(
+    (n, p) => n + (p.usage_patterns || []).filter((u) => u.verified_at).length, 0);
+  $("statPatternsK").textContent = patterns === verified
+    ? "전부 실제로 돌려보고 행 수까지 확인함"
+    : "검증 " + nf.format(verified) + " · 저작 초안 " + nf.format(patterns - verified);
   const stamps = products.map((p) => p.exported_at).filter(Boolean).sort();
   const newest = stamps[stamps.length - 1];
   setStat("statFresh", (newest && relTime(newest)) || "—");
