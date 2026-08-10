@@ -11,7 +11,15 @@
 <meta property="og:site_name" content="ASK: SEOUL">
 <meta property="og:title" content="ASK: SEOUL — 서울 데이터 API 허브">
 <meta property="og:description" content="흩어진 서울 공공데이터를 같은 두 축 위에. 문화·인구·교통·상권·날씨 데이터를 시간과 공간 두 축으로 쌓아 시계열·공간계열 데이터로 제공합니다.">
-<meta name="twitter:card" content="summary">
+<!-- OG 이미지 — 스크레이퍼는 상대 경로를 못 푸므로 **절대 URL 이어야** 한다. 원본은
+     public/og.png(1200×630, 62KB). 고치려면 그리는 코드가 정본이다: 히어로의 시각 언어
+     (워드마크 콜론 accent · 헤드라인 두 줄 위계 · 도메인 6색 점 · 426격자 모티프)를
+     캔버스로 그린 것 — docs/og-image.md 에 재생성 절차가 있다. -->
+<meta property="og:image" content="https://ask-seoul.kr/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="ASK:SEOUL — 흩어진 서울 공공데이터를 같은 두 축 위에">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b6e60'/%3E%3Ccircle cx='16' cy='11.2' r='3.1' fill='%23fff'/%3E%3Ccircle cx='16' cy='20.8' r='3.1' fill='%23fff'/%3E%3C/svg%3E">
 <script>
   /* 테마 확정 — 첫 페인트 전에 끝나야 한다. 이 블록이 </body> 쪽으로 내려가면
