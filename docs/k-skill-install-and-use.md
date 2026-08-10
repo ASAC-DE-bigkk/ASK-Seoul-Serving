@@ -19,11 +19,11 @@
 
 ```bash
 # Codex
-npx skills add https://github.com/ASAC-DE-bigkk/ASK-Seoul-Serving/archive/909354e4a4ec5e95f5bde3db5aa6f20d5b2ad8b0.tar.gz \
+npx skills add https://github.com/ASAC-DE-bigkk/ASK-Seoul-Serving/archive/7203c869380f2907175919733b3282742767cbc6.tar.gz \
   --global --agent codex --copy --yes
 
 # Claude Code
-npx skills add https://github.com/ASAC-DE-bigkk/ASK-Seoul-Serving/archive/909354e4a4ec5e95f5bde3db5aa6f20d5b2ad8b0.tar.gz \
+npx skills add https://github.com/ASAC-DE-bigkk/ASK-Seoul-Serving/archive/7203c869380f2907175919733b3282742767cbc6.tar.gz \
   --global --agent claude-code --copy --yes
 ```
 

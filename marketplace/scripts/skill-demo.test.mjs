@@ -11,6 +11,7 @@ const SITE_CSS = await readFile(new URL("../public/site.css", import.meta.url), 
 const SYNC = await readFile(new URL("./sync-partials.mjs", import.meta.url), "utf8");
 const FOOTER = await readFile(new URL("../partials/footer.html", import.meta.url), "utf8");
 const OPENAPI = JSON.parse(await readFile(new URL("../public/skill-openapi.json", import.meta.url), "utf8"));
+const EXPECTED_ARTIFACT_COMMIT = "7203c869380f2907175919733b3282742767cbc6";
 
 test("API key stays in a password field and module memory only", () => {
   assert.match(HTML, /<input[^>]+id="skillApiKey"[^>]+type="password"/);
@@ -35,6 +36,7 @@ test("install commands pin one reachable Serving artifact commit", () => {
     .map((match) => match[1]);
   assert.equal(refs.length, 4);
   assert.equal(new Set(refs).size, 1);
+  assert.deepEqual([...new Set(refs)], [EXPECTED_ARTIFACT_COMMIT]);
 });
 
 test("install commands use a skills-cli-compatible commit archive", () => {
