@@ -21,10 +21,10 @@
 // **정본은 [decision/0014](docs/decision/0014-console-route-contract.md).** 값을 늘리거나
 // 뜻을 바꿀 때는 그 문서를 먼저 고친다 — 여기만 고치면 화면 문구가 따라오지 않는다.
 //
-// 게이트웨이가 내보내는 값 전수 21종(`marketplace/src/index.js` 의 `trace.route` 대입 자리
-// 15종 + `mcp.js` 의 툴별 세분화 6종과 1:1):
+// 게이트웨이가 내보내는 값 전수 22종(`marketplace/src/index.js` 의 `trace.route` 대입 자리
+// 16종 + `mcp.js` 의 툴별 세분화 6종과 1:1):
 //   catalog · preview · data · me · keys · revoke · product · glossary · run_pattern
-//   auth_start · auth_callback
+//   auth_start · auth_callback · chat
 //   skill_bundle · skill_data · skill_product
 //   mcp · mcp_list_products · mcp_describe_product · mcp_preview_product
 //       · mcp_query_product · mcp_run_pattern · mcp_check_quota
@@ -32,6 +32,9 @@
 // ⚠️ 이 종 수는 세 번의 추가(auth 2종 · mcp_run_pattern · run_pattern)가 지나도록 17종에
 // 멈춰 있었다(2026-08-08 보정). 값을 늘리면 **이 주석의 목록·종 수와 0014 §1 머리**도 함께
 // 고친다 — CLAUDE.md §7-1 route 행이 이 자리를 가리킨다.
+//
+// 🔴 `chat`(Serving#159, 2026-08-10) 은 **SERVE 배열에 안 들어 있다.** 값이 같아도 서빙일
+// 수도 아닐 수도 있는 첫 route 라서다 — 판단은 0014 §2-2 의 열린 질문으로 두었다.
 //
 // ⚠️ `product`·`glossary` 는 한때 `v1_product`·`v1_glossary` 였다 — ea28bcc(#67)가 `/v1` 을
 // 삭제가 아니라 **흡수**로 바꾸면서 개명했다. 옛 이름으로 번역표를 채우면 화면에 슬러그가 샌다.
