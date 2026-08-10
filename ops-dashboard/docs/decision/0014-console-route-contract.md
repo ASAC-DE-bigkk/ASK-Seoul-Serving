@@ -33,7 +33,7 @@
 그래서 이 문서의 형식이 목록이다. **"어디를 고쳐야 하나"에 한 곳으로 답할 수 있어야** 같은
 사고가 안 난다.
 
-## 1. 값 → 화면 문구 (`ROUTE_KO` 정본, 22종)
+## 1. 값 → 화면 문구 (`ROUTE_KO` 정본, 23종)
 
 `public/index.html` 의 `ROUTE_KO` 가 구현이고, 이 표가 정본이다.
 
@@ -49,6 +49,7 @@
 | `glossary` | 용어 사전 | ⚠️ **`v1_glossary` 아니다** — 〃 |
 | `run_pattern` | 패턴 조회 | **SERVE** — 검증 패턴의 **사람용 문**(Serving PR#175). `mcp_run_pattern` 과 같은 함수·같은 쿼터, 문만 다르다 |
 | `chat` | 채팅 질문 | 자연어 질문 하나를 받아 **검증 패턴을 골라 실행**한다(Serving#159 · decision/0006). SERVE 판정은 **§2-2 참조** — 이 표에서 유일하게 조건부다 |
+| `search` | 데이터 찾기 | 질문 문장으로 **어느 제품이 답할 수 있나**만 찾는다(Serving#268, 랜딩 챗봇 1단계). 데이터를 조회하지 않아 **SERVE 가 아니다** — `catalog` 과 같은 부류이고, 조건부인 `chat` 과 달리 늘 그렇다 |
 | `skill_bundle` | 스킬 묶음 | |
 | `skill_data` | 스킬 데이터 조회 | **SERVE** |
 | `skill_product` | 스킬 제품 안내 | |
@@ -127,7 +128,7 @@ const SERVE = "route IN (" + SERVE_ROUTES.map((r) => "'" + r + "'").join(", ") +
 |---|---|
 | `preview` · `mcp_preview_product` | 판단 재료다. 일일 쿼터도 안 깎는다 |
 | `product` · `glossary` · `skill_product` · `mcp_describe_product` | 메타·안내 |
-| `catalog` · `mcp_list_products` | 목록 |
+| `catalog` · `mcp_list_products` · `search` | 목록 — `search` 는 "어느 제품이 답하나"만 찾고 데이터를 안 읽는다 |
 | `me` · `mcp_check_quota` · `keys` · `revoke` | 데이터와 무관 |
 | `mcp` | 연결 절차 — **§3 참조** |
 | `chat` | **조건부다** — 배열에 못 담는다. **§2-2 참조** |

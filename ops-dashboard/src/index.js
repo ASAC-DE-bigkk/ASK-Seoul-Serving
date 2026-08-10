@@ -21,10 +21,10 @@
 // **정본은 [decision/0014](docs/decision/0014-console-route-contract.md).** 값을 늘리거나
 // 뜻을 바꿀 때는 그 문서를 먼저 고친다 — 여기만 고치면 화면 문구가 따라오지 않는다.
 //
-// 게이트웨이가 내보내는 값 전수 22종(`marketplace/src/index.js` 의 `trace.route` 대입 자리
-// 16종 + `mcp.js` 의 툴별 세분화 6종과 1:1):
+// 게이트웨이가 내보내는 값 전수 23종(`marketplace/src/index.js` 의 `trace.route` 대입 자리
+// 17종 + `mcp.js` 의 툴별 세분화 6종과 1:1):
 //   catalog · preview · data · me · keys · revoke · product · glossary · run_pattern
-//   auth_start · auth_callback · chat
+//   auth_start · auth_callback · chat · search
 //   skill_bundle · skill_data · skill_product
 //   mcp · mcp_list_products · mcp_describe_product · mcp_preview_product
 //       · mcp_query_product · mcp_run_pattern · mcp_check_quota
