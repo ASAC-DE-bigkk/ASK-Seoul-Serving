@@ -2,9 +2,11 @@
 // npm test 에 포함(scripts/*.test.mjs). 순수 함수라 D1 불필요.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { convertPattern, parseRestArrayParams } from "../src/run-pattern-ext.js";
+import { convertPattern, parseRestArrayParams, resolveRelativeDefault } from "../src/run-pattern-ext.js";
 
 const MAX = 5000;
+// 고정 기준시각 — KST 2026-08-10 15:04:05 (UTC 06:04:05). 상대 날짜 해석의 결정성 확보.
+const NOW = Date.UTC(2026, 7, 10, 6, 4, 5);
 
 // ── 계약 보존: 게시 메타(defaults/enums/spec)가 없으면 기존 계약 그대로 ──────────────
 test("메타 없음: 전 파라미터 필수 · 스칼라 bind · limit 클램프(기존 계약)", () => {
@@ -84,4 +86,61 @@ test("REST: array 선언 + JSON 배열 문자열 → 실배열 · 그 외는 그
   assert.equal(parseRestArrayParams({ gus: "[oops" }, spec).gus, "[oops");
   // spec 없음 → supplied 그대로
   assert.deepEqual(parseRestArrayParams({ a: "1" }, null), { a: "1" });
+});
+
+// ── 동적 기본값(상대 날짜) — 시점이 박제되지 않고 '지금' 기준으로 움직인다 ──────────────
+test("resolveRelativeDefault: 형식별 KST 기준 해석", () => {
+  const r = (rel, as) => resolveRelativeDefault({ rel, as }, NOW).val;
+  assert.equal(r("0d", "date"), "2026-08-10");       // KST 오늘
+  assert.equal(r("-30d", "date"), "2026-07-11");     // 30일 전
+  assert.equal(r("-1w", "date"), "2026-08-03");      // 1주 전
+  assert.equal(r("-1M", "date"), "2026-07-10");      // 1달 전
+  assert.equal(r("0M", "ym"), "2026-08");            // 이번 달
+  assert.equal(r("0y", "year"), "2026");             // 올해
+  assert.equal(r("-1y", "year"), "2025");
+  assert.equal(r("0d", "datetime"), "2026-08-10 15:04:05");  // 오프셋 0 = 지금(시각까지)
+  assert.equal(r("-7d", "datetime"), "2026-08-03 00:00:00"); // 그 외 = 그날 00:00:00
+});
+
+test("resolveRelativeDefault: KST 경계 — UTC 늦은 밤이 KST 다음날", () => {
+  // UTC 2026-08-10 16:00 = KST 2026-08-11 01:00 → '오늘'은 11일
+  const late = Date.UTC(2026, 7, 10, 16, 0, 0);
+  assert.equal(resolveRelativeDefault({ rel: "0d", as: "date" }, late).val, "2026-08-11");
+});
+
+test("resolveRelativeDefault: 잘못된 표현은 err", () => {
+  assert.ok(resolveRelativeDefault({ rel: "-30x", as: "date" }, NOW).err);
+  assert.ok(resolveRelativeDefault({ rel: "-30d", as: "week" }, NOW).err);
+});
+
+test("convertPattern: 상대 기본값이 실행 시점으로 bind (from/to 최근 30일)", () => {
+  const sql = "SELECT * FROM t WHERE d BETWEEN :from AND :to";
+  const defaults = { from: { rel: "-30d", as: "date" }, to: { rel: "0d", as: "date" } };
+  const r = convertPattern(sql, {}, { defaults, nowMs: NOW });
+  assert.ok(r.ok);
+  assert.deepEqual(r.values, ["2026-07-11", "2026-08-10"]);
+  assert.deepEqual(r.defaulted.sort(), ["from", "to"]);
+});
+
+test("convertPattern: 🔴 동적 — 다른 '지금'이면 다른 날짜 (박제 아님)", () => {
+  const sql = "SELECT * FROM t WHERE d >= :from";
+  const d = { from: { rel: "-7d", as: "date" } };
+  const day1 = convertPattern(sql, {}, { defaults: d, nowMs: NOW }).values[0];
+  const day2 = convertPattern(sql, {}, { defaults: d, nowMs: NOW + 5 * 86400_000 }).values[0]; // +5일
+  assert.equal(day1, "2026-08-03");
+  assert.equal(day2, "2026-08-08");   // 기준이 5일 이동하면 기본값도 5일 이동
+  assert.notEqual(day1, day2);
+});
+
+test("convertPattern: 소비자가 날짜를 주면 상대 기본값을 override", () => {
+  const sql = "SELECT * FROM t WHERE d >= :from";
+  const d = { from: { rel: "-7d", as: "date" } };
+  const r = convertPattern(sql, { from: "2020-01-01" }, { defaults: d, nowMs: NOW });
+  assert.equal(r.values[0], "2020-01-01");
+  assert.equal(r.defaulted.length, 0);
+});
+
+test("convertPattern: 상대 기본값 형식 오류는 400 invalid default", () => {
+  const r = convertPattern("SELECT * FROM t WHERE d >= :from", {}, { defaults: { from: { rel: "bad", as: "date" } }, nowMs: NOW });
+  assert.equal(r.problem.title, "invalid default");
 });

@@ -68,6 +68,24 @@
   테스트 552/552(회귀 5건 신설 — 옛 링크가 돌아오면 그 자리에서 걸린다).
   🔑 **화면이 "제품 22개"라고 적어 놓고 다른 것을 주면, 사용자는 필터가 걸린 줄 알고
   남의 분야 제품을 그 분야로 읽는다** — 조용히 틀리는 종류라 빈 화면보다 나쁘다.
+### upstream 등록과 독립된 `seoul-weather-risk` 설치·실호출 시연 경로
+
+- **작업자**: @masondev1024
+- **의도 · 목표**: upstream merge/npm release를 기다리지 않고 발표 환경의 Codex·Claude Code에서 ASK 서울 운영 `/skill/v1` 실호출을 재현한다.
+- **조치**: organization fork의 고정 commit에서 standalone artifact를 export하고 provenance/hash 검증을 추가했다. `/skill-demo`에 설치, memory-only API Key, bundle/product/data readiness, 자연어 질문 handoff를 연결하고 성공 `X-Request-Id` 계약을 문서화했다. 화면은 기존 `site.css`와 문서형 `header.page`/`nav.toc` 구조로 맞추고 light/dark 두 테마, 44px 조작 영역, 전체 너비 설치 명령, 단일 보조 정보 영역으로 정리했다.
+- **결과**: 집중 테스트 20건과 최신 `dev` 병합 후 Marketplace 전체 테스트 402건, 운영 read-only smoke가 통과했다. Windows CRLF와 Linux LF checkout에서도 artifact hash가 같도록 LF 정규화 회귀 테스트를 포함한다. `320/375/768/960/1280px` 실측에서 가로 overflow가 없고 light/dark 데스크톱·모바일 렌더를 확인했다. 실측 publication은 현재 1행 응답과 bundle/product/data request ID를 반환했다. artifact 설치 URL은 provenance LF 해시 보정이 포함된 Serving commit `7203c869380f2907175919733b3282742767cbc6`으로 고정했다. Codex·Claude Code 각 2회 E2E는 배포 전 최종 검증으로 남긴다.
+
+### `skills` CLI가 commit archive를 설치하도록 고정
+
+- **의도 · 목표**: `/tree/<commit>/skills/...` URL은 `skills@1.5.22`가 commit을 branch 이름으로 오해해 설치에 실패했다. 발표용 설치 명령은 실제 CLI가 해석하는 경로여야 한다.
+- **조치**: 설치 URL을 동일 commit의 GitHub archive `.../archive/<commit>.tar.gz`로 바꾸고, archive 형식 및 기존 tree 형식 금지를 회귀 테스트로 고정했다.
+- **결과**: Codex·Claude Code 격리 home에 archive URL 설치 성공, vendored 4개 파일 일치, 설치본에서 운영 API 1회씩 호출 성공(`row_count` 4/3, `registration_ready=true`).
+
+### archive 설치 실측에서 provenance 기준 불일치 원인 확인
+
+- **원인**: archive URL이 provenance 해시 보정 전 commit `909354e4a4ec5e95f5bde3db5aa6f20d5b2ad8b0`을 가리켰다. 해당 commit은 Windows checkout 바이트 해시를 기록했지만 GitHub archive는 LF 파일을 제공해 설치본에서 3개 파일의 raw SHA가 달라졌다.
+- **조치**: LF 정규화 해시와 `hash_normalization: lf`가 반영된 commit `7203c869380f2907175919733b3282742767cbc6`으로 Codex·Claude Code 설치 URL을 재고정했다.
+- **검증 기준**: 설치 후 raw byte 비교가 아니라 `canonicalTextSha256`(CRLF→LF 정규화) 기준으로 provenance를 검증한다. NOTICE를 제외한 3개 텍스트 파일도 동일하게 통과해야 한다.
 
 ### 랜딩 히어로 챗봇 1단계 — 질문으로 제품을 찾는다 (LLM 없음)
 

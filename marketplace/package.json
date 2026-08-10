@@ -13,6 +13,7 @@
     "verify:log": "node scripts/verify-request-log.mjs",
     "preflight": "node scripts/preflight-d1.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "smoke:skill-demo": "node scripts/skill-demo-live-smoke.mjs",
     "issue:service-key": "node scripts/issue-service-key.mjs",
     "eval:model": "node scripts/model-eval.mjs",
     "test": "node --test \"scripts/*.test.mjs\" && node scripts/sync-partials.mjs --check",
