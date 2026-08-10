@@ -1,0 +1,19 @@
+{
+  "artifact": "seoul-weather-risk",
+  "exported_at": "2026-08-10",
+  "source": {
+    "repository": "https://github.com/ASAC-DE-bigkk/k-skill",
+    "ref": "feat/546-seoul-weather-risk",
+    "commit": "a9e1c7e4b372da670908737b752bf708af160112"
+  },
+  "transformations": [
+    "standalone SKILL.md frontmatter and direct Python command export",
+    "successful X-Request-Id response header preservation"
+  ],
+  "files": {
+    "SKILL.md": "c0267339dc2776a269e6d8a52d69ce407258fd7cc0955a97af85328caacdc3ed",
+    "NOTICE": "c44d28c486a732a450f947ed751674163aad71fdb421605dee9f4fc8270d1332",
+    "scripts/seoul_weather_risk.py": "7ace0abcab6a1b20fa280ec58e96642f627881076b1d53a52df3fda037f3446f",
+    "references/admin-dong-place-map.json": "bcfc3d0afb5147d446d969c5a5d76229fe8830f35bec5e328e23dbe1980b550c"
+  }
+}
