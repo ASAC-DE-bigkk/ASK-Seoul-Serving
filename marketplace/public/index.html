@@ -556,26 +556,30 @@
 
 <div class="wrap">
   <div class="strip">
-    <!-- 라벨은 한국어 — 히어로·카드·카탈로그가 전부 한국어인데 스트립만 영어면 어휘가
-         갈린다. 공간축·시간축은 히어로 문구("시간과 공간 두 축")를 그대로 받는 이름이다. -->
-    <div class="cell"><div class="lab ko">데이터 제품</div><div class="v sk" id="statProducts">0종</div><div class="k">제공 중인 데이터 제품</div></div>
+    <!-- 라벨은 한국어 — 히어로·카드·카탈로그가 전부 한국어인데 스트립만 영어면 어휘가 갈린다. -->
+    <!-- 분야 수는 별도 칸을 안 만들고 이 라벨이 흡수한다 — 바로 아래 도메인 격자가
+         여섯을 이미 보여주므로 칸을 하나 더 쓰면 같은 말을 두 번 하는 셈이다. -->
+    <div class="cell"><div class="lab ko">데이터 제품</div><div class="v sk" id="statProducts">0종</div><div class="k" id="statProductsK">제공 중인 데이터 제품</div></div>
     <!-- 여기에 "426개 행정동"을 커버리지로 적었었는데, 그건 culture 한 도메인의 커버리지다.
          citydata 는 실시간 관측 121곳, weather 는 KMA 격자 80칸이라 플랫폼 공통값이 아니다.
          공통인 것은 커버리지가 아니라 **조인 축**(행정동 코드, #48 합의)이라 그것만 적는다.
          도메인별 실측 커버리지는 아래 도메인 격자에서 각각 밝힌다. 총 행수도 쓰지 않는다 —
          그레인이 다른 제품을 더한 값이라 의미가 없다(제품별 행수는 카드에 유지) -->
-    <!-- 두 축을 나란히 둔다 — 히어로가 "붙이고 자릅니다"라고 주장하는 그 둘이다.
-         공간축은 이름이 하나라 이름을 적고(행정동 코드), 시간축은 컬럼명이 제품마다 달라
-         (실측 18종) 이름 대신 "몇 종에 걸리는가"를 적는다. 둘의 표시가 다른 건 값의
-         성질이 달라서지 일관성이 없어서가 아니다.
-         여기 있던 Daily quota(1,000회/일)를 시간축으로 갈았다 — 한도는 키를 받은 뒤의
-         이야기고, 처음 온 사람이 재는 건 "무엇으로 자를 수 있나"다. 한도는 /docs 와
-         카탈로그에 그대로 있다. -->
-    <!-- 공간축도 시간축처럼 "몇 종에 걸리는가"를 값으로 적는다 — 행정동 코드 보유
-         30/62(실측)라 이름만 적으면 전 제품이 되는 것처럼 읽힌다. 카운트는 하드코딩하지
-         않고 카탈로그 columns 에서 센다(시간축과 같은 이유 — 박아두면 조용히 거짓이 된다). -->
-    <div class="cell"><div class="lab ko">공간축</div><div class="v sk num" id="statDong">0종</div><div class="k">행정동(동네) 단위로 다른 데이터와 붙일 수 있는 제품</div></div>
-    <div class="cell"><div class="lab ko">시간축</div><div class="v sk num" id="statTimed">0종</div><div class="k">원하는 기간만 잘라 받을 수 있는 제품</div></div>
+    <!-- 🔴 2026-08-10 — 공간축·시간축 두 칸을 걷었다. **스키마 사실이지 사용자의 질문이
+         아니었다** — 방문자는 "행정동 조인 키를 가진 제품이 몇 종인가"를 궁금해하지 않는다.
+         숫자도 불리하게 읽혔다: 24/57 · 30/57 이라 분모를 아는 사람에겐 "절반도 안 되네"가
+         된다. 강점을 말하려던 칸이 약점을 말하고 있었다(오너 지적).
+         축 정보를 감춘 게 아니라 자리를 옮긴 것이다 — sub 가 "시간과 공간 두 축"이라고
+         말하고, 제품별 실제 축은 카탈로그 배지가 밝힌다.
+         ⚠️ 예전에 여기 있던 Daily quota(1,000회/일)를 되돌린 게 아니다 — 그건 **키를 받은
+         뒤**의 이야기라 뺐고, 아래 '미리보기 무료'는 **키를 받기 전** 이야기다. 다른 값이다.
+
+         네 칸이 첫 방문의 네 질문에 답한다: 얼마나 있나 · 뭘 물어볼 수 있나 · 돈 드나 ·
+         살아 있나. 숫자는 전부 카탈로그 응답에서 센다(박아두면 조용히 거짓이 된다). -->
+    <div class="cell"><div class="lab ko">검증된 질문</div><div class="v sk num" id="statPatterns">0개</div><div class="k">실제로 돌려보고 행 수까지 확인한 질문</div></div>
+    <!-- '무료'는 셀 값이 아니라 사실이라 스켈레톤(sk)을 안 붙인다 — 카탈로그를 기다릴
+         이유가 없고, 기다리게 하면 첫 화면에서 이 칸만 늦게 채워진다. -->
+    <div class="cell"><div class="lab ko">미리보기</div><div class="v">무료</div><div class="k">전 제품 5행 · 키 없이</div></div>
     <div class="cell"><div class="lab ko">갱신</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
   </div>
 </div>
@@ -1153,7 +1157,7 @@ async function bootCatalog() {
   await fallbackReady;
   products = await catalogReady;
   if (!products) {
-    setStat("statProducts", "—"); setStat("statDong", "—"); setStat("statTimed", "—"); setStat("statFresh", "—");
+    setStat("statProducts", "—"); setStat("statPatterns", "—"); setStat("statFresh", "—");
     $("statFreshK").textContent = "마지막 갱신 · 확인 불가";
     failState("domains", "도메인 정보를 불러오지 못했습니다");
     failState("cards", "제품 목록을 불러오지 못했습니다");
@@ -1161,14 +1165,15 @@ async function bootCatalog() {
   }
 
   setStat("statProducts", products.length + "<span class='u'>종</span>");
-  // 두 축의 수는 세어서 넣는다 — 하드코딩하면 제품이 늘 때 조용히 거짓이 된다.
-  // 공간축 = 행정동 코드(#48 합의 조인 키) 보유 제품. 구 단위(gu_code)만 있는 제품은
-  // 동 단위로 못 붙으므로 세지 않는다(실측 30/62 — 구까지 치면 42).
-  const dong = products.filter((p) => (p.columns || []).some((c) => c.name === "admin_dong_code")).length;
-  setStat("statDong", dong + "<span class='u'>종</span>");
-  // time_axis 가 null 인 제품(명부형)은 기간 필터를 못 걸므로 세지 않는다.
-  const timed = products.filter((p) => p.time_axis).length;
-  setStat("statTimed", timed + "<span class='u'>종</span>");
+  // 분야 수는 라벨이 아니라 **세어서** 넣는다 — 도메인이 늘거나 줄면 따라간다.
+  // domainOf 는 product_id 앞머리라 DOMAINS 상수와 무관하게 실물을 센다.
+  const domCount = new Set(products.map(domainOf)).size;
+  $("statProductsK").textContent = domCount + "개 분야에 걸쳐 제공 중";
+  // 검증된 질문 — 이 서비스가 가진 것 중 가장 강한 자산이고, 히어로 챗봇이 쓰는 바로 그
+  // 값이다. **하드코딩하지 않는다**: 지금 640 이지만 871 로 늘 예정이라(ASAC-DBT#484→#489)
+  // 박아두면 그날 거짓이 된다.
+  const patterns = products.reduce((n, p) => n + ((p.usage_patterns || []).length), 0);
+  setStat("statPatterns", nf.format(patterns) + "<span class='u'>개</span>");
   const stamps = products.map((p) => p.exported_at).filter(Boolean).sort();
   const newest = stamps[stamps.length - 1];
   setStat("statFresh", (newest && relTime(newest)) || "—");
