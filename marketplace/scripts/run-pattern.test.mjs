@@ -38,6 +38,7 @@ const keyRow = { key_hash: "h", daily_quota: 1000 };
 // INSERT/SELECT 를 쓴다. 그래서 여기서는 run() 이 필요하다: 위 fake 에 없으면 실패한다.
 function fullEnv(patternRow, dataRows, patternIds) {
   const env = fakeEnv(patternRow, dataRows, patternIds);
+  env.usageSql = [];
   env.catalogMeta = { name: "t", product_id: "p", publication_id: "pub1", exported_at: "s1" };
   env.sources = [{ source_id: "s", redistribution: "allowed_with_attribution" }];
   const base = env.DB.prepare.bind(env.DB);
@@ -51,7 +52,14 @@ function fullEnv(patternRow, dataRows, patternIds) {
       return { bind: () => ({ first: async () => env.catalogMeta }) };
     }
     if (sql.includes("_usage")) {
-      return { bind: () => ({ run: async () => ({}), first: async () => ({ count: 1 }) }) };
+      // 쿼터 문장을 전부 기록한다 — 되돌리기(#217 검토 중 발견)는 **안 하면 조용히 틀리는**
+      // 종류라, "무엇을 실행했나"를 봐야 검증된다. 응답만 보면 되돌렸는지 알 수 없다.
+      return {
+        bind: (...binds) => {
+          env.usageSql.push({ sql, binds });
+          return { run: async () => ({}), first: async () => ({ count: 1 }) };
+        },
+      };
     }
     return base(sql);
   };
@@ -306,4 +314,80 @@ test("형식이 틀린 pattern_id 는 남기지 않는다 — 아무 문자열�
   const res = await handleRunPattern(fullEnv(PATTERN), "p", "DROP TABLE x", {}, keyRow, trace);
   assert.equal(res.status, 400);
   assert.equal(trace.patternId, undefined);
+});
+
+// ── 드리프트 500 은 쿼터를 안 태운다 (#217 검토 중 발견) ─────────────────────────
+//
+// `countUsage` 는 이름과 달리 **증가**라, 실행이 던진 시점에 이미 하루 몫이 깎여 있었다.
+// 게시자가 깨뜨린 패턴을 소비자가 지불하고, 재시도하면 매번 깎이는 구조였다.
+//
+// 응답만 봐서는 되돌렸는지 알 수 없어 **실행한 쿼터 문장**을 본다.
+
+function driftEnv() {
+  const env = fullEnv(PATTERN);
+  const base = env.DB.prepare.bind(env.DB);
+  env.DB.prepare = (sql) => {
+    // 패턴 SQL 실행만 던지게 한다 — 게시본과 어긋난 상황의 재현
+    if (sql.includes("SELECT a, b FROM t")) {
+      return { bind: () => ({ all: async () => { throw new Error("no such column: b"); } }) };
+    }
+    return base(sql);
+  };
+  return env;
+}
+
+const refunds = (env) => env.usageSql.filter((s) => /UPDATE _usage/.test(s.sql));
+const charges = (env) => env.usageSql.filter((s) => /INSERT INTO _usage/.test(s.sql));
+
+test("드리프트 500 — 깎은 쿼터를 되돌린다", async () => {
+  const env = driftEnv();
+  const res = await handleRunPattern(env, "p", "pat", { gu: "강남구", n: 10 }, keyRow, {});
+  assert.equal(res.status, 500);
+  assert.equal(charges(env).length, 1, "과금이 한 번 일어나야 이 테스트가 의미가 있다");
+  assert.equal(refunds(env).length, 1, "되돌리기가 없다 — 소비자가 서버 잘못을 지불한다");
+});
+
+test("되돌리기는 음수를 만들지 않는다 — 무제한 키가 되어 버린다", async () => {
+  const env = driftEnv();
+  await handleRunPattern(env, "p", "pat", { gu: "강남구", n: 10 }, keyRow, {});
+  assert.match(refunds(env)[0].sql, /count > 0/,
+    "가드가 없으면 두 번 되돌릴 때 음수가 되고, 음수 쿼터는 리셋 전까지 무제한이다");
+});
+
+test("되돌리기는 깎은 그 날짜를 가리킨다 — 자정을 걸치면 남의 몫을 깎는다", async () => {
+  const env = driftEnv();
+  await handleRunPattern(env, "p", "pat", { gu: "강남구", n: 10 }, keyRow, {});
+  const chargedDay = charges(env)[0].binds[1];
+  const refundedDay = refunds(env)[0].binds[1];
+  assert.equal(refundedDay, chargedDay);
+});
+
+test("드리프트 500 은 안 깎였다고 말한다 — 안 그러면 소비자가 알 길이 없다", async () => {
+  const env = driftEnv();
+  const res = await handleRunPattern(env, "p", "pat", { gu: "강남구", n: 10 }, keyRow, {});
+  const body = await res.json();
+  assert.equal(body.quota_charged, false);
+  assert.match(body.detail, /쿼터를 소모하지 않았다/);
+});
+
+test("🔴 되돌리기가 실패하면 안 깎였다고 말하지 않는다", async () => {
+  const env = driftEnv();
+  const base = env.DB.prepare.bind(env.DB);
+  env.DB.prepare = (sql) => {
+    if (/UPDATE _usage/.test(sql)) throw new Error("D1 unavailable");
+    return base(sql);
+  };
+  const res = await handleRunPattern(env, "p", "pat", { gu: "강남구", n: 10 }, keyRow, {});
+  assert.equal(res.status, 500);
+  const body = await res.json();
+  assert.equal(body.quota_charged, undefined, "틀린 안내는 안내가 없는 것보다 나쁘다");
+  assert.doesNotMatch(body.detail, /쿼터를 소모하지 않았다/);
+});
+
+test("성공하면 되돌리지 않는다 — 정상 서빙은 과금 대상이다", async () => {
+  const env = fullEnv(PATTERN);
+  const res = await handleRunPattern(env, "p", "pat", { gu: "강남구", n: 10 }, keyRow, {});
+  assert.equal(res.status, 200);
+  assert.equal(charges(env).length, 1);
+  assert.equal(refunds(env).length, 0);
 });

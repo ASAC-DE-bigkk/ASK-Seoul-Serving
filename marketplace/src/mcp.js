@@ -5,34 +5,61 @@
 // product_id 로 통일하고, 물리 테이블명 해석은 shared 해석기(decision/0003)에 맡긴다.
 // stateless — 세션 상태 없음(과거 SSE 재접속 폭주 위험 회피).
 //
-// 툴(6): list_products · describe_product · preview_product · query_product · run_pattern ·
+// 툴(7): search_products · list_products · describe_product · preview_product · query_product · run_pattern ·
 // check_quota. run_pattern 은 #118 실행 계약(2026-08-07 확정)으로 P1 에서 승격.
 
 import { burstProblem, normalizeIntent, normalizeMcpClient, ATTRIBUTION } from "./shared.js";
+// AI 소비자 공용 성형 — 채팅(#159)과 같은 모양을 보게 한다. `TOOLS` 는 여기가 정본이고
+// 저쪽은 인자로 받아 읽기만 한다(순환 없음).
+import { slimProductList, buildDataContext, searchProducts } from "./agent-tools.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "ask-seoul", version: "0.1.0" };
 
 // 툴 주석(annotations) — MCP 사양의 선택 필드지만 **PlayMCP 심사는 필수로 본다**
 // (2026-08-09 반려 사유 ①: "툴 annotations 가 정의되지 않았습니다").
-// 여섯 툴 모두 성격이 같다: 저장된 데이터를 **읽기만** 하고(readOnly), 아무것도 지우지
+// 모든 툴이 성격이 같다: 저장된 데이터를 **읽기만** 하고(readOnly), 아무것도 지우지
 // 않으며(destructive 아님), 같은 인자로 다시 부르면 같은 결과다(idempotent — 게시본이
 // 바뀌기 전까지). `openWorldHint: false` 는 **닫힌 데이터셋**이라는 뜻이다 — 웹 검색처럼
 // 예측 불가한 외부를 훑지 않고 우리가 게시한 57종 안에서만 답한다.
-// 값을 툴마다 손으로 적지 않는 이유: 여섯이 같은 성격인데 따로 적으면 하나만 어긋난다.
+// 값을 툴마다 손으로 적지 않는 이유: 전부 같은 성격인데 따로 적으면 하나만 어긋난다.
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const annotate = (title) => ({ title, ...READ_ONLY });
 
-// 🔴 설명에는 **서비스명("서울시 데이터")을 넣는다** (반려 사유 ②). 카탈로그에서 툴 하나가
-// 서버 이름과 떨어져 단독으로 읽히는 자리가 있어서, 문장만 보고 "무엇에 대한 도구인지"를
-// 알 수 있어야 한다. 기존 문장의 AI 지시(호출 순서·runnable 조건 등)는 그대로 둔다.
+// 🔴 설명에는 **서비스명을 글자 그대로 넣는다** (PlayMCP 반려 사유 ②).
+// ⚠️ 1차 수리에서 "서울시 데이터"만 넣었다가 **또 반려됐다**(2026-08-10). 검사기 문구
+// *"서비스명(서울시 데이터 패턴)"* 의 괄호 안이 **찾는 문자열 그 자체**였다 — "패턴"을
+// 수식어(= 정규식·패턴)로 읽은 것이 틀렸다. 지금은 `서울시 데이터 패턴` 전체를 넣는다.
+// 이 문자열은 "서울시 데이터"를 부분으로 포함하므로 두 해석을 동시에 만족한다.
+// 🔴 **줄이거나 바꾸지 말 것** — 한 글자만 달라도 전 툴이 한꺼번에 반려된다.
+// 기존 문장의 AI 지시(호출 순서·runnable 조건·data_context 안내)는 그대로 둔다.
+export const SERVICE_NAME = "서울시 데이터 패턴";
 export const TOOLS = [
+  // 🔴 **목록보다 앞에 둔다.** AI 는 위에서부터 읽고 첫 도구를 먼저 부르는 경향이 있는데,
+  // 실측(2026-08-08)에서 `list_products` 142KB 를 다 못 읽고 없는 제품 이름을 9분에 13번
+  // 지어냈다. 질문으로 바로 찾게 하면 그 왕복이 통째로 없어진다.
+  {
+    name: "search_products",
+    title: "질문으로 제품 찾기",
+    annotations: annotate("질문으로 제품 찾기"),
+    description:
+      "사용자 질문 문장을 그대로 넣어 서울시 데이터 패턴 서비스에서 맞는 제품을 찾습니다. 어떤 데이터를 써야 할지 모를 때 목록 전체를 훑는 대신 이 도구를 먼저 부르세요. 제품마다 왜 걸렸는지(matched_terms)와 바로 실행할 수 있는 질의 패턴(matched_patterns)이 함께 옵니다.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "사용자 질문 그대로. 예: 토요일 낮에 20대 많은 장소" },
+        limit: { type: "integer", minimum: 1, maximum: 10, description: "돌려받을 제품 수(기본 5)" },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
   {
     name: "list_products",
     title: "서울시 데이터 제품 목록",
     annotations: annotate("서울시 데이터 제품 목록"),
     description:
-      "조회 가능한 서울시 데이터 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 어떤 서울시 데이터가 질문에 맞는지 고를 때 가장 먼저 호출하세요. 목록에는 컬럼 이름과 질의 패턴의 질문만 담기므로, 제품을 고른 뒤 describe_product 로 상세를 확인하세요.",
+      "서울시 데이터 패턴 서비스에서 조회 가능한 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 전체를 훑어야 할 때 쓰고, 질문에 맞는 제품을 고르는 것이 목적이면 search_products 가 빠릅니다. 목록에는 컬럼 이름과 질의 패턴의 질문만 담기므로, 제품을 고른 뒤 describe_product 로 상세를 확인하세요.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -40,7 +67,7 @@ export const TOOLS = [
     title: "제품 상세 — 컬럼·질의 패턴",
     annotations: annotate("제품 상세 — 컬럼·질의 패턴"),
     description:
-      "선택한 서울시 데이터 제품의 컬럼 설명·기준(grain)·시간축·질의 패턴(usage_patterns)을 보여줍니다. 조회 전에 스키마와 필터 가능한 컬럼을 확인하세요. usage_patterns 중 runnable=true 인 것만 run_pattern 으로 실행할 수 있습니다.",
+      "서울시 데이터 패턴 서비스의 제품 하나를 골라 컬럼 설명·기준(grain)·시간축·질의 패턴(usage_patterns)을 보여줍니다. 조회 전에 스키마와 필터 가능한 컬럼을 확인하세요. usage_patterns 중 runnable=true 인 것만 run_pattern 으로 실행할 수 있습니다.",
     inputSchema: {
       type: "object",
       properties: { product_id: { type: "string", description: "예: citydata_ppltn_dow_hour" } },
@@ -53,7 +80,7 @@ export const TOOLS = [
     title: "5행 미리보기",
     annotations: annotate("5행 미리보기"),
     description:
-      "서울시 데이터 5행을 미리 봅니다(일일 한도 무차감). 필터에 넣을 실제 값(장소명·코드 등)을 확인할 때 사용하세요.",
+      "서울시 데이터 패턴 서비스의 제품 데이터 5행을 미리 봅니다(일일 한도 무차감). 필터에 넣을 실제 값(장소명·코드 등)을 확인할 때 사용하세요.",
     inputSchema: {
       type: "object",
       properties: { product_id: { type: "string" } },
@@ -66,7 +93,7 @@ export const TOOLS = [
     title: "서울시 데이터 조회",
     annotations: annotate("서울시 데이터 조회"),
     description:
-      "서울시 데이터를 지역·기간·등가 필터로 조회합니다(sort/join/집계 불가, 커서로 페이지네이션). 응답의 data_context 에 집계 기준 시점(freshness)·출처(attribution)·주의사항(caution)이 함께 담깁니다.",
+      "서울시 데이터 패턴 서비스의 데이터를 지역·기간·등가 필터로 조회합니다(sort/join/집계 불가, 커서로 페이지네이션). 응답의 data_context 에 집계 기준 시점(freshness)·출처(attribution)·주의사항(caution)이 함께 담깁니다.",
     inputSchema: {
       type: "object",
       properties: {
@@ -95,7 +122,7 @@ export const TOOLS = [
     title: "검증된 질의 패턴 실행",
     annotations: annotate("검증된 질의 패턴 실행"),
     description:
-      "실제 서울시 데이터에 실행해 동작이 확인된 질의 패턴을 실행합니다. 질문에 맞는 패턴이 있으면 필터를 직접 조립하기보다 이 도구를 우선 사용하세요. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. param_defaults 가 선언된 파라미터는 생략하면 그 기본값으로 실행되고, param_enum 이 선언된 파라미터는 허용값 밖이면 400 입니다. params 선언이 array 인 파라미터는 실제 배열로 보내세요(원소별로 안전하게 바인딩됩니다). 응답에는 insight_sample_ko(해석 예시)가 함께 제공됩니다.",
+      "서울시 데이터 패턴 서비스에서 실제 데이터에 실행해 동작이 확인된 질의 패턴을 실행합니다. 질문에 맞는 패턴이 있으면 필터를 직접 조립하기보다 이 도구를 우선 사용하세요. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. param_defaults 가 선언된 파라미터는 생략하면 그 기본값으로 실행되고, param_enum 이 선언된 파라미터는 허용값 밖이면 400 입니다. params 선언이 array 인 파라미터는 실제 배열로 보내세요(원소별로 안전하게 바인딩됩니다). 응답에는 insight_sample_ko(해석 예시)가 함께 제공됩니다.",
     inputSchema: {
       type: "object",
       properties: {
@@ -119,7 +146,7 @@ export const TOOLS = [
     name: "check_quota",
     title: "사용량·남은 한도 확인",
     annotations: annotate("사용량·남은 한도 확인"),
-    description: "서울시 데이터 조회에 쓰는 내 API 키의 오늘 사용량과 남은 일일 한도를 확인합니다.",
+    description: "서울시 데이터 패턴 서비스 조회에 쓰는 내 API 키의 오늘 사용량과 남은 일일 한도를 확인합니다.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
 ];
@@ -237,6 +264,15 @@ async function unknownPatternWithList(env, deps, request, productId, patternId, 
 async function callTool(name, args, ctx) {
   const { env, request, keyRow, trace, deps } = ctx;
   args = args || {};
+  if (name === "search_products") {
+    if (!args.query) return errText("query 가 필요합니다 — 사용자 질문 문장을 그대로 넣으세요.");
+    // 목록과 **같은 카탈로그**를 읽는다(SWR 캐시) — 검색 전용 색인을 따로 만들면 카탈로그가
+    // 바뀔 때 둘이 갈린다. 무과금: 데이터가 아니라 고르기 위한 판단 재료다(list_products 와 같은 규칙).
+    const res = await deps.handleCatalog(env);
+    if (res.status >= 400) return toToolResult(res, trace);
+    const limit = Math.min(Math.max(Number(args.limit) || 5, 1), 10);
+    return okJson(searchProducts(await res.json(), args.query, limit));
+  }
   if (name === "list_products") {
     const res = await deps.handleCatalog(env);
     if (res.status >= 400) return toToolResult(res, trace);
@@ -265,22 +301,9 @@ async function callTool(name, args, ctx) {
     // pattern_id 로 돌린다) · `insight_sample_ko`(실행 응답에 온다) · `requires`·`axes`
     // (describe_product 와 400 안내가 말해 준다) · `verified_*`.
     // 컬럼도 같다 — 이름은 "이 축으로 필터되나"를 목록에서 판단하게 하고, 설명은 상세의 몫이다.
-    const slimPattern = (u) => ({ pattern_id: u.pattern_id, question_ko: u.question_ko });
-    const slimColumn = (c) => c.name ?? c.column_name ?? null;
-    if (Array.isArray(body.products)) {
-      body.products = body.products.map(({ usage_patterns, columns, ...rest }) => ({
-        ...rest,
-        // 개수를 함께 두는 이유: 0 이면 "아직 메타가 게시되지 않은 제품"이라는 신호라
-        // 고르는 판단에 쓰인다. 목록이 비었다는 것과 필드가 없다는 것은 다른 뜻이다.
-        column_count: Array.isArray(columns) ? columns.length : 0,
-        column_names: Array.isArray(columns) ? columns.map(slimColumn).filter(Boolean) : [],
-        pattern_count: Array.isArray(usage_patterns) ? usage_patterns.length : 0,
-        usage_patterns: Array.isArray(usage_patterns) ? usage_patterns.map(slimPattern) : [],
-      }));
-      body.detail_hint =
-        "목록에는 질의 패턴의 질문·id 와 컬럼 이름만 싣습니다. 컬럼 설명·필요 파라미터·실행 가능 여부(runnable)는 describe_product(product_id) 로 확인하세요.";
-    }
-    return okJson(body);
+    // 성형은 **AI 소비자 공용 층**이 한다(agent-tools.js) — 채팅도 같은 모양을 봐야 하고,
+    // 두 벌이 되면 한쪽만 고쳐진다(#159 ②, MCP 담당 조건).
+    return okJson(slimProductList(body));
   }
   if (name === "check_quota") {
     // /api/v1/me 는 본인에게 주는 응답이라 이메일을 담지만, MCP 결과는 LLM 컨텍스트·제3자
@@ -327,17 +350,8 @@ async function callTool(name, args, ctx) {
     // D1 왕복을 안 늘린다). product_meta 는 운반용이라 밖으로는 data_context 로만 나간다.
     const meta = body.product_meta;
     delete body.product_meta;
-    if (meta) {
-      body.data_context = {
-        freshness: meta.freshness ?? null,          // 이 게시본의 원천 기준 시각 — "지금"이 아니다
-        serving_status: meta.serving_status ?? null,
-        ...(meta.serving_status && meta.serving_status !== "published"
-          ? { warning: `serving_status='${meta.serving_status}' — 원천 수집 지연 등으로 최신성이 보장되지 않는다` }
-          : {}),
-        attribution: ATTRIBUTION,  // 정본 한 벌(shared) — "답변에 반영" 지시는 툴 description 몫
-        caution: meta.description ?? null,          // 제품 주의사항("공식 특보 아님" 등)이 여기 있다
-      };
-    }
+    const ctx = buildDataContext(meta);
+    if (ctx) body.data_context = ctx;
     return okJson(body);
   }
   if (name === "run_pattern") {
@@ -397,6 +411,15 @@ export async function handleMcp(request, env, trace, deps) {
   }
   if (method === "notifications/initialized" || method === "notifications/cancelled")
     return new Response(null, { status: 202 });
+  // 생존 확인 — 사양의 표준 유틸리티다. **빈 결과로 즉시** 답한다(그게 규격이다).
+  //
+  // 우리는 stateless HTTP 라 연결 상태라는 게 없어 기능적 필요는 작다. 그런데도 받는 이유는
+  // **없으면 `-32601 method not found` 가 나가기 때문**이다 — 적합성 검사를 도는 쪽에는 그게
+  // 그대로 결함으로 잡힌다. 같은 부류를 이미 겪었다: `annotations` 도 사양에선 선택인데
+  // PlayMCP 심사는 필수로 봤고 그것으로 반려됐다(#228).
+  // 인증을 요구하지 않는다 — 살아 있는지 묻는 데 키를 요구하면 그 자체가 장애로 읽힌다.
+  // 데이터에 닿지 않으므로 쿼터·버스트도 세지 않는다(발견 단계와 같은 취급).
+  if (method === "ping") return rpcResult(id, {});
   if (method === "tools/list") return rpcResult(id, { tools: TOOLS });
 
   if (method === "tools/call") {

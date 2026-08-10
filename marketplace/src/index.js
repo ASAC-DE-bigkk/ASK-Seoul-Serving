@@ -8,7 +8,7 @@
 // 공유 층은 src/shared.js 한 곳이다: 키 발급·검증 · 쿼터·버스트 · 오류 형식 · 요청 로깅.
 import {
   json, problem, quotaHeaders, quotaExceededProblem, sha256hex, kstDay, PUBLIC, ATTRIBUTION,
-  authenticate, checkBurst, burstProblem, countUsage, clientAxes, normalizeIntent, safeRows,
+  authenticate, checkBurst, burstProblem, countUsage, refundUsage, checkDailyCap, clientAxes, normalizeIntent, safeRows,
   parseJsonArray, loadRedistributionRights, redistributionBlockers, rightsBlockedProblem,
 } from "./shared.js";
 import { handleProductBundle, handleGlossary } from "./v1.js";
@@ -22,6 +22,10 @@ import {
   handleSkillProduct,
 } from "./skill.js";
 import { handleMcp } from "./mcp.js";
+import { TOOLS } from "./mcp.js";
+import {
+  runChat, CHAT_MODEL, CHAT_ANON_DAILY_TOTAL, CHAT_ANON_DAILY_PER_IP, CHAT_ANON_PRINCIPAL,
+} from "./chat.js";
 import {
   isConfigured, redirectUri, authorizeUrl, exchangeCode, makeState, verifyState,
   readIdTokenFromTokenEndpoint, stateCookie, readCookie, STATE_COOKIE,
@@ -692,8 +696,16 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
   } catch (e) {
     // 패턴 SQL 이 게시본과 어긋난 경우(드리프트) — 소비자 잘못이 아니므로 그렇게 말한다
     trace.status = 500;
+    // 🔴 **말만 그렇게 하고 요금은 받고 있었다.** `countUsage` 는 읽기가 아니라 증가라
+    //    여기 닿은 시점에 이미 하루 몫이 하나 깎여 있다. 게시자가 깨뜨린 패턴을 소비자가
+    //    지불하는 꼴이고, 재시도하면 매번 깎인다. §2 의 "쿼터 과금은 유효한 서빙 직전만"
+    //    이 400/404/409 만 적어 둬서 이 자리가 새 있었다(ASK-Seoul-Serving#217 검토 중 발견).
+    const refunded = await refundUsage(env, keyRow, usage.day);
     return problem(500, "pattern execution failed",
-      "패턴이 현재 게시본과 어긋난다(드리프트) — 도메인 검증 사이클에서 잡힐 문제이니 다른 패턴이나 일반 데이터 조회를 쓸 것");
+      "패턴이 현재 게시본과 어긋난다(드리프트) — 도메인 검증 사이클에서 잡힐 문제이니 다른 패턴이나 일반 데이터 조회를 쓸 것" +
+      // 되돌리기가 실패했으면 **말하지 않는다.** 틀린 안내는 안내가 없는 것보다 나쁘다.
+      (refunded ? ". 이 실패는 오늘 쿼터를 소모하지 않았다" : ""),
+      refunded ? { quota_charged: false } : {});
   }
   const rows = results.length > MAX_LIMIT ? results.slice(0, MAX_LIMIT) : results;
   trace.rows = rows.length;
@@ -771,8 +783,14 @@ export function logValues(trace, env) {
 
 // 아직 채우지 않는 하나 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
 //
-//   page_path       정적 페이지·기계 문서는 `run_worker_first` 밖이라 워커에 닿지 않는다.
-//                   관측하려면 §3-4 의 6경로를 워커로 통과시키는 결정이 먼저다(#63 ④).
+//   page_path       기계 문서 3종(`/llms.txt`·`/openapi.json`·`/skill-openapi.json`)이
+//                   `run_worker_first` 밖이라 워커에 닿지 않는다. 범위가 **3경로로 확정**됐다
+//                   (#177 · agreement §3-1-1) — 사람 페이지(`/`·`/catalog`)는 부팅에서
+//                   `/api/v1/catalog` 를 불러 **이미 `route=catalog` 로 세어지므로** 넣으면
+//                   같은 방문을 두 번 센다.
+//                   🔴 착수 전제: `[assets]` 에 `binding` 이 없다. 그대로 `run_worker_first`
+//                   에 더하면 워커가 그 경로를 아는 분기가 없어 problem+json 으로 떨어져
+//                   **문서 파일이 깨진다.** `binding = "ASSETS"` + `route="page"` 분기가 세트다.
 //
 // `pattern_id` 는 배선됐다 — "패턴 실행 API 가 아직 없다"가 미룬 이유였고 `run_pattern`(#132)
 // 이 그 소비자다. 이걸로 ASAC-DAG#642 의 로깅 키 `(product_id, pattern_id, publication_id)`
@@ -796,8 +814,130 @@ async function logRequest(env, trace) {
   }
 }
 
+// 한글이 든 정적 텍스트 — **charset 을 우리가 말해야 하는 파일들.**
+//
+// Assets 가 직접 서빙하면 운영에서 `Content-Type: text/plain` 만 붙고 charset 이 없다.
+// 그러면 브라우저가 자기 기본 인코딩(대개 windows-1252)으로 읽어 **한글이 전부 깨진다** —
+// `llms.txt` 는 한글이 123줄, `robots.txt` 는 8줄이다(2026-08-09 운영 제보).
+//
+// 🔴 `_headers` 로는 못 고친다. **덮지 않고 덧붙인다** — 로컬 실측에서
+//    `text/plain; charset=utf-8, text/plain; charset=euc-kr` 처럼 값 둘이 콤마로 붙은
+//    망가진 헤더가 나왔다. 운영에 나가면 지금보다 나빠진다.
+//
+// ⚠️ 그리고 **로컬은 이 버그가 안 보인다.** 로컬 workerd 는 `.txt` 에 charset 을 알아서
+//    붙여서, 규칙을 넣든 빼든 로컬 응답은 늘 정상이다. 정적 자산의 content-type 은
+//    **로컬이 운영의 증거가 되지 않는다** — 이 파일들을 만질 때 그걸 기억한다.
+const TEXT_ASSETS = new Set(["/llms.txt", "/robots.txt"]);
+
+async function serveTextAsset(request, env) {
+  const res = await env.ASSETS.fetch(request);
+  // 원본 응답을 그대로 두고 헤더만 바꾼다 — 본문·상태·`_headers` 의 보안 헤더가 다 살아야
+  // 한다. `new Response(res.body, res)` 가 그걸 보장한다(헤더 사본이 따라온다).
+  const out = new Response(res.body, res);
+  out.headers.set("content-type", "text/plain; charset=utf-8");
+  return out;
+}
+
+
+// ── 채팅 문(#159 · decision/0006) — 상한·인증·제품 찾기. 루프는 chat.js ─────────────
+//
+// 🔴 무인증 상한이 코드에 있기 전에는 채팅을 무인증에 열지 않는다(0006 게이트) — 이 함수가
+//    그 상한이다. 층 순서는 §2 규약 그대로: 버스트(속도) → 하루 몫(비용) → 실행.
+async function handleChat(request, env, trace, ctx) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return problem(400, "invalid request body", "JSON 본문이 필요하다 — { product_id, question }");
+  }
+  const productId = String(body?.product_id || "");
+  const question = String(body?.question || "").trim();
+  if (!productId || !question)
+    return problem(400, "missing fields", "product_id 와 question 이 모두 필요하다");
+  // 질문 길이 상한 — LLM 비용은 왕복 수만이 아니라 **넣는 길이**로도 자란다. 500자면
+  // 사람 질문으로 충분하고, 그 이상은 대개 붙여넣기(문서·코드)라 채팅의 용도가 아니다.
+  if (question.length > 500)
+    return problem(400, "question too long", "질문은 500자 이내 — 데이터에 대한 질문 하나를 적어 달라");
+
+  // 인증은 **선택**이다(0006 맛보기+키). 헤더가 있으면 정식 인증을 태우고 — 틀린 키에
+  // 조용히 익명 취급을 하면 사용자는 자기 키가 죽은 걸 모른다 — 없으면 맛보기다.
+  let keyRow = null;
+  if (request.headers.get("authorization")) {
+    const auth = await authenticate(env, request);
+    if (auth.error) return auth.error;
+    keyRow = auth.keyRow;
+    trace.keyHash = keyRow.key_hash;
+  }
+
+  if (keyRow) {
+    const burst = await checkBurst(env, "k:" + keyRow.key_hash);
+    if (burst.exceeded) return burstProblem(burst.retryAfter);
+    // 키 사용자의 채팅 1건 = 기존 일일 쿼터에서 1 (0006 — "기존 쿼터를 그대로 쓴다").
+    // LLM 왕복이 실제 비용이므로 질문 자체가 유효한 서빙이다. 패턴 실행은 안에서 따로
+    // 과금된다(진짜 데이터 서빙이라 이중이 아니라 각자 몫이다).
+    const usage = await countUsage(env, keyRow);
+    if (usage.exceeded) return quotaExceededProblem(usage.used, usage.quota);
+  } else {
+    const ip = request.headers.get("cf-connecting-ip") || "local";
+    const burst = await checkBurst(env, "ip:" + ip);
+    if (burst.exceeded) return burstProblem(burst.retryAfter);
+    // IP 몫은 해시 버킷으로 센다 — 분 버킷(위)은 1시간 안에 청소되지만 하루 버킷은 ~하루
+    // 산다. 원문 IP 를 그만큼 들고 있지 않는다(0001 값-최소화 — 발급 rate limit 의
+    // 일 회전 해시와 같은 판단). 날짜를 소금으로 섞어 날이 바뀌면 같은 IP 도 다른 버킷이다.
+    const ipBucket = "chatd:" + (await sha256hex(kstDay() + "|" + ip)).slice(0, 16);
+    const perIp = await checkDailyCap(env, ipBucket, CHAT_ANON_DAILY_PER_IP);
+    const total = await checkDailyCap(env, "chatd:total", CHAT_ANON_DAILY_TOTAL);
+    // 🔴 몫이 다 차면 429 가 아니라 **강등**이다(0006 — "채팅이 죽는 대신 내려앉는다").
+    //    LLM 만 안 부르고 후보 제시는 그대로 하므로, 문은 통과시키되 ai 를 안 준다.
+    if (perIp.exceeded || total.exceeded) {
+      const product = await findChatProduct(env, ctx, productId);
+      if (!product) return chatUnknownProduct(productId);
+      const r = await runChat({ product, question, tools: TOOLS,
+                                ctx: { env, request, keyRow: CHAT_ANON_PRINCIPAL, trace, deps: chatDeps(ctx) } });
+      return json({ ...r, reason: "anon_quota_exhausted",
+                    message: "오늘 체험 몫이 다 찼습니다. 로그인하시면 계속 쓰실 수 있어요." });
+    }
+  }
+
+  const product = await findChatProduct(env, ctx, productId);
+  if (!product) return chatUnknownProduct(productId);
+
+  // 🔴 여기는 env.AI 유무만 본다. 바인딩이 없으면(아직 안 켬 — 과금 스위치는 별도 PR)
+  //    어댑터가 후보 제시로 내려앉는다. 있으면 채택 모델로 감싼 함수 하나를 꽂는다 —
+  //    chat.js 는 끝까지 env.AI 를 모른다(테스트 가능성의 근거).
+  const ai = env.AI ? (payload) => env.AI.run(CHAT_MODEL, payload) : undefined;
+  const r = await runChat({ product, question, ai, tools: TOOLS,
+                            ctx: { env, request, keyRow: keyRow ?? CHAT_ANON_PRINCIPAL, trace, deps: chatDeps(ctx) } });
+  if (r.degraded && r.reason === "ai_unavailable")
+    r.message = "채팅 AI 가 아직 연결되지 않았습니다 — 질문과 비슷한 질의 패턴을 추천해 드려요.";
+  return json(r);
+}
+
+// 채팅의 도구 실행이 쓰는 shared 핸들러 묶음 — MCP 의 deps 와 같은 조립(내부 HTTP 재호출 없음).
+const chatDeps = (ctx) => ({
+  handleCatalog: (e) => handleCatalog(e, ctx),
+  handlePreview, handleData, handleMe, handleProductBundle, handleRunPattern,
+});
+
+// 채팅은 제품이 먼저다(측정 9/10 의 전제) — 카탈로그(캐시)에서 패턴까지 통째로 꺼낸다.
+async function findChatProduct(env, ctx, productId) {
+  const res = await handleCatalog(env, ctx);
+  if (res.status >= 400) return null;
+  const { products = [] } = await res.json();
+  return products.find((p) => p.product_id === productId) || null;
+}
+
+const chatUnknownProduct = (productId) =>
+  problem(404, "unknown product",
+    `'${productId}' 은 서빙 카탈로그에 없다 — GET /api/v1/catalog 로 목록을 확인할 것`);
+
 async function route(request, env, url, trace, ctx) {
   const path = url.pathname;
+
+  // 정적 텍스트는 게이트 앞이다 — 키도 쿼터도 없는 공개 문서고, 로깅도 아직 안 붙인다.
+  // (`route="page"` 로 세는 것은 콘솔 계약 반영이 먼저다 — #177 · agreement §3-1-1)
+  if (TEXT_ASSETS.has(path) && (request.method === "GET" || request.method === "HEAD"))
+    return serveTextAsset(request, env);
 
   // 폐지된 이메일 발급 경로. **경로 자체는 안내용으로 남긴다** — 지우면 아래 405 분기로
   // 떨어져 "왜 안 되는지"를 못 말하고, 같은 주소의 DELETE 는 살아 있어 더 헷갈린다.
@@ -822,6 +962,12 @@ async function route(request, env, url, trace, ctx) {
     if (error) return error;
     trace.keyHash = keyRow.key_hash;
     return revokeKey(env, keyRow, url.searchParams.get("purge") === "true");
+  }
+  // 채팅 — 질문 하나를 검증된 패턴 실행으로 (#159 · decision/0006). 루프는 chat.js,
+  // 여기는 문(상한·인증·제품 찾기)만 지킨다.
+  if (path === "/api/v1/chat" && request.method === "POST") {
+    trace.route = "chat";
+    return handleChat(request, env, trace, ctx);
   }
   // MCP 서버 — Streamable HTTP, stateless POST /mcp (#26 P0). shared 핸들러 재사용(내부 HTTP X).
   if (path === "/mcp") {

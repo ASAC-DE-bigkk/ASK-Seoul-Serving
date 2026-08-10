@@ -161,6 +161,29 @@ export async function checkBurst(env, bucket) {
   return { exceeded: used > BURST_PER_MIN, retryAfter: 60 - now.getUTCSeconds() };
 }
 
+// 하루 단위 상한 — 채팅 맛보기의 두 층(무인증 총량·IP 당 몫, decision/0006)이 쓴다.
+//
+// `_burst` 표를 재사용한다(새 표 없음 — 스키마 변경은 §2 절차가 필요하다). `checkBurst` 와
+// 같은 UPSERT 리셋인데 창이 분이 아니라 **KST 하루**다.
+//
+// 🔴 `window_start` 를 `<날짜>T23:59` 로 적는 이유 — 이 표에는 시간마다 도는 청소가 있다:
+//    `DELETE FROM _burst WHERE window_start < (now - 1h)`. 날짜만 적으면('YYYY-MM-DD')
+//    문자열 비교에서 그날 어느 시각보다도 작아 **첫 청소가 카운터를 지워 버린다** — 하루
+//    상한이 한 시간 상한이 된다. `T23:59` 로 적으면 그날이 끝날 때까지 살아남고, 자정을
+//    넘기면 청소가 걷어 간다(못 걷어도 UPSERT 가 날짜 불일치로 1 로 리셋하므로 무해).
+export async function checkDailyCap(env, bucket, cap) {
+  const window = kstDay() + "T23:59";
+  await env.DB.prepare(
+    "INSERT INTO _burst (bucket, window_start, count) VALUES (?, ?, 1) " +
+    "ON CONFLICT(bucket) DO UPDATE SET " +
+    "count = CASE WHEN _burst.window_start = excluded.window_start THEN _burst.count + 1 ELSE 1 END, " +
+    "window_start = excluded.window_start"
+  ).bind(bucket, window).run();
+  const row = await env.DB.prepare("SELECT count FROM _burst WHERE bucket = ?").bind(bucket).first();
+  const used = row ? row.count : 1;
+  return { exceeded: used > cap, used, cap };
+}
+
 // 초과 시 응답 — Retry-After 를 함께 준다. "언제 다시 오라"를 안 알려주면 클라이언트가
 // 곧바로 재시도해서 상황을 더 나쁘게 만든다.
 export const burstProblem = (retryAfter) =>
@@ -168,6 +191,15 @@ export const burstProblem = (retryAfter) =>
     `분당 ${BURST_PER_MIN}건을 넘었다 — ${retryAfter}초 뒤 다시 시도할 것`,
     { retry_after: retryAfter }, { "retry-after": String(retryAfter) });
 
+// 🔴 이 함수는 **읽기가 아니라 증가**다. 이름이 `count…` 라 조회처럼 읽히지만, 부르는
+//    순간 그 키의 오늘 몫이 하나 깎인다. 그래서 호출 위치가 곧 과금 지점이다 —
+//    §2 의 "쿼터 과금은 유효한 서빙 직전만" 이 이 함수를 어디서 부르냐로 지켜진다.
+//
+//    증가하고 나서 판정하는 순서인 게 의도다. 조회 → 판정 → 증가로 바꾸면 동시에 온 두
+//    요청이 같은 값을 읽고 둘 다 통과한다(TOCTOU). 증가가 새 값을 돌려주므로 동시 요청이
+//    서로 다른 번호를 받는 지금 순서가 한도를 실제로 지킨다.
+//
+//    대가는 **실패해도 이미 깎였다는 것**이고, 그건 `refundUsage` 로 되돌린다.
 export async function countUsage(env, keyRow) {
   const day = kstDay();
   await env.DB.prepare(
@@ -177,7 +209,32 @@ export async function countUsage(env, keyRow) {
   const row = await env.DB.prepare(
     "SELECT count FROM _usage WHERE key_hash = ? AND day = ?"
   ).bind(keyRow.key_hash, day).first();
-  return { used: row.count, quota: keyRow.daily_quota, exceeded: row.count > keyRow.daily_quota };
+  // `day` 를 같이 돌려준다 — 되돌릴 때 **깎은 바로 그 행**을 가리켜야 한다. 여기서 다시
+  // `kstDay()` 를 부르면 자정을 걸친 요청이 **다음 날 몫을 깎는다**(하루 한 번 나지만
+  // 그날 첫 사용자가 남의 실패를 대신 무는 형태라 조용히 틀린다).
+  return { used: row.count, quota: keyRow.daily_quota, day,
+           exceeded: row.count > keyRow.daily_quota };
+}
+
+// 서버 잘못으로 끝난 요청의 차감을 되돌린다.
+//
+// 쓰는 자리는 **우리가 깎은 뒤 우리 탓으로 실패한 경우**뿐이다. 소비자 잘못(400·404·409)은
+// 애초에 깎기 전에 끝나므로 되돌릴 게 없다.
+//
+// `count > 0` 을 거는 이유: 되돌리기가 어떤 경위로든 두 번 불려도 음수가 되지 않아야 한다.
+// 음수 쿼터는 다음 날 리셋 전까지 그 키를 **무제한**으로 만든다.
+//
+// 실패를 삼키고 false 를 돌려준다 — 되돌리기가 안 됐는데 "안 깎였다"고 말하면
+// 안내가 없는 것보다 나쁘다. 부르는 쪽이 그 값으로 문구를 정한다.
+export async function refundUsage(env, keyRow, day) {
+  try {
+    await env.DB.prepare(
+      "UPDATE _usage SET count = count - 1 WHERE key_hash = ? AND day = ? AND count > 0"
+    ).bind(keyRow.key_hash, day).run();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // 표가 아직 없어도 응답을 죽이지 않는다 — 그 조각만 비우고 부른 쪽이 "없음"을 표시한다.

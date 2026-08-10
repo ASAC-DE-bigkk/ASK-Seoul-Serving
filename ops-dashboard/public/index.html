@@ -355,6 +355,11 @@
     <h2 class="sec">API 사용량 <span>어떤 API가 얼마나 쓰이나 · 분야별 비중</span></h2>
     <div class="kpis" id="useKpis"></div>
     <div class="grid">
+      <!-- 신설형(검증 질의 패턴) 현황 (Serving#217) — 저작이 얼마나 준비됐고 실제로 쓰이나 -->
+      <div class="card wide">
+        <div class="hd"><h3>검증 질의 패턴(신설형) 현황</h3><p>도메인이 게시·검증한 질의 패턴이 얼마나 준비됐고 실제로 쓰이나 · 게시본과 어긋난 실행 실패</p></div>
+        <div class="bd" id="patternHealth"></div>
+      </div>
       <div class="card">
         <div class="hd"><h3>분야별 사용 비중</h3><p>전체 요청 중 각 분야가 차지하는 몫</p></div>
         <div class="bd" id="domShare"></div>
@@ -2010,11 +2015,14 @@ function render(d) {
 
   // 축은 product_id 가 정본이고 표명은 폴백이다(서버 PRODUCT_KEY). 화면에는 사람이 아는
   // 이름을 먼저 보이고, 없으면 식별자를 그대로 쓴다 — 빈칸으로 두면 무엇인지 알 수 없다.
-  const apiName = (r) => esc(r.table_name || r.product_id || r.product_key || "—");
+  const apiName = (r) => r.display_title
+    ? esc(r.display_title) + " <span class='pill dim'>" +
+      esc(r.table_name || r.product_id || r.product_key || "—") + "</span>"
+    : esc(r.table_name || r.product_id || r.product_key || "—");
   $("failures").innerHTML = table([
     { t:"이유", get:(r) => statePill(r.status >= 500 ? "bad" : "warn", STATUS_KO[r.status] || String(r.status)) },
     { t:"요청 종류", get:(r) => ROUTE_KO[r.route] || esc(r.route) },
-    { t:"대상 API", get:(r) => esc(r.table_name || "—"), name:true },
+    { t:"대상 API", get:apiName, name:true },
     { t:"건수", r:true, get:(r) => nf.format(r.hits) },
   ], s.failures, "답하지 못한 요청이 없습니다");
 
@@ -2362,6 +2370,43 @@ const apiNameCell = (r) => {
 const apiHay = (a) => (a.name + " " + (a.product_id || "") + " " + (a.description || "") + " " +
   (apiTitle(a) || "") + " " + ((dispOf(a) && dispOf(a).summary) || "")).toLowerCase();
 
+// 신설형(검증 질의 패턴) 현황 카드. 표가 아직 게시 전이면 그 조각만 '아직 게시 전'으로 내려앉힌다
+// (모른다 ≠ 0). 드리프트는 게시본과 어긋나 실행이 실패한 패턴 — 0 보다 크면 강조한다.
+function renderPatternHealth(p, days) {
+  const box = $("patternHealth");
+  if (!box) return;
+  if (!p) { box.innerHTML = emptyBox("읽지 못함"); return; }
+  const rows = [];
+  // 검증 커버리지 (가로 막대)
+  if (p.total == null) {
+    rows.push("<p style='font-size:12px;color:var(--faint);margin:0 0 10px'>검증 커버리지 — 아직 게시 전(도메인 검증 사이클 후 채워집니다)</p>");
+  } else {
+    const v = Number(p.verified) || 0, t = Number(p.total) || 0;
+    const pct = t ? Math.round(v / t * 100) : 0;
+    rows.push("<div class='share'><div class='row'>" +
+      "<div class='nm'>검증된 질의 패턴<small>도메인이 게시한 것 중 검증 완료 — 미검증도 분모에 셉니다</small></div>" +
+      "<div class='track'><div class='fill" + (v ? "" : " dim") + "' style='width:" + Math.max(v ? 2 : 0, pct) + "%'></div></div>" +
+      "<div class='num'><b>" + nf.format(v) + "</b> / " + nf.format(t) + " <small>" + pct + "%</small></div>" +
+      "</div></div>");
+  }
+  // 파라미터 메타(P1 기본값·P3 배열) 선언 수
+  rows.push("<p style='font-size:12px;color:var(--muted);margin:12px 0 0'>파라미터 기본값·다중값 선언(생략 가능·배열 필터): " +
+    (p.with_meta == null ? "<span style='color:var(--faint)'>아직 게시 전</span>" : "<b>" + nf.format(p.with_meta) + "</b> 패턴") + "</p>");
+  // 사용·드리프트 (최근 창)
+  const u = p.usage;
+  if (u) {
+    const drift = Number(u.drift) || 0, errs = Number(u.errors) || 0, calls = Number(u.calls) || 0;
+    rows.push("<div style='display:flex;gap:22px;flex-wrap:wrap;margin-top:14px'>" +
+      "<div><div style='font-size:20px;font-weight:700'>" + nf.format(calls) + "</div><div style='font-size:11px;color:var(--muted)'>최근 " + days + "일 패턴 조회</div></div>" +
+      "<div><div style='font-size:20px;font-weight:700" + (errs ? ";color:var(--red-ink)" : "") + "'>" + nf.format(errs) + "</div><div style='font-size:11px;color:var(--muted)'>실패</div></div>" +
+      "<div><div style='font-size:20px;font-weight:700" + (drift ? ";color:var(--red-ink)" : "") + "'>" + nf.format(drift) + "</div><div style='font-size:11px;color:var(--muted)'>게시본과 어긋난 실패" + (drift ? " · 재검증 필요" : "") + "</div></div>" +
+      "</div>");
+  } else {
+    rows.push("<p style='font-size:12px;color:var(--faint);margin-top:14px'>최근 패턴 조회 사용량 — 읽지 못함</p>");
+  }
+  box.innerHTML = rows.join("");
+}
+
 function renderApis(u) {
   USE = u;
   // 🔴 **이 탭도 '보는 분야'를 탄다.** 예전에는 목록(`renderApiList`)만 걸리고 KPI·분야별
@@ -2382,6 +2427,10 @@ function renderApis(u) {
     ["전체 요청", nf.format(totalCalls), "API 조회 요청만 (목록·사용량 조회 제외)" + scopeSuffix, ""],
     ["실패", nf.format(errs), "답을 받지 못한 요청" + scopeSuffix, errs > 0 ? "bad" : ""],
   ]);
+
+  // 신설형 현황은 분야 스코프를 타지 않는다 — 저작 커버리지는 제품 전체 기준이고, 사용/드리프트도
+  // 창 전체 합이다(분야 축으로 가르는 건 별건). 창(window_days)만 따른다.
+  renderPatternHealth(u.patterns, u.window_days);
 
   // 분야별 비중 — 가로 막대. 요청이 0 인 분야도 남겨 둔다("안 쓰인다"가 정보다)
   const max = Math.max(1, ...uDomains.map((r) => r.calls));
