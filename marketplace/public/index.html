@@ -559,7 +559,8 @@
     <!-- 라벨은 한국어 — 히어로·카드·카탈로그가 전부 한국어인데 스트립만 영어면 어휘가 갈린다. -->
     <!-- 분야 수는 별도 칸을 안 만들고 이 라벨이 흡수한다 — 바로 아래 도메인 격자가
          여섯을 이미 보여주므로 칸을 하나 더 쓰면 같은 말을 두 번 하는 셈이다. -->
-    <div class="cell"><div class="lab ko">데이터 제품</div><div class="v sk" id="statProducts">0종</div><div class="k" id="statProductsK">제공 중인 데이터 제품</div></div>
+    <div class="cell"><div class="lab ko">데이터 제품</div><div class="v sk" id="statProducts">0종</div><div class="k">제공 중인 데이터 제품</div></div>
+    <div class="cell"><div class="lab ko">분야</div><div class="v sk num" id="statDomains">0개</div><div class="k" id="statDomainsK">수집 중인 데이터 분야</div></div>
     <!-- 여기에 "426개 행정동"을 커버리지로 적었었는데, 그건 culture 한 도메인의 커버리지다.
          citydata 는 실시간 관측 121곳, weather 는 KMA 격자 80칸이라 플랫폼 공통값이 아니다.
          공통인 것은 커버리지가 아니라 **조인 축**(행정동 코드, #48 합의)이라 그것만 적는다.
@@ -584,15 +585,15 @@
     <div class="cell"><div class="lab ko">질의 패턴</div><div class="v sk num" id="statPatterns">0개</div><div class="k" id="statPatternsK">제품에 선언된 질문</div></div>
     <!-- '무료'는 셀 값이 아니라 사실이라 스켈레톤(sk)을 안 붙인다 — 카탈로그를 기다릴
          이유가 없고, 기다리게 하면 첫 화면에서 이 칸만 늦게 채워진다. -->
-    <!-- 🔴 "미리보기 무료"를 걷었다 — **이 서비스는 전부 무료라 정보가 없는 칸**이었다
-         (오너 지적, 2026-08-10). 대신 첫 화면에 없던 축을 세운다: **신뢰**.
-         나머지 셋이 "얼마나 · 뭘 물어보나 · 살아 있나"이고, "이 데이터 어디서 왔나"에
-         답하는 자리가 없었다.
-         ⚠️ 기관 이름은 `/attribution` 이 정본이다 — 여기 셋은 그중 알아보기 쉬운 것만
-         고른 발췌이고, 원천이 바뀌면 그 페이지가 먼저 바뀐다(여기는 "외"로 열어 둔다).
-         숫자를 안 쓴 이유: 원천 수는 카탈로그가 안 내려줘 박아야 하는데, 박은 수는
-         조용히 거짓이 된다(스트립의 다른 값은 전부 실측이라 규칙을 깨고 싶지 않다). -->
-    <div class="cell"><div class="lab ko">공공 원천</div><div class="v">공식 기관</div><div class="k">기상청 · KOPIS · 영화진흥위원회 외</div></div>
+    <!-- 🔴 이 자리는 네 번 실패했다 — 공간축·시간축(스키마 사실) · 미리보기 "무료"(전부
+         무료라 정보 없음) · 공공 원천(세는 기준이 판단이고 손 사본이라 정본과 어긋남) ·
+         컬럼 설명(우리 자랑이지 방문자의 질문이 아님). 한 번은 비우기까지 했다.
+         **분야가 답이었다**(오너 제안) — 방문자의 첫 질문이 "무슨 데이터가 있나"인데
+         지금까지는 한참 스크롤해야 답이 나왔다(도메인 격자). 라벨에 이름을 그대로 적어
+         읽는 즉시 알게 한다.
+         ⚠️ **수는 카탈로그에서 세고**(도메인이 늘거나 줄면 따라간다) 이름만 DOMAINS 에서
+         가져온다 — 목록에 없는 새 접두사가 오면 수에는 잡히고 이름에서만 빠진다(그게
+         "모르는 것을 지어내지 않는" 쪽이다). -->
     <div class="cell"><div class="lab ko">갱신</div><div class="v sk" id="statFresh">0시간 전</div><div class="k" id="statFreshK">마지막 갱신</div></div>
   </div>
 </div>
@@ -722,17 +723,17 @@ const HOME_CARDS = 6;  // 홈은 큐레이션 — 나머지는 카탈로그에�
 // 원래는 unit 자리에 "행정동"·"관측 121곳"을 그대로 적었는데, 라벨 없이 값만 있어
 // 처음 보는 사람에게는 무슨 축인지 안 읽혔다(사용자 피드백).
 const DOMAINS = [
-  { id:"culture",    name:"문화·행사", desc:"공연·전시·축제·예매",     unit:"동네 단위 · 서울 전역",
+  { id:"culture",    name:"문화·행사", short:"문화", desc:"공연·전시·축제·예매",     unit:"동네 단위 · 서울 전역",
     note:"행정동 단위 — 서울 426개 동 전역" },
-  { id:"citydata",   name:"인구·도시", desc:"실시간 인구·도시데이터",   unit:"주요 지점 121곳",
+  { id:"citydata",   name:"인구·도시", short:"인구", desc:"실시간 인구·도시데이터",   unit:"주요 지점 121곳",
     note:"서울시 실시간 도시데이터 관측 장소 121곳" },
-  { id:"transit",    name:"대중교통",  desc:"버스·지하철 접근성",       unit:"동네 단위",
+  { id:"transit",    name:"대중교통", short:"교통",  desc:"버스·지하철 접근성",       unit:"동네 단위",
     note:"행정동 단위" },
-  { id:"commerce",   name:"상권",      desc:"업종·매출 분석",           unit:"동네 단위",
+  { id:"commerce",   name:"상권", short:"상권",      desc:"업종·매출 분석",           unit:"동네 단위",
     note:"행정동 단위" },
-  { id:"weather",    name:"날씨",      desc:"기상 관측·예보",           unit:"기상 구역 80곳",
+  { id:"weather",    name:"날씨", short:"날씨",      desc:"기상 관측·예보",           unit:"기상 구역 80곳",
     note:"기상청 예보 격자 80칸" },
-  { id:"traffic",    name:"도로 소통",  desc:"속도·정체·돌발",           unit:"도로 구간 단위",
+  { id:"traffic",    name:"도로 소통", short:"도로",  desc:"속도·정체·돌발",           unit:"도로 구간 단위",
     note:"TOPIS 도로 링크 단위 — 6종 중 5종(돌발×기상만 행정동)" },
 ];
 
@@ -1170,7 +1171,7 @@ async function bootCatalog() {
   await fallbackReady;
   products = await catalogReady;
   if (!products) {
-    setStat("statProducts", "—"); setStat("statPatterns", "—"); setStat("statFresh", "—");
+    setStat("statProducts", "—"); setStat("statDomains", "—"); setStat("statPatterns", "—"); setStat("statFresh", "—");
     $("statFreshK").textContent = "마지막 갱신 · 확인 불가";
     failState("domains", "도메인 정보를 불러오지 못했습니다");
     failState("cards", "제품 목록을 불러오지 못했습니다");
@@ -1180,8 +1181,18 @@ async function bootCatalog() {
   setStat("statProducts", products.length + "<span class='u'>종</span>");
   // 분야 수는 라벨이 아니라 **세어서** 넣는다 — 도메인이 늘거나 줄면 따라간다.
   // domainOf 는 product_id 앞머리라 DOMAINS 상수와 무관하게 실물을 센다.
-  const domCount = new Set(products.map(domainOf)).size;
-  $("statProductsK").textContent = domCount + "개 분야에 걸쳐 제공 중";
+  // 분야 — **수는 카탈로그에서 세고 이름만 DOMAINS 에서 가져온다.** 새 접두사가 오면
+  // 수에는 잡히고 이름에서만 빠진다(모르는 분야의 한글 이름을 지어내지 않는다).
+  // 이름은 제품이 많은 순서다 — 아래 도메인 격자와 같은 정렬이라 두 곳이 안 어긋난다.
+  const domIds = new Set(products.map(domainOf));
+  setStat("statDomains", domIds.size + "<span class='u'>개</span>");
+  const domCounts = {};
+  for (const p of products) domCounts[domainOf(p)] = (domCounts[domainOf(p)] || 0) + 1;
+  const domNames = [...domIds]
+    .sort((a, b) => (domCounts[b] || 0) - (domCounts[a] || 0))
+    .map((id) => (DOMAINS.find((d) => d.id === id) || {}).short)
+    .filter(Boolean);
+  $("statDomainsK").textContent = domNames.join(" · ") || "수집 중인 데이터 분야";
   // 검증된 질문 — 이 서비스가 가진 것 중 가장 강한 자산이고, 히어로 챗봇이 쓰는 바로 그
   // 값이다. **하드코딩하지 않는다**: 지금 640 이지만 871 로 늘 예정이라(ASAC-DBT#484→#489)
   // 박아두면 그날 거짓이 된다.
