@@ -1202,12 +1202,14 @@ async function bootCatalog() {
   //    전부를 "검증된"이라고 부르면 거짓이 된다 — 저작 스윕으로 초안이 들어온 날 실제로
   //    그렇게 됐다. 그래서 초안이 하나라도 있으면 **초안을 품는 문구**를 쓰고, 전부
   //    스탬프되면 더 강한 문구로 저절로 올라간다(스탬프 진행이 화면에 보이는 부수 효과).
-  //    ⚠️ 초안은 `verified_at` 이 없어 실행하면 409 다 — "검증된"에 포함시키면 안 된다.
+  //    ⚠️ 초안은 `verified_at` 이 없어 실행하면 409 다 — **"검증된"이라는 말을 라벨에서
+  //    아예 뺀 이유가 이것이다.** 초안이 섞인 동안에는 패턴이 **무엇인지**만 말한다
+  //    (질문 + 그 답을 내는 질의). 전부 스탬프되면 그때 "확인했다"고 말한다.
   const verified = products.reduce(
     (n, p) => n + (p.usage_patterns || []).filter((u) => u.verified_at).length, 0);
   $("statPatternsK").textContent = patterns === verified
     ? "전부 실제로 돌려보고 행 수까지 확인한 질문"
-    : "검증된 질의 패턴 · 저작 중인 초안 포함";
+    : "제품마다 준비된 질문과 조회 질의";
   const stamps = products.map((p) => p.exported_at).filter(Boolean).sort();
   const newest = stamps[stamps.length - 1];
   setStat("statFresh", (newest && relTime(newest)) || "—");
