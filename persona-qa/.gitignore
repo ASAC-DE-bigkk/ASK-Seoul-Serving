@@ -1,1 +1,11 @@
-out/
+# 원자료(answers/ 231개 파일 등)는 추적하지 않는다 — 전문은 detail-table.csv 에 있다
+out/*
+!out/summary.json
+!out/report.md
+!out/domain-recommendations.md
+!out/detail-table.csv
+!out/dashboard.html
+!out/personas.json
+!out/questions.json
+!out/verdicts.json
+!out/catalog.json
