@@ -14,6 +14,7 @@ from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 CLAUDE = shutil.which("claude") or "claude"  # Windows: claude.cmd 해석
+MODEL = os.environ.get("MODEL")  # 미지정이면 CLI 기본 모델
 ANSWERS = OUT / "answers"
 SYSTEM_HINT = ("서울 데이터 MCP 도구만 사용해 답하라. "
                "데이터에 없는 것은 없다고 말하고 지어내지 마라.")
@@ -33,12 +34,17 @@ def mcp_config_path(key: str) -> str:
 def run_one(question: str, cfg_path: str) -> dict:
     # 질문은 stdin 으로 — claude.cmd(배치 래퍼)가 여러 줄/특수문자 인자를 깨뜨린다
     cmd = [CLAUDE, "-p",
+           *(["--model", MODEL] if MODEL else []),
            "--append-system-prompt", SYSTEM_HINT,
            "--mcp-config", cfg_path, "--strict-mcp-config",
            "--allowedTools", "mcp__askseoul__*",
            "--output-format", "stream-json", "--verbose"]
-    r = subprocess.run(cmd, input=question, capture_output=True, text=True,
-                       encoding="utf-8", timeout=600)
+    try:
+        r = subprocess.run(cmd, input=question, capture_output=True, text=True,
+                           encoding="utf-8", timeout=600)
+    except subprocess.TimeoutExpired:  # 한 건의 타임아웃이 배치 전체를 죽이지 않게
+        return {"answer": None, "tool_path": [], "error": True,
+                "model": MODEL or "cli-default", "stderr": "timeout(600s)"}
     tool_path: list[str] = []
     answer, is_error = None, r.returncode != 0
     for line in r.stdout.splitlines():
@@ -54,6 +60,7 @@ def run_one(question: str, cfg_path: str) -> dict:
             answer = ev.get("result")
             is_error = is_error or ev.get("is_error", False)
     return {"answer": answer, "tool_path": tool_path, "error": is_error,
+            "model": MODEL or "cli-default",
             "stderr": r.stderr[-300:] if is_error else None}
 
 

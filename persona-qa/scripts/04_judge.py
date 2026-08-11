@@ -7,7 +7,7 @@ from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 ANSWERS = OUT / "answers"
-MODEL = "claude-sonnet-5"
+MODEL = "claude-haiku-4-5-20251001"  # 비용 절약 — 사용자 요청(2026-08-10)
 CLAUDE = shutil.which("claude") or "claude"  # Windows: claude.cmd 해석
 
 PROMPT = """서울 공공데이터 MCP 서비스의 답변을 채점한다.
