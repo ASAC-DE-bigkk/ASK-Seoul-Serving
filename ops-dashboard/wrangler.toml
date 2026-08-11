@@ -52,7 +52,7 @@ ENV_SCOPE = "prod"
 # database_id 로 실제 운영 DB 에 붙는다. 예전처럼 "로컬은 이 값을 안 쓴다"가 아니다.
 #
 # 게이트웨이 [env.production](../marketplace/wrangler.toml) 과 **같은 값이어야 한다** —
-# 갈리면 콘솔의 응답 상태·이용 행동·API 사용량·이용자 키 탭이 통째로 빈다(decision/0003).
+# 갈리면 콘솔의 응답 상태·이용 패턴 분석·API 사용량·이용자 키 탭이 통째로 빈다(decision/0003).
 [[d1_databases]]
 binding = "DB"
 database_name = "ask-seoul-prod-d1"

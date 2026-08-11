@@ -66,11 +66,11 @@
         <span class="sub">실패·빈 응답</span>
       </button>
     </li>
-    <!-- 두 탭은 묻는 질문이 다르다 — '이용 행동'은 **누가**(사람·AI·여정),
+    <!-- 두 탭은 묻는 질문이 다르다 — '이용 패턴 분석'은 **누가**(사람·AI·여정),
          'API 사용량'은 **무엇이**(제품별 수요). 원본이 겹쳐 보여 이름을 갈랐다. -->
     <li role="presentation">
       <button role="tab" id="tab-usage" aria-controls="pane-usage" aria-selected="false" tabindex="-1">
-        <span class="dot" id="dot-usage"></span>이용 행동
+        <span class="dot" id="dot-usage"></span>이용 패턴 분석
         <span class="sub">사람·AI·여정</span>
       </button>
     </li>
@@ -300,10 +300,10 @@
     </div>
     </section>
 
-    <!-- 이용 행동 — 행동 로그 스펙 초안(#9)의 소비 화면(decision/0010). 여정·추적은 현행
+    <!-- 이용 패턴 분석 — 행동 로그 스펙 초안(#9)의 소비 화면(decision/0010). 여정·추적은 현행
          데이터로 즉시 동작하고, AI·페이지 축은 게이트웨이 수집 반영 후 자동 점등된다. -->
     <section class="pane" id="pane-usage" role="tabpanel" aria-labelledby="tab-usage" tabindex="0" hidden>
-    <h2 class="sec">이용 행동 <span>누가·무엇이·어떻게 쓰나 · _gateway_request_log + 행동 스펙 초안(#9)</span></h2>
+    <h2 class="sec">이용 패턴 분석 <span>누가·무엇이·어떻게 쓰나 · _gateway_request_log + 행동 스펙 초안(#9)</span></h2>
     <div class="kpis" id="usageKpis"></div>
     <div class="grid">
       <div class="card wide">
@@ -331,7 +331,10 @@
         <div class="bd" id="usageAgents"></div>
       </div>
       <div class="card">
-        <div class="hd"><h3>페이지 접근</h3><p>정적 페이지 관측 — run_worker_first 확대가 전제(#9 ②)</p></div>
+        <!-- 관측 범위를 카드가 직접 말한다(#177 · #285). 3경로만 채워지는 순간 "사람 페이지 0"
+             으로 읽히는 함정(#78 F-3 계열)을 제목·부제가 막는다 — 사람 페이지는 부팅 API 호출로
+             이미 'API 목록' 요청에 세어지고, robots.txt 는 게이트웨이가 싣지 않기로 확정했다. -->
+        <div class="hd"><h3>기계 문서 접근</h3><p>AI 가 읽는 문서 3종(/llms.txt · /openapi.json · /skill-openapi.json)만 셉니다 — 사람 페이지는 'API 목록' 요청으로 이미 세어지고, robots.txt 는 세지 않습니다(#285)</p></div>
         <div class="bd" id="usagePages"></div>
       </div>
       <div class="card">
@@ -462,6 +465,10 @@ const ROUTE_KO = {
   // 랜딩 챗봇의 1단계(Serving#268) — 질문으로 **어느 제품이 답하나**만 찾는다.
   // 데이터를 안 읽으므로 SERVE 가 아니다(0014 §2 뺀 값 표). `chat` 과 달리 조건부가 아니다.
   search:"데이터 찾기",
+  // 기계 문서 3종 접근(Serving#285) — 🔴 **선등록**이다. 게이트웨이 배선이 이 등록 뒤에
+  // 나가는 게 합의된 순서라(#132→PR#138 교훈), 배선 전까지 로그에 이 값이 없는 게 정상이다.
+  // AI 가 데이터 계약을 발견하는 여정의 첫 마디이지 데이터 서빙이 아니다(0014 §1·§2).
+  page:"기계 문서",
   skill_bundle:"스킬 묶음", skill_data:"스킬 데이터 조회", skill_product:"스킬 제품 안내",
   // 맨 `mcp` 는 이제 **연결 절차만** 뜻한다 — 기능 호출은 아래로 갈렸다(#63 결정 A).
   // 예전 문구 "AI 연결(MCP)" 를 그대로 두면 기능 호출까지 품는 말이 되어 틀린다.
@@ -583,7 +590,7 @@ const byProduct = (rows) => scoped(rows, (r) => domOf(r.product_id || r.table_na
 const servRows = (rows) => (rows || []).filter((r) =>
   DOMSCOPE ? r.domain === DOMSCOPE : r.domain !== "*");
 // ⚠️ 예전에 `servStar()`(스코프 버킷 그대로 고르기)가 여기 있었다. 유일한 사용처가
-//    '이용자별 재방문' 카드였는데 그 카드가 **이용 행동 탭으로 옮겨 가면서** 쓰는 곳이
+//    '이용자별 재방문' 카드였는데 그 카드가 **이용 패턴 분석 탭으로 옮겨 가면서** 쓰는 곳이
 //    없어졌다 — 이용자는 여러 분야를 쓰므로 저쪽은 언제나 '*' 버킷이다. 안 쓰는 헬퍼를
 //    남겨 두면 다음 사람이 "스코프를 걸어야 하나" 하고 되묻게 되어 지웠다.
 // 지금 스코프의 합계 한 줄. 목록을 더해서 만들지 않는다 — 목록은 상위 N 이라 합이 전체가 아니다.
@@ -617,7 +624,8 @@ function mergeRows(rows, keyOf, sumKeys, baseOf, avgKey) {
 // 순서가 곧 메시지다: 정상 넷을 먼저 쌓고 조치 대상을 맨 아래 세운다.
 const AXIS_KIND = [
   ["product",    "제품 요청",           "카탈로그에 있는 제품 — 분야로 셉니다",              ""],
-  ["no_product", "제품 축이 없는 요청", "목록·인증·키 발급 — 애초에 제품이 없습니다",        "dim"],
+  // '문서'는 route=page(기계 문서 3종, #285) — 제품 축이 없는 정상 요청이라 이 갈래가 맞다
+  ["no_product", "제품 축이 없는 요청", "목록·인증·키 발급·문서 — 애초에 제품이 없습니다",   "dim"],
   ["bundle",     "번들 요청",           "여러 제품을 묶은 패키지 — 분야로 환산하지 않습니다", "dim"],
   ["qa_probe",   "의도된 점검",         "404 가 성공 조건인 네거티브 프로브(qa- 접두)",       "dim"],
   ["not_found",  "제품을 못 찾은 요청", "카탈로그에 없는 이름입니다",                        "bad"],
@@ -1169,7 +1177,7 @@ const parseHash = () => {
 // 도메인 스코프 UI 를 전체 분야 목록으로 채운다(#3). 값·라벨은 서버 _ops_domain 이 정본.
 // 스코프가 안 걸리는 탭(키·API 사용량 상세)에서는 스코프바를 숨긴다 — 있으면 "여기서도
 // 좁혀지겠지" 오해한다.
-// '보는 분야'가 실제로 걸러지는 탭만 넣는다. usage(이용 행동)는 분야 축이 아니라 주체(사람·AI)
+// '보는 분야'가 실제로 걸러지는 탭만 넣는다. usage(이용 패턴 분석)는 분야 축이 아니라 주체(사람·AI)
 // 축이라 스코프가 무의미했다(걸어도 값이 안 바뀜) → 뺀다. apis(사용량)는 분야로 걸러진다 → 넣는다.
 const SCOPED_PANES = ["pipeline", "runs", "serving", "apis"];
 // 드롭다운에 넣을 '집계 가능한 분야'를 등록부(_ops_domain) **하나만** 보고 뽑지 않는다.
@@ -1215,7 +1223,7 @@ function syncScopeBar(domains) {
 }
 function updateScopeVisible() {
   // 🔴 **주소가 아니라 지금 열린 탭을 본다.** `showTab` 이 이 함수를 부른 뒤에 주소를 쓰므로,
-  //    여기서 주소를 읽으면 **직전 탭**이 잡힌다 — 스코프바가 한 탭씩 밀려서 '이용 행동'·
+  //    여기서 주소를 읽으면 **직전 탭**이 잡힌다 — 스코프바가 한 탭씩 밀려서 '이용 패턴 분석'·
   //    '이용자 키'에는 뜨고 'API 사용량'에는 안 뜨는, 정확히 반대인 상태였다.
   //    키 탭은 아예 주소를 안 써서(showTab 의 early return) 더 어긋났다.
   //    `SCOPED_PANES` 설정이 되돌려진 게 아니라 **이 한 줄이 그 설정을 무력화하고 있었다.**
@@ -1429,7 +1437,7 @@ function render(d) {
     const dl = "<b>" + esc(domLabel(DOMSCOPE)) + "</b>";
     // 이 탭은 **남은 카드 전부** 좁혀진다(#156). 예전 문구는 "요청 종류·날짜별 요청은
     // 분야 축이 없다"고 했는데 사실이 아니었다 — 축은 로그에 있었고 서버가 안 실었을
-    // 뿐이다. ('이용자별 재방문'은 이용 행동 탭으로 옮겼다 — 묻는 질문이 "누가 쓰나"다.)
+    // 뿐이다. ('이용자별 재방문'은 이용 패턴 분석 탭으로 옮겼다 — 묻는 질문이 "누가 쓰나"다.)
     // 대신 **분야에 안 들어가는 요청**이 빠진다는 것을 밝힌다.
     const unk = (d.serving.totals || []).find((r) => r.domain === null);
     N.serving.push(note("info", dl + " 분야만",
@@ -1972,7 +1980,7 @@ function render(d) {
   // **남은 카드 전부 스코프를 건다**(#156). 예전에는 제품·실패·0건 셋만 걸고 나머지는
   // "분야 축이 없는 지표"라며 전체를 뒀는데, 축이 없던 게 아니라 서버가 **안 실었던 것**이다.
   // 이제 서버가 `domain` 을 실어 주므로 화면은 버킷을 고르기만 한다(servRows/servTotal).
-  // ⚠️ `keys` 는 여기서 안 쓴다 — 카드가 이용 행동 탭으로 옮겨 갔다(거기서 '*' 버킷을 쓴다).
+  // ⚠️ `keys` 는 여기서 안 쓴다 — 카드가 이용 패턴 분석 탭으로 옮겨 갔다(거기서 '*' 버킷을 쓴다).
   const s0 = d.serving;
   const scopeLabel = DOMSCOPE ? domLabel(DOMSCOPE) : "전체";
   const s = {
@@ -2056,7 +2064,7 @@ function render(d) {
     { t:"평균 응답시간", r:true, get:(r) => fmtMs(r.avg_ms) },
   ], s.routes, "요청이 없습니다");
 
-  // ── 이용 행동 — 여정·익명 비중은 지금 데이터로, 초안 종속 축은 '수집 전'으로 그린다
+  // ── 이용 패턴 분석 — 여정·익명 비중은 지금 데이터로, 초안 종속 축은 '수집 전'으로 그린다
   const U = d.usage || { funnel:null, daily:[], clients:{pending:true,rows:[]},
                          agents:{pending:true,rows:[]}, pages:{pending:true,rows:[]} };
   const f = U.funnel || null;
@@ -2107,7 +2115,7 @@ function render(d) {
 
   // 재방문은 **분야 축이 없다** — 한 사람이 여러 분야를 쓴다. 그래서 언제나 전 분야 합계
   // 버킷('*')을 쓴다. 이 카드는 '응답 상태'에 있었는데, 묻는 질문이 "누가 쓰나"라서
-  // 이용 행동으로 옮겼다 — 옆의 '이용자별 통계'와 같은 축을 보는 카드다.
+  // 이용 패턴 분석으로 옮겼다 — 옆의 '이용자별 통계'와 같은 축을 보는 카드다.
   $("keys").innerHTML = table([
     { t:"이용자", get:(r) => esc(r.key_id), name:true },
     { t:"요청 수", r:true, get:(r) => nf.format(r.calls) },
@@ -2166,7 +2174,7 @@ function render(d) {
     ((slo.length || P.by_domain.length) ? (pipeBad ? "bad" : "ok") : "");
   $("dot-runs").className = "dot " + ((R.daily.length || R.expectations.length) ? (runsBad ? "bad" : "ok") : "");
   $("dot-serving").className = "dot " + (calls ? (servBad ? "bad" : "ok") : "");
-  // 이용 행동은 아직 경고 규칙이 없다(정보 탭) — 데이터 유무만 알린다
+  // 이용 패턴 분석은 아직 경고 규칙이 없다(정보 탭) — 데이터 유무만 알린다
   $("dot-usage").className = "dot " + (uTotal || (f && f.issued) ? "ok" : "");
   // 🔴 **여기서 탭을 다시 고르지 않는다 — 지금 열린 탭을 그대로 다시 적용할 뿐이다.**
   //    `showTab` 을 부르는 이유는 이동이 아니라 **알림 칩 가시성**이다(배너를 render 가
@@ -2674,7 +2682,7 @@ async function openDetail(name, silent) {
   if (!silent) { const tr = document.getElementById("apiDetRow"); if (tr) tr.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
 }
 
-// 이용 행동의 퍼널 숫자 → 키 목록. 앵커라 주소가 바뀌고 hashchange 가 나머지를 한다.
+// 이용 패턴 분석의 퍼널 숫자 → 키 목록. 앵커라 주소가 바뀌고 hashchange 가 나머지를 한다.
 $("usageFunnel").addEventListener("click", (e) => {
   const a = e.target.closest("[data-goto-keys]");
   if (!a) return;

@@ -25,7 +25,7 @@ ops-dashboard 의 문서는 **세 층**이고, 층마다 구속력이 다르다.
 | [0007](decision/0007-schema-single-file-reset.md) | 마이그레이션 증분(추가만) | DROP 금지 — 팀 조회 DB 실존으로 리셋 규약 폐지 (#78 D-6) · 장부 추적 · **남의 표 소유 경계** |
 | [0008](decision/0008-deferred-scope.md) | 후속으로 미룬 것 | 안 하기로 한 것의 전체 목록 + 도입 신호 |
 | [0009](decision/0009-ops-records-consumption.md) | 운영 기록 소비 | 조회 DB 4종을 읽기 전용으로 — 실행 기록 탭 (#78 적용 3단계) |
-| [0010](decision/0010-behavior-log-console-first.md) | 행동 로그 콘솔 선반영 | 이용 행동 탭 — 수집 스펙은 #9 검토 중, ALTER 미러 금지 |
+| [0010](decision/0010-behavior-log-console-first.md) | 행동 로그 콘솔 선반영 | 이용 패턴 분석 탭(문서 본문은 옛 이름 '이용 행동') — 수집 스펙은 #9 검토 중, ALTER 미러 금지 |
 | [0011](decision/0011-per-env-config.md) | 환경별 설정 | 한 파일 + `[env.production]` — **개정(0015)**: 기본 환경도 이제 운영이다 |
 | [0012](decision/0012-runs-tab-observation-boundaries.md) | 실행 기록의 관측 경계 | 환경 스코프·신선도·감시 3분류·로그 번들 — **못 거른 범위까지 화면이 밝힌다** |
 | [0014](decision/0014-console-route-contract.md) | 콘솔 route 계약 | route 전수(종 수는 §1 머리) + 퇴역분 → 화면 문구 · `SERVE` 한 곳 · **못 가른 MCP 를 화면이 말한다** (#63) |
