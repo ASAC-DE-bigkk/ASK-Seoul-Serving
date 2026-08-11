@@ -103,13 +103,31 @@ test("page exposes accessibility and responsive contracts", () => {
   assert.match(HTML, /prefers-reduced-motion/);
 });
 
-test("page uses the shared document header and exposes the three-step flow first", () => {
+test("page uses the shared document header and exposes the visitor journey first", () => {
   assert.match(HTML, /<header class="page">\s*<div class="wrap wide">/s);
-  assert.match(HTML, /<nav class="toc"[^>]+aria-label="데모 진행 단계"/);
-  assert.match(HTML, /href="#install"[^>]*>1\. 설치</);
-  assert.match(HTML, /href="#connect"[^>]*>2\. 연결</);
-  assert.match(HTML, /href="#verify"[^>]*>3\. 검증</);
+  assert.match(HTML, /<nav class="toc"[^>]+aria-label="사용 방법"/);
+  assert.match(HTML, /href="#install"[^>]*>1\. AI에 설치하기</);
+  assert.match(HTML, /href="#connect"[^>]*>2\. 내 API 키 연결</);
+  assert.match(HTML, /href="#verify"[^>]*>3\. 연결 상태 확인</);
   assert.doesNotMatch(HTML, /class="skill-hero"/);
+});
+
+test("first screen presents Seoul-wide coverage before implementation terms", () => {
+  assert.match(HTML, /<h1>서울, 언제 날씨를 조심해야 할까\?<\/h1>/);
+  assert.match(HTML, /서울 행정동 이름으로 물어보면, 더위·비·강풍에 주의할 시간대를 알려드려요\./);
+  assert.doesNotMatch(HTML, /내 동네, 언제 날씨를 조심해야 할까/);
+  assert.doesNotMatch(HTML, /성수2가3동처럼 서울 행정동 이름으로 물어보면/);
+  assert.match(HTML, /href="#install"[^>]*>1\. AI에 설치하기</);
+  assert.match(HTML, /href="#connect"[^>]*>2\. 내 API 키 연결</);
+  assert.match(HTML, /href="#verify"[^>]*>3\. 연결 상태 확인</);
+  assert.doesNotMatch(HTML, /ASK 서울의 실제 publication을 읽어 자연어 질문에 답합니다\./);
+});
+
+test("successful verification reveals technical evidence through a disclosure", () => {
+  assert.match(HTML, /<details class="verification-details" id="verificationDetails" hidden>/);
+  assert.match(HTML, /<summary>데이터·검증 정보 보기<\/summary>/);
+  assert.match(CLIENT, /verificationDetails\.hidden = false/);
+  assert.match(CLIENT, /verificationDetails\.open = true/);
 });
 
 test("install commands use full-width document rows instead of nested choice cards", () => {

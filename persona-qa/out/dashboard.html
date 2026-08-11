@@ -1,0 +1,204 @@
+<title>페르소나 품질 테스트 — ASK: SEOUL</title>
+<style>
+  :root {
+    --plane: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e;
+    --muted: #898781; --grid: #e1e0d9; --ring: rgba(11,11,11,.10);
+    --accent: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+    --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b;
+    --neutral-bar: #9ec5f4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      --plane: #0d0d0d; --surface: #1a1a19; --ink: #fff; --ink-2: #c3c2b7;
+      --muted: #898781; --grid: #2c2c2a; --ring: rgba(255,255,255,.10);
+      --accent: #3987e5; --s2: #d95926; --s3: #199e70; --neutral-bar: #1c5cab;
+    }
+  }
+  :root[data-theme="dark"] {
+    --plane: #0d0d0d; --surface: #1a1a19; --ink: #fff; --ink-2: #c3c2b7;
+    --muted: #898781; --grid: #2c2c2a; --ring: rgba(255,255,255,.10);
+    --accent: #3987e5; --s2: #d95926; --s3: #199e70; --neutral-bar: #1c5cab;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--plane); color: var(--ink);
+         font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+         word-break: keep-all; overflow-wrap: break-word; }
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 40px 20px 72px; }
+  header h1 { font-size: 1.45rem; margin: 0 0 4px; text-wrap: balance; }
+  header .sub { color: var(--ink-2); font-size: .92rem; max-width: 68ch; }
+  .eyebrow { color: var(--muted); font-size: .75rem; letter-spacing: .08em;
+             text-transform: uppercase; margin-bottom: 6px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr));
+           gap: 12px; margin: 26px 0; }
+  .tile { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 14px 16px; }
+  .tile .v { font-size: 1.85rem; font-weight: 650; line-height: 1.15; }
+  .tile .v small { font-size: 1rem; font-weight: 500; color: var(--ink-2); }
+  .tile .k { color: var(--ink-2); font-size: .85rem; margin-top: 2px; }
+  .tile .n { color: var(--muted); font-size: .78rem; margin-top: 4px; }
+  .card { background: var(--surface); border: 1px solid var(--ring);
+          border-radius: 12px; padding: 20px 22px; margin: 18px 0; }
+  .card h2 { font-size: 1.02rem; margin: 0 0 2px; }
+  .card .desc { color: var(--ink-2); font-size: .88rem; margin: 0 0 14px; max-width: 72ch; }
+  .hbar-row { display: grid; grid-template-columns: 110px 1fr 92px; gap: 10px;
+              align-items: center; margin: 6px 0; font-size: .87rem; }
+  .hbar-row .lbl { color: var(--ink-2); text-align: right; }
+  .hbar-track { height: 16px; }
+  .hbar { height: 100%; border-radius: 0 4px 4px 0; min-width: 2px; }
+  .hbar-row .val { font-variant-numeric: tabular-nums; color: var(--ink-2);
+                   font-size: .8rem; white-space: nowrap; }
+  @media (max-width: 560px) {
+    /* 좁은 폭: 라벨·값을 윗줄에, 막대를 아랫줄 전체 폭으로 */
+    .hbar-row { grid-template-columns: 1fr auto; gap: 2px 10px; margin: 10px 0; }
+    .hbar-row .lbl { grid-row: 1; grid-column: 1; text-align: left; }
+    .hbar-row .val { grid-row: 1; grid-column: 2; }
+    .hbar-track { grid-row: 2; grid-column: 1 / -1; }
+  }
+  /* 도메인 통계 카드 */
+  .domgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap: 14px; }
+  .dom { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 16px 18px; }
+  .dom .head { display: flex; align-items: baseline; gap: 10px; }
+  .dom .name { font-weight: 650; font-size: .98rem; }
+  .dom .nn { color: var(--muted); font-size: .78rem; }
+  .dom .acc { font-size: 1.7rem; font-weight: 650; margin: 6px 0 2px;
+              font-variant-numeric: tabular-nums; }
+  .dom .accbar { height: 6px; background: var(--grid); border-radius: 3px; margin: 4px 0 12px; }
+  .dom .accbar i { display: block; height: 100%; border-radius: 3px; }
+  .dom .kv { display: flex; justify-content: space-between; gap: 12px;
+             font-size: .84rem; color: var(--ink-2); padding: 4px 0;
+             border-bottom: 1px solid var(--grid); }
+  .dom .kv:last-of-type { margin-bottom: 10px; }
+  .dom .kv span { min-width: 0; }
+  .dom .kv b { font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums;
+               text-align: right; flex-shrink: 0; }
+  .fix { border-top: 1px dashed var(--grid); padding-top: 9px; font-size: .84rem; color: var(--ink-2); }
+  .fix b { color: var(--ink); }
+  .fix::before { content: "보완 "; font-size: .7rem; letter-spacing: .06em; color: var(--accent);
+                 border: 1px solid var(--accent); border-radius: 4px; padding: 0 5px; margin-right: 7px; }
+  table.sumry { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  table.sumry th { text-align: left; color: var(--muted); font-weight: 500; font-size: .78rem;
+                   border-bottom: 1px solid var(--grid); padding: 6px 10px 6px 0; }
+  table.sumry td { border-bottom: 1px solid var(--grid); padding: 8px 10px 8px 0; vertical-align: top; }
+  table.sumry td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  footer { color: var(--muted); font-size: .8rem; margin-top: 40px; border-top: 1px solid var(--grid);
+           padding-top: 14px; max-width: 76ch; }
+  code { font-size: .85em; }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">ASK: SEOUL · 데이터 품질 실측 통계 · 2026-08-10~11 · 최종</div>
+  <h1>페르소나 품질 테스트 — 231문항 도메인 통계</h1>
+  <p class="sub">Nemotron-Personas-Korea 서울 거주 가상 시민 77명(연령 5구간 균형·자치구 21종+)의
+  질문 231건을 headless Claude + 원격 MCP로 실측. 정확률 = "데이터로 답함(정상)" 판정 비율,
+  오차 = 환각의심+오류. 실측 모델: 상위(기본) 41 · sonnet 34 · haiku 156.</p>
+</header>
+
+<div class="tiles">
+  <div class="tile"><div class="v">51.5<small>%</small></div><div class="k">답변 정확률</div><div class="n">정상 119 / 231</div></div>
+  <div class="tile"><div class="v">3.9<small>%</small></div><div class="k">답변 오차율</div><div class="n">환각 7 + 오류 2</div></div>
+  <div class="tile"><div class="v">92.6<small>%</small></div><div class="k">근거성</div><div class="n">한계 명시·지어냄 없음</div></div>
+  <div class="tile"><div class="v">3.13<small>/5</small></div><div class="k">유용성 평균</div><div class="n">페르소나 관점 채점</div></div>
+</div>
+
+<div class="card">
+  <h2>질문유형별 통계 — 무엇을 묻고, 무엇이 답이 되나</h2>
+  <p class="desc">막대 길이 = 질문 수. <strong>수요 1위는 예보·미래형(79건)인데 정확률 47%</strong> —
+  관측 이력 중심 카탈로그와 수요의 어긋남이 유형 통계에 그대로 나타난다.
+  반대로 카탈로그 성격과 맞는 추이·이력형은 83%.</p>
+  <div class="hbar-row"><span class="lbl">예보·미래형</span><div class="hbar-track"><div class="hbar" style="width:100%;background:var(--accent)"></div></div><span class="val">79건 · 47%</span></div>
+  <div class="hbar-row"><span class="lbl">일정·목록형</span><div class="hbar-track"><div class="hbar" style="width:62%;background:var(--accent)"></div></div><span class="val">49건 · 57%</span></div>
+  <div class="hbar-row"><span class="lbl">시간대·패턴형</span><div class="hbar-track"><div class="hbar" style="width:42%;background:var(--accent)"></div></div><span class="val">33건 · 36%</span></div>
+  <div class="hbar-row"><span class="lbl">실시간·현재형</span><div class="hbar-track"><div class="hbar" style="width:28%;background:var(--accent)"></div></div><span class="val">22건 · 68%</span></div>
+  <div class="hbar-row"><span class="lbl">경로·방법형</span><div class="hbar-track"><div class="hbar" style="width:23%;background:var(--accent)"></div></div><span class="val">18건 · 39%</span></div>
+  <div class="hbar-row"><span class="lbl">추이·이력형</span><div class="hbar-track"><div class="hbar" style="width:23%;background:var(--s3)"></div></div><span class="val">18건 · 83%</span></div>
+  <div class="hbar-row"><span class="lbl">기타·순위</span><div class="hbar-track"><div class="hbar" style="width:15%;background:var(--accent)"></div></div><span class="val">12건 · 42%</span></div>
+</div>
+
+<div class="card">
+  <h2>실측 모델별 통계</h2>
+  <p class="desc">커버리지는 상위 모델만 독보적이고, <strong>환각 억제는 sonnet 티어부터 확보</strong>된다
+  (sonnet·haiku 정확률은 같지만 환각은 haiku에만 7건).</p>
+  <div class="hbar-row"><span class="lbl">상위(기본)</span><div class="hbar-track"><div class="hbar" style="width:88%;background:var(--accent)"></div></div><span class="val">88% · 41건</span></div>
+  <div class="hbar-row"><span class="lbl">sonnet</span><div class="hbar-track"><div class="hbar" style="width:44%;background:var(--s2)"></div></div><span class="val">44% · 34건</span></div>
+  <div class="hbar-row"><span class="lbl">haiku 4.5</span><div class="hbar-track"><div class="hbar" style="width:44%;background:var(--s2)"></div></div><span class="val">44% · 156건</span></div>
+</div>
+
+<h2 style="font-size:1.1rem;margin:28px 0 4px">도메인별 통계</h2>
+<p style="color:var(--ink-2);font-size:.88rem;margin:0 0 14px;max-width:74ch">질문이 두 도메인에
+걸치면 양쪽에 집계된다(합 &gt; 231). 정확률 낮은 순.</p>
+
+<div class="domgrid">
+  <div class="dom">
+    <div class="head"><span class="name">transit 대중교통</span><span class="nn">n=45 · 제품 4종</span></div>
+    <div class="acc">29%</div><div class="accbar"><i style="width:29%;background:var(--crit)"></i></div>
+    <div class="kv"><span>데이터없음 · 되물음</span><b>19건 · 13건(최다)</b></div>
+    <div class="kv"><span>오차(환각+오류)</span><b>0건</b></div>
+    <div class="kv"><span>주 질문유형</span><b>시간대 18 · 예보 12</b></div>
+    <div class="fix"><b>노선 단위 시간표(첫차·막차·배차)·혼잡 데이터 신설</b> — 현재 행정동 축뿐이라 되물음 13건의 진원.</div>
+  </div>
+  <div class="dom">
+    <div class="head"><span class="name">traffic 도로교통</span><span class="nn">n=31 · 제품 6종</span></div>
+    <div class="acc">39%</div><div class="accbar"><i style="width:39%;background:var(--serious)"></i></div>
+    <div class="kv"><span>데이터없음 · 되물음</span><b>11건 · 6건</b></div>
+    <div class="kv"><span>오차(환각+오류)</span><b>2건</b></div>
+    <div class="kv"><span>주 질문유형</span><b>시간대 13 · 예보 11</b></div>
+    <div class="fix"><b>link_id ↔ 도로명·자치구 매핑 테이블 추가</b> — 딱 맞는 제품(시간대 프로파일)이 있는데 지명으로 도달 불가. 전 도메인 최고 가성비.</div>
+  </div>
+  <div class="dom">
+    <div class="head"><span class="name">weather 날씨</span><span class="nn">n=40 · 제품 6종</span></div>
+    <div class="acc">45%</div><div class="accbar"><i style="width:45%;background:var(--serious)"></i></div>
+    <div class="kv"><span>데이터없음 · 되물음</span><b>17건 · 3건</b></div>
+    <div class="kv"><span>오차(환각+오류)</span><b>2건</b></div>
+    <div class="kv"><span>주 질문유형</span><b>예보 32 (80%)</b></div>
+    <div class="fix"><b>예보 기간(+5일) 카탈로그 명시 + 동↔장소 105곳 매핑</b> — "우리 동 주말 날씨" 수요 흡수.</div>
+  </div>
+  <div class="dom">
+    <div class="head"><span class="name">culture 문화행사</span><span class="nn">n=45 · 제품 7종</span></div>
+    <div class="acc">51%</div><div class="accbar"><i style="width:51%;background:var(--warn)"></i></div>
+    <div class="kv"><span>데이터없음 · 되물음</span><b>15건 · 5건</b></div>
+    <div class="kv"><span>오차(환각+오류)</span><b>2건</b></div>
+    <div class="kv"><span>주 질문유형</span><b>일정·목록 28 (62%)</b></div>
+    <div class="fix"><b>공연장 밖 행사(축제·팝업·독립행사) 축 확장 + 자치구 필터·장소 상세화</b> — "문화"의 범위를 수요에 맞추기.</div>
+  </div>
+  <div class="dom">
+    <div class="head"><span class="name">citydata 도시생활</span><span class="nn">n=77 (최다) · 제품 14종</span></div>
+    <div class="acc">58%</div><div class="accbar"><i style="width:58%;background:var(--warn)"></i></div>
+    <div class="kv"><span>데이터없음 · 되물음</span><b>24건 · 4건</b></div>
+    <div class="kv"><span>오차(환각+오류)</span><b>4건 (최다)</b></div>
+    <div class="kv"><span>주 질문유형</span><b>예보 30 · 실시간 20</b></div>
+    <div class="fix"><b>대기질 예보 축 신설(단일 최다 간극) + 시간 단위 농도 + 관측 공백구(금천) 보완</b>.</div>
+  </div>
+  <div class="dom">
+    <div class="head"><span class="name">commerce 상권</span><span class="nn">n=38 · 제품 22종</span></div>
+    <div class="acc">76%</div><div class="accbar"><i style="width:76%;background:var(--good)"></i></div>
+    <div class="kv"><span>데이터없음 · 되물음</span><b>4건 · 4건</b></div>
+    <div class="kv"><span>오차(환각+오류)</span><b>1건</b></div>
+    <div class="kv"><span>주 질문유형</span><b>일정 11 · 추이 7</b></div>
+    <div class="fix"><b>유지</b> — 제품 투자가 수요를 잘 받는 유일한 도메인. 답변의 product_id 인용 유도, 동 단위 유동인구 연계만 보강.</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:22px">
+  <h2>보완점 요약 — 한 줄씩</h2>
+  <div class="scroll"><table class="sumry">
+    <tr><th>도메인</th><th>정확률</th><th>보완점 한 줄</th></tr>
+    <tr><td><b>transit</b></td><td class="num">29%</td><td>노선 단위 시간표(첫차·막차·배차간격)·혼잡 데이터를 신설한다 — 행정동 축만으로는 되물음이 구조적이다.</td></tr>
+    <tr><td><b>traffic</b></td><td class="num">39%</td><td>link_id ↔ 도로명·자치구 매핑 하나를 추가해 기존 6종 제품에 지명으로 도달하게 한다.</td></tr>
+    <tr><td><b>weather</b></td><td class="num">45%</td><td>예보 제공 기간을 명시하고 동↔주요장소 매핑을 붙여 "우리 동 주말 날씨" 수요를 받는다.</td></tr>
+    <tr><td><b>culture</b></td><td class="num">51%</td><td>공연장 밖 축제·팝업·독립행사 수집으로 "문화"의 커버 범위를 시민 수요에 맞춘다.</td></tr>
+    <tr><td><b>citydata</b></td><td class="num">58%</td><td>대기질 "예보" 축을 신설한다 — 전체에서 가장 자주 반복된 단일 간극.</td></tr>
+    <tr><td><b>commerce</b></td><td class="num">76%</td><td>현 수준 유지 — 답변에 사용 제품명을 인용하게 유도하고 동 단위 유동인구만 연계한다.</td></tr>
+    <tr><td><b>공통</b></td><td class="num">—</td><td>하위 모델 소비자 가드레일: 응답 data_context에 데이터 해상도·기간 한계를 명시한다(환각 7건 전부 haiku).</td></tr>
+  </table></div>
+</div>
+
+<footer>
+  방법론: 질문 생성은 카탈로그 비공개(단, 6개 도메인 힌트는 제공 — 따라서 정확률은
+  "서비스가 다루는 생활영역 내" 기준이며 완전 개방 수요 기준으로는 이보다 낮다).
+  실측은 mcp-eval-57과 동일한 headless Claude + 원격 MCP. 도메인 분류는 질문 키워드
+  기준(복수 도메인 중복 집계). 문항별 전체 상세(질문ID·페르소나·답변·API·서빙 데이터·
+  보완점·질문유형)는 <code>out/detail-table.csv</code>, 사례 중심 상세 분석은
+  <code>out/domain-recommendations.md</code>, 집계 원본은 <code>out/summary.json</code>.
+</footer>
+</div>

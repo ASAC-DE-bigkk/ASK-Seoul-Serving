@@ -439,6 +439,7 @@ def _parser() -> argparse.ArgumentParser:
     query.add_argument("--to", dest="to_value")
     query.add_argument("--limit", type=int, default=100)
     query.add_argument("--cursor")
+    query.add_argument("--fast", action="store_true", help="metadata 조회를 생략하고 안전한 data-only 질문 경로 사용")
     return parser
 
 
@@ -463,8 +464,12 @@ def run(argv: list[str]) -> int:
         else:
             if not 1 <= args.limit <= 500:
                 raise SkillError("invalid_limit", "limit은 1부터 500 사이여야 합니다.")
-            _bundle(config)
-            detail = _detail(config, args.product_id)
+            if args.fast and args.filter:
+                raise SkillError("invalid_fast_query", "fast query에서는 --filter를 사용할 수 없습니다.")
+            detail = None
+            if not args.fast:
+                _bundle(config)
+                detail = _detail(config, args.product_id)
             filters = _filters(args.filter)
             if args.gu is not None and args.admin_dong is None:
                 raise SkillError("invalid_location_input", "--gu는 --admin-dong과 함께 사용해야 합니다.")
@@ -480,10 +485,11 @@ def run(argv: list[str]) -> int:
                     )
                 resolved = _resolve_admin_dong(args.admin_dong, args.gu)
                 filters["place_id"] = resolved["place_id"]
-            allowed_columns = {column["name"] for column in detail["metadata"].get("columns", [])}
-            unknown = sorted(set(filters) - allowed_columns)
-            if unknown:
-                raise SkillError("unknown_filter", f"공개 projection에 없는 필터입니다: {', '.join(unknown)}")
+            if not args.fast:
+                allowed_columns = {column["name"] for column in detail["metadata"].get("columns", [])}
+                unknown = sorted(set(filters) - allowed_columns)
+                if unknown:
+                    raise SkillError("unknown_filter", f"공개 projection에 없는 필터입니다: {', '.join(unknown)}")
             request_query = {**filters, "limit": str(args.limit)}
             if args.from_value is not None:
                 request_query["from"] = _time_bound(args.from_value, "from")

@@ -5,7 +5,7 @@ license: MIT
 metadata:
   category: public-data
   locale: ko-KR
-  source-commit: a9e1c7e4b372da670908737b752bf708af160112
+  source-commit: 131abc37ed43bac7362ed64ceffa16adcd6fe674
 ---
 
 # Seoul Weather Risk
@@ -76,6 +76,19 @@ python scripts/seoul_weather_risk.py query \
 ```
 
 응답의 `registration_ready`, `publication_id`, `blockers`를 먼저 확인한다. data 응답의 `next_cursor`는 같은 제품의 다음 page에만 그대로 재사용한다. publication이 바뀌면 cursor는 `409`로 만료된다.
+
+설치 직후 또는 운영 상태 점검 때 위의 `preflight`, `catalog`, `describe`를 한 번 실행한 뒤에는 다음 data-only 경로를 사용한다. 이 경로는 bundle/product metadata를 다시 조회하지 않고 data endpoint 한 곳만 호출하므로, 실제 자연어 질문의 지연을 줄인다.
+
+```bash
+python scripts/seoul_weather_risk.py query --fast \
+  --product-id weather_place_risk_window \
+  --admin-dong 잠실본동 \
+  --from 2026-08-10 \
+  --to 2026-08-10 \
+  --limit 100
+```
+
+`--fast`는 `--admin-dong`, 선택적 `--gu`, 기간, `limit`, `cursor`만 허용한다. 임의 projection이 필요한 경우에는 기존 `query` 경로에서 `--filter`를 사용해 product metadata를 먼저 검증한다. fast data 응답의 `bundle_id`, `product_id`, `publication_id`, `row_count`, `usage` 및 `registration_ready`/오류 상태를 그대로 확인하며, live 실패를 추정값으로 대체하지 않는다.
 
 ## Local pre-registration fallback
 

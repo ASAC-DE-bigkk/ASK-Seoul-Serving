@@ -9,11 +9,11 @@
 | 데이터 준비 상태 (`#pipeline`) | 수집·변환이 매일 제때 끝났나 | `_ops_slo` (보조·합성 스냅샷) |
 | 실행 기록 (`#runs`) | 무엇이 돌았고, 무엇이 조용한가 | 조회 DB 4종 `_ops_run_event` 외 (ASK-Seoul#78) |
 | 응답 상태 (`#serving`) | 외부에 잘 나가고 있나 | `_gateway_request_log` (게이트웨이가 쌓는다) |
-| 이용 행동 (`#usage`) | **누가** 쓰나 — 사람·AI·여정 | `_gateway_request_log` + `_keys` + 행동 스펙 초안(#9) |
+| 이용 패턴 분석 (`#usage`) | **누가** 쓰나 — 사람·AI·여정 | `_gateway_request_log` + `_keys` + 행동 스펙 초안(#9) |
 | API 사용량 (`#apis`) | **무엇이** 얼마나 쓰이나 — API별·분야별 | `_gateway_request_log` + `_catalog` + `d1_catalog_display`(표시명) |
 | 이용자 키 (`#keys`) | 누가 쓰고 있고, 손댈 것이 있나 | `_keys` + `_usage` + `_gateway_request_log` |
 
-'이용 행동'과 'API 사용량'은 같은 표를 읽지만 **묻는 질문이 다르다** — 앞은 주체(사람이냐
+'이용 패턴 분석'과 'API 사용량'은 같은 표를 읽지만 **묻는 질문이 다르다** — 앞은 주체(사람이냐
 에이전트냐, 발급 후 어디까지 갔나), 뒤는 대상(어느 API·어느 분야가 얼마나 쓰이나)이다.
 
 **화면 문구는 내부 용어를 쓰지 않는다.** SLO·route·status·preview 같은 말은 화면에 내보내지 않고
@@ -66,7 +66,7 @@
 이름·컬럼이 같아 화면 코드는 그대로다. 시나리오별 확인 방법은
 [runbook §3](docs/runbook.md).
 
-## 이용 행동 탭 — 행동 로그 스펙 초안(#9)의 소비 화면
+## 이용 패턴 분석 탭 — 행동 로그 스펙 초안(#9)의 소비 화면 (구 '이용 행동', #177 개명)
 
 "누가·무엇이·어떻게 쓰나"를 본다. 두 부류가 섞여 있다
 ([decision/0010](docs/decision/0010-behavior-log-console-first.md)):
@@ -85,7 +85,8 @@
 ⚠️ '이용자별 재방문'은 2026-08-07 까지 **응답 상태** 탭에 있었다. 원본이 서빙 로그라는 이유
 였는데, 그 카드가 묻는 것은 "잘 나갔나"가 아니라 **"누가 쓰나"** 라 여기로 옮겼다.
 - **수집 반영 후 자동 점등** — 손님 구성(사람/AI 대행/AI 크롤러/CLI), AI 에이전트별 제품
-  수요, 페이지 접근. 축(`ua_class`·`agent_name`·`page_path` …)의 정의는 행동 로그 공통 스펙
+  수요, 기계 문서 접근(구 '페이지 접근' — 범위는 기계 문서 3종, Serving#285).
+  축(`ua_class`·`agent_name`·`page_path` …)의 정의는 행동 로그 공통 스펙
   초안(ASK-Seoul-Serving#9, [reference/behavior-log-spec-draft.md](docs/reference/behavior-log-spec-draft.md))이며
   **게이트웨이 반영 전까지 '수집 전'으로 표시**된다 — 콘솔은 게이트웨이 스키마를 만들지도
   미러하지도 않는다.
