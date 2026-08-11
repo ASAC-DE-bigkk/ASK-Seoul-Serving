@@ -1216,18 +1216,24 @@ function patternDefaults(sql) {
   //    분기 ②에서 한 칸씩 밀려 `undefined` 를 채운 적이 있다(값이 있는데 빈 칸으로 남았다).
   const VALUE = "('([^']*)'|\"([^\"]*)\"|[^\\s,;)|]+)";
   const take = (m, at) => m[at + 1] ?? m[at + 2] ?? m[at];
+  // 🔴 `예시`·`예` 뒤에는 **구분자가 반드시 온다**(공백 또는 `:`). 이걸 안 걸면 `예보`·`예상`
+  //    같은 낱말에서 뒷글자를 값으로 뽑는다(`예보 3시간` → `보`). 지금 게시본에는 그런 주석이
+  //    0건이지만, 날씨처럼 `예보` 를 쓰는 도메인이 주석을 달면 그날 조용히 틀린 값이 찬다.
+  //    🔴 하나의 그룹으로 감싼다 — 최상위 교대(`A|B`)로 두면 이어 붙일 때 VALUE 가 뒤쪽
+  //    갈래에만 걸려 앞 갈래가 값 없이 매치되고, 결과가 `undefined` 로 들어간다.
+  const MARK = "(?:예시|예)(?:\\s*:\\s*|\\s+)";
   for (const line of String(sql || "").split("\n")) {
     const cut = line.indexOf("--");
     if (cut < 0) continue;
     const code = line.slice(0, cut), note = line.slice(cut);
     // ① 이름이 주석 안에 있는 형 — `-- :n=10` · `-- :n 예시 10`  (앞에 이름 그룹 1개)
-    for (const m of note.matchAll(new RegExp(":([a-z_][a-z0-9_]*)\\s*(?:=|예시|예:?)\\s*" + VALUE, "gi")))
+    for (const m of note.matchAll(new RegExp(":([a-z_][a-z0-9_]*)\\s*(?:=\\s*|" + MARK + ")" + VALUE, "gi")))
       if (out[m[1]] === undefined) out[m[1]] = take(m, 2);
     // ② 이름이 **코드 쪽에** 있고 주석은 값만 적은 형 — `WHERE x = :cat  -- 예시 'food'`
     //    같은 줄에 파라미터가 하나일 때만 붙인다(둘이면 어느 것인지 알 수 없다).
     const onLine = [...new Set([...code.matchAll(/:([a-z_][a-z0-9_]*)/gi)].map((x) => x[1]))];
     if (onLine.length !== 1 || out[onLine[0]] !== undefined) continue;
-    const bare = note.match(new RegExp("(?:예시|예)\\s*:?\\s*" + VALUE, "i"));
+    const bare = note.match(new RegExp(MARK + VALUE, "i"));
     if (bare) out[onLine[0]] = take(bare, 1);
   }
   return out;
