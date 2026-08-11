@@ -26,7 +26,7 @@ const HTML = (await readFile(new URL("../public/index.html", import.meta.url), "
 const STRIP = HTML.slice(HTML.indexOf('<div class="strip">'), HTML.indexOf('<main class="wrap">'));
 
 test("네 칸이 첫 방문의 네 질문에 답한다", () => {
-  for (const lab of ["데이터 제품", "분야", "검증된 질문", "갱신"])
+  for (const lab of ["데이터 제품", "분야", "질의 패턴", "갱신"])
     assert.match(STRIP, new RegExp('class="lab ko">' + lab + "<"), lab + " 칸이 없다");
   assert.equal((STRIP.match(/class="cell"/g) || []).length, 4,
     "칸을 늘릴 때는 그것이 **방문자의 질문**인지 먼저 본다 — 네 번 실패한 자리다");
@@ -61,11 +61,13 @@ test("② 네 칸이 전부 실측이다 — 하드코딩한 사실을 끼워 �
     "실측이 아닌 값이 섞이면 '무료' 같은 빈 칸이 다시 생긴다");
 });
 
-// 🔴 말과 수를 같은 쪽에 맞춘다 — 라벨이 "검증된"이면 **검증본만 세야** 한다.
-//    한때 전체(초안 포함)를 세면서 "검증된 질문"이라 적었다가, 저작 스윕(ASAC-DBT#489)으로
-//    초안이 섞인 날 그 문장이 거짓이 됐다(795 중 73 미검증). 정책은 "외부에는 검증본만"이라
-//    수를 그쪽에 맞췄다 — 초안이 스탬프되면 이 수가 저절로 오른다.
-test("🔴 '검증된 질문'이라 부르면 검증본만 센다", () => {
+// 🔴 말과 수를 같은 쪽에 맞춘다 — 설명이 "바로 물어볼 수 있는"이면 **실행되는 것만 세야** 한다.
+//    한때 전체(초안 포함)를 세면서 "검증된 질문"이라 적었다가 초안이 섞인 날 거짓이 됐고
+//    (795 중 73 미검증 — ASAC-DBT#489), 그 뒤 "행 수까지 확인함"으로 맞췄더니 이번엔 증명이
+//    방문자의 언어가 아니었다(오너 결정 2026-08-11 — 방문자의 질문은 "뭘 물어볼 수 있나"다).
+//    라벨은 설명("활용 질문")으로 바뀌었지만 세는 쪽은 그대로다: 미검증 초안은 실행하면
+//    409 라, verified_at 필터를 빼는 순간 "물어볼 수 있는"이 거짓이 된다.
+test("🔴 '바로 물어볼 수 있는'이라 말하면 실행되는 것(검증본)만 센다", () => {
   assert.match(HTML, /const patterns = products\.reduce\(\s*\(n, p\) => n \+ \(p\.usage_patterns \|\| \[\]\)\.filter\(\(u\) => u\.verified_at\)\.length, 0\)/,
     "verified_at 필터 없이 세면 초안이 '검증된'에 섞인다");
   assert.doesNotMatch(HTML, /n \+ \(\(p\.usage_patterns \|\| \[\]\)\.length\)/,
