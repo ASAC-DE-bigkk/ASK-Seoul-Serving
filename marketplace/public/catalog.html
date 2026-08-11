@@ -1502,9 +1502,10 @@ function renderRows(rows) {
 // problem+json → 사람이 읽는 한국어. 매핑 없으면 서버 detail 그대로.
 function friendly(status, body) {
   const t = (body && body.title) || "";
-  if (t === "rotate confirmation required") return null; // 별도 확인 플로가 처리
-  if (status === 429 && t === "issuance rate limited")
-    return "같은 네트워크에서 발급이 잦았어요 — IP당 시간당 5회까지예요. 잠시 뒤 다시 시도해주세요.";
+  // 🔴 발급 관련 두 분기(`rotate confirmation required`·`issuance rate limited`)는 걷어냈다
+  //    (2026-08-12 전수 대조). 발급이 Google 로그인 하나로 바뀌면서 그 경로는 problem+json 이
+  //    아니라 **안내 화면**으로 답한다 — 이 매퍼에 닿지 않는다. 안 쓰는 매핑을 남겨 두면
+  //    "이 오류가 아직 있나 보다"로 읽혀 문서까지 따라 낡는다(실제로 /docs·/status 가 그랬다).
   if (status === 429 && t === "burst rate limited")
     return `너무 빠르게 호출했어요 — 분당 60건까지예요. ${(body && body.retry_after) || 60}초 뒤 다시 시도해주세요.`;
   if (status === 429) return "오늘 호출 한도를 모두 썼어요 — 내일 00:00(KST)에 리셋됩니다.";

@@ -297,12 +297,12 @@ async function handleCatalog(env, ctx) {
 }
 
 async function buildCatalog(env, cache, cacheKey) {
-  // 🔴 **다섯 질의를 줄세우지 않는다.** 서로 독립적인 읽기인데 순차로 `await` 하면 D1 왕복이
+  // 🔴 **여섯 질의를 줄세우지 않는다.** 서로 독립적인 읽기인데 순차로 `await` 하면 D1 왕복이
   // 그대로 더해진다 — 한국↔CF 왕복이 회당 0.7~0.9s 라 5번이면 4~4.5s 다(브라우저 실측 4,529ms).
   // 병렬로 띄우면 가장 느린 하나로 수렴한다. 실패 처리는 그대로다: `_catalog` 이 깨지면
-  // 전체가 reject 되고(카탈로그 없이는 응답이 성립하지 않는다), 나머지 넷은 `safeRows` 가
+  // 전체가 reject 되고(카탈로그 없이는 응답이 성립하지 않는다), 나머지 다섯은 `safeRows` 가
   // null 로 내려앉아 **그 부분만 빠진 채** 응답이 나간다.
-  const [catalogRes, docRows, patternRows, displayRows, grainRows] = await Promise.all([
+  const [catalogRes, docRows, patternRows, displayRows, grainRows, vocabularyRows] = await Promise.all([
     env.DB.prepare(
       "SELECT name, product_id, external, description, product_question, time_axis, columns, " +
       "row_count, freshness, exported_at " +
@@ -321,6 +321,9 @@ async function buildCatalog(env, cache, cacheKey) {
     safeRows(env.DB.prepare(
       "SELECT product_id, grain FROM d1_catalog_ext"
     )),
+    safeRows(env.DB.prepare(
+      "SELECT product_id, column_name, vocabulary_id FROM d1_catalog_column_vocabularies"
+    )),
   ]);
   const { results } = catalogRes;
 
@@ -337,6 +340,10 @@ async function buildCatalog(env, cache, cacheKey) {
   // 꾸미면 화면이 설명이 있는 척한다).
   const docs = new Map();
   for (const r of docRows || []) docs.set(`${r.product_id}|${r.column_name}`, r.description_ko || null);
+  const vocabularies = new Map();
+  for (const r of vocabularyRows || []) {
+    vocabularies.set(`${r.product_id}|${r.column_name}`, r.vocabulary_id);
+  }
 
   // 활용 예시도 같은 이유로 게시본에서 온다(`d1_usage_patterns`, #642 §3).
   //
@@ -400,9 +407,14 @@ async function buildCatalog(env, cache, cacheKey) {
     key_issuance: { method: "google_oauth", start: "/api/v1/auth/google" },
     join_axes: JOIN_AXES,
     products: results.map((r) => {
-      const columns = JSON.parse(r.columns).map((c) => ({
-        ...c, description: docs.get(`${r.product_id}|${c.name}`) ?? null,
-      }));
+      const columns = JSON.parse(r.columns).map((c) => {
+        const vocabularyId = vocabularies.get(`${r.product_id}|${c.name}`);
+        return {
+          ...c,
+          description: docs.get(`${r.product_id}|${c.name}`) ?? null,
+          ...(vocabularyId ? { vocabulary_id: vocabularyId } : {}),
+        };
+      });
       return {
         ...r, columns,
         join_keys: columns.map((c) => c.name).filter((n) => JOIN_AXES.includes(n)),
