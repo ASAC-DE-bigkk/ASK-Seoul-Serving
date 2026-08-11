@@ -75,8 +75,11 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
 
 ## 시작 순서
 
-1. `GET /api/v1/catalog` — 제품 목록. 인증 불필요. 각 제품의 `product_question`(자연어 질문)으로
-   사용자 질문과 매칭해 제품을 고른다. `description` = 그레인·주의사항, `columns` = 스키마.
+0. `GET /api/v1/search?q=<질문 문장>` — **어떤 데이터를 쓸지 모르면 여기서 시작한다.** 인증·쿼터
+   없음. 후보 3개까지와 함께 `matched_terms`(왜 골랐나)·바로 실행할 질의 패턴이 온다.
+   MCP 의 `search_products` 와 같은 검색기다. 전체를 훑어야 할 때만 1번을 쓴다.
+1. `GET /api/v1/catalog` — 제품 목록(전량). 인증 불필요. 각 제품의 `product_question`(자연어 질문)
+   으로 사용자 질문과 매칭해 제품을 고른다. `description` = 그레인·주의사항, `columns` = 스키마.
 2. `GET /api/v1/preview/<product_id>` — 샘플 5행(최신 구간). 인증·쿼터 없음. 스키마·실값 확인용.
 3. 키 발급 — 방법은 **Google 로그인 하나**다(2026-08-07 이메일 발급 폐지). 추측하지 말고
    1번 응답의 `key_issuance` 를 볼 것 — 늘 그 필드가 정본이다.

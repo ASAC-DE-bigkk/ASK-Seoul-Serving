@@ -105,7 +105,7 @@
       <div class="table-scroll"><table><thead><tr><th>구분</th><th>한도</th><th>초과 시</th></tr></thead><tbody><tr><td class="dom">분당 한도</td><td><b>60건</b></td><td><code>429</code> 와 <code>Retry-After</code> 헤더로 재시도 시각을 알려드립니다</td></tr><tr><td class="dom">일일 쿼터</td><td>키당 <b>1,000회</b> (KST 자정 리셋)</td><td><code>429</code> 를 반환합니다</td></tr></tbody></table></div></div></li>
       <li><span class="n">②</span><div>분당 한도는 <b>인증 요청은 키 단위로, 인증 없는 미리보기는 IP 단위</b>로 셉니다.</div></li>
       <li><span class="n">③</span><div>다음 요청은 <b>일일 쿼터를 소모하지 않습니다.</b>
-      <ul><li>분당 한도로 막힌 요청</li><li>유효하지 않은 요청(<code>400</code> · <code>404</code> · <code>409</code>)</li><li>인증 없는 미리보기(<code>/api/v1/preview</code>)</li></ul></div></li>
+      <ul><li>분당 한도로 막힌 요청</li><li>유효하지 않은 요청(<code>400</code> · <code>404</code> · <code>409</code>)</li><li>인증 없는 미리보기(<code>/api/v1/preview</code>) · 제품 검색(<code>/api/v1/search</code>)</li><li>메타 조회(<code>/api/v1/products</code> · <code>/api/v1/glossary</code>)</li><li><b>서비스 잘못으로 실패한 요청</b>(<code>500</code>) — 이미 차감된 몫을 되돌려 드리며, 응답의 <code>quota_charged: false</code> 로 확인하실 수 있습니다</li></ul></div></li>
       <li><span class="n">④</span><div><b>페이지도 한 건씩 계상됩니다.</b> 큰 제품을 <code>cursor</code> 로 나눠 받으면 페이지 수만큼 쿼터를 사용합니다 — 한 번에 받는 행 수(<code>limit</code>, 최대 5,000)를 키우면 호출 수를 줄일 수 있습니다.</div></li>
     </ul>
   </section>
@@ -190,10 +190,13 @@
   <div class="foot-in">
     <div class="fcol">
       <b>ASK: SEOUL</b>
-      <!-- ⚠️ "행정동 코드 하나로"라고 쓰지 않는다(2026-08-07 정정). 실측: 공개 55종 중
-           행정동 축은 23종(42%)뿐이고 자치구 축이 32종(58%)으로 더 많으며, 21종(38%)은
-           조인 축이 아예 없다. 축이 셋인데 하나처럼 말하면 카탈로그를 여는 순간 어긋난다.
-           시간 축도 빼지 않는다 — 히어로가 "시간과 공간 두 축"이라고 말한다. -->
+      <!-- ⚠️ "행정동 코드 하나로"라고 쓰지 않는다(2026-08-07 정정 · 2026-08-12 재실측).
+           실측(운영 D1, 공개 60종): 행정동 축(admin_dong_code) 33종(55%) · 자치구 축만
+           10종(17%) · **조인 축이 아예 없는 것이 17종(28%)** · 시간축 보유 33종(55%).
+           축이 셋인데 하나처럼 말하면 카탈로그를 여는 순간 어긋난다.
+           시간 축도 빼지 않는다 — 히어로가 "시간과 공간 두 축"이라고 말한다.
+           🔴 이 주석의 수는 **재실 측한 날짜와 함께** 적는다. 앞선 55/23/32/21 은
+           2026-08-07 값인데 날짜 없이 남아 닷새 만에 조용히 낡았다. -->
       <span>서울 공공데이터를 시간·공간 같은 축 위에 올린 API 허브</span>
     </div>
     <div class="fcol">
