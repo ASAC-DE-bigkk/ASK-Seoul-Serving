@@ -79,7 +79,7 @@ curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.runs | {failures, empty_ru
 # ③ 키 목록 — 이메일이 마스킹돼 나오는지 (email 원문 키가 없어야 정상)
 curl -s -H "$AUTH" "$BASE/api/keys" | jq '.keys[0]'
 
-# ④ 이용 행동 — 여정(즉시)과 스펙 종속 축('수집 전') 구분
+# ④ 이용 패턴 분석 — 여정(즉시)과 스펙 종속 축('수집 전') 구분
 curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{spec_pending: .meta.usage_spec_pending,
   funnel: .usage.funnel, clients_pending: .usage.clients.pending}'
 
@@ -115,12 +115,12 @@ curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '
   | (.serving.totals | map(select(.domain==null)) | .[0].calls // 0) as $unknown
   | {all: $all, by_domain: $byDom, unknown: $unknown, ok: (($byDom + $unknown) == $all)}'
 #   🔴 by_domain + unknown == all 이어야 한다. unknown 은 제품에 안 묶이는 요청
-#      (API 목록·인증·키 발급) — 어느 분야에도 안 넣는다. 화면이 그 건수를 밝힌다
+#      (API 목록·인증·키 발급·기계 문서) — 어느 분야에도 안 넣는다. 화면이 그 건수를 밝힌다
 
 # ④-2-a 그 unknown 이 **무엇인지** — 다섯 갈래로 갈렸나 (#162 🅐)
 curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '{axis: .serving.axis, ok: .serving.axis_ok}'
 #   product     카탈로그 제품 — 분야로 센다
-#   no_product  목록·인증·키 발급 — 애초에 제품이 없다. 정상
+#   no_product  목록·인증·키 발급·문서(#285) — 애초에 제품이 없다. 정상
 #   bundle      번들 요청 — 🔴 **분야로 환산하지 않는다**(정의가 시점마다 다르다, PR #161)
 #   qa_probe    404 가 성공 조건인 점검(`qa-` 접두). 정상
 #   not_found   카탈로그에 없는 이름 — 🔴 **여기만 조치 대상**
@@ -395,10 +395,10 @@ curl -s -X POST "$BASE/api/keys" -H "authorization: Bearer $TOKEN" \
 | 조치가 503 | `OPS_TOKEN` 미설정 | `.dev.vars` 작성 후 `npm run dev` 재시작 |
 | `npm run d1` 이 DDL 을 거부 | 의도된 동작 | 스키마는 `migrations/` + `npm run migrate`. 남의 표면 소유자에게 |
 | '응답 상태' 탭에서 **분야를 바꿔도 숫자가 그대로**다 | 예전 결함(2026-08-07 수정). 서버가 분야 축을 안 실어서 KPI·날짜별·요청 종류·이용자가 전체 그대로였다 | 고쳐졌다. `.serving.totals` 가 비면 서버 쪽을 본다(§2 ④-2) |
-| 분야별 요청을 다 더해도 **'전체'보다 작다** | **정상이다.** 제품에 안 묶이는 요청(API 목록·인증·키 발급)은 어느 분야에도 안 넣는다 — 화면이 그 건수를 밝힌다 | 조치 없음. `.serving.totals` 의 `domain=null` 이 그 몫이다 |
+| 분야별 요청을 다 더해도 **'전체'보다 작다** | **정상이다.** 제품에 안 묶이는 요청(API 목록·인증·키 발급·기계 문서)은 어느 분야에도 안 넣는다 — 화면이 그 건수를 밝힌다 | 조치 없음. `.serving.totals` 의 `domain=null` 이 그 몫이다 |
 | 자동 새로고침 때 **보던 탭에서 튕겨 나간다** | 예전 결함(2026-08-07 수정). `render()` 가 주소에서 탭을 다시 골랐는데, 키 탭은 주소를 안 써서 클릭으로 열면 주소가 이전 탭에 머물렀다 | 고쳐졌다. 다시 나면 `activePane()` 이 아니라 주소를 읽고 있는지부터 본다 |
 | 공유받은 `#<탭>?dom=<분야>` 링크의 **스코프가 안 걸린다** | 예전 결함(2026-08-07 수정). `showTab` 이 `?dom=` 을 지운 뒤에 읽고 있었다 | 고쳐졌다. 부트에서 `showTab` 보다 **먼저** `DOMSCOPE` 를 세운다 |
-| '보는 분야' 선택이 **뜨면 안 되는 탭**(이용 행동·이용자 키)에 뜬다 | `ui.css` 에 `<셀렉터>[hidden]{display:none}` 이 빠졌다 — UA 기본은 author 규칙한테 진다 | `npm run check:hidden` 이 잡는다. JS 는 멀쩡한데 CSS 가 덮는 계열이라 `el.hidden` 검사로는 안 보인다 |
+| '보는 분야' 선택이 **뜨면 안 되는 탭**(이용 패턴 분석·이용자 키)에 뜬다 | `ui.css` 에 `<셀렉터>[hidden]{display:none}` 이 빠졌다 — UA 기본은 author 규칙한테 진다 | `npm run check:hidden` 이 잡는다. JS 는 멀쩡한데 CSS 가 덮는 계열이라 `el.hidden` 검사로는 안 보인다 |
 | '보는 분야'를 바꿔도 **일부 카드만** 바뀐다 | 그 탭을 다시 그리는 함수가 스코프를 안 보거나, `setScope` 가 그 함수를 안 부른다 | 스코프를 노출한 탭은 **화면 전부**가 따라야 한다(§5) — KPI·요약 카드까지 확인 |
 | 분야가 **영문 코드**로 뜬다 (`culture`·`commerce`·`common`) | `_ops_domain` 등록부가 비었다 — `domLabel()` 은 라벨을 지어내지 않는다 | `npm run d1 -- --file=fixtures/ops_domain.sql` (§4-1-1) |
 | API 목록에 제품이 **표 이름**으로 뜬다 (`gold_…`·`d1_…`) | 그 제품이 `meta.serving.display` 를 아직 선언 안 했다 — **정상**(계약이 optional, ASAC-DAG#706) | 콘솔에서 고칠 게 없다. 이름이 필요하면 **도메인 오너**가 dbt yml 에 선언하고 `<domain>_serving_export` 를 돌린다 |

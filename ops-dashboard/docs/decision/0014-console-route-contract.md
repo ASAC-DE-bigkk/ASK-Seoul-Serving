@@ -33,7 +33,7 @@
 그래서 이 문서의 형식이 목록이다. **"어디를 고쳐야 하나"에 한 곳으로 답할 수 있어야** 같은
 사고가 안 난다.
 
-## 1. 값 → 화면 문구 (`ROUTE_KO` 정본, 23종)
+## 1. 값 → 화면 문구 (`ROUTE_KO` 정본, 24종)
 
 `public/index.html` 의 `ROUTE_KO` 가 구현이고, 이 표가 정본이다.
 
@@ -50,6 +50,7 @@
 | `run_pattern` | 패턴 조회 | **SERVE** — 검증 패턴의 **사람용 문**(Serving PR#175). `mcp_run_pattern` 과 같은 함수·같은 쿼터, 문만 다르다 |
 | `chat` | 채팅 질문 | 자연어 질문 하나를 받아 **검증 패턴을 골라 실행**한다(Serving#159 · decision/0006). SERVE 판정은 **§2-2 참조** — 이 표에서 유일하게 조건부다 |
 | `search` | 데이터 찾기 | 질문 문장으로 **어느 제품이 답할 수 있나**만 찾는다(Serving#268, 랜딩 챗봇 1단계). 데이터를 조회하지 않아 **SERVE 가 아니다** — `catalog` 과 같은 부류이고, 조건부인 `chat` 과 달리 늘 그렇다 |
+| `page` | 기계 문서 | 🔴 **선등록**(Serving#285) — 게이트웨이 배선이 이 등록 **뒤에** 나간다(#132→PR#138 순서). 기계 문서 **3종만**(`/llms.txt`·`/openapi.json`·`/skill-openapi.json`, agreement §3-1-1)이고 `page_path` 는 그 3값 닫힌 열거형이다. `robots.txt` 는 워커를 통과해도 **안 싣는다**(통과 사유는 charset). 사람 페이지는 부팅 API 호출로 이미 `catalog` 에 세어진다. **SERVE 아니다** — 문서 접근은 데이터 서빙이 아니다 |
 | `skill_bundle` | 스킬 묶음 | |
 | `skill_data` | 스킬 데이터 조회 | **SERVE** |
 | `skill_product` | 스킬 제품 안내 | |
@@ -129,6 +130,7 @@ const SERVE = "route IN (" + SERVE_ROUTES.map((r) => "'" + r + "'").join(", ") +
 | `preview` · `mcp_preview_product` | 판단 재료다. 일일 쿼터도 안 깎는다 |
 | `product` · `glossary` · `skill_product` · `mcp_describe_product` | 메타·안내 |
 | `catalog` · `mcp_list_products` · `search` | 목록 — `search` 는 "어느 제품이 답하나"만 찾고 데이터를 안 읽는다 |
+| `page` | 기계 문서 접근 — AI 가 **데이터 계약을 발견**하는 여정의 첫 마디(#9 §3)이지 데이터 서빙이 아니다. 발견 축은 '이용 패턴 분석' 탭이 맡는다 |
 | `me` · `mcp_check_quota` · `keys` · `revoke` | 데이터와 무관 |
 | `mcp` | 연결 절차 — **§3 참조** |
 | `chat` | **조건부다** — 배열에 못 담는다. **§2-2 참조** |
@@ -275,7 +277,8 @@ pre_split      = 둘 다 있고  mcp_bare_first < mcp_split_from
 
 ## 대가
 
-- **화면 문구가 늘었다.** 요청 종류가 17줄까지 늘 수 있다. 묶어서 줄이지 않은 이유는
+- **화면 문구가 늘었다.** 요청 종류가 §1 표의 전 종만큼 한 화면에 늘어설 수 있다(종 수는
+  §1 머리가 정본이다 — 산문에 또 적으면 따로 낡는다). 묶어서 줄이지 않은 이유는
   #63 결정 A 의 목적이 *발견 → 확인 → 서빙* 퍼널 관측이라, 묶는 순간 그게 도로 안 보인다.
 - **`ROUTE_KO` 는 손으로 맞춰야 한다.** 게이트웨이가 값을 늘리면 콘솔이 따라가야 하고,
   자동 동기화 장치는 없다(두 워커가 코드를 공유하지 않는다 — [0001](0001-separate-worker-from-marketplace.md)).

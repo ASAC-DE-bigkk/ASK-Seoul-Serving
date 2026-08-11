@@ -5,7 +5,7 @@
 //   · 실행 기록       — 무엇이 돌았고 무엇이 조용한가 (_ops_run_event 등 조회 DB 4종,
 //                       ASK-Seoul#78 규약 — 정본 스키마는 ASAC-DAG, 여기는 읽기 전용. decision/0009)
 //   · 응답 상태       — 외부에 잘 나가고 있나 (_gateway_request_log, 게이트웨이가 쌓는다)
-//   · 이용 행동       — **누가** 쓰나: 사람·AI·여정 (decision/0010)
+//   · 이용 패턴 분석  — **누가** 쓰나: 사람·AI·여정 (decision/0010, #177 개명 — 구 '이용 행동')
 //   · API 사용량      — **무엇이** 얼마나 쓰이나: API별·분야별 (_gateway_request_log + _catalog
 //                       + d1_catalog_display — 제품의 사람 이름. ASAC-DAG#706, DISPLAY_COLS 참고)
 //   · 이용자 키       — 발급된 키의 상태·쿼터
@@ -21,10 +21,10 @@
 // **정본은 [decision/0014](docs/decision/0014-console-route-contract.md).** 값을 늘리거나
 // 뜻을 바꿀 때는 그 문서를 먼저 고친다 — 여기만 고치면 화면 문구가 따라오지 않는다.
 //
-// 게이트웨이가 내보내는 값 전수 23종(`marketplace/src/index.js` 의 `trace.route` 대입 자리
-// 17종 + `mcp.js` 의 툴별 세분화 6종과 1:1):
+// 콘솔이 아는 값 전수 24종 — 게이트웨이가 **지금 내보내는** `trace.route` 대입 자리 17종
+// (`marketplace/src/index.js`) + `mcp.js` 툴별 세분화 6종 + **선등록 1종**(`page`, 배선 뒤 18종):
 //   catalog · preview · data · me · keys · revoke · product · glossary · run_pattern
-//   auth_start · auth_callback · chat · search
+//   auth_start · auth_callback · chat · search · page
 //   skill_bundle · skill_data · skill_product
 //   mcp · mcp_list_products · mcp_describe_product · mcp_preview_product
 //       · mcp_query_product · mcp_run_pattern · mcp_check_quota
@@ -32,6 +32,11 @@
 // ⚠️ 이 종 수는 세 번의 추가(auth 2종 · mcp_run_pattern · run_pattern)가 지나도록 17종에
 // 멈춰 있었다(2026-08-08 보정). 값을 늘리면 **이 주석의 목록·종 수와 0014 §1 머리**도 함께
 // 고친다 — CLAUDE.md §7-1 route 행이 이 자리를 가리킨다.
+//
+// ⚠️ `page`(Serving#285) 는 **선등록**이다 — 게이트웨이 배선이 이 등록 **뒤에** 나가는 게
+// 합의된 순서라(#132→PR#138 사고의 교훈: 배포가 반영을 앞서면 화면에 슬러그가 샌다),
+// 배선 전까지 로그에 이 값이 없는 것이 정상이다. 기계 문서 3종(`/llms.txt`·`/openapi.json`
+// ·`/skill-openapi.json`)의 접근만 남고, SERVE 가 아니다(0014 §1·§2).
 //
 // 🔴 `chat`(Serving#159, 2026-08-10) 은 **SERVE 배열에 안 들어 있다.** 값이 같아도 서빙일
 // 수도 아닐 수도 있는 첫 route 라서다 — 판단은 0014 §2-2 의 열린 질문으로 두었다.
@@ -134,7 +139,7 @@ const GW_DOM = "CASE WHEN instr(COALESCE(product_id, ''), '_') > 1 " +
 //
 // 🔴 **읽는 사람이 할 일이 갈리는 지점에서 가른다.** 그게 이 셋이다:
 //
-//   no_product   제품 축이 **없는** 요청 — 목록·인증·키 발급. 정상. 할 일 없음
+//   no_product   제품 축이 **없는** 요청 — 목록·인증·키 발급·문서(#285). 정상. 할 일 없음
 //   bundle       **번들** 요청 — 여러 제품을 묶은 패키지. 정상. 할 일 없음
 //   qa_probe     **의도된 점검** — 404 가 성공 조건인 네거티브 프로브. 정상. 할 일 없음
 //   not_found    제품을 **못 찾은** 요청 — 카탈로그에 없는 이름. 🔴 **조치 대상**
@@ -502,7 +507,7 @@ async function summary(env, params, writable = false) {
   const pipelineSource = slo.rows.length ? "live" : "none";
 
 
-  // ── 이용 행동 (행동 로그 스펙 초안 #9 — 콘솔 선반영, decision/0010)
+  // ── 이용 패턴 분석 (행동 로그 스펙 초안 #9 — 콘솔 선반영, decision/0010)
   // 지금 데이터로 답이 되는 것(여정·익명 비중)과 수집 후 점등되는 것(ua_class 등)을 나눈다.
   // 초안 컬럼이 아직 없으면 safeRows 가 실패를 삼키고 그 카드는 '수집 전'으로 남는다 —
   // 콘솔은 게이트웨이 스키마를 만들지도 미러하지도 않는다(0010: ALTER 미러는 정본
@@ -526,10 +531,15 @@ async function summary(env, params, writable = false) {
       "COUNT(DISTINCT " + PRODUCT_KEY + ") AS products FROM _gateway_request_log " +
       "WHERE ts >= datetime('now', ?)" + gwW + " AND agent_name IS NOT NULL " +
       "GROUP BY agent_name, agent_mode ORDER BY calls DESC LIMIT 10", since),
-    // ⚠️ 예전에는 `route = 'page'` 로 걸렀는데 **게이트웨이 라우터에 그런 값이 없다** —
+    // ⚠️ 예전에는 `route = 'page'` 로 걸렀는데 **당시에도 지금도 라우터에 없는 값이다**
+    // (#285 선등록 — 배선 대기) —
     // 조건이 아니라 오타에 가까웠고, 그래서 이 카드는 구조적으로 영원히 비었다(#63 ④).
     // 지금은 컬럼만 본다. `page_path` 는 `0005` 에 있지만 게이트웨이 `LOG_COLUMNS` 에 아직
     // 없어 채워지지 않는다 — 그 사실은 아래 `fill` 이 실측으로 말한다.
+    // 🔴 배선 스펙은 확정됐다(#285): 값은 **닫힌 3값**(`/llms.txt`·`/openapi.json`
+    // ·`/skill-openapi.json`) 원문 그대로이고, `robots.txt` 는 워커를 통과해도 **안 싣는다**
+    // (통과 사유는 charset, 적재 사유가 아니다). 사람 페이지는 부팅 API 호출로 이미
+    // `route=catalog` 에 세어져 여기 안 온다 — 배선이 나가면 이 질의는 그대로 살아난다.
     safeRows(env, "SELECT page_path, COUNT(*) AS hits FROM _gateway_request_log " +
       "WHERE ts >= datetime('now', ?)" + gwW + " AND page_path IS NOT NULL " +
       "GROUP BY page_path ORDER BY hits DESC LIMIT 12", since),
@@ -576,7 +586,7 @@ async function summary(env, params, writable = false) {
     // 이용자 × API. **이용자마다** 상위 20을 뽑는다(`topPerDomain` 과 같은 이유) — 전체
     // 상위 N 을 뽑아 놓고 화면에서 이용자로 거르면 **상위 N 밖의 이용자가 0건으로 보인다.**
     //
-    // 축은 제품이 정본이고, 제품이 없는 요청(목록·인증·키 발급)은 **route 로 남긴다** —
+    // 축은 제품이 정본이고, 제품이 없는 요청(목록·인증·키 발급·문서)은 **route 로 남긴다** —
     // 버리면 "이 사람 요청 수는 30인데 목록 합은 12"가 되어 화면이 못 맞춘다.
     safeRows(env,
       "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY key_id ORDER BY calls DESC) AS rn FROM (" +
@@ -747,7 +757,7 @@ const SOURCES = [
   // 옛 이름 `_request_log` 는 transit 워커 소유로 남았다(agreement §2) — 콘솔은 더 읽지 않는다.
   { table: "_gateway_request_log", owner: "게이트웨이", home: "local", pane: ["serving", "usage", "apis"],
     need: ["ts", "route", "status", "table_name", "key_hash", "product_id", "env"],
-    used: "응답 상태 · 이용 행동 · API 사용량" },
+    used: "응답 상태 · 이용 패턴 분석 · API 사용량" },
   { table: "_keys", owner: "게이트웨이", home: "local", pane: ["keys", "usage"],
     need: ["key_hash", "email", "status", "daily_quota"], used: "이용자 키" },
   { table: "_catalog", owner: "도메인 export", home: "both", pane: ["apis"],
