@@ -21,7 +21,8 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--plane); color: var(--ink);
-         font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; }
+         font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+         word-break: keep-all; overflow-wrap: break-word; }
   .wrap { max-width: 1020px; margin: 0 auto; padding: 40px 20px 72px; }
   header h1 { font-size: 1.45rem; margin: 0 0 4px; text-wrap: balance; }
   header .sub { color: var(--ink-2); font-size: .92rem; max-width: 68ch; }
@@ -38,12 +39,20 @@
           border-radius: 12px; padding: 20px 22px; margin: 18px 0; }
   .card h2 { font-size: 1.02rem; margin: 0 0 2px; }
   .card .desc { color: var(--ink-2); font-size: .88rem; margin: 0 0 14px; max-width: 72ch; }
-  .hbar-row { display: grid; grid-template-columns: 120px 1fr 120px; gap: 10px;
+  .hbar-row { display: grid; grid-template-columns: 110px 1fr 92px; gap: 10px;
               align-items: center; margin: 6px 0; font-size: .87rem; }
   .hbar-row .lbl { color: var(--ink-2); text-align: right; }
   .hbar-track { height: 16px; }
   .hbar { height: 100%; border-radius: 0 4px 4px 0; min-width: 2px; }
-  .hbar-row .val { font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: .82rem; }
+  .hbar-row .val { font-variant-numeric: tabular-nums; color: var(--ink-2);
+                   font-size: .8rem; white-space: nowrap; }
+  @media (max-width: 560px) {
+    /* 좁은 폭: 라벨·값을 윗줄에, 막대를 아랫줄 전체 폭으로 */
+    .hbar-row { grid-template-columns: 1fr auto; gap: 2px 10px; margin: 10px 0; }
+    .hbar-row .lbl { grid-row: 1; grid-column: 1; text-align: left; }
+    .hbar-row .val { grid-row: 1; grid-column: 2; }
+    .hbar-track { grid-row: 2; grid-column: 1 / -1; }
+  }
   /* 도메인 통계 카드 */
   .domgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap: 14px; }
   .dom { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 16px 18px; }
@@ -54,9 +63,13 @@
               font-variant-numeric: tabular-nums; }
   .dom .accbar { height: 6px; background: var(--grid); border-radius: 3px; margin: 4px 0 12px; }
   .dom .accbar i { display: block; height: 100%; border-radius: 3px; }
-  .dom table.mini { width: 100%; border-collapse: collapse; font-size: .8rem; margin-bottom: 10px; }
-  .dom table.mini td { padding: 3px 0; border: 0; color: var(--ink-2); }
-  .dom table.mini td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .dom .kv { display: flex; justify-content: space-between; gap: 12px;
+             font-size: .84rem; color: var(--ink-2); padding: 4px 0;
+             border-bottom: 1px solid var(--grid); }
+  .dom .kv:last-of-type { margin-bottom: 10px; }
+  .dom .kv span { min-width: 0; }
+  .dom .kv b { font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums;
+               text-align: right; flex-shrink: 0; }
   .fix { border-top: 1px dashed var(--grid); padding-top: 9px; font-size: .84rem; color: var(--ink-2); }
   .fix b { color: var(--ink); }
   .fix::before { content: "보완 "; font-size: .7rem; letter-spacing: .06em; color: var(--accent);
@@ -106,9 +119,9 @@
   <h2>실측 모델별 통계</h2>
   <p class="desc">커버리지는 상위 모델만 독보적이고, <strong>환각 억제는 sonnet 티어부터 확보</strong>된다
   (sonnet·haiku 정확률은 같지만 환각은 haiku에만 7건).</p>
-  <div class="hbar-row"><span class="lbl">상위(기본)</span><div class="hbar-track"><div class="hbar" style="width:88%;background:var(--accent)"></div></div><span class="val">88% · n=41 · 환각 0</span></div>
-  <div class="hbar-row"><span class="lbl">sonnet</span><div class="hbar-track"><div class="hbar" style="width:44%;background:var(--s2)"></div></div><span class="val">44% · n=34 · 환각 0</span></div>
-  <div class="hbar-row"><span class="lbl">haiku 4.5</span><div class="hbar-track"><div class="hbar" style="width:44%;background:var(--s2)"></div></div><span class="val">44% · n=156 · 환각 7</span></div>
+  <div class="hbar-row"><span class="lbl">상위(기본)</span><div class="hbar-track"><div class="hbar" style="width:88%;background:var(--accent)"></div></div><span class="val">88% · 41건</span></div>
+  <div class="hbar-row"><span class="lbl">sonnet</span><div class="hbar-track"><div class="hbar" style="width:44%;background:var(--s2)"></div></div><span class="val">44% · 34건</span></div>
+  <div class="hbar-row"><span class="lbl">haiku 4.5</span><div class="hbar-track"><div class="hbar" style="width:44%;background:var(--s2)"></div></div><span class="val">44% · 156건</span></div>
 </div>
 
 <h2 style="font-size:1.1rem;margin:28px 0 4px">도메인별 통계</h2>
@@ -119,55 +132,49 @@
   <div class="dom">
     <div class="head"><span class="name">transit 대중교통</span><span class="nn">n=45 · 제품 4종</span></div>
     <div class="acc">29%</div><div class="accbar"><i style="width:29%;background:var(--crit)"></i></div>
-    <table class="mini">
-      <tr><td>데이터없음</td><td class="num">19건</td><td>되물음</td><td class="num">13건 (최다)</td></tr>
-      <tr><td>오차(환각+오류)</td><td class="num">0건</td><td>주 질문유형</td><td class="num">시간대 18 · 예보 12</td></tr>
-    </table>
+    <div class="kv"><span>데이터없음 · 되물음</span><b>19건 · 13건(최다)</b></div>
+    <div class="kv"><span>오차(환각+오류)</span><b>0건</b></div>
+    <div class="kv"><span>주 질문유형</span><b>시간대 18 · 예보 12</b></div>
     <div class="fix"><b>노선 단위 시간표(첫차·막차·배차)·혼잡 데이터 신설</b> — 현재 행정동 축뿐이라 되물음 13건의 진원.</div>
   </div>
   <div class="dom">
     <div class="head"><span class="name">traffic 도로교통</span><span class="nn">n=31 · 제품 6종</span></div>
     <div class="acc">39%</div><div class="accbar"><i style="width:39%;background:var(--serious)"></i></div>
-    <table class="mini">
-      <tr><td>데이터없음</td><td class="num">11건</td><td>되물음</td><td class="num">6건</td></tr>
-      <tr><td>오차(환각+오류)</td><td class="num">2건</td><td>주 질문유형</td><td class="num">시간대 13 · 예보 11</td></tr>
-    </table>
+    <div class="kv"><span>데이터없음 · 되물음</span><b>11건 · 6건</b></div>
+    <div class="kv"><span>오차(환각+오류)</span><b>2건</b></div>
+    <div class="kv"><span>주 질문유형</span><b>시간대 13 · 예보 11</b></div>
     <div class="fix"><b>link_id ↔ 도로명·자치구 매핑 테이블 추가</b> — 딱 맞는 제품(시간대 프로파일)이 있는데 지명으로 도달 불가. 전 도메인 최고 가성비.</div>
   </div>
   <div class="dom">
     <div class="head"><span class="name">weather 날씨</span><span class="nn">n=40 · 제품 6종</span></div>
     <div class="acc">45%</div><div class="accbar"><i style="width:45%;background:var(--serious)"></i></div>
-    <table class="mini">
-      <tr><td>데이터없음</td><td class="num">17건</td><td>되물음</td><td class="num">3건</td></tr>
-      <tr><td>오차(환각+오류)</td><td class="num">2건</td><td>주 질문유형</td><td class="num">예보 32 (80%)</td></tr>
-    </table>
+    <div class="kv"><span>데이터없음 · 되물음</span><b>17건 · 3건</b></div>
+    <div class="kv"><span>오차(환각+오류)</span><b>2건</b></div>
+    <div class="kv"><span>주 질문유형</span><b>예보 32 (80%)</b></div>
     <div class="fix"><b>예보 기간(+5일) 카탈로그 명시 + 동↔장소 105곳 매핑</b> — "우리 동 주말 날씨" 수요 흡수.</div>
   </div>
   <div class="dom">
     <div class="head"><span class="name">culture 문화행사</span><span class="nn">n=45 · 제품 7종</span></div>
     <div class="acc">51%</div><div class="accbar"><i style="width:51%;background:var(--warn)"></i></div>
-    <table class="mini">
-      <tr><td>데이터없음</td><td class="num">15건</td><td>되물음</td><td class="num">5건</td></tr>
-      <tr><td>오차(환각+오류)</td><td class="num">2건</td><td>주 질문유형</td><td class="num">일정·목록 28 (62%)</td></tr>
-    </table>
+    <div class="kv"><span>데이터없음 · 되물음</span><b>15건 · 5건</b></div>
+    <div class="kv"><span>오차(환각+오류)</span><b>2건</b></div>
+    <div class="kv"><span>주 질문유형</span><b>일정·목록 28 (62%)</b></div>
     <div class="fix"><b>공연장 밖 행사(축제·팝업·독립행사) 축 확장 + 자치구 필터·장소 상세화</b> — "문화"의 범위를 수요에 맞추기.</div>
   </div>
   <div class="dom">
     <div class="head"><span class="name">citydata 도시생활</span><span class="nn">n=77 (최다) · 제품 14종</span></div>
     <div class="acc">58%</div><div class="accbar"><i style="width:58%;background:var(--warn)"></i></div>
-    <table class="mini">
-      <tr><td>데이터없음</td><td class="num">24건</td><td>되물음</td><td class="num">4건</td></tr>
-      <tr><td>오차(환각+오류)</td><td class="num">4건 (최다)</td><td>주 질문유형</td><td class="num">예보 30 · 실시간 20</td></tr>
-    </table>
+    <div class="kv"><span>데이터없음 · 되물음</span><b>24건 · 4건</b></div>
+    <div class="kv"><span>오차(환각+오류)</span><b>4건 (최다)</b></div>
+    <div class="kv"><span>주 질문유형</span><b>예보 30 · 실시간 20</b></div>
     <div class="fix"><b>대기질 예보 축 신설(단일 최다 간극) + 시간 단위 농도 + 관측 공백구(금천) 보완</b>.</div>
   </div>
   <div class="dom">
     <div class="head"><span class="name">commerce 상권</span><span class="nn">n=38 · 제품 22종</span></div>
     <div class="acc">76%</div><div class="accbar"><i style="width:76%;background:var(--good)"></i></div>
-    <table class="mini">
-      <tr><td>데이터없음</td><td class="num">4건</td><td>되물음</td><td class="num">4건</td></tr>
-      <tr><td>오차(환각+오류)</td><td class="num">1건</td><td>주 질문유형</td><td class="num">일정 11 · 추이 7</td></tr>
-    </table>
+    <div class="kv"><span>데이터없음 · 되물음</span><b>4건 · 4건</b></div>
+    <div class="kv"><span>오차(환각+오류)</span><b>1건</b></div>
+    <div class="kv"><span>주 질문유형</span><b>일정 11 · 추이 7</b></div>
     <div class="fix"><b>유지</b> — 제품 투자가 수요를 잘 받는 유일한 도메인. 답변의 product_id 인용 유도, 동 단위 유동인구 연계만 보강.</div>
   </div>
 </div>
