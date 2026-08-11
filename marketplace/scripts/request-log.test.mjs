@@ -128,23 +128,36 @@ test("요청 축이 제자리에 들어간다 — 목록과 값 순서가 어긋
     assert.equal(row.publication_id, "pub_2026_08_04");
   });
 
-test("배선하지 않은 하나는 NULL 로 남는다 — 0 은 '검증 실패'로 읽힌다", NEEDS_SQLITE, () => {
-  // page_path 는 값을 만들 곳이 아직 없다(정적 페이지가 run_worker_first 밖). 목록에 넣어
-  // 두고 undefined 를 실으면 0/'' 로 굳는다.
-  //
-  // ⚠️ `pattern_id` 는 여기서 빠졌다 — `run_pattern`(#132)이 소비자로 생겨 배선했다.
-  //    **이 목록이 줄어드는 것이 정상 진행**이고, 줄어들 때마다 그 컬럼을 채우는 테스트가
-  //    아래에 하나씩 생긴다(agent_verified → #111, pattern_id → ASAC-DAG#642).
-  assert.ok(!LOG_COLUMNS.includes("page_path"), "page_path 는 아직 채울 값이 없다 — 목록에 넣지 않는다");
+// 🔴 `0005` 의 22종이 이제 **전부 배선됐다** — 미배선 컬럼이 하나도 없다.
+//    마지막이 `page_path` 였고 #285 에서 붙었다(전제였던 `[assets]` binding 은 #238 이 해소).
+//    이 테스트는 "미배선을 목록에 넣지 마라"에서 **"배선했으니 값이 실린다"** 로 뒤집혔다.
+test("배선한 컬럼도 해당 경로가 아니면 NULL 로 남는다", NEEDS_SQLITE, () => {
+  assert.ok(LOG_COLUMNS.includes("page_path"), "#285 에서 배선했다");
 
   const db = migratedDb();
   const sql = `INSERT INTO _gateway_request_log (${LOG_COLUMNS.join(", ")}) ` +
     `VALUES (${LOG_COLUMNS.map(() => "?").join(", ")})`;
   db.prepare(sql).run(...logValues(TRACE, { ASK_ENV: "local" }));
   const row = db.prepare("SELECT * FROM _gateway_request_log").get();
+  // 데이터 조회는 문서 접근이 아니다 — 빈 문자열이 아니라 NULL 이어야 한다(§4-3)
   assert.equal(row.page_path, null);
   // 배선했어도 patternId 를 안 만든 경로(일반 데이터 조회)는 NULL 이어야 한다
   assert.equal(row.pattern_id, null);
+});
+
+test("page 요청은 page_path 가 경로 원문 그대로 실린다", NEEDS_SQLITE, () => {
+  const db = migratedDb();
+  const sql = `INSERT INTO _gateway_request_log (${LOG_COLUMNS.join(", ")}) ` +
+    `VALUES (${LOG_COLUMNS.map(() => "?").join(", ")})`;
+  db.prepare(sql).run(...logValues(
+    { ...TRACE, route: "page", table: null, productId: null, rows: null, pagePath: "/openapi.json" },
+    { ASK_ENV: "prod" }));
+  const row = db.prepare("SELECT * FROM _gateway_request_log").get();
+  assert.equal(row.route, "page");
+  assert.equal(row.page_path, "/openapi.json", "소문자화·정규화 없이 원문 그대로");
+  // 🔴 콘솔 `AXIS_BUCKET` 이 `no_product` 갈래로 넣는 근거 — 둘 다 NULL 이어야 한다(#177 §3)
+  assert.equal(row.product_id, null);
+  assert.equal(row.table_name, null);
 });
 
 // 🔴 배선했다고 해서 값이 늘 채워지는 건 아니다 — 검증 대상이 아닌 요청(브라우저·curl)은
