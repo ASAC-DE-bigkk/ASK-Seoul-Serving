@@ -32,6 +32,12 @@ function fakeEnv(patternRow, dataRows = [{ x: 1 }], patternIds = null) {
 }
 const keyRow = { key_hash: "h", daily_quota: 1000 };
 
+const VALID_EMPTY = {
+  state: "valid_empty",
+  code: "no_upcoming_precipitation_forecast",
+  message_ko: "현재 수집된 유효 단기예보에는 향후 강수 구간이 없습니다.",
+};
+
 // countUsage·권리 게이트가 이 테스트의 관심사가 아니므로, 권리 증거는 허용 1행을 준다 —
 // 게이트가 2단계(증거 누락 차단)라 0행이면 모든 케이스가 503 에서 끝나 버린다. 누락 차단
 // 자체는 아래 전용 테스트가 본다. _usage 는 all/first 를 안 쓰는 경로가 없어 — countUsage 는
@@ -50,6 +56,12 @@ function fullEnv(patternRow, dataRows, patternIds) {
     if (sql.includes("_catalog")) {
       // 카탈로그 게이트(#132 사후 리뷰 ①) — catalogMeta 를 null 로 두면 "없는 제품"이 된다
       return { bind: () => ({ first: async () => env.catalogMeta }) };
+    }
+    if (sql.includes("d1_product_quality")) {
+      return { bind: () => ({ first: async () => env.quality ?? null }) };
+    }
+    if (sql.includes("AS currentness_as_of")) {
+      return { bind: () => ({ first: async () => env.currentness ?? null }) };
     }
     if (sql.includes("_usage")) {
       // 쿼터 문장을 전부 기록한다 — 되돌리기(#217 검토 중 발견)는 **안 하면 조용히 틀리는**
@@ -139,6 +151,63 @@ test("권리 증거가 없으면 503 — run_pattern 도 게이트 2단계를 �
   const res = await handleRunPattern(env, "p", "pat", { gu: "x", n: 1 }, keyRow, {});
   assert.equal(res.status, 503);
   assert.deepEqual((await res.json()).blockers, ["missing_source_rights_evidence"]);
+});
+
+test("정상 빈 상품의 run_pattern 은 0행 availability를 돌려주고 과금·SQL 실행을 하지 않는다", async () => {
+  const env = fullEnv(PATTERN);
+  env.catalogMeta = {
+    name: "t",
+    product_id: "p",
+    publication_id: "pub1",
+    serving_status: "published",
+    row_count: 0,
+    mcp_projection: JSON.stringify({ empty_result: VALID_EMPTY }),
+  };
+  env.quality = {
+    source_row_count: 0,
+    d1_row_count: 0,
+    duplicate_primary_key_count: 0,
+    null_primary_key_count: 0,
+    freshness_as_of: new Date().toISOString(),
+    freshness_slo_minutes: 240,
+    serving_status: "published",
+    measured_at: new Date().toISOString(),
+    publication_id: "pub1",
+  };
+
+  const res = await handleRunPattern(env, "p", "pat", { gu: "x", n: 1 }, keyRow, {});
+  const body = await res.json();
+
+  assert.equal(res.status, 200);
+  assert.equal(body.row_count, 0);
+  assert.deepEqual(body.rows, []);
+  assert.deepEqual(body.availability, VALID_EMPTY);
+  assert.equal(body.quota_charged, false);
+  assert.equal(env.usageSql.length, 0);
+  assert.equal(env.seen.sql, null, "정상 빈 결과는 pattern SQL을 실행하면 안 된다");
+});
+
+test("현재 스냅샷이 지난 시간이면 run_pattern 도 과금 전에 fail-closed 한다", async () => {
+  const env = fullEnv(PATTERN);
+  env.catalogMeta = {
+    name: "t",
+    product_id: "p",
+    publication_id: "pub1",
+    row_count: 1,
+    mcp_projection: JSON.stringify({
+      currentness: { field: "forecast_at", minimum: "current_kst_hour" },
+    }),
+  };
+  env.currentness = { currentness_as_of: "2000-01-01 00:00:00" };
+
+  const res = await handleRunPattern(env, "p", "pat", { gu: "x", n: 1 }, keyRow, {});
+  const body = await res.json();
+
+  assert.equal(res.status, 503);
+  assert.equal(body.code, "product_not_ready");
+  assert.ok(body.blockers.includes("quality_snapshot_not_current"));
+  assert.equal(env.usageSql.length, 0);
+  assert.equal(env.seen.sql, null, "stale snapshot은 pattern SQL을 실행하면 안 된다");
 });
 
 // ── 없는 패턴 404 의 회복 경로 (#204) ────────────────────────────────────────────

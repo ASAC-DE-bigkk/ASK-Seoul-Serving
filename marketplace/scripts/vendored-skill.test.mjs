@@ -12,7 +12,7 @@ const PROVENANCE = new URL("provenance.json", SKILL);
 test("vendored artifact is pinned to the reviewed organization-fork commit", async () => {
   const provenance = JSON.parse(await readFile(PROVENANCE, "utf8"));
   assert.equal(provenance.source.repository, "https://github.com/ASAC-DE-bigkk/k-skill");
-  assert.equal(provenance.source.commit, "a9e1c7e4b372da670908737b752bf708af160112");
+  assert.equal(provenance.source.commit, "131abc37ed43bac7362ed64ceffa16adcd6fe674");
   assert.match(provenance.source.ref, /^feat\//);
 });
 
@@ -39,6 +39,12 @@ test("success response request id is preserved by the standalone helper", async 
   const helper = await readFile(new URL("scripts/seoul_weather_risk.py", SKILL), "utf8");
   assert.match(helper, /headers\.get\(["']X-Request-Id["']\)/i);
   assert.match(helper, /payload\[["']request_id["']\]/);
+});
+
+test("standalone helper exposes the data-only fast query contract", async () => {
+  const helper = await readFile(new URL("scripts/seoul_weather_risk.py", SKILL), "utf8");
+  assert.match(helper, /query\.add_argument\(["']--fast["']/);
+  assert.match(helper, /invalid_fast_query/);
 });
 
 test("verification CLI accepts the checked-in provenance", () => {

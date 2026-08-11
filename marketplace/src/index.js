@@ -27,6 +27,7 @@ import {
   runChat, CHAT_MODEL, CHAT_ANON_DAILY_TOTAL, CHAT_ANON_DAILY_PER_IP, CHAT_ANON_PRINCIPAL,
 } from "./chat.js";
 import { searchProducts } from "./agent-tools.js";
+import { loadProductAvailability, productNotReadyResponse } from "./product-availability.js";
 import {
   isConfigured, redirectUri, authorizeUrl, exchangeCode, makeState, verifyState,
   readIdTokenFromTokenEndpoint, stateCookie, readCookie, STATE_COOKIE,
@@ -462,7 +463,7 @@ async function handlePreview(env, id, trace = {}) {
   if (!/^[a-z0-9_]+$/.test(id))
     return problem(400, "invalid id", "제품 id 형식이 아니다");
   // 비공개 제품은 404 로 답한다 — 403 이면 "있긴 있다"를 알려주는 셈이다
-  const meta = await lookupProduct(env, id, "name, product_id, time_axis");
+  const meta = await lookupProduct(env, id, "*");
   if (!meta) return problem(404, "unknown product", `'${id}' 은 서빙 카탈로그에 없다 — GET /api/v1/catalog 참조`);
   // 조회는 **카탈로그가 준 물리명**으로만 한다 — 요청 문자열을 식별자로 쓰지 않는다
   const table = meta.name;
@@ -472,6 +473,22 @@ async function handlePreview(env, id, trace = {}) {
   trace.productId = meta.product_id;
   trace.publicationId = meta.publication_id ?? null;
   // 시간축이 있으면 최신 구간을 보여준다 — 미리보기의 존재 이유는 "실물이 쓸만한가"의 판단
+  const availability = await loadProductAvailability(env, meta);
+  if (availability.blockers.length) {
+    trace.status = 503;
+    return productNotReadyResponse(meta, availability.blockers);
+  }
+  if (availability.availability) {
+    trace.rows = 0;
+    return json({
+      product_id: meta.product_id,
+      table,
+      preview: true,
+      row_count: 0,
+      availability: availability.availability,
+      rows: [],
+    });
+  }
   const order = meta.time_axis ? ` ORDER BY "${meta.time_axis}" DESC` : "";
   const { results } = await env.DB.prepare(
     `SELECT * FROM "${table}"${order} LIMIT ${PREVIEW_ROWS}`
@@ -533,6 +550,32 @@ async function handleData(env, id, params, keyRow, trace = {}, opts = {}) {
   if (rightsBlockers.length) {
     trace.status = 503;   // waitUntil 로깅이 실제 응답 코드를 남기게(logStatus 규약)
     return rightsBlockedProblem(meta.product_id, meta.publication_id, rightsBlockers);
+  }
+
+  const availability = await loadProductAvailability(env, meta);
+  if (availability.blockers.length) {
+    trace.status = 503;
+    return productNotReadyResponse(meta, availability.blockers);
+  }
+  if (availability.availability) {
+    trace.rows = 0;
+    return json({
+      product_id: meta.product_id,
+      ...(opts.includeMeta ? { product_meta: {
+        description: meta.description ?? null,
+        freshness: meta.freshness ?? null,
+        serving_status: meta.serving_status ?? null,
+      } } : {}),
+      table,
+      row_count: 0,
+      limit,
+      time_axis: meta.time_axis,
+      has_more: false,
+      next_cursor: null,
+      availability: availability.availability,
+      quota_charged: false,
+      rows: [],
+    });
   }
 
   // 쿼터는 유효한 요청(실제 서빙 직전)만 소모 — 400/404/409 는 무과금
@@ -662,6 +705,26 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
     return rightsBlockedProblem(productId, null, rightsBlockers);
   }
 
+  const availability = await loadProductAvailability(env, meta);
+  if (availability.blockers.length) {
+    trace.status = 503;
+    return productNotReadyResponse(meta, availability.blockers);
+  }
+  if (availability.availability) {
+    trace.rows = 0;
+    return json({
+      product_id: productId,
+      pattern_id: patternId,
+      question_ko: pattern.question_ko ?? null,
+      row_count: 0,
+      rows: [],
+      availability: availability.availability,
+      quota_charged: false,
+      insight_sample_ko: pattern.insight_sample_ko ?? null,
+      verified: { rows: pattern.verified_rows ?? null, at: pattern.verified_at },
+    });
+  }
+
   // 저장된 SQL 만, 그리고 읽기만 — 검증기(serving_verify)와 같은 원칙이다.
   // 변환(주석 제거 → SELECT/WITH 확인 → :이름→? → 값 해석·클램프)은 run-pattern-ext.js 의
   // convertPattern 하나가 맡는다(#217 P1·P3 — prep/run-pattern-ext.mjs 이식본).
@@ -753,7 +816,7 @@ export const LOG_COLUMNS = [
   // 행동 로그 (#9 · agreement §3-1) — 원문은 하나도 없다. UA 는 분류 상수로, Referer 는
   // 호스트로, IP 는 아예 안 본다(§3-2). 미배선으로 남는 셋은 아래 주석에 이유를 적었다.
   "ua_class", "agent_name", "agent_mode", "agent_verified", "country", "asn", "referer_host",
-  "publication_id", "pattern_id",
+  "publication_id", "pattern_id", "page_path",
 ];
 
 export function logValues(trace, env) {
@@ -779,19 +842,18 @@ export function logValues(trace, env) {
     // 어느 검증 패턴을 돌렸는지(ASAC-DAG#642) — `run_pattern` 만 채운다. 나머지 경로는
     // 패턴이라는 개념 자체가 없어 NULL 이 맞다(§4-3: 없는 것을 0·'' 로 꾸미지 않는다).
     trace.patternId ?? null,
+    // 어느 기계 문서를 읽었는지(#285 · agreement §3-1-1) — `route="page"` 만 채운다.
+    // 값은 `LOGGED_PAGES` 셋뿐이고 사람 페이지는 안 넣는다(`/`·`/catalog` 는 부팅에서
+    // `/api/v1/catalog` 를 불러 **이미 `route=catalog` 로 세어져** 같은 방문을 두 번 센다).
+    trace.pagePath ?? null,
   ];
 }
 
-// 아직 채우지 않는 하나 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
+// `0005` 의 22종은 이제 전부 배선됐다 — 미배선으로 남은 컬럼이 없다.
 //
-//   page_path       기계 문서 3종(`/llms.txt`·`/openapi.json`·`/skill-openapi.json`)이
-//                   `run_worker_first` 밖이라 워커에 닿지 않는다. 범위가 **3경로로 확정**됐다
-//                   (#177 · agreement §3-1-1) — 사람 페이지(`/`·`/catalog`)는 부팅에서
-//                   `/api/v1/catalog` 를 불러 **이미 `route=catalog` 로 세어지므로** 넣으면
-//                   같은 방문을 두 번 센다.
-//                   🔴 착수 전제: `[assets]` 에 `binding` 이 없다. 그대로 `run_worker_first`
-//                   에 더하면 워커가 그 경로를 아는 분기가 없어 problem+json 으로 떨어져
-//                   **문서 파일이 깨진다.** `binding = "ASSETS"` + `route="page"` 분기가 세트다.
+// `page_path` 는 마지막 하나였다(#285). 착수를 막던 전제는 `[assets]` 의 `binding` 부재였고
+// #238(charset 수정)이 그걸 해소하면서 길이 열렸다 — 워커가 자산을 직접 꺼낼 수 있어야
+// `run_worker_first` 에 더한 경로가 problem+json 으로 떨어지지 않는다.
 //
 // `pattern_id` 는 배선됐다 — "패턴 실행 API 가 아직 없다"가 미룬 이유였고 `run_pattern`(#132)
 // 이 그 소비자다. 이걸로 ASAC-DAG#642 의 로깅 키 `(product_id, pattern_id, publication_id)`
@@ -830,12 +892,27 @@ async function logRequest(env, trace) {
 //    **로컬이 운영의 증거가 되지 않는다** — 이 파일들을 만질 때 그걸 기억한다.
 const TEXT_ASSETS = new Set(["/llms.txt", "/robots.txt"]);
 
-async function serveTextAsset(request, env) {
+// 🔴 관측 대상은 **기계 문서 3종**이고, 워커를 통과하는 4경로와 **다르다**(#285 · #177 §3).
+//    `robots.txt` 가 워커를 지나는 건 위의 charset 사고 때문이지 관측 의도가 아니다 —
+//    통과 사유와 적재 사유를 섞으면 나중에 "왜 이건 세고 저건 안 세나"를 못 답한다.
+//    그리고 크롤러가 주기적으로 치는 파일이라, 세면 "기계가 우리 **데이터 계약**을 읽었다"는
+//    신호가 그 잡음에 묻힌다. 범위의 정본은 agreement §3-1-1 이고 넓히려면 그 개정이 먼저다.
+//
+// 🔑 이 집합이 곧 `page_path` 의 **값 전체**다 — 자유 문자열이 아니라 값 셋짜리 열거형이라,
+//    콘솔 카드가 값을 그대로 표시해도 예기치 못한 것이 들어올 자리가 없다(#177 "형식이 곧 화면").
+const LOGGED_PAGES = new Set(["/llms.txt", "/openapi.json", "/skill-openapi.json"]);
+
+// 워커가 직접 꺼내 주는 정적 문서 전부(= `run_worker_first` 의 문서 넷).
+const WORKER_SERVED_ASSETS = new Set([...TEXT_ASSETS, ...LOGGED_PAGES]);
+
+async function serveAsset(request, env, path) {
   const res = await env.ASSETS.fetch(request);
   // 원본 응답을 그대로 두고 헤더만 바꾼다 — 본문·상태·`_headers` 의 보안 헤더가 다 살아야
   // 한다. `new Response(res.body, res)` 가 그걸 보장한다(헤더 사본이 따라온다).
   const out = new Response(res.body, res);
-  out.headers.set("content-type", "text/plain; charset=utf-8");
+  // ⚠️ charset 교정은 **텍스트 둘에만** 건다. `.json` 에 `text/plain` 을 씌우면 문서가
+  //    깨진다 — JSON 은 규격상 UTF-8 이라 손댈 이유도 없다.
+  if (TEXT_ASSETS.has(path)) out.headers.set("content-type", "text/plain; charset=utf-8");
   return out;
 }
 
@@ -958,10 +1035,16 @@ const chatUnknownProduct = (productId) =>
 async function route(request, env, url, trace, ctx) {
   const path = url.pathname;
 
-  // 정적 텍스트는 게이트 앞이다 — 키도 쿼터도 없는 공개 문서고, 로깅도 아직 안 붙인다.
-  // (`route="page"` 로 세는 것은 콘솔 계약 반영이 먼저다 — #177 · agreement §3-1-1)
-  if (TEXT_ASSETS.has(path) && (request.method === "GET" || request.method === "HEAD"))
-    return serveTextAsset(request, env);
+  // 정적 문서는 게이트 앞이다 — 키도 쿼터도 없는 공개 문서다.
+  // 기계 문서 3종만 `route="page"` 로 센다(#285 · agreement §3-1-1). `page` 는 **SERVE 가
+  // 아니다** — 문서 접근은 데이터 서빙이 아니라 관측 축이다(콘솔 decision/0014 §2).
+  if (WORKER_SERVED_ASSETS.has(path) && (request.method === "GET" || request.method === "HEAD")) {
+    if (LOGGED_PAGES.has(path)) {
+      trace.route = "page";
+      trace.pagePath = path;      // 화이트리스트를 통과한 경로 원문 — 정규화하지 않는다
+    }
+    return serveAsset(request, env, path);
+  }
 
   // 폐지된 이메일 발급 경로. **경로 자체는 안내용으로 남긴다** — 지우면 아래 405 분기로
   // 떨어져 "왜 안 되는지"를 못 말하고, 같은 주소의 DELETE 는 살아 있어 더 헷갈린다.

@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_COMMIT = "a9e1c7e4b372da670908737b752bf708af160112";
+const EXPECTED_COMMIT = "131abc37ed43bac7362ed64ceffa16adcd6fe674";
 const REQUIRED_FILES = new Set([
   "SKILL.md",
   "NOTICE",

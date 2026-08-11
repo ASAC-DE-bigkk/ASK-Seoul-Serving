@@ -202,7 +202,10 @@ _gateway_request_log 컬럼 추가       → 새 ALTER 파일 + 시드 체인 + 
 > |---|---|
 > | `agent_verified` | ✅ **배선됨**(#111, 2026-08-06). prod 실측으로 0·NULL 확정, `1` 은 검증된 크롤러 도착 시 |
 > | `pattern_id` | ✅ **배선됨** — `run_pattern`(#132)이 소비자다. `(product_id, pattern_id, publication_id)` 로깅 키 세 축이 한 행에 모였다(ASAC-DAG#642). 400 은 안 남기고(형식 검사 통과 뒤에 넣는다) **404·409 는 남긴다** — 무슨 패턴을 부르다 막혔나가 곧 수요 신호다 |
-> | `page_path` | ⏸ **범위는 확정됐다 — 기계 문서 3종**(`/llms.txt`·`/openapi.json`·`/skill-openapi.json`, #177 · agreement §3-1-1). 사람 페이지는 부팅 API 호출로 **이미 `route=catalog` 로 세어져** 넣으면 중복이다. 🔴 착수 전제: `[assets]` 에 `binding` 이 없어 그대로 `run_worker_first` 에 더하면 **그 문서들이 깨진다**(`binding = "ASSETS"` + `route="page"` 분기가 세트). 콘솔은 `route="page"` 를 `decision/0014` 에 먼저 올려야 한다. **이제 이것만 남았다** |
+> | `page_path` | ✅ **배선됨**(#285). 값은 **기계 문서 3종**(`/llms.txt`·`/openapi.json`·`/skill-openapi.json`)뿐인 **열거형**이다 — 화이트리스트 밖은 안 싣는다. 🔴 **워커 통과 4경로 ≠ 관측 3경로**: `robots.txt` 는 charset 사유(#237)로 통과할 뿐 세지 않는다. 사람 페이지는 부팅 API 호출로 **이미 `route=catalog` 로 세어져** 넣으면 중복이다(agreement §3-1-1). `page` 는 **SERVE 가 아니다** — 관측 축이다 |
+>
+> **`0005` 의 22종이 전부 배선됐다** — 미배선으로 남은 컬럼은 이제 없다. 마지막이 `page_path`
+> 였고, 착수를 막던 전제(`[assets]` 의 `binding` 부재)는 #238(charset 수정)이 해소했다.
 >
 > **`agent_name`·`agent_mode` 는 UA 말고 두 번째 출처가 생겼다**(#111 후속) — MCP `initialize`
 > 의 `clientInfo` 다. 출처는 `agent_mode` 가 말한다(`crawler`·`on_demand` = UA / `mcp_client`
