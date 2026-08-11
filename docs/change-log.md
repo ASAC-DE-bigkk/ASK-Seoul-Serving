@@ -43,6 +43,25 @@
 
 ---
 
+## 2026-08-11
+
+### 강수 예보가 없을 때도 장소별 상품을 정직하게 보여준다
+
+- **작업자**: @masondev1024
+- **의도 · 목표**: 강수 예보가 없는 기간에 `weather_place_precipitation_window`가 0행이면,
+  소비자는 장애인지 "다가오는 강수 예보 없음"인지 구분할 수 없었다. 0행을 가짜 행으로
+  채우면 예보 사실을 왜곡하고, 반대로 현재 전망이 한 시간 전 snapshot이면 신선하다고
+  보여도 실제 "현재"가 아니게 된다.
+- **조치**: Publisher가 명시한 fresh `valid_empty` 계약과 같은 publication의 quality 증거가
+  함께 있을 때만 강수·위험 후보 0행을 정상 응답으로 연다. API·preview·MCP·`run_pattern`은
+  같은 gate를 거쳐 이 상태를 SQL 실행·과금 없이 반환한다. 현재 전망에는 KST 정시 snapshot
+  기준을 추가해 다음 시간 경계를 지난 자료를 fail-closed 한다. 공개 카탈로그는 장소 기반 4개
+  상품만 남기고, 80-grid 두 상품은 Iceberg 감사·수집 경로를 보존한 채 외부 발견 경로에서 retire한다.
+- **결과**: dev에서 장소 기반 Gold 5개를 같은 KST 10:00 snapshot으로 재생성했다 — 현재 전망
+  427행 · 위험 구간 3,266행 · 일별 변화 2,135행 · 강수 예상대 0행. 직접 DBT 계약 76/76,
+  Weather DAG 583, Marketplace 597 테스트가 통과했다. 강수 0행은 no-upcoming-forecast
+  singular test를 통과한 정상 empty 상태이며, prod D1 재게시·cutover는 별도 승인 단계다.
+
 ## 2026-08-10
 
 ### change-log 충돌을 손으로 푸는 일을 끝냈다 — `merge=union`
