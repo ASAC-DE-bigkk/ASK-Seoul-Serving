@@ -1196,11 +1196,40 @@ function patternParams(sql) {
 //
 // ⚠️ 따옴표는 벗긴다. 주석은 SQL 리터럴 표기(`'rename'`)인데 서버는 값을 **바인딩**하므로
 //    `rename` 이 들어가야 한다. `'rename'` 을 그대로 보내면 따옴표까지 값이 된다.
+// 패턴 SQL 주석의 예시값 → 입력칸 미리 채우기(#218).
+//
+// 🔴 **구표기(`:n 예시 10`)도 읽는다.** 계약은 `:이름=값` 이고(ASAC-DBT#499) 게시본도 그리로
+//    가는 중이지만, 아직 옛 표기로 게시된 것이 남아 있다. 그 사이 이 화면은 칸을 **빈 채로**
+//    뒀고, 이용자가 그대로 「호출」을 누르면 값 없는 요청이 나가 400 이 됐다 — 히어로 칩
+//    ("요즘 뜨는 상권" 등)에서 들어온 사람이 만나던 바로 그 벽이다(2026-08-12 실측: 게시본
+//    906건 중 65건이 이 경우, 전부 commerce).
+//
+//    구표기를 읽어도 안전한 이유: 구분자가 **리터럴 한국어**(`예시`·`예`)라 옆 파라미터의
+//    숫자를 주워 올 수 없다. 검증기(`pattern_verify`)가 `=` 앵커로 좁힌 이유였던 사고
+//    (`:gu=종로구, :from=2026-07-01` → `:gu` 에 `2026`)는 이 형태에서 생기지 않는다.
+//    여기는 **화면 편의**일 뿐이고 이용자가 고쳐 쓸 수 있는 값이라, 못 채우는 것보다 낫다.
+//    게시본이 새 표기로 바뀌면 앞 갈래가 먼저 잡아 이 갈래는 저절로 안 쓰인다.
 function patternDefaults(sql) {
   const out = {};
-  for (const line of String(sql || "").match(/--[^\n]*/g) || [])
-    for (const m of line.matchAll(/:([a-z_][a-z0-9_]*)\s*=\s*('([^']*)'|"([^"]*)"|[^\s,;)]+)/gi))
-      out[m[1]] = m[3] ?? m[4] ?? m[2];
+  // VALUE 는 세 갈래를 캡처한다: 0=전체 · 1=홑따옴표 안 · 2=쌍따옴표 안.
+  // 🔴 갈래마다 앞에 붙는 그룹 수가 달라 **오프셋을 명시로 넘긴다** — 번호를 손으로 세다
+  //    분기 ②에서 한 칸씩 밀려 `undefined` 를 채운 적이 있다(값이 있는데 빈 칸으로 남았다).
+  const VALUE = "('([^']*)'|\"([^\"]*)\"|[^\\s,;)|]+)";
+  const take = (m, at) => m[at + 1] ?? m[at + 2] ?? m[at];
+  for (const line of String(sql || "").split("\n")) {
+    const cut = line.indexOf("--");
+    if (cut < 0) continue;
+    const code = line.slice(0, cut), note = line.slice(cut);
+    // ① 이름이 주석 안에 있는 형 — `-- :n=10` · `-- :n 예시 10`  (앞에 이름 그룹 1개)
+    for (const m of note.matchAll(new RegExp(":([a-z_][a-z0-9_]*)\\s*(?:=|예시|예:?)\\s*" + VALUE, "gi")))
+      if (out[m[1]] === undefined) out[m[1]] = take(m, 2);
+    // ② 이름이 **코드 쪽에** 있고 주석은 값만 적은 형 — `WHERE x = :cat  -- 예시 'food'`
+    //    같은 줄에 파라미터가 하나일 때만 붙인다(둘이면 어느 것인지 알 수 없다).
+    const onLine = [...new Set([...code.matchAll(/:([a-z_][a-z0-9_]*)/gi)].map((x) => x[1]))];
+    if (onLine.length !== 1 || out[onLine[0]] !== undefined) continue;
+    const bare = note.match(new RegExp("(?:예시|예)\\s*:?\\s*" + VALUE, "i"));
+    if (bare) out[onLine[0]] = take(bare, 1);
+  }
   return out;
 }
 
