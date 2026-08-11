@@ -27,6 +27,7 @@ import {
   runChat, CHAT_MODEL, CHAT_ANON_DAILY_TOTAL, CHAT_ANON_DAILY_PER_IP, CHAT_ANON_PRINCIPAL,
 } from "./chat.js";
 import { searchProducts } from "./agent-tools.js";
+import { loadProductAvailability, productNotReadyResponse } from "./product-availability.js";
 import {
   isConfigured, redirectUri, authorizeUrl, exchangeCode, makeState, verifyState,
   readIdTokenFromTokenEndpoint, stateCookie, readCookie, STATE_COOKIE,
@@ -462,7 +463,7 @@ async function handlePreview(env, id, trace = {}) {
   if (!/^[a-z0-9_]+$/.test(id))
     return problem(400, "invalid id", "제품 id 형식이 아니다");
   // 비공개 제품은 404 로 답한다 — 403 이면 "있긴 있다"를 알려주는 셈이다
-  const meta = await lookupProduct(env, id, "name, product_id, time_axis");
+  const meta = await lookupProduct(env, id, "*");
   if (!meta) return problem(404, "unknown product", `'${id}' 은 서빙 카탈로그에 없다 — GET /api/v1/catalog 참조`);
   // 조회는 **카탈로그가 준 물리명**으로만 한다 — 요청 문자열을 식별자로 쓰지 않는다
   const table = meta.name;
@@ -472,6 +473,22 @@ async function handlePreview(env, id, trace = {}) {
   trace.productId = meta.product_id;
   trace.publicationId = meta.publication_id ?? null;
   // 시간축이 있으면 최신 구간을 보여준다 — 미리보기의 존재 이유는 "실물이 쓸만한가"의 판단
+  const availability = await loadProductAvailability(env, meta);
+  if (availability.blockers.length) {
+    trace.status = 503;
+    return productNotReadyResponse(meta, availability.blockers);
+  }
+  if (availability.availability) {
+    trace.rows = 0;
+    return json({
+      product_id: meta.product_id,
+      table,
+      preview: true,
+      row_count: 0,
+      availability: availability.availability,
+      rows: [],
+    });
+  }
   const order = meta.time_axis ? ` ORDER BY "${meta.time_axis}" DESC` : "";
   const { results } = await env.DB.prepare(
     `SELECT * FROM "${table}"${order} LIMIT ${PREVIEW_ROWS}`
@@ -533,6 +550,32 @@ async function handleData(env, id, params, keyRow, trace = {}, opts = {}) {
   if (rightsBlockers.length) {
     trace.status = 503;   // waitUntil 로깅이 실제 응답 코드를 남기게(logStatus 규약)
     return rightsBlockedProblem(meta.product_id, meta.publication_id, rightsBlockers);
+  }
+
+  const availability = await loadProductAvailability(env, meta);
+  if (availability.blockers.length) {
+    trace.status = 503;
+    return productNotReadyResponse(meta, availability.blockers);
+  }
+  if (availability.availability) {
+    trace.rows = 0;
+    return json({
+      product_id: meta.product_id,
+      ...(opts.includeMeta ? { product_meta: {
+        description: meta.description ?? null,
+        freshness: meta.freshness ?? null,
+        serving_status: meta.serving_status ?? null,
+      } } : {}),
+      table,
+      row_count: 0,
+      limit,
+      time_axis: meta.time_axis,
+      has_more: false,
+      next_cursor: null,
+      availability: availability.availability,
+      quota_charged: false,
+      rows: [],
+    });
   }
 
   // 쿼터는 유효한 요청(실제 서빙 직전)만 소모 — 400/404/409 는 무과금
@@ -660,6 +703,26 @@ export async function handleRunPattern(env, productId, patternId, userParams, ke
   if (rightsBlockers.length) {
     trace.status = 503;
     return rightsBlockedProblem(productId, null, rightsBlockers);
+  }
+
+  const availability = await loadProductAvailability(env, meta);
+  if (availability.blockers.length) {
+    trace.status = 503;
+    return productNotReadyResponse(meta, availability.blockers);
+  }
+  if (availability.availability) {
+    trace.rows = 0;
+    return json({
+      product_id: productId,
+      pattern_id: patternId,
+      question_ko: pattern.question_ko ?? null,
+      row_count: 0,
+      rows: [],
+      availability: availability.availability,
+      quota_charged: false,
+      insight_sample_ko: pattern.insight_sample_ko ?? null,
+      verified: { rows: pattern.verified_rows ?? null, at: pattern.verified_at },
+    });
   }
 
   // 저장된 SQL 만, 그리고 읽기만 — 검증기(serving_verify)와 같은 원칙이다.
