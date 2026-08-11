@@ -234,7 +234,7 @@ test("stale 한도를 넘긴 사본은 쓰지 않는다 — 새로 만든다", a
   });
 });
 
-test("다섯 질의를 **동시에** 띄운다 — 줄세우면 D1 왕복이 그대로 더해진다", async () => {
+test("여섯 질의를 **동시에** 띄운다 — 줄세우면 D1 왕복이 그대로 더해진다", async () => {
   const stub = stubCaches();
   await withCaches(stub, async () => {
     const issued = [];
@@ -254,7 +254,7 @@ test("다섯 질의를 **동시에** 띄운다 — 줄세우면 D1 왕복이 그
     const p = callWithCtx(db, { waitUntil() {} });
     await new Promise((r) => setImmediate(r));
 
-    assert.equal(issued.length, 5, `다섯 질의가 모두 떠 있어야 한다 (실제 ${issued.length})`);
+    assert.equal(issued.length, 6, `여섯 질의가 모두 떠 있어야 한다 (실제 ${issued.length})`);
     release();
     assert.equal((await p).status, 200);
   });

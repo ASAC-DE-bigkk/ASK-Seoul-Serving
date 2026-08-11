@@ -40,10 +40,10 @@ export async function handleProductBundle(env, productId, request, trace = {}) {
   if (etag && request.headers.get("if-none-match") === etag)
     return new Response(null, { status: 304, headers: { etag, "access-control-allow-origin": "*" } });
 
-  // 보조 3종은 파이프라인이 게시하고 도메인별 진도가 다르다(#668) — 없으면 그 조각만 비운다.
+  // 보조 메타는 파이프라인이 게시하고 도메인별 진도가 다르다(#668) — 없으면 그 조각만 비운다.
   // 파라미터 메타(P1 기본값·허용값 / P3 타입, #217)는 별도 표 d1_pattern_params 다(#706 전례:
   // 공유 표에 컬럼을 더하면 구 실행기가 되돌린다). 표가 없으면 그 조각만 없이 동작한다.
-  const [columns, ext, patterns, paramMeta] = await Promise.all([
+  const [columns, ext, patterns, paramMeta, vocabularyRows] = await Promise.all([
     safeRows(env.DB.prepare(
       "SELECT ordinal, column_name, type, description_ko FROM d1_catalog_columns " +
       "WHERE product_id = ? ORDER BY ordinal"
@@ -60,6 +60,10 @@ export async function handleProductBundle(env, productId, request, trace = {}) {
       "SELECT pattern_id, param_defaults, param_enum, params FROM d1_pattern_params " +
       "WHERE product_id = ?"
     ).bind(productId)),
+    safeRows(env.DB.prepare(
+      "SELECT column_name, vocabulary_id FROM d1_catalog_column_vocabularies " +
+      "WHERE product_id = ?"
+    ).bind(productId)),
   ]);
   // 기본값 파싱은 서버 이 한 곳이다(#217 결정) — 플레이그라운드의 `-- :n=10` 주석 파서(#219)는
   // 이 응답의 선언값으로 대체된다. 못 읽는 JSON 은 그 항목만 버린다(없는 것과 같게).
@@ -69,6 +73,9 @@ export async function handleProductBundle(env, productId, request, trace = {}) {
     param_enum: parseObj(r.param_enum),
     params: parseObj(r.params),
   }]));
+  const vocabularyByColumn = new Map(
+    (vocabularyRows || []).map((row) => [row.column_name, row.vocabulary_id]),
+  );
 
   const extRow = ext && ext.length ? ext[0] : null;
   const missing = [];
@@ -99,9 +106,13 @@ export async function handleProductBundle(env, productId, request, trace = {}) {
           rollup_rule: extRow.rollup_rule,
         }
       : null,
-    columns: (columns || []).map((c) => ({
-      name: c.column_name, type: c.type, description_ko: c.description_ko,
-    })),
+    columns: (columns || []).map((c) => {
+      const vocabularyId = vocabularyByColumn.get(c.column_name);
+      return {
+        name: c.column_name, type: c.type, description_ko: c.description_ko,
+        ...(vocabularyId ? { vocabulary_id: vocabularyId } : {}),
+      };
+    }),
     patterns: (patterns || []).map((p) => ({
       pattern_id: p.pattern_id,
       question_ko: p.question_ko,
