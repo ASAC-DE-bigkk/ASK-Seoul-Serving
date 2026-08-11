@@ -46,16 +46,19 @@ test("두 환경 모두 워커를 먼저 태운다 — 한쪽만이면 운영에
 });
 
 test("워커가 charset 을 덮어쓴다 — `_headers` 로는 못 한다(덮지 않고 덧붙인다)", () => {
-  const fn = SRC.slice(SRC.indexOf("async function serveTextAsset"), SRC.indexOf("async function route"));
+  const fn = SRC.slice(SRC.indexOf("async function serveAsset"), SRC.indexOf("async function route"));
   assert.match(fn, /env\.ASSETS\.fetch\(request\)/, "자산을 안 꺼내면 본문이 없다");
   assert.match(fn, /headers\.set\("content-type", "text\/plain; charset=utf-8"\)/);
   // `set` 이어야 한다. `append` 면 값이 콤마로 붙어 망가진 헤더가 된다 — `_headers` 가
   // 정확히 그래서 못 쓰는 방법이었다.
   assert.doesNotMatch(fn, /headers\.append\(\s*"content-type"/);
+  // 🔴 교정은 **텍스트 둘에만** 건다 — `.json` 에 씌우면 기계 문서가 깨진다(#285).
+  assert.match(fn, /TEXT_ASSETS\.has\(path\)/,
+    "charset 교정이 무조건 걸리면 openapi.json 이 text/plain 으로 나간다");
 });
 
 test("원본 응답을 버리지 않는다 — 보안 헤더·상태가 같이 살아야 한다", () => {
-  const fn = SRC.slice(SRC.indexOf("async function serveTextAsset"), SRC.indexOf("async function route"));
+  const fn = SRC.slice(SRC.indexOf("async function serveAsset"), SRC.indexOf("async function route"));
   // `new Response(res.body, res)` 라야 `_headers` 의 nosniff·CSP·상태 코드가 따라온다.
   assert.match(fn, /new Response\(res\.body, res\)/,
     "헤더를 새로 만들면 _headers 의 보안 헤더가 통째로 사라진다");
@@ -63,19 +66,20 @@ test("원본 응답을 버리지 않는다 — 보안 헤더·상태가 같이 �
 
 test("라우터가 게이트보다 앞에서 받는다 — 공개 문서라 키도 쿼터도 없다", () => {
   const router = SRC.slice(SRC.indexOf("async function route(request"));
-  const guard = router.indexOf("TEXT_ASSETS.has(path)");
+  const guard = router.indexOf("WORKER_SERVED_ASSETS.has(path)");
   assert.notEqual(guard, -1, "라우터에 분기가 없다 — run_worker_first 에만 넣으면 404 가 된다");
   assert.ok(guard < router.indexOf("authenticate("), "인증보다 뒤에 있으면 공개 문서가 아니다");
 });
 
 test("HEAD 도 받는다 — 크롤러가 robots.txt 를 HEAD 로 두드린다", () => {
   const router = SRC.slice(SRC.indexOf("async function route(request"));
-  const line = router.slice(router.indexOf("TEXT_ASSETS.has(path)"), router.indexOf("TEXT_ASSETS.has(path)") + 200);
+  const line = router.slice(router.indexOf("WORKER_SERVED_ASSETS.has(path)"),
+    router.indexOf("WORKER_SERVED_ASSETS.has(path)") + 320);
   assert.match(line, /"HEAD"/);
 });
 
 test("대상은 한글이 든 텍스트뿐이다 — 캐시를 잃는 대가가 있다", async () => {
-  const set = SRC.slice(SRC.indexOf("const TEXT_ASSETS"), SRC.indexOf("async function serveTextAsset"));
+  const set = SRC.slice(SRC.indexOf("const TEXT_ASSETS"), SRC.indexOf("const LOGGED_PAGES"));
   for (const p of PATHS) assert.ok(set.includes(`"${p}"`));
   // 실제로 한글이 들어 있는지 확인 — 없는 파일을 넣으면 캐시만 잃고 얻는 게 없다.
   for (const p of PATHS) {
