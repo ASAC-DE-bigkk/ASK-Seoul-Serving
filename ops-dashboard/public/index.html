@@ -1468,6 +1468,17 @@ function render(d) {
   // pane 별로 모은다 — 배너는 자기 탭에서만 보여야 남의 문제로 읽히지 않는다
   const N = { pipeline: [], runs: [], serving: [], usage: [], apis: [], keys: [] };
 
+  // 🔴 미등록 접두사 제품(#293)의 몫 — **전체 지표에서 뺐다는 사실을 화면이 말한다**(0012).
+  // 관측 카드(요청이 어느 분야로 세어지나 · 못 찾은 이름)에는 제외 없이 그대로 남아,
+  // 그 카드의 합과 KPI 는 정확히 이 건수만큼 다르다 — 숨기면 "숫자가 왜 다르지"가 된다.
+  if (d.meta.serving_unregistered_excluded > 0) {
+    const un = nf.format(d.meta.serving_unregistered_excluded);
+    for (const p of ["serving", "usage"])
+      N[p].push(note("info", "미등록 제품 요청 " + un + "건 제외",
+        "등록된 분야 밖 이름을 부른 요청은 <b>전체 지표에서 뺐습니다</b> — " +
+        "'요청이 어느 분야로 세어지나'·'못 찾은 이름' 카드에는 그대로 남습니다(#293)."));
+  }
+
   if (d.meta.missing.includes("pipeline") && hasSlo)
     N.pipeline.push(note("info", "데이터 없음", "<code>npm run seed</code> 를 먼저 실행하세요."));
   // 🔴 등록부가 아직 데이터 분야와 운영 축을 못 가른다(#162 🅕). 조용히 예전처럼 세면
