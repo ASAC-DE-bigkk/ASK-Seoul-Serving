@@ -105,6 +105,20 @@ curl -s -H "$AUTH" "$BASE/api/apis?days=14" | jq '{missing: .meta.missing,
 curl -s -H "$AUTH" "$BASE/api/apis?days=14" | jq -r '.apis[] | select(.display == null) | .product_id' | head
 #   미선언 제품의 product_id — 어느 도메인이 남았는지 여기서 본다
 
+# ④-1-a 시간축 — 서빙 날짜가 KST 로 접히나 (시간축 감사 2차)
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq -r '[.serving.daily[].day] | unique | last'
+#   KST 오늘(한국 날짜)이어야 한다. UTC 오늘이 나오면(KST 00~09시에 하루 전) 축이 되돌아간 것
+#   🔴 파이프라인 축(observed_date_kst)은 원래 KST 다(팀 합의) — 서빙이 거기 맞춘 것이지
+#      파이프라인을 바꾼 게 아니다. 저장(ts, UTC ISO)은 그대로다
+
+# ④-1-b 이용자 이름 — 해시가 아니라 ask_… 로 이어지나 (#326)
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.usage.identity'
+#   linked_calls/keyed 가 커버리지다. 못 잇는 몫은 삭제된 키(처리방침 제7조 ③ — 정상)
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '[.usage.by_key[] | {id:.key_id, prefix:.key_prefix, known}][:5]'
+#   known=true 행은 prefix 가 있어야 하고, 이메일은 **가려진 형태만** 있어야 한다
+curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '[.usage.by_key[].email_masked // empty] | map(test("^..[*]{3}@")) | all'
+#   → true. false 면 원문이 새는 것이다 — 즉시 막는다
+
 # ④-2 응답 상태 탭의 분야 축 — 여섯 카드가 다 분야로 갈리나 (#156)
 curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.serving.totals'
 #   domain='*'  전 분야 합계 · domain=null  분야 미상 · 나머지는 분야별

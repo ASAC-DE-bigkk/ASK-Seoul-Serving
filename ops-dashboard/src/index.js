@@ -118,11 +118,31 @@ const envScope = (env) => SCOPES[String(env.ENV_SCOPE || "").trim()] || null;
 const gwWhere = (env) => { const c = envScope(env); return c ? ` AND env = '${c}'` : ""; };
 const gwWhereR = (env) => { const c = envScope(env); return c ? ` AND r.env = '${c}'` : ""; };
 
+// ── 서빙 시간축 — 🔴 **KST 하루가 정본이다** (시간축 전수 감사 2026-08-12, 2차) ────
+//
+// `ts` 는 UTC ISO 로 **저장**된다 — 그건 맞는 저장 방식이라 건드리지 않는다(파이프라인
+// 표준 관행이고, 마켓플레이스도 같다). 문제는 **집계·표시 축**이었다: 서빙 화면 셋
+// (응답 상태·이용 패턴 분석·API 사용량)만 UTC 달력일로 날짜를 접고 있어서, 파이프라인
+// (observed_date_kst)·발행(KST 접기)·이용자 키(date(ts,'+9h'))와 **같은 하루가 다른 날로
+// 세어졌다.** KST 09시 이전의 요청이 "어제"로 보이는 화면이다 — 한국 서비스에서 그 축을
+// 읽는 사람은 전부 KST 로 생각하므로, 축이 값을 왜곡하고 있었다.
+//
+//   저장  UTC ISO 그대로 (원본 불변 — 되돌릴 수 있어야 한다)
+//   집계  date(ts, '+9 hours') — KST 달력일
+//   창    KST 오늘 포함 N일 (파이프라인·발행과 같은 규약)
+//   표시  화면 fmtTs 가 +9h 로 접는다 — 축과 문자면이 같은 시간대다
+const GW_DAY = "date(ts, '+9 hours')";
+const GW_DAY_R = "date(r.ts, '+9 hours')";
+// KST 오늘 포함 N일 창. `?` 에는 `-${days-1} days` 를 바인딩한다 — publication() 과 같은
+// 형태로, KST 시작일 자정을 UTC 로 되돌려(-9h) **원 컬럼과 비교**한다(인덱스를 태운다).
+const TS_SINCE = "ts >= datetime(date('now','+9 hours', ?), '-9 hours')";
+const TS_SINCE_R = "r.ts >= datetime(date('now','+9 hours', ?), '-9 hours')";
+
 // ── 지정 날짜만 보기 (#293 후속, 2026-08-12) ─────────────────────────────────
 //
-// 서빙 로그를 읽는 화면 셋(응답 상태·이용 패턴 분석·API 사용량)에서 사람이 창 안의
-// **특정 날짜만** 골라 본다. 🔴 축은 `ts` 의 **UTC 달력일**(`substr(ts,1,10)`)이다 —
-// 일자별 카드가 이미 그 축으로 그리므로 필터도 같은 축이어야 화면과 숫자가 맞는다.
+// 서빙 로그를 읽는 화면 셋에서 사람이 창 안의 **특정 날짜만** 골라 본다.
+// 🔴 축은 위의 **KST 달력일**(GW_DAY)이다 — 일자별 카드가 그 축으로 그리므로 필터도
+// 같은 축이어야 화면과 숫자가 맞는다(예전엔 둘 다 UTC 였고, 지금은 둘 다 KST 다).
 //
 // 값은 정규식으로 형태(YYYY-MM-DD)를 강제한 뒤에만 SQL 조각에 넣는다 — envScope 와
 // 같은 근거다: 실수의 방향이 '덜 거름'이지 주입이 아니다. 개수는 창 최대치로 자른다.
@@ -131,7 +151,7 @@ const parseDates = (params) => String(params.get("dates") || "").split(",")
   .map((s) => s.trim()).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s))
   .slice(0, MAX_DAYS + 1);
 const dayWhere = (dates, col = "ts") => dates.length
-  ? " AND substr(" + col + ",1,10) IN (" + dates.map((d) => "'" + d + "'").join(",") + ")"
+  ? " AND date(" + col + ", '+9 hours') IN (" + dates.map((d) => "'" + d + "'").join(",") + ")"
   : "";
 
 // ── 서빙 로그의 분야 축 (#156) ─────────────────────────────────────────────────
@@ -338,12 +358,11 @@ async function safeRows(env, sql, ...bind) {
 
 async function summary(env, params, writable = false) {
   const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
-  const since = `-${days} days`;
-  // ⚠️ 서빙 질의의 `ts >= datetime('now', ?)` 는 사실상 **UTC 하루 경계**로 동작한다 —
-  // ts 는 'YYYY-MM-DDTHH:MM:SSZ' 꼴이고 datetime() 은 'YYYY-MM-DD HH:MM:SS' 꼴이라,
-  // 같은 날짜에서 11번째 문자 'T' > ' ' 로 경계일의 **모든** 행이 사전순 비교를 통과한다.
-  // 우연이지만 결과적으로 일자 카드·날짜 칩의 UTC 달력일 축과 맞아떨어지므로 그대로 둔다
-  // (시간축 감사 실측, 2026-08-12). 바꾸려면 축 전체(일자 카드·칩·필터)와 한 몸으로 바꿔야 한다.
+  // 🔴 **KST 오늘 포함 N일** — 서빙(TS_SINCE)·SLO·실행 기록(kstSince)이 전부 이 하나다
+  //    (시간축 감사 2차, 2026-08-12). 예전에는 서빙만 `datetime('now','-N days')` 롤링이라
+  //    ① 경계가 UTC '지금 시각'이었고 ② 사전순 비교의 우연에 기대고 있었고 ③ SLO 창만
+  //    N+1일이었다. 셋 다 이 값으로 정렬된다 — 축이 갈리면 같은 하루가 다른 날로 세어진다.
+  const since = `-${days - 1} days`;
   const missing = [];
 
   // ── 파이프라인
@@ -362,8 +381,10 @@ async function summary(env, params, writable = false) {
   if (!domains.ok || !slo.ok) missing.push("pipeline");
 
   // ── 실행 기록 (조회 DB 4종 — ASK-Seoul#78 §8, decision/0009. 읽기만 한다)
-  // 날짜 축은 observed_date_kst 라 KST 로 자른다(now+9h). 오늘 포함 N일 창.
-  const kstSince = `-${days - 1} days`;
+  // 날짜 축은 observed_date_kst 라 KST 로 자른다(now+9h). 오늘 포함 N일 창 — `since` 와
+  // 같은 값이다(시간축 정렬로 하나가 됐다). 이름을 남겨 두는 이유: 여기는 날짜 **컬럼**에
+  // 그대로 대는 값이고 서빙은 UTC 로 되돌린 경계(TS_SINCE)에 대는 값이라, 형태가 다르다.
+  const kstSince = since;
 
   // 🔴 환경 축을 걸러 읽는다(#78 Z-7, #36 지침 ②). 한 조회 DB 에 prod·dev 기록이 함께
   // 들어가 있어서 — 실측 2026-08-04 운영 D1 에 dev 17행 — 안 거르면 개발 실행이 운영
@@ -462,7 +483,7 @@ async function summary(env, params, writable = false) {
   const routes = await safeRows(env,
     "SELECT route, " + GW_DOM + " AS domain, COUNT(*) AS calls, SUM(status >= 400) AS errors, " +
     "ROUND(AVG(ms),1) AS avg_ms " +
-    "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW +
+    "FROM _gateway_request_log WHERE " + TS_SINCE + "" + gwW +
     " GROUP BY route, domain ORDER BY calls DESC", since);
   if (!routes.ok) missing.push("serving");
   const [daily, products, failures, empty, keys, servTotals, axis, notFound, unreg] = await Promise.all([
@@ -470,9 +491,9 @@ async function summary(env, params, writable = false) {
     // **분야별로 더할 수 없는 값**이라(같은 키가 두 분야에 있으면 중복) 있으면 오히려 위험하다.
     // `errors` 를 대신 싣는다: 막대 툴팁이 `x.errors` 를 읽고 있는데 질의에 없어서 **실패 수가
     // 한 번도 안 뜨고 있었다.**
-    safeRows(env, "SELECT substr(ts,1,10) AS day, " + GW_DOM + " AS domain, COUNT(*) AS calls, " +
+    safeRows(env, "SELECT " + GW_DAY + " AS day, " + GW_DOM + " AS domain, COUNT(*) AS calls, " +
       "SUM(status >= 400) AS errors " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW +
+      "FROM _gateway_request_log WHERE " + TS_SINCE + "" + gwW +
       " GROUP BY day, domain ORDER BY day", since),
     // 축은 product_id 가 정본, 표명은 폴백. 화면에는 사람이 아는 이름을 내보내야 하므로
     // 표명도 같이 싣는다 — 없으면 화면이 식별자를 그대로 보여준다.
@@ -489,7 +510,7 @@ async function summary(env, params, writable = false) {
       // 그래서 제품 축이 아니라 창 전체(meta.mcp)에서만 말한다.
       "SUM(" + SERVE + ") AS calls, " +
       "ROUND(AVG(row_count),1) AS avg_rows FROM _gateway_request_log " +
-      "WHERE " + PRODUCT_KEY + " IS NOT NULL AND ts >= datetime('now', ?)" + gwW + " " +
+      "WHERE " + PRODUCT_KEY + " IS NOT NULL AND " + TS_SINCE + "" + gwW + " " +
       "GROUP BY product_key", "calls DESC, previews DESC", 12), since),
     // 🔴 실패 목록의 분야도 `product_id` 에서 뽑는다. 예전에는 화면이 `table_name` 접두사로
     //    걸렀는데 그건 **등급**이다 — `gold_traffic_flow_anomaly_current` 의 접두사는 'gold'
@@ -500,24 +521,25 @@ async function summary(env, params, writable = false) {
       "SELECT status, route, table_name, MAX(product_id) AS product_id, " +
       GW_DOM + " AS domain, COUNT(*) AS hits " +
       "FROM _gateway_request_log " +
-      "WHERE status >= 400 AND ts >= datetime('now', ?)" + gwW + " " +
+      "WHERE status >= 400 AND " + TS_SINCE + "" + gwW + " " +
       "GROUP BY status, route, table_name, domain", "hits DESC", 10), since),
     safeRows(env, topPerDomain(
       "SELECT " + PRODUCT_KEY + " AS product_key, MAX(table_name) AS table_name, " +
       GW_DOM + " AS domain, filters, COUNT(*) AS empty_responses FROM _gateway_request_log " +
-      "WHERE status = 200 AND row_count = 0 AND ts >= datetime('now', ?)" + gwW + " " +
+      "WHERE status = 200 AND row_count = 0 AND " + TS_SINCE + "" + gwW + " " +
       "GROUP BY product_key, filters", "empty_responses DESC", 10), since),
     // 이용자는 **분야에 속하지 않는다** — 한 키가 여러 분야를 쓴다. 그래서 분야별 행과
     // 전체 행(`domain='*'`)을 **둘 다** 싣는다. `active_days`(DISTINCT 날짜)는 분야별 값을
     // 더할 수 없어서(같은 날 두 분야를 쓰면 중복) 전체를 따로 세는 수밖에 없다.
+    // 이름(key_prefix)은 조인이 아니라 `keymap()` 으로 붙인다 — 아래 이용자 축 주석 참고.
     safeRows(env, topPerDomain(
       "SELECT substr(key_hash,1,8) AS key_id, " + GW_DOM + " AS domain, COUNT(*) AS calls, " +
-      "COUNT(DISTINCT substr(ts,1,10)) AS active_days FROM _gateway_request_log " +
-      "WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?)" + gwW + " GROUP BY key_hash, domain" +
+      "COUNT(DISTINCT " + GW_DAY + ") AS active_days FROM _gateway_request_log " +
+      "WHERE key_hash IS NOT NULL AND " + TS_SINCE + "" + gwW + " GROUP BY key_hash, domain" +
       " UNION ALL " +
-      "SELECT substr(key_hash,1,8), '*', COUNT(*), COUNT(DISTINCT substr(ts,1,10)) " +
+      "SELECT substr(key_hash,1,8), '*', COUNT(*), COUNT(DISTINCT " + GW_DAY + ") " +
       "FROM _gateway_request_log " +
-      "WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?)" + gwW + " GROUP BY key_hash",
+      "WHERE key_hash IS NOT NULL AND " + TS_SINCE + "" + gwW + " GROUP BY key_hash",
       "calls DESC", 10), since, since),
     // KPI 타일 전용 합계. **목록에서 더해 쓰지 않는다** — 목록은 상위 N 이라 합이 전체가
     // 아니고(특히 '사용 중인 이용자'는 `keys` 목록 길이를 세는 바람에 **10에서 멈춰 있었다**),
@@ -526,10 +548,10 @@ async function summary(env, params, writable = false) {
     safeRows(env,
       "SELECT " + GW_DOM + " AS domain, COUNT(*) AS calls, SUM(status >= 400) AS errors, " +
       "COUNT(DISTINCT key_hash) AS users FROM _gateway_request_log " +
-      "WHERE ts >= datetime('now', ?)" + gwW + " GROUP BY domain" +
+      "WHERE " + TS_SINCE + "" + gwW + " GROUP BY domain" +
       " UNION ALL " +
       "SELECT '*', COUNT(*), SUM(status >= 400), COUNT(DISTINCT key_hash) " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW, since, since),
+      "FROM _gateway_request_log WHERE " + TS_SINCE + "" + gwW, since, since),
     // 🔴 분야 축 내역 (#162 🅐). '미상' 한 덩어리를 셋으로 가른다 — `AXIS_BUCKET` 주석 참고.
     // `_catalog` 를 참조하므로 **따로 읽는다.** 위 집계에 섞으면 카탈로그를 못 읽을 때
     // 응답 상태 탭 전체가 빈다(표시명에서 이미 배운 것 — DISPLAY_COLS 주석).
@@ -537,7 +559,7 @@ async function summary(env, params, writable = false) {
     //    자리라 지표용 제외를 걸지 않는다. 다섯 갈래 합 = 창 전체(제외 전)가 유지된다.
     safeRows(env,
       "SELECT " + AXIS_BUCKET + " AS bucket, COUNT(*) AS calls, SUM(status >= 400) AS errors " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwWX +
+      "FROM _gateway_request_log WHERE " + TS_SINCE + "" + gwWX +
       " GROUP BY bucket", since),
     // 못 찾은 이름은 **이름째로** 보여준다. 건수만 말하면 "무엇을 고쳐야 하나"에 답이 안 된다.
     // 부른 키(`key_id`)까지 싣는 이유: 실측에서 이 7건이 **외부 클라이언트의 오타가 아니라
@@ -547,13 +569,13 @@ async function summary(env, params, writable = false) {
       "SELECT " + PRODUCT_KEY + " AS target, group_concat(DISTINCT route) AS routes, " +
       "COUNT(*) AS calls, SUM(status >= 400) AS errors, " +
       "group_concat(DISTINCT substr(key_hash, 1, 8)) AS key_ids, MAX(ts) AS last_ts " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwWX +
+      "FROM _gateway_request_log WHERE " + TS_SINCE + "" + gwWX +
       " AND " + PRODUCT_KEY + " IS NOT NULL AND NOT " + IS_BUNDLE +
       " AND NOT " + IS_QA_PROBE + " AND NOT " + IN_CATALOG +
       " GROUP BY target ORDER BY calls DESC LIMIT 20", since),
     // 전체 지표에서 뺀 미등록 접두사 제품의 몫 — 화면 배너·meta 가 이 값으로 말한다(0012).
     safeRows(env,
-      "SELECT COUNT(*) AS n FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwWX +
+      "SELECT COUNT(*) AS n FROM _gateway_request_log WHERE " + TS_SINCE + "" + gwWX +
       " AND " + GW_UNREG, since),
   ]);
 
@@ -573,7 +595,7 @@ async function summary(env, params, writable = false) {
   // 콘솔은 게이트웨이 스키마를 만들지도 미러하지도 않는다(0010: ALTER 미러는 정본
   // 마이그레이션과 duplicate column 으로 충돌해 저쪽 시드를 깨뜨린다).
   const [src, pub, funnel, udaily, uclients, uagents, upages, fill, genv,
-         uident, ukeys, ukeyApis, udisp] = await Promise.all([
+         uident, ukeys, ukeyApis, udisp, ukm] = await Promise.all([
     sources(env),
     publication(env, days),
     safeRows(env,
@@ -582,14 +604,14 @@ async function summary(env, params, writable = false) {
       "FROM (SELECT k.created_at, (SELECT MIN(r.ts) FROM _gateway_request_log r " +
       "WHERE r.key_hash = k.key_hash AND r." + SERVE + gwWhereR(env) +
       ") AS first_call FROM _keys k)"),
-    safeRows(env, "SELECT substr(ts,1,10) AS day, SUM(key_hash IS NOT NULL) AS keyed, " +
-      "SUM(key_hash IS NULL) AS anon FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW + " " +
+    safeRows(env, "SELECT " + GW_DAY + " AS day, SUM(key_hash IS NOT NULL) AS keyed, " +
+      "SUM(key_hash IS NULL) AS anon FROM _gateway_request_log WHERE " + TS_SINCE + "" + gwW + " " +
       "GROUP BY day ORDER BY day", since),
     safeRows(env, "SELECT ua_class, COUNT(*) AS calls FROM _gateway_request_log " +
-      "WHERE ts >= datetime('now', ?)" + gwW + " AND ua_class IS NOT NULL GROUP BY ua_class ORDER BY calls DESC", since),
+      "WHERE " + TS_SINCE + "" + gwW + " AND ua_class IS NOT NULL GROUP BY ua_class ORDER BY calls DESC", since),
     safeRows(env, "SELECT agent_name, agent_mode, COUNT(*) AS calls, SUM(" + SERVE + ") AS data_calls, " +
       "COUNT(DISTINCT " + PRODUCT_KEY + ") AS products FROM _gateway_request_log " +
-      "WHERE ts >= datetime('now', ?)" + gwW + " AND agent_name IS NOT NULL " +
+      "WHERE " + TS_SINCE + "" + gwW + " AND agent_name IS NOT NULL " +
       "GROUP BY agent_name, agent_mode ORDER BY calls DESC LIMIT 10", since),
     // ⚠️ 예전에는 `route = 'page'` 로 걸렀는데 **당시에도 지금도 라우터에 없는 값이다**
     // (#285 선등록 — 배선 대기) —
@@ -601,7 +623,7 @@ async function summary(env, params, writable = false) {
     // (통과 사유는 charset, 적재 사유가 아니다). 사람 페이지는 부팅 API 호출로 이미
     // `route=catalog` 에 세어져 여기 안 온다 — 배선이 나가면 이 질의는 그대로 살아난다.
     safeRows(env, "SELECT page_path, COUNT(*) AS hits FROM _gateway_request_log " +
-      "WHERE ts >= datetime('now', ?)" + gwW + " AND page_path IS NOT NULL " +
+      "WHERE " + TS_SINCE + "" + gwW + " AND page_path IS NOT NULL " +
       "GROUP BY page_path ORDER BY hits DESC LIMIT 12", since),
     // 행동 축이 '아직 안 온 것'인지 '와서 0인 것'인지는 컬럼 존재만으로 못 가른다. 창 안에서
     // 실제로 채워진 행 수를 세어, 화면이 "게이트웨이가 아직 안 싣는다"를 근거 있게 말하게
@@ -617,12 +639,12 @@ async function summary(env, params, writable = false) {
       "SUM(" + MCP_UNSPLIT + ") AS mcp_unsplit, " +
       "MIN(CASE WHEN " + MCP_SPLIT + " THEN ts END) AS mcp_split_from, " +
       "MIN(CASE WHEN route = 'mcp' THEN ts END) AS mcp_bare_first " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW, since),
+      "FROM _gateway_request_log WHERE " + TS_SINCE + "" + gwW, since),
     // 환경 분포 — 🔴 **여기만 스코프를 걸지 않는다.** 걸면 "무엇을 뺐는지"를 셀 수 없다.
     // 거른 범위를 화면이 말하려면 거르기 **전**을 한 번은 봐야 한다(decision/0012).
     // NULL 은 `(미상)` 으로 따로 센다 — 운영으로 채우지 않는다(ASAC-DAG#692).
     safeRows(env, "SELECT COALESCE(env, '(미상)') AS env, COUNT(*) AS calls " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + dayWhere(dates) +
+      "FROM _gateway_request_log WHERE " + TS_SINCE + "" + dayWhere(dates) +
       " GROUP BY env ORDER BY calls DESC", since),
     // ── 이용자 축 ─────────────────────────────────────────────────────────────
     //
@@ -631,18 +653,24 @@ async function summary(env, params, writable = false) {
     //    익명은 신원 축이 아예 없으므로(키가 없다) 아래 이용자별 목록에 나올 수 없다 —
     //    그래서 합계를 따로 실어, 화면이 "이 목록이 전체의 몇 %인가"를 밝힐 수 있게 한다
     //    (decision/0012 — 거른 것은 걸렀다고 말한다).
+    // `linked_*` 는 지금 `_keys` 로 이어지는 몫이다(#326 커버리지 문구의 근거). 상관 서브질의의
+    // 바깥 컬럼은 **표 이름으로 못 박는다** — AXIS_BUCKET 에서 실제로 데인 함정(GW_KEY 주석).
     safeRows(env, "SELECT COUNT(*) AS calls, SUM(key_hash IS NOT NULL) AS keyed, " +
-      "SUM(key_hash IS NULL) AS anon, COUNT(DISTINCT key_hash) AS keys_used " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW, since),
+      "SUM(key_hash IS NULL) AS anon, COUNT(DISTINCT key_hash) AS keys_used, " +
+      "SUM(CASE WHEN key_hash IS NOT NULL AND EXISTS (SELECT 1 FROM _keys k " +
+      "  WHERE k.key_hash = _gateway_request_log.key_hash) THEN 1 ELSE 0 END) AS linked_calls, " +
+      "COUNT(DISTINCT CASE WHEN EXISTS (SELECT 1 FROM _keys k " +
+      "  WHERE k.key_hash = _gateway_request_log.key_hash) THEN key_hash END) AS keys_linked " +
+      "FROM _gateway_request_log WHERE " + TS_SINCE + "" + gwW, since),
     // 이용자 한 사람이 한 줄. **키 앞 8자로만 식별한다** — 이메일·전체 해시는 이 축에
     // 필요 없고, 필요 없는 것을 내보내면 화면 공유·스크린샷으로 새어 나간다.
     safeRows(env, "SELECT substr(key_hash,1,8) AS key_id, COUNT(*) AS calls, " +
       "COALESCE(SUM(" + SERVE + "), 0) AS data_calls, " +
       "COALESCE(SUM(status >= 400), 0) AS errors, " +
       "COUNT(DISTINCT " + PRODUCT_KEY + ") AS apis, " +
-      "COUNT(DISTINCT substr(ts,1,10)) AS active_days, " +
+      "COUNT(DISTINCT " + GW_DAY + ") AS active_days, " +
       "MIN(ts) AS first_call, MAX(ts) AS last_call " +
-      "FROM _gateway_request_log WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?)" + gwW +
+      "FROM _gateway_request_log WHERE key_hash IS NOT NULL AND " + TS_SINCE + "" + gwW +
       " GROUP BY key_id ORDER BY calls DESC LIMIT 50", since),
     // 이용자 × API. **이용자마다** 상위 20을 뽑는다(`topPerDomain` 과 같은 이유) — 전체
     // 상위 N 을 뽑아 놓고 화면에서 이용자로 거르면 **상위 N 밖의 이용자가 0건으로 보인다.**
@@ -655,11 +683,12 @@ async function summary(env, params, writable = false) {
       "MAX(table_name) AS table_name, " +
       "CASE WHEN " + PRODUCT_KEY + " IS NULL THEN route END AS route, " +
       "COUNT(*) AS calls, COALESCE(SUM(status >= 400), 0) AS errors, MAX(ts) AS last_call " +
-      "FROM _gateway_request_log WHERE key_hash IS NOT NULL AND ts >= datetime('now', ?)" + gwW +
+      "FROM _gateway_request_log WHERE key_hash IS NOT NULL AND " + TS_SINCE + "" + gwW +
       " GROUP BY key_id, target, route)) WHERE rn <= 20 ORDER BY key_id, calls DESC", since),
     // 사람이 아는 이름. 🔴 **조인하지 않는다** — 표가 없으면 질의가 통째로 실패해 카드가
     // 죽는다(DISPLAY_COLS 주석의 그 판단). 못 읽으면 식별자로 내려앉는다.
     displayMap(env),
+    keymap(env),
   ]);
   // 행동 축이 **아직 안 오는 것**인지 **와서 0인 것**인지. 컬럼이 있어도 게이트웨이가 안 실으면
   // 질의는 성공하고 0행이 나와, 화면은 "데이터 없음"이라 말한다 — 그건 틀린 말이다.
@@ -754,7 +783,8 @@ async function summary(env, params, writable = false) {
                  ...r,
                  display_title: (r.product_id && udisp.map.get(r.product_id)?.title) || null,
                })),
-               empty: empty.rows, keys: keys.rows,
+               // 재방문 카드도 같은 이름 규격이다(#326) — 화면 둘이 같은 사람을 다르게 못 부른다.
+               empty: empty.rows, keys: withKeyName(keys.rows, ukm),
                totals: servTotals.rows,
                // 분야 축 내역(#162 🅐). `axis` 는 네 갈래의 건수, `not_found` 는 그중
                // 조치 대상만 **이름째로**. 카탈로그를 못 읽으면 둘 다 빈 채로 온다 —
@@ -771,7 +801,10 @@ async function summary(env, params, writable = false) {
              // 목록이 그중 어디를 덮는지를 화면이 말할 수 있게 한다. 익명은 신원 축이
              // 없어 목록에 못 나온다: 빠진 게 아니라 **셀 사람이 없는 것**이다.
              identity: uident.ok ? (uident.rows[0] || null) : null,
-             by_key: ukeys.rows,
+             // 🔴 이름(`key_prefix`·가린 이메일)은 keymap 이 붙인다(#326). 못 잇는 행은
+             //    `known:false` — 완전삭제된 키라 못 잇는 게 맞고, 화면이 '삭제된 키'로 부른다.
+             by_key: withKeyName(ukeys.rows, ukm),
+             keymap_ok: ukm.ok,
              // 이용자마다 상위 20. 표시명은 조인이 아니라 여기서 붙인다(미선언은 null 그대로).
              // 🔴 **제목 한 줄만 싣는다.** `displayOf()` 전체를 실으면 요약·주의·활용예까지
              //    이용자 수 × 20 만큼 따라와 응답이 수십 배로 붓는다 — 이 카드가 쓰는 것은
@@ -1169,11 +1202,45 @@ async function displayMap(env) {
   return { map, ok: got.ok };
 }
 
+// ── 이용자의 사람 이름 (#326) ────────────────────────────────────────────────────
+//
+// 서빙 로그의 신원은 `key_hash` 뿐이라 화면이 해시 앞 8자를 보여줬는데, 그러면 옆 화면
+// ('이용자 키')의 `ask_…` 와 **눈으로 대조해야 같은 사람인지 안다** — 같은 사람이 화면마다
+// 다른 이름인 것이다. `_keys` 가 발급 때 따로 남긴 `key_prefix`(키 앞 8자)가 콘솔이 실제로
+// 다루는 이름이므로, 해시 → prefix 지도를 만들어 응답에서 붙인다.
+//
+// 🔴 **조인이 아니라 지도다** — displayMap 과 같은 판단. 조인하면 `_keys` 를 못 읽을 때
+//    이용자 카드가 통째로 죽고, `_keys.status` 와 로그의 `status` 가 겹쳐 SUM(status>=400)
+//    이 모호해진다(별칭을 다 다는 것보다 안 섞는 쪽이 안전하다).
+// 🔴 **이메일은 서버에서 가리고 원문은 싣지 않는다** — '이용자 키' 화면과 같은 규격
+//    (원문은 규약상 본인 응답 `/api/v1/me` 에만 나간다).
+// 🔴 지도에 없는 해시는 **완전삭제된 키**다. 처리방침 제7조 ③("삭제로 대응이 사라져 더는
+//    특정 개인과 연결되지 않습니다")이 약속한 상태라 **못 잇는 게 맞다** — 화면은 그 행을
+//    지우지 않고 '삭제된 키'로 부른다(빈칸은 '모른다'가 '없다'로 읽힌다).
+async function keymap(env) {
+  const got = await safeRows(env,
+    "SELECT substr(key_hash,1,8) AS key_id, key_prefix, status, " +
+    "substr(email, 1, 2) || '***@' || substr(email, instr(email, '@') + 1) AS email_masked " +
+    "FROM _keys");
+  const map = new Map();
+  for (const r of got.rows)
+    map.set(r.key_id, { key_prefix: r.key_prefix, email_masked: r.email_masked, status: r.status });
+  return { map, ok: got.ok };
+}
+
+/** 이용자 행에 이름을 붙인다. 못 잇는 행은 `known:false` — 화면이 '삭제된 키'로 부른다. */
+const withKeyName = (rows, km) => (rows || []).map((r) => {
+  const k = km.map.get(r.key_id);
+  return k ? { ...r, key_prefix: k.key_prefix, email_masked: k.email_masked,
+               key_status: k.status, known: true }
+           : { ...r, known: false };
+});
+
 // 카탈로그를 왼쪽에 둔다 — **호출이 0인 API 도 목록에 나와야** "전체 리스트"가 된다.
 // 한 번도 안 불린 제품이야말로 알아야 하는 정보다.
 async function usage(env, params) {
   const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
-  const since = `-${days} days`;
+  const since = `-${days - 1} days`;   // KST 오늘 포함 N일 (TS_SINCE 와 한 쌍)
   // 별칭 붙은 질의라 `_R` 을 쓴다(#64). 날짜 필터도 같은 조각에 얹는다(summary 와 같은 구조).
   const dates = parseDates(params);
   const gwWR = gwWhereR(env) + dayWhere(dates, "r.ts");
@@ -1188,7 +1255,7 @@ async function usage(env, params) {
       "COALESCE(SUM(r.status = 200 AND r.row_count = 0), 0) AS empty_hits, " +
       "ROUND(AVG(r.ms), 1) AS avg_ms, MAX(r.ts) AS last_call " +
       "FROM _catalog c LEFT JOIN _gateway_request_log r " +
-      "  ON " + CATALOG_JOIN + " AND r.ts >= datetime('now', ?)" + gwWR + " " +
+      "  ON " + CATALOG_JOIN + " AND " + TS_SINCE_R + "" + gwWR + " " +
       "GROUP BY c.name ORDER BY calls DESC, c.name", since),
     // 도메인 비율 — 분모는 '카탈로그에 잡히는 호출'이다. catalog·me 처럼 제품이 없는 라우트는
     // 도메인에 귀속되지 않으므로 여기서 빠진다(화면에 그 사실을 적는다).
@@ -1197,14 +1264,14 @@ async function usage(env, params) {
       "COUNT(r.rowid) AS calls, COUNT(DISTINCT " + PRODUCT_KEY_R + ") AS apis_used, " +
       "COALESCE(SUM(r.status >= 400), 0) AS errors " +
       "FROM _catalog c LEFT JOIN _gateway_request_log r " +
-      "  ON " + CATALOG_JOIN + " AND r.ts >= datetime('now', ?)" + gwWR + " " +
+      "  ON " + CATALOG_JOIN + " AND " + TS_SINCE_R + "" + gwWR + " " +
       "GROUP BY domain ORDER BY calls DESC, domain", since),
     // 월별 — _gateway_request_log 는 30일 보존이라 실제로 잡히는 건 최대 두 달 조각이다.
     // 그래도 내보내는 이유는 "지금 보이는 게 전부"라는 사실을 화면이 말해줄 수 있어서다.
     safeRows(env,
-      "SELECT substr(r.ts,1,7) AS month, " + DOMAIN_EXPR + " AS domain, COUNT(*) AS calls " +
+      "SELECT substr(" + GW_DAY_R + ",1,7) AS month, " + DOMAIN_EXPR + " AS domain, COUNT(*) AS calls " +
       "FROM _gateway_request_log r JOIN _catalog c ON " + CATALOG_JOIN + " " +
-      "WHERE r.ts >= datetime('now', ?)" + gwWR +
+      "WHERE " + TS_SINCE_R + "" + gwWR +
       " GROUP BY month, domain ORDER BY month, calls DESC", since),
     displayMap(env),
     // ── 신설형(검증 패턴) 현황 (Serving#217) ─────────────────────────────────
@@ -1226,7 +1293,7 @@ async function usage(env, params) {
       "COALESCE(SUM((route IN ('run_pattern','mcp_run_pattern')) AND status = 500), 0) AS drift " +
       // 미등록 접두사 제품 제외는 summary 의 지표용 조각과 같은 판단(#293 후속) —
       // 가짜 제품명으로 찌른 패턴 호출이 패턴 현황 카드의 오류·드리프트를 움직이면 안 된다.
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwWhere(env) + dayWhere(dates) +
+      "FROM _gateway_request_log WHERE " + TS_SINCE + "" + gwWhere(env) + dayWhere(dates) +
       " AND NOT " + GW_UNREG, since),
   ]);
 
@@ -1273,7 +1340,7 @@ async function usage(env, params) {
 // 개별 API 상세. 값이 아니라 **축**을 보여준다 — 어떤 필터 조합으로 들어와서 몇 행이 나갔나.
 async function usageDetail(env, name, params) {
   const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
-  const since = `-${days} days`;
+  const since = `-${days - 1} days`;   // KST 오늘 포함 N일 (TS_SINCE 와 한 쌍)
 
   // 사용자 입력이 테이블명으로 도는 유일한 지점 — 카탈로그 존재 확인으로 화이트리스트한다
   // (게이트웨이 쪽과 같은 규약). 바인딩이라 주입은 아니지만, 없는 이름을 404 로 끊는 게 맞다.
@@ -1300,21 +1367,21 @@ async function usageDetail(env, name, params) {
     product.product_id || name);
 
   const [daily, filters, statuses, recent] = await Promise.all([
-    safeRows(env, "SELECT substr(ts,1,10) AS day, COUNT(*) AS calls, " +
+    safeRows(env, "SELECT " + GW_DAY + " AS day, COUNT(*) AS calls, " +
       "SUM(status >= 400) AS errors, ROUND(AVG(row_count),1) AS avg_rows " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + KEY_W + "GROUP BY day ORDER BY day",
+      "FROM _gateway_request_log WHERE " + TS_SINCE + "" + KEY_W + "GROUP BY day ORDER BY day",
       since, ...K),
     // 필터 '축' — 컬럼명 조합이다. 값은 저장하지 않으므로 여기 나올 수 없다.
     safeRows(env, "SELECT COALESCE(filters, '') AS filters, COUNT(*) AS calls, " +
       "ROUND(AVG(row_count),1) AS avg_rows, SUM(status = 200 AND row_count = 0) AS empty_hits " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + KEY_W +
+      "FROM _gateway_request_log WHERE " + TS_SINCE + "" + KEY_W +
       "GROUP BY filters ORDER BY calls DESC LIMIT 20", since, ...K),
     safeRows(env, "SELECT status, route, COUNT(*) AS calls FROM _gateway_request_log " +
-      "WHERE ts >= datetime('now', ?)" + KEY_W + "GROUP BY status, route ORDER BY calls DESC",
+      "WHERE " + TS_SINCE + "" + KEY_W + "GROUP BY status, route ORDER BY calls DESC",
       since, ...K),
     safeRows(env, "SELECT ts, route, status, COALESCE(filters,'') AS filters, row_count, ms, " +
       "request_id, substr(key_hash,1,8) AS key_id FROM _gateway_request_log " +
-      "WHERE ts >= datetime('now', ?)" + KEY_W + "ORDER BY ts DESC LIMIT 50", since, ...K),
+      "WHERE " + TS_SINCE + "" + KEY_W + "ORDER BY ts DESC LIMIT 50", since, ...K),
   ]);
 
   return json({
