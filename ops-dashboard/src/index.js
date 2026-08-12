@@ -598,6 +598,22 @@ async function summary(env, params, writable = false) {
   // 초안 컬럼이 아직 없으면 safeRows 가 실패를 삼키고 그 카드는 '수집 전'으로 남는다 —
   // 콘솔은 게이트웨이 스키마를 만들지도 미러하지도 않는다(0010: ALTER 미러는 정본
   // 마이그레이션과 duplicate column 으로 충돌해 저쪽 시드를 깨뜨린다).
+  //
+  // ── '삭제된 키 제외' 토글 (#usage) ────────────────────────────────────────────
+  // 완전삭제된 키의 요청은 이제 사람에 못 잇지만 **트래픽으로는 남아** 이용 지표에 섞인다.
+  // 화면 토글이 이 파라미터를 실어 오면 이용 패턴 질의에서 그 행을 뺀다.
+  //   🔴 익명은 남는다 — 키가 없어 '삭제된 키'일 수 없다. 빼는 것은 "키가 있는데 _keys 에
+  //      없는" 행뿐이다.
+  //   🔴 identity(아래 uident)는 **거르지 않는다** — 그 카드가 "무엇을 뺐나"를 밝히는 근거라,
+  //      거르면 뺀 몫(keyed - linked_calls)을 셀 수 없다(0012: 거른 것은 걸렀다고 말한다).
+  //   🔴 funnel 은 원래 `_keys` 를 도는 질의라 삭제된 키가 **애초에 안 들어간다** — 안 건다.
+  //   상관 서브질의의 바깥 컬럼은 표 이름으로 못 박는다(GW_KEY 교훈 — 맨 이름은 안쪽 표로
+  //   붙어 EXISTS 가 언제나 참이 된다).
+  const exDel = params.get("exclude_deleted") === "1";
+  const exW = exDel
+    ? " AND (key_hash IS NULL OR EXISTS (SELECT 1 FROM _keys kx " +
+      "WHERE kx.key_hash = _gateway_request_log.key_hash))"
+    : "";
   const [src, pub, funnel, udaily, uclients, uagents, upages, fill, genv,
          uident, ukeys, ukeyApis, udisp, ukm] = await Promise.all([
     sources(env),
@@ -609,13 +625,13 @@ async function summary(env, params, writable = false) {
       "WHERE r.key_hash = k.key_hash AND r." + SERVE + gwWhereR(env) +
       ") AS first_call FROM _keys k)"),
     safeRows(env, "SELECT " + GW_DAY + " AS day, SUM(key_hash IS NOT NULL) AS keyed, " +
-      "SUM(key_hash IS NULL) AS anon FROM _gateway_request_log WHERE " + TS_SINCE + "" + gwW + " " +
+      "SUM(key_hash IS NULL) AS anon FROM _gateway_request_log WHERE " + TS_SINCE + "" + gwW + exW + " " +
       "GROUP BY day ORDER BY day", since),
     safeRows(env, "SELECT ua_class, COUNT(*) AS calls FROM _gateway_request_log " +
-      "WHERE " + TS_SINCE + "" + gwW + " AND ua_class IS NOT NULL GROUP BY ua_class ORDER BY calls DESC", since),
+      "WHERE " + TS_SINCE + "" + gwW + exW + " AND ua_class IS NOT NULL GROUP BY ua_class ORDER BY calls DESC", since),
     safeRows(env, "SELECT agent_name, agent_mode, COUNT(*) AS calls, SUM(" + SERVE + ") AS data_calls, " +
       "COUNT(DISTINCT " + PRODUCT_KEY + ") AS products FROM _gateway_request_log " +
-      "WHERE " + TS_SINCE + "" + gwW + " AND agent_name IS NOT NULL " +
+      "WHERE " + TS_SINCE + "" + gwW + exW + " AND agent_name IS NOT NULL " +
       "GROUP BY agent_name, agent_mode ORDER BY calls DESC LIMIT 10", since),
     // ⚠️ 예전에는 `route = 'page'` 로 걸렀는데 **당시에도 지금도 라우터에 없는 값이다**
     // (#285 선등록 — 배선 대기) —
@@ -627,7 +643,7 @@ async function summary(env, params, writable = false) {
     // (통과 사유는 charset, 적재 사유가 아니다). 사람 페이지는 부팅 API 호출로 이미
     // `route=catalog` 에 세어져 여기 안 온다 — 배선이 나가면 이 질의는 그대로 살아난다.
     safeRows(env, "SELECT page_path, COUNT(*) AS hits FROM _gateway_request_log " +
-      "WHERE " + TS_SINCE + "" + gwW + " AND page_path IS NOT NULL " +
+      "WHERE " + TS_SINCE + "" + gwW + exW + " AND page_path IS NOT NULL " +
       "GROUP BY page_path ORDER BY hits DESC LIMIT 12", since),
     // 행동 축이 '아직 안 온 것'인지 '와서 0인 것'인지는 컬럼 존재만으로 못 가른다. 창 안에서
     // 실제로 채워진 행 수를 세어, 화면이 "게이트웨이가 아직 안 싣는다"를 근거 있게 말하게
@@ -674,7 +690,7 @@ async function summary(env, params, writable = false) {
       "COUNT(DISTINCT " + PRODUCT_KEY + ") AS apis, " +
       "COUNT(DISTINCT " + GW_DAY + ") AS active_days, " +
       "MIN(ts) AS first_call, MAX(ts) AS last_call " +
-      "FROM _gateway_request_log WHERE key_hash IS NOT NULL AND " + TS_SINCE + "" + gwW +
+      "FROM _gateway_request_log WHERE key_hash IS NOT NULL AND " + TS_SINCE + "" + gwW + exW +
       " GROUP BY key_id ORDER BY calls DESC LIMIT 50", since),
     // 이용자 × API. **이용자마다** 상위 20을 뽑는다(`topPerDomain` 과 같은 이유) — 전체
     // 상위 N 을 뽑아 놓고 화면에서 이용자로 거르면 **상위 N 밖의 이용자가 0건으로 보인다.**
@@ -687,7 +703,7 @@ async function summary(env, params, writable = false) {
       "MAX(table_name) AS table_name, " +
       "CASE WHEN " + PRODUCT_KEY + " IS NULL THEN route END AS route, " +
       "COUNT(*) AS calls, COALESCE(SUM(status >= 400), 0) AS errors, MAX(ts) AS last_call " +
-      "FROM _gateway_request_log WHERE key_hash IS NOT NULL AND " + TS_SINCE + "" + gwW +
+      "FROM _gateway_request_log WHERE key_hash IS NOT NULL AND " + TS_SINCE + "" + gwW + exW +
       " GROUP BY key_id, target, route)) WHERE rn <= 20 ORDER BY key_id, calls DESC", since),
     // 사람이 아는 이름. 🔴 **조인하지 않는다** — 표가 없으면 질의가 통째로 실패해 카드가
     // 죽는다(DISPLAY_COLS 주석의 그 판단). 못 읽으면 식별자로 내려앉는다.
@@ -772,6 +788,9 @@ async function summary(env, params, writable = false) {
       // 등록부가 데이터 분야와 운영 축을 **가를 수 있나**(#162 🅕). 마이그레이션 전
       // 배포에서는 false 다 — 그때 화면은 예전처럼 전부 세고, 그 사실을 숨기지 않는다.
       domain_kind: domains.kind,
+      // '삭제된 키 제외'가 걸린 응답인가 — 서버가 실제로 뭘 했는지를 화면이 추측하지 않게
+      // 명시한다(0012). 뺀 건수는 identity(keyed - linked_calls)에서 나온다.
+      usage_exclude_deleted: exDel,
     },
     pipeline: { domains: domains.rows, slo: slo.rows },
     runs: { daily: rdaily.rows, expectations: rexp.rows, failures: rfail.rows,
