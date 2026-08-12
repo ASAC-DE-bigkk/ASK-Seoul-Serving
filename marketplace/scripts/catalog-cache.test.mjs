@@ -298,10 +298,30 @@ test("만료돼도 응답은 갱신을 **기다리지 않는다** — 갱신이 
 // 가를 것이 없어 키에서 뺐고, 그래서 "정책이 다르면 다른 칸" 테스트도 지웠다.
 // **대신 원인을 지키는 테스트를 남긴다** — 캐시된 응답이 환경값에 따라 달라지면 안 된다.
 // 이게 깨지면 그때 캐시 키에 그 축을 되살려야 한다.
-test("캐시 키는 환경에 따라 갈리지 않는다 — 응답 본문이 환경값을 안 담기 때문이다", () => {
+// 🔴 2026-08-12 — **축이 다시 생겼다.** 응답에 `chat.enabled`(= `env.AI` 유무)를 실었기
+//    때문이다. 위 경고가 가리키던 바로 그 경우다. 안 가르면 AI 를 켠 뒤에도 캐시가 최대
+//    10분간 `enabled:false` 를 주고, 그동안 화면은 질문 칸을 안 띄운다.
+test("캐시 키는 **응답이 담는 환경값에만** 따라 갈린다", () => {
   const bare = catalogCacheKey({});
+  // 담지 않는 값으로는 갈리지 않는다 — 칸이 쪼개지면 캐시 적중률만 떨어진다
   assert.equal(catalogCacheKey({ GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret" }), bare);
   assert.equal(catalogCacheKey({ ASK_ENV: "prod" }), bare);
+  // 담는 값으로는 갈린다
+  assert.notEqual(catalogCacheKey({ AI: {} }), bare, "AI 바인딩 유무가 캐시 칸을 안 가른다");
+  assert.equal(catalogCacheKey({ AI: {} }), catalogCacheKey({ AI: {}, ASK_ENV: "prod" }));
+});
+
+test("🔴 채팅 가능 여부를 응답이 말한다 — 화면이 이걸 보고 질문 칸을 연다", async () => {
+  const prev = globalThis.caches;
+  globalThis.caches = undefined;   // 캐시 없이 새로 만든 응답을 본다
+  try {
+    const off = await worker.fetch(new Request("https://m.example.test/api/v1/catalog"),
+      { DB: stubDb(), ASK_ENV: "dev" }, { waitUntil() {} });
+    assert.equal((await off.json()).chat.enabled, false, "바인딩이 없는데 켜졌다고 말한다");
+    const on = await worker.fetch(new Request("https://m.example.test/api/v1/catalog"),
+      { DB: stubDb(), ASK_ENV: "dev", AI: { run: async () => ({}) } }, { waitUntil() {} });
+    assert.equal((await on.json()).chat.enabled, true, "바인딩이 있는데 꺼졌다고 말한다");
+  } finally { globalThis.caches = prev; }
 });
 
 test("발급 방식은 환경과 무관하게 google_oauth 하나다", async () => {
