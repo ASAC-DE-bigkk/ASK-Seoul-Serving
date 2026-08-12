@@ -565,7 +565,7 @@
   <div class="main">
     <div class="topbar">
       <h1 id="pageTitle">데이터 카탈로그</h1>
-      <div class="search"><span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span><input type="search" id="q" placeholder="제품·질문·테이블명 검색"></div>
+      <div class="search"><span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg></span><input type="search" id="q" placeholder="제품 이름·질문으로 검색"></div>
       <span class="spacer"></span>
       <button class="theme-btn" id="themeBtn" type="button" aria-label="테마 전환">
         <svg class="sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
@@ -873,7 +873,11 @@ async function boot() {
   const pid = params.get("product");
   const carried = pid ? PRODUCTS.find((p) => p.product_id === pid) : null;
   if (carried) {
-    $("q").value = carried.name; query = carried.name.toLowerCase();
+    // 🔴 **검색창에는 사람이 고른 이름을 되비춘다.** 예전엔 기술명(`gold_transit_parking_full_risk`)
+    //    을 그대로 실었는데, 그건 사용자가 누른 것도 아니고 다시 칠 말도 아니다 — 화면이
+    //    "당신은 이걸 검색한 겁니다"라고 잘못 말하는 셈이었다(2026-08-12 오너 제보).
+    //    표시명은 검색 표면(`visible()`)에 포함돼 있어 거르기 결과는 그대로다.
+    $("q").value = titleOf(carried); query = titleOf(carried).toLowerCase();
     const patId = params.get("pat");
     const pat = patId ? (carried.usage_patterns || []).find((u) => u.pattern_id === patId) : null;
     pickProduct(carried, pat || null);
@@ -911,7 +915,7 @@ function renderNav() {
   }
 }
 
-// 도메인 클릭 = "이 도메인 전부 보기" 의도다. 홈 제품 카드가 넘긴 검색어(?q=테이블명)가
+// 도메인 클릭 = "이 도메인 전부 보기" 의도다. 홈 제품 카드가 넘긴 검색어(?q=표시명)가
 // 남아 있으면 다른 도메인이 전부 0건으로 걸러져 탭이 죽은 것처럼 보였다(버그) — 전환 시 비운다.
 function selectDomain(id) {
   activeDomain = id;
