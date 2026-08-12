@@ -739,21 +739,25 @@ function layerVerdict(day) {
   return { cls: over.length ? "bad" : under.length ? "warn" : "ok", over, under, missing };
 }
 
-/** 단계 막대 두 줄(소요·적재). 세 보기가 같은 그림을 쓴다 — 눈이 옮겨 다니지 않게. */
-function layerBars(rows, durOf, rowOf, subOf) {
+/** 단계 막대 두 줄(소요·적재). 세 보기가 같은 그림을 쓴다 — 눈이 옮겨 다니지 않게.
+ *  marks(선택): 값 옆에 붙일 배지 HTML — 날짜별 하루 상세가 '평균 대비'를 얹는 자리다.
+ *  전체·평균은 안 넘기므로 그대로다. */
+function layerBars(rows, durOf, rowOf, subOf, marks) {
   const maxD = Math.max(1, ...rows.map(durOf));
   const maxR = Math.max(1, ...rows.map(rowOf));
   return "<div class='share'>" + rows.map((x) => {
     const d0 = durOf(x), r0 = rowOf(x);
+    const m = marks ? marks(x) : null;
     return "<div class='row'><div class='nm'>" + esc(x.label) +
         "<small>" + subOf(x) + "</small></div>" +
       "<div class='track' title='소요 " + hrs(d0) + "'>" +
         "<div class='fill' style='width:" + Math.round(d0 / maxD * 100) + "%'></div></div>" +
-      "<div class='num'><b>" + hrs(d0) + "</b></div></div>" +
+      "<div class='num'><b>" + hrs(d0) + "</b>" + (m && m.dur ? " " + m.dur : "") + "</div></div>" +
       "<div class='row'><div class='nm'><small>적재 행수</small></div>" +
       "<div class='track' title='" + nf.format(Math.round(r0)) + "행'>" +
         "<div class='fill dim' style='width:" + Math.round(r0 / maxR * 100) + "%'></div></div>" +
-      "<div class='num'><small>" + nf.format(Math.round(r0)) + "행</small></div></div>";
+      "<div class='num'><small>" + nf.format(Math.round(r0)) + "행</small>" +
+        (m && m.rows ? " " + m.rows : "") + "</div></div>";
   }).join("") + "</div>";
 }
 
@@ -822,16 +826,21 @@ function layerDayDetail(day) {
       : r < 1 - LAYER_BAND ? "<span class='pill warn'>▼ " + pctTxt + "</span>"
       : "<span class='pill ok'>= " + pctTxt + "</span>";
   };
-  const rows = LAYERS.filter(([k]) => layerAvg[k] || per[k])
-    .map(([k, lab]) => ({ key:k, label:lab, cur:per[k] || null, avg:layerAvg[k] || null }));
-  const body = table([
-    { t:"단계", name:true, get:(r) => esc(r.label) + " <span class='pill dim'>" + esc(r.key) + "</span>" },
-    { t:"소요", r:true, get:(r) => r.cur ? hrs(r.cur.dur) : "<span class='zero'>기록 없음</span>" },
-    { t:"평균 대비", r:true, get:(r) => r.cur && r.avg ? mark(r.cur.dur, r.avg.dur) : "—" },
-    { t:"적재 행수", r:true, get:(r) => r.cur ? nf.format(r.cur.rows) + "행" : "<span class='zero'>기록 없음</span>" },
-    { t:"평균 대비", r:true, get:(r) => r.cur && r.avg ? mark(r.cur.rows, r.avg.rows) : "—" },
-    { t:"실행", r:true, get:(r) => r.cur ? nf.format(r.cur.ev) : "—" },
-  ], rows, "이 날의 단계 기록이 없습니다");
+  // 🔴 하루 상세도 전체·평균과 **같은 막대 그림**을 쓴다(2026-08-12 요청) — 예전에는 여기만
+  // 표라서, 날을 고르는 순간 그림 문법이 바뀌어 눈이 다시 배워야 했다. 막대는 그날 단계끼리의
+  // 상대 크기이고, 이 보기의 고유 정보(평균 대비 판정)는 값 옆 배지로 남긴다 — 색(칩)이 왜
+  // 그 색인지 배지가 잇는다. 기록 있는 단계만 막대로 세운다(없는 단계는 0 이 아니라 모름 —
+  // 아래 글이 따로 말한다, agreement §4).
+  const rows = LAYERS.filter(([k]) => per[k])
+    .map(([k, lab]) => ({ key:k, label:lab, cur:per[k], avg:layerAvg[k] || null }));
+  const body = rows.length
+    ? layerBars(rows, (x) => x.cur.dur, (x) => x.cur.rows,
+        (x) => esc(x.key) + " · 실행 " + nf.format(x.cur.ev) +
+          (x.avg ? "" : " · <span class='zero'>평균 기준 없음</span>"),
+        (x) => x.avg
+          ? { dur: mark(x.cur.dur, x.avg.dur), rows: mark(x.cur.rows, x.avg.rows) }
+          : null)
+    : "<p class='hint'>이 날의 단계 기록이 없습니다</p>";
 
   const why = v.over.length ? "평균을 넘은 인자: <b>" + v.over.map((x) => esc(x.lab + " " + x.fl)).join(" · ") + "</b>"
     : v.under.length ? "평균에 못 미친 인자: <b>" + v.under.map((x) => esc(x.lab + " " + x.fl)).join(" · ") + "</b>"
@@ -1152,6 +1161,13 @@ const bundleNote = (load) => !load || load.bundled ? ""
 // 막대 하나에 축 양끝이 같은 날짜가 되어, 고른 기간이 화면에 반영되지 않은 것처럼 보인다.
 // (실제로 "기간을 바꿔도 안 변한다"는 지적이 여기서 나왔다.)
 const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
+// fillDays 의 자매 — 창 전체가 아니라 **주어진 날짜 목록만** 채운다. '지정 날짜만 보기'가
+// 켜졌을 때 쓴다: 서버는 선택한 날짜의 행만 주므로, 선택했는데 요청이 없던 날을 0 막대로
+// 세우는 몫만 여기서 한다(없는 날을 지어내지도, 선택 밖 날을 끼워 넣지도 않는다).
+function fillDaysList(rows, dayList, keyOf, zero) {
+  const by = new Map(rows.map((r) => [keyOf(r), r]));
+  return dayList.map((k) => by.get(k) || { ...zero, day: k, _empty: true });
+}
 function fillDays(rows, days, keyOf, zero) {
   const by = new Map(rows.map((r) => [keyOf(r), r]));
   // 🔴 끝 칸은 **UTC 오늘**이다 — 이 함수를 쓰는 일자 카드(응답 상태·이용 패턴)의 날짜 키가
@@ -2143,11 +2159,13 @@ function render(d) {
   const dSeries = fillDays(s.daily, d.window_days, (r) => r.day, { calls: 0, errors: 0 });
   const dMax = Math.max(1, ...dSeries.map((x) => x.calls));
   const dTotal = dSeries.reduce((a, x) => a + (x.calls || 0), 0);
+  // title → data-tip(UITip) — '일자별 손님'과 같은 이유·같은 동작(2026-08-12 요청):
+  // 말풍선이 문서에 하나뿐이라 막대 사이 이동에도 겹치지 않고, 열림 75ms·닫힘 120ms.
   $("daily").innerHTML = dTotal
     ? "<div class='bars'>" + dSeries.map((x) =>
-        "<div class='b" + (x._empty ? " none" : "") + "' title='" + esc(x.day) +
-        (x._empty ? " · 기록 없음" : " · " + nf.format(x.calls) + "회" +
-          (x.errors ? " (실패 " + x.errors + ")" : "")) + "'>" +
+        "<div class='b" + (x._empty ? " none" : "") + "' data-tip='<b>" + esc(x.day) + "</b><br>" +
+        (x._empty ? "기록 없음" : "요청 " + nf.format(x.calls) + "회" +
+          (x.errors ? " — 실패 " + nf.format(x.errors) + "건" : " — 실패 0건")) + "'>" +
         "<i style='height:" + (x.calls ? Math.max(3, Math.round(x.calls / dMax * 70)) : 0) +
         "px'></i></div>").join("") + "</div>" +
       "<div class='bars-axis'><span>" + esc(dSeries[0].day) + "</span>" +
@@ -2228,23 +2246,39 @@ function render(d) {
   const axisBox = (part, axis) => part.pending ? pendingBox(axis)
     : part.unfilled ? unfilledBox(axis) : null;
 
-  U.daily = fillDays(U.daily, d.window_days, (r) => r.day, { keyed: 0, anon: 0 });
+  // '지정 날짜만 보기'가 켜져 있으면 **선택한 날짜의 막대만** 그린다(#293 후속) — 창 전체를
+  // 그대로 두면 나머지 날이 전부 0 으로 깔려, 하루를 골라도 "빈 창에 점 하나"로 읽힌다.
+  // 기준은 서버가 실제로 센 범위(meta.dates_filter)다 — 화면 상태(DATESEL)로 그리면
+  // 응답이 오기 전의 선택이 섞여 그림과 숫자가 어긋날 수 있다.
+  const picked = (d.meta.dates_filter || []).slice().sort();
+  U.daily = picked.length
+    ? fillDaysList(U.daily, picked, (r) => r.day, { keyed: 0, anon: 0 })
+    : fillDays(U.daily, d.window_days, (r) => r.day, { keyed: 0, anon: 0 });
   if (U.daily.some((x) => (x.keyed || 0) + (x.anon || 0) > 0)) {
     const maxU = Math.max(...U.daily.map((x) => x.keyed + x.anon));
     // 🔴 title 이 아니라 data-tip(ui.js UITip)이다 — title 은 ① 뜨는 데 ~1초 걸리고
     // ② 모바일에서 안 뜨고 ③ 서식이 안 된다. UITip 은 **말풍선이 문서 전체에 하나**라
     // 막대 사이를 옮겨 다녀도 생기는 영역과 없어지는 영역이 겹칠 수 없고(같은 요소가
     // 자리만 옮긴다), 열림 75ms·닫힘 120ms 페이드로 빠르고 부드럽다(2026-08-12 요청).
+    // 선택 모드에서는 막대 폭을 고정한다(.picked) — 하나만 남았다고 카드 폭을 다 차지하면
+    // 값이 실제보다 커 보인다. 축 문구도 범위가 아니라 **고른 날짜들**을 말한다(5일 초과면 요약).
     $("usageDaily").innerHTML =
-      "<div class='bars'>" + U.daily.map((x) =>
+      "<div class='bars" + (picked.length ? " picked" : "") + "'>" + U.daily.map((x) =>
         "<div class='b' data-tip='<b>" + esc(x.day) + "</b><br>" +
         "요청 " + nf.format(x.keyed + x.anon) + "건 — 인증 " + nf.format(x.keyed) +
         " · 익명 " + nf.format(x.anon) + "'>" +
         "<i style='height:" + Math.max(3, Math.round((x.keyed + x.anon) / maxU * 70)) + "px'></i></div>").join("") + "</div>" +
-      "<div class='bars-axis'><span>" + esc(U.daily[0].day) + "</span><span>" +
-      esc(U.daily[U.daily.length - 1].day) + "</span></div>";
+      (picked.length
+        ? "<div class='bars-axis picked'><span>" + (picked.length <= 5
+            ? picked.map((k) => esc(md(k))).join(" · ")
+            : esc(md(picked[0])) + " ~ " + esc(md(picked[picked.length - 1])) +
+              " · " + picked.length + "일 선택") + "</span></div>"
+        : "<div class='bars-axis'><span>" + esc(U.daily[0].day) + "</span><span>" +
+          esc(U.daily[U.daily.length - 1].day) + "</span></div>");
   } else $("usageDaily").innerHTML =
-      emptyBox(["데이터 없음", "최근 " + d.window_days + "일에 요청이 없습니다"]);
+      emptyBox(["데이터 없음", picked.length
+        ? "선택한 " + picked.length + "일에는 요청이 없습니다"
+        : "최근 " + d.window_days + "일에 요청이 없습니다"]);
 
   renderUserStats(U, d.window_days);
 
