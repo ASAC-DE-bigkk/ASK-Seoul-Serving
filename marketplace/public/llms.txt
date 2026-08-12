@@ -87,6 +87,9 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
      열어 Google 로 로그인해야 한다. 이메일 소유를 Google 이 확인해 주는 경로라 **자동화로는
      받을 수 없다.** 에이전트라면 운영자에게 키를 받아 설정에 넣는 것이 정상 경로다.
    - **한 이메일에 키 하나**다. 옛 `POST /api/v1/keys` 는 폐지됐고 403 을 준다.
+   - 키를 잃었으면 **같은 계정으로 다시 로그인**하면 된다 — 확인 화면의 버튼이 새 키를 준다
+     (`POST /api/v1/keys/rotate`, 브라우저 폼 전용). 이전 키는 그때 무효가 되고, 그날 쓴
+     호출 수는 새 키로 이어진다. 한 계정당 하루 5회.
 4. `GET /api/v1/data/<product_id>?...` — 헤더 `Authorization: Bearer ask_…` 로 조회.
    **맞는 검증 패턴이 있으면 4 대신 4′ 를 쓴다** — 필터를 직접 조립하는 것보다 낫다.
 
@@ -157,3 +160,5 @@ Streamable HTTP, stateless JSON-RPC 2.0 단일 엔드포인트. 프로토콜 버
 - 신선도: 카탈로그 `freshness`(데이터 기준 시점) · `exported_at`(적재 시점). "지금/현재" 질문에
   답할 때는 이 시점을 함께 밝힐 것.
 - 키 폐기: `DELETE /api/v1/keys`(Bearer). `?purge=true` 면 이메일·사용 기록까지 삭제.
+- 키 재발급: 같은 계정으로 다시 로그인 → 확인 버튼(`POST /api/v1/keys/rotate`). 기존 키를
+  몰라도 되고, 사람이 브라우저로 해야 한다(자동화 불가).

@@ -87,7 +87,7 @@
       <li><span class="n">①</span><div><b>이용자가 제공하는 정보</b>
       <div class="table-scroll"><table><thead><tr><th>항목</th><th>수집 시점</th><th>수집 방법</th></tr></thead><tbody><tr><td class="dom">이메일 주소</td><td>API 키 발급</td><td>Google 로그인(OAuth 2.0)을 통해 Google 로부터 전달받습니다. 서비스가 직접 입력받지 않습니다.</td></tr></tbody></table></div></div></li>
       <li><span class="n">②</span><div><b>서비스 이용 과정에서 자동으로 생성·수집되는 정보</b>
-      <div class="table-scroll"><table><thead><tr><th>항목</th><th>수집 시점</th><th>수집 방법</th></tr></thead><tbody><tr><td class="dom">발급 요청 IP의 해시</td><td>API 키 발급</td><td>요청 시 자동 수집하여 즉시 해시로 변환합니다.</td></tr><tr><td class="dom">API 요청 기록</td><td>API 호출</td><td>호출 시 자동으로 생성됩니다.</td></tr></tbody></table></div>
+      <div class="table-scroll"><table><thead><tr><th>항목</th><th>수집 시점</th><th>수집 방법</th></tr></thead><tbody><tr><td class="dom">발급 요청 IP의 해시</td><td>API 키 발급</td><td>요청 시 자동 수집하여 즉시 해시로 변환합니다.</td></tr><tr><td class="dom">API 요청 기록</td><td>API 호출</td><td>호출 시 자동으로 생성됩니다.</td></tr><tr><td class="dom">재발급 횟수와 그 날짜</td><td>키 재발급</td><td>키 정보에 함께 기록됩니다. 새로 수집하는 정보가 아니라 <b>횟수를 세는 숫자</b>입니다.</td></tr></tbody></table></div>
       <p>이 항목들은 <b>그 자체로는 특정 개인을 알아볼 수 없으나</b>, 서비스가 보유한 다른 정보와 결합하면 알아볼 수 있습니다. 따라서 <b>개인정보로 보아 관리</b>합니다. 결합의 통로는 다음 둘이며, 그래서 보유 기간을 짧게 두었습니다(제3조).</p>
       <ul><li>API 요청 기록의 <b>키 해시</b>는 이메일과 1:1 로 대응합니다 — 이용자가 키를 완전 삭제하면 그 대응이 사라져 더는 연결되지 않습니다(제7조).</li><li>발급 요청 IP의 해시는 서비스가 보유한 비밀값을 알면 <b>같은 날 안에서는 원문을 되찾을 수 있습니다</b> — 24시간 뒤 삭제되며, 날이 바뀌면 앞뒤 기록이 서로 이어지지 않습니다.</li></ul></div></li>
       <li><span class="n">③</span><div>API 요청 기록에 남는 항목은 <b>호출 경로, 제품(테이블)명, 응답 상태, 응답 행수, 소요 시간, 키 해시</b>, 그리고 필터로 사용한 <b>컬럼의 이름</b>입니다.</div></li>
@@ -99,7 +99,7 @@
     <h2>제3조 (개인정보의 보유 및 이용 기간)</h2>
     <ul class="cl">
       <li><span class="n">①</span><div>서비스는 법령에 따른 별도의 보유 의무가 없으며, 각 항목을 다음 기간 동안만 보유합니다.
-      <div class="table-scroll"><table><thead><tr><th>항목</th><th>보유 기간</th><th>근거</th></tr></thead><tbody><tr><td class="dom">이메일 주소</td><td>이용자의 삭제 요청 시까지</td><td>키 식별에 필요한 기간</td></tr><tr><td class="dom">발급 요청 IP의 해시</td><td><b>24시간</b></td><td>시간당 발급 횟수 제한에 필요한 기간</td></tr><tr><td class="dom">API 요청 기록</td><td><b>30일</b></td><td>장애·남용 대응에 필요한 기간</td></tr></tbody></table></div></div></li>
+      <div class="table-scroll"><table><thead><tr><th>항목</th><th>보유 기간</th><th>근거</th></tr></thead><tbody><tr><td class="dom">이메일 주소</td><td>이용자의 삭제 요청 시까지</td><td>키 식별에 필요한 기간</td></tr><tr><td class="dom">발급 요청 IP의 해시</td><td><b>24시간</b></td><td>시간당 발급 횟수 제한에 필요한 기간</td></tr><tr><td class="dom">API 요청 기록</td><td><b>30일</b></td><td>장애·남용 대응에 필요한 기간</td></tr><tr><td class="dom">재발급 횟수와 그 날짜</td><td>이메일 주소와 같음</td><td>하루 재발급 횟수 제한에 필요한 기간 — 날이 바뀌면 새로 셉니다</td></tr></tbody></table></div></div></li>
       <li><span class="n">②</span><div>보유 기간이 지난 정보는 <b>자동으로 삭제</b>되며, 이용자의 별도 요청이 필요하지 않습니다.</div></li>
     </ul>
   </section>
