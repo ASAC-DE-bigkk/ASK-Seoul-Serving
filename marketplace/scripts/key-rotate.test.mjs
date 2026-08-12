@@ -24,8 +24,8 @@ const ENV = {
 };
 
 // D1 스텁 — 회전이 실제로 **무엇을 쓰는지**를 본다. 배치에 담긴 문장이 이 테스트의 관찰 대상이다.
-function fixtureDb({ row = { key_hash: OLD, rotated_day: null, rotated_count: 0 },
-                     issuedThisHour = 0, updateChanges = 1 } = {}) {
+function fixtureDb({ row = { key_hash: OLD, email: "a@b.c", rotated_day: null, rotated_count: 0 },
+                     guard = null, issuedThisHour = 0, updateChanges = 1 } = {}) {
   const seen = { batches: [], binds: [] };
   return {
     seen,
@@ -33,6 +33,8 @@ function fixtureDb({ row = { key_hash: OLD, rotated_day: null, rotated_count: 0 
       const stmt = (b) => ({
         async first() {
           if (sql.includes("FROM _keys WHERE key_hash")) return row;
+          // 상한의 정본 — 완전삭제가 못 지우는 자리(#320)
+          if (sql.includes("FROM _issuance_guard")) return guard;
           return null;
         },
         async all() {
@@ -131,11 +133,39 @@ test("🔴 ④ 계정당 하루 상한 — 다 쓰면 429 이고 쓰던 키는 �
 });
 
 test("어제 쓴 횟수는 오늘을 막지 않는다 — 날짜가 바뀌면 0부터 센다", async () => {
-  const db = fixtureDb({ row: { key_hash: OLD, rotated_day: "2020-01-01", rotated_count: 99 } });
+  const db = fixtureDb({ row: { key_hash: OLD, email: "a@b.c", rotated_day: "2020-01-01", rotated_count: 99 } });
   const res = await rotate(db, await ticketBody());
   assert.equal(res.status, 201);
-  const upd = db.seen.batches.at(-1).find((s) => s.sql.includes("UPDATE _keys"));
-  assert.equal(upd.bind[4], 1, "오늘 첫 회전인데 카운터가 1이 아니다");
+  const g = db.seen.batches.at(-1).find((s) => s.sql.includes("INSERT INTO _issuance_guard"));
+  assert.ok(g, "상한 카운터를 안 썼다");
+  assert.equal(g.bind[2], 1, "오늘 첫 회전인데 카운터가 1이 아니다");
+});
+
+// ── 완전삭제가 상한의 우회로가 되지 않게 (#320) ────────────────────────────────
+// 🔴 상한(하루 5회)이 `_keys` 행에 얹혀 있던 동안, 완전삭제가 그 행을 지워
+//    **상한이 막으려던 바로 그 행동으로 상한이 사라졌다**:
+//        남용 → 완전삭제 → 재로그인 → 신규 발급 → 반복
+//    그래서 카운터를 이메일 해시를 키로 하는 `_issuance_guard` 로 옮겼다.
+
+test("🔴 상한은 키 행이 아니라 가드에 쓴다 — 완전삭제가 못 지우는 자리", async () => {
+  const db = fixtureDb({ row: { key_hash: OLD, email: "a@b.c", rotated_day: null, rotated_count: 0 } });
+  await rotate(db, await ticketBody());
+  const batch = db.seen.batches.at(-1);
+  const upd = batch.find((s) => s.sql.includes("UPDATE _keys"));
+  assert.doesNotMatch(upd.sql, /rotated_count/, "옛 자리에 또 쓰면 정본이 둘이 된다");
+  assert.ok(batch.some((s) => s.sql.includes("INSERT INTO _issuance_guard")));
+  // 청소가 같은 batch 에 붙어 있어야 한다 — 별도 스케줄러는 안 도는 걸 아무도 모른다
+  assert.ok(batch.some((s) => s.sql.includes("DELETE FROM _issuance_guard")), "30일 청소가 없다");
+});
+
+test("🔴 가드가 있으면 그 값이 옛 컬럼을 이긴다 — 정본이 하나여야 한다", async () => {
+  // `_keys` 에는 0(적용 전 값)이 남아 있어도, 가드가 5면 오늘은 끝난 것이다.
+  const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const db = fixtureDb({ row: { key_hash: OLD, email: "a@b.c", rotated_day: null, rotated_count: 0 },
+                         guard: { day: today, count: 5 } });
+  const res = await rotate(db, await ticketBody());
+  assert.equal(res.status, 429);
+  assert.equal(db.seen.batches.length, 0, "상한에 걸렸는데 키를 갈아 끼웠다");
 });
 
 test("발급 IP 상한은 회전에도 그대로 걸린다", async () => {
