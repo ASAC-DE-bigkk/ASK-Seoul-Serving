@@ -186,3 +186,67 @@ test("🔴 절반 넘는 제품에 있는 낱말은 지운다 — 다만 다 지
   //    모른다 ≠ 없다 — 그래서 다 지워질 상황이면 하나도 안 지운다.
   assert.ok(searchProducts(cat, "하는", 5).matched > 0, "흔한 말만 물었더니 통째로 0건이 됐다");
 });
+
+test("🔴 질문의 마지막 낱말 하나만 걸린 제품은 누른다 — 어미는 낱말이 아니다", () => {
+  // `있어` 는 카탈로그에서 **딱 한 제품의 소개문 산문**에만 나온다 → df=1 → idf 최대.
+  // 그래서 *"사고 난 곳 있어?"* 의 1등이 `사고` 를 가진 교통 제품이 아니라 그 상권 제품이었다.
+  // 드묾을 정보로 읽는 idf 가 어미에서는 정확히 뒤집힌다.
+  const cat = { products: [
+    { product_id: "commerce_flow_yearly",
+      display: { title: "서울 인허가 개·폐업 흐름", summary: "수십 년치가 쌓여 있어 장기 추세를 봅니다." },
+      usage_patterns: [] },
+    { product_id: "traffic_incident",
+      display: { title: "동네 교통량 × 돌발" },
+      usage_patterns: [pat("by_dong", "사고가 난 동네는 어디인가?")] },
+  ] };
+  assert.equal(searchProducts(cat, "사고 난 곳 있어?", 5).products[0].product_id, "traffic_incident",
+    "질문을 끝맺는 말이 주제어를 이겼다");
+
+  // ⚠️ 지우지 않고 누른다 — 마지막 낱말이 실질 명사인 질의까지 0건이 되면 안 된다.
+  assert.ok(searchProducts(cat, "무슨 사고", 5).matched > 0, "누른다는 것이 지운다가 됐다");
+  // 낱말이 하나뿐이면 '무엇을 묻는지'와 '어떻게 묻는지'가 갈리지 않는다 — 규칙을 쉰다.
+  assert.equal(searchProducts(cat, "사고", 5).products[0].product_id, "traffic_incident");
+});
+
+test("🔑 컬럼 설명도 신호다 — 소개문은 제품을 줄이느라 어휘를 잃는다", () => {
+  // `culture_boxoffice_daily` 소개문에는 "연극"·"뮤지컬"이 없고 컬럼 설명에만 있다.
+  // 컬럼을 안 보던 동안 *"연극 보러 어디 갈까"* 는 **0건**이었다 — 데이터는 있는데.
+  const cat = { products: [
+    { product_id: "culture_boxoffice_daily",
+      display: { title: "공연 예매 랭킹", summary: "공연 예매 순위를 매일 기록합니다." },
+      columns: [{ name: "genre", description: "장르(연극·뮤지컬·클래식)" }],
+      usage_patterns: [] },
+    { product_id: "weather_grid", display: { title: "격자 기상" }, usage_patterns: [] },
+  ] };
+  assert.equal(searchProducts(cat, "연극", 5).products[0].product_id, "culture_boxoffice_daily");
+});
+
+test("🔑 한 글자도 버리지 않는다 — 단 통째로 맞을 때만, 무게는 절반", () => {
+  // `비` 는 날씨 질의의 핵심어인데 길이 컷에 걸려 사라졌고, *"내일 비 오나?"* 가 상권
+  // 제품을 물어 왔다. 반대로 접두로 풀면 `수` 하나가 49제품에 걸린다 — 완전 일치만 센다.
+  const cat = { products: [
+    { product_id: "weather_x", display: { title: "동네 혼잡 × 날씨" },
+      columns: [{ name: "pty", description: "강수 형태(비/눈)" }], usage_patterns: [] },
+    { product_id: "commerce_y", display: { title: "업종 비중 분포" }, usage_patterns: [] },
+  ] };
+  assert.equal(searchProducts(cat, "내일 비 오나?", 5).products[0].product_id, "weather_x");
+  // `비` 가 "비중" 에 접두로 걸리면 상권 제품이 따라 올라온다 — 한 글자는 그러면 안 된다
+  assert.ok(!searchProducts(cat, "내일 비 오나?", 5).products
+    .some((p) => p.product_id === "commerce_y" && p.matched_terms.includes("비")));
+});
+
+test("🔴 숫자에서는 꼬리를 떼지 않는다 — 조사가 아니라 단위를 지우게 된다", () => {
+  // `20대`→`20` 이 "**20**년 이상 업력" 에 걸려, *"20대 많은 동네"* 의 1등이 인구 제품이
+  // 아니라 상권 업력 제품이었다. 조사는 한글이다 — 떼고 숫자가 남으면 조사가 아니었다.
+  const cat = { products: [
+    { product_id: "citydata_ppltn_demographics",
+      display: { title: "방문객 인구통계 패턴", summary: '"20대는 언제 몰리나"에 답합니다.' },
+      usage_patterns: [] },
+    { product_id: "commerce_age_band",
+      display: { title: "업력 구간별 업소 분포", summary: "1년 미만부터 20년 이상까지 업력 구간으로 나눴습니다." },
+      usage_patterns: [] },
+  ] };
+  const out = searchProducts(cat, "20대 많은 동네", 5);
+  assert.equal(out.products[0].product_id, "citydata_ppltn_demographics");
+  assert.equal(out.matched, 1, "`20대` 가 `20년` 에 걸렸다");
+});

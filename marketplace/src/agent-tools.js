@@ -124,10 +124,21 @@ const HAY_WEIGHT = { intro: 4, pattern: 3, question: 2, text: 1 };
 
 // 한국어는 조사가 붙어 낱말이 어긋난다("장소가" vs "장소"). 형태소 분석기를 넣을 자리는
 // 아니므로 **꼬리 한 글자를 떼어 본다** — 조사 대부분이 1음절이라 이것만으로 크게 는다.
-const forms = (tok) => (tok.length >= 3 ? [tok, tok.slice(0, -1)] : [tok]);
+//
+// 🔴 **숫자만 남는 꼬리는 떼지 않는다.** 조사는 한글이므로, 떼고 나서 숫자로 끝나면 그건
+//    조사를 지운 게 아니라 **단위를 지운 것**이다. `20대`→`20` 이 "**20**년 이상 업력"에
+//    걸려 *"20대 많은 동네"* 의 1등이 인구 제품이 아니라 상권 업력 제품이었다(실측 2026-08-12).
+const forms = (tok) => {
+  if (tok.length < 3) return [tok];
+  const stem = tok.slice(0, -1);
+  return /[0-9]$/.test(stem) ? [tok] : [tok, stem];
+};
 
+// 🔑 **한 글자도 버리지 않는다** — `비`·`눈` 은 날씨 질의의 핵심어인데 길이 컷에 걸려
+//    통째로 사라졌다("내일 비 오나?" 가 상권 제품을 물어 왔다). 대신 한 글자는 `hitsIn` 이
+//    **완전 일치만** 인정한다 — 접두로 풀면 `수` 하나가 49제품에 걸린다.
 const tokenize = (s) => String(s || "").toLowerCase()
-  .split(/[^0-9a-z가-힣]+/).filter((w) => w.length >= 2);
+  .split(/[^0-9a-z가-힣]+/).filter(Boolean);
 
 // 말뭉치도 같은 규칙으로 쪼갠다. 길이 2 컷을 여기엔 두지 않는다 — "구"·"동" 같은 한 글자
 // 낱말이 통째로 사라지면 접두 비교의 상대가 없어진다(질의 쪽만 2자 이상을 요구한다).
@@ -161,7 +172,14 @@ function haystacks(p) {
     patternWords: patterns.map((u) => words(stripExamples(u.question_ko))),
     intro: words([p.display?.title, p.display?.summary].join(" ")),
     question: words(stripExamples(p.product_question)),
-    text: words([p.description, String(p.product_id || "").replace(/_/g, " ")].join(" ")),
+    // 🔑 **컬럼 설명이 가장 구체적인 증거다** — 소개문은 제품을 한 줄로 줄이느라 어휘를
+    //    잃는다(`culture_boxoffice_daily` 소개문에 "연극"·"뮤지컬"이 없지만 컬럼 설명에는
+    //    있다). 885개 컬럼이 담은 말이 그냥 놀고 있었다. 무게는 가장 낮게 둔다 —
+    //    "자치구명"처럼 전 제품에 있는 것이 태반이라 순위를 만들 자격은 없고,
+    //    **0건을 면하게 하는 쪽**이 이 층의 몫이다(흔한 것은 idf 가 알아서 누른다).
+    text: words([p.description, String(p.product_id || "").replace(/_/g, " "),
+      ...(Array.isArray(p.columns) ? p.columns.map((c) => `${c?.name ?? ""} ${c?.description ?? ""}`) : []),
+    ].join(" ")),
   };
 }
 
@@ -170,7 +188,9 @@ function haystacks(p) {
 //    에 걸려 **60제품 중 29개**에 점수를 뿌렸다(실측 2026-08-12). 조사·어미는 낱말 **뒤**에
 //    붙으므로 접두 일치가 맞다 — "장소가".startsWith("장소") 는 그대로 걸리고,
 //    "차지하는".startsWith("하는") 은 걸리지 않는다.
-const hitsIn = (tok, bag) => forms(tok).some((f) => bag.some((w) => w.startsWith(f)));
+const hitsIn = (tok, bag) => (tok.length === 1
+  ? bag.includes(tok)                                   // 한 글자는 통째로 맞을 때만
+  : forms(tok).some((f) => bag.some((w) => w.startsWith(f))));
 
 // 낱말이 이 제품 어딘가에 있나 — df 를 셀 때 층을 가리지 않는다.
 const anyHit = (tok, h) =>
@@ -216,9 +236,29 @@ function idfOf(tokens, products) {
   return idf;
 }
 
+// 🔴 **한국어는 서술어가 끝에 온다.** 질의의 마지막 낱말 하나만 걸렸다면 그건 "무엇을
+//    묻는지"가 아니라 **"어떻게 묻는지"** 가 걸린 것이다 — 어미는 낱말이 아니다.
+//
+//    df 로는 못 잡는 부류라 따로 둔다. `있어` 는 카탈로그에서 **딱 한 제품의 소개문 산문**
+//    ("수십 년치가 쌓여 **있어** 장기 추세를 봅니다")에만 나온다 → df=1 → idf 가 **최대**가
+//    되어, *"사고 난 곳 있어?"* 의 1등이 `사고` 를 가진 교통 제품이 아니라 그 상권 제품이었다
+//    (실측 2026-08-12). **드묾을 정보로 읽는 idf 가 어미에서는 정확히 뒤집힌다.**
+//
+// ⚠️ 지우지 않고 **누른다.** 마지막 낱말이 실질 명사인 질의("임대료 싼 동네" — 앞의 둘은
+//    카탈로그에 없다)까지 0건이 되면 "맞는 데이터가 없다"로 읽힌다. 순위만 밀면 된다.
+const TAIL_ONLY_PENALTY = 0.25;
+
+// 한 글자가 통째로 맞아도 세 글자가 맞은 것과 같은 증거일 수는 없다. `비` 처럼 그것만이
+// 유일한 실질 신호인 질의는 살리되, `이번 **달** 콘서트` 의 `달` 이 문화행사를 이기지는
+// 않게 절반만 준다(실측 2026-08-12 — 반만 안 주면 `달`·`갈` 이 1위를 뒤집었다).
+const ONE_CHAR_WEIGHT = 0.5;
+
 export function searchProducts(body, query, limit = 5) {
   const products = Array.isArray(body?.products) ? body.products : [];
-  const tokens = [...new Set(tokenize(query))];
+  const raw = tokenize(query);
+  const tokens = [...new Set(raw)];
+  // 낱말이 하나뿐이면 "무엇을 묻는지"와 "어떻게 묻는지"가 갈리지 않는다 — 규칙을 쉰다.
+  const tail = tokens.length > 1 ? raw[raw.length - 1] : null;
   const idf = idfOf(tokens, products);
 
   const scored = products.map((p) => {
@@ -244,8 +284,9 @@ export function searchProducts(body, query, limit = 5) {
         : h.patternWords.some((b) => hitsIn(t, b)) ? HAY_WEIGHT.pattern
         : hitsIn(t, h.question) ? HAY_WEIGHT.question
         : hitsIn(t, h.text) ? HAY_WEIGHT.text : 0;
-      if (where) { score += where * w; hits.add(t); }
+      if (where) { score += where * w * (t.length === 1 ? ONE_CHAR_WEIGHT : 1); hits.add(t); }
     }
+    if (tail && hits.size === 1 && hits.has(tail)) score *= TAIL_ONLY_PENALTY;
     matchedPatterns.sort((a, b) => b.weight - a.weight);
     return { p, score, hits, matchedPatterns };
   }).filter((x) => x.score > 0)
