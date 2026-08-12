@@ -823,9 +823,21 @@ async function sources(env) {
 const PUB_DOMAIN = "substr(product_id, 1, instr(product_id, '_') - 1)";
 
 async function publication(env, days) {
-  const since = `-${days} days`;
+  // 🔴 집계 창은 KST 하루 경계로 자른다 — **오늘 포함 N일**(2026-08-11). 예전의
+  // `datetime('now','-N days')` 롤링 창은 경계가 UTC '지금 시각' 기준이라 ① 첫날이
+  // 시각만큼 잘려 히트맵 첫 칸이 부분 집계가 되고 ② "며칠치를 셌나"를 화면이 말할 수
+  // 없었다. 실행 기록 축(observed_date_kst, 오늘 포함 N일)과 같은 규약으로 맞춘다.
+  // attempted_at 은 UTC 라 KST 시작일 자정을 UTC 로 되돌려(-9h) 원 컬럼과 비교한다 —
+  // 컬럼에 date() 를 씌우지 않는 형태라 인덱스를 태울 수 있다.
+  const startKst = `-${days - 1} days`;
+  const SINCE = "datetime(date('now','+9 hours', ?), '-9 hours')";
 
-  const [byDomain, byStage, worst, mismatch, recent, byDay] = await Promise.all([
+  const [win, byDomain, byStage, worst, mismatch, recent, byDay] = await Promise.all([
+    // 집계 기간 — 화면이 "이 기간을 셌습니다"를 말할 근거. 질의 경계와 **같은 규약**
+    // (date('now','+9 hours'))으로 서버가 계산한다 — 화면이 따로 셈하면 언젠가 어긋나고,
+    // 그때 표기는 "이렇게 셌습니다"라는 틀린 말이 된다(SERVE 배열을 한 곳에 둔 그 이유).
+    safeRows(env,
+      "SELECT date('now','+9 hours', ?) AS from_day, date('now','+9 hours') AS to_day", startKst),
     // 분야별 rollup. **전체 합계는 화면에서 SUM 한다** — 같은 것을 두 번 묻지 않는다.
     safeRows(env,
       "SELECT " + PUB_DOMAIN + " AS domain, COUNT(*) AS attempts, " +
@@ -833,28 +845,28 @@ async function publication(env, days) {
       "SUM(outcome = 'failed') AS failed, SUM(outcome = 'skipped_retained') AS skipped, " +
       "SUM(published_row_count <> d1_row_count) AS row_mismatch, " +
       "COUNT(DISTINCT product_id) AS products, MAX(attempted_at) AS last_at " +
-      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
-      "GROUP BY domain ORDER BY attempts DESC", since),
+      "FROM _publication_ledger WHERE attempted_at >= " + SINCE + " " +
+      "GROUP BY domain ORDER BY attempts DESC", startKst),
     // 어느 **단계**에서 깨지나 — write / read_back / source_primary_key / gate.
     // 실패를 한 덩어리로 세면 "쓰다 실패"와 "쓰고 나서 확인 실패"가 같아 보인다.
     safeRows(env,
       "SELECT outcome, stage, COUNT(*) AS n, MAX(attempted_at) AS last_at " +
-      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
-      "AND outcome <> 'published' GROUP BY outcome, stage ORDER BY n DESC", since),
+      "FROM _publication_ledger WHERE attempted_at >= " + SINCE + " " +
+      "AND outcome <> 'published' GROUP BY outcome, stage ORDER BY n DESC", startKst),
     // 어느 **제품**에 몰렸나. reason 은 표에 안 싣고 title 로만 쓴다(화면 문구 규약).
     safeRows(env,
       "SELECT product_id, " + PUB_DOMAIN + " AS domain, outcome, stage, COUNT(*) AS n, " +
       "MAX(attempted_at) AS last_at, MAX(reason) AS reason " +
-      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
+      "FROM _publication_ledger WHERE attempted_at >= " + SINCE + " " +
       "AND outcome IN ('failed', 'degraded') " +
-      "GROUP BY product_id, outcome, stage ORDER BY n DESC LIMIT 12", since),
+      "GROUP BY product_id, outcome, stage ORDER BY n DESC LIMIT 12", startKst),
     // 행수 불일치 — 세 숫자(원본·발행·D1)가 어긋난다. 어느 게 맞는지는 콘솔이 판단하지 않고
     // **그대로 드러낸다**(F-3: 모르는 것을 지어내지 않는다).
     safeRows(env,
       "SELECT product_id, " + PUB_DOMAIN + " AS domain, source_row_count, published_row_count, " +
       "d1_row_count, api_smoke_status, rollback_status, attempted_at " +
-      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
-      "AND published_row_count <> d1_row_count ORDER BY attempted_at DESC LIMIT 10", since),
+      "FROM _publication_ledger WHERE attempted_at >= " + SINCE + " " +
+      "AND published_row_count <> d1_row_count ORDER BY attempted_at DESC LIMIT 10", startKst),
     // 마지막 성공 발행 — 성공 대장은 행이 적어 단독 카드로 두지 않고 각주로 쓴다.
     safeRows(env,
       "SELECT product_id, published_at, serving_status, published_row_count, " +
@@ -867,12 +879,16 @@ async function publication(env, days) {
       "COUNT(*) AS attempts, SUM(outcome = 'failed') AS failed, " +
       "SUM(outcome = 'degraded') AS degraded, " +
       "SUM(published_row_count <> d1_row_count) AS row_mismatch " +
-      "FROM _publication_ledger WHERE attempted_at >= datetime('now', ?) " +
-      "GROUP BY day, domain", since),
+      "FROM _publication_ledger WHERE attempted_at >= " + SINCE + " " +
+      "GROUP BY day, domain", startKst),
   ]);
 
   return {
     ok: byDomain.ok,
+    // 집계 기간(KST, 오늘 포함 N일). 못 구했으면 null — 화면은 지어내지 않고 표기를 숨긴다.
+    window: win.ok && win.rows[0]
+      ? { from: win.rows[0].from_day, to: win.rows[0].to_day, days }
+      : null,
     by_domain: byDomain.rows, by_stage: byStage.rows,
     worst: worst.rows, row_mismatch: mismatch.rows, recent_published: recent.rows,
     by_day: byDay.rows,

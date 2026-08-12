@@ -392,6 +392,10 @@ tbody tr:hover .kbtn { border-color:var(--line-strong); }
 
 p.hint { font-size:11.5px; color:var(--faint); line-height:1.55; }
 p.hint b { color:var(--muted); }
+/* 집계 기간 캡션 — KPI·카드 묶음이 "며칠치인가"를 말하는 한 줄. 표기 값은 앱이 채운다. */
+.winnote { font-size:12px; color:var(--faint); margin:2px 2px 10px;
+           font-variant-numeric:tabular-nums; }
+.winnote[hidden] { display:none; }
 
 /* ── 히트맵 ─────────────────────────────────────────────────────────────────── */
 .hm { border-collapse:collapse; }
@@ -399,7 +403,12 @@ p.hint b { color:var(--muted); }
 .hm .cell { display:block; min-width:26px; height:20px; border-radius:4px; background:var(--bg);
             border:1px solid var(--line); font-family:var(--mono); font-size:10px;
             line-height:18px; text-align:center; color:transparent; }
-.hm .cell.ok   { background:var(--ok-soft); border-color:transparent; }
+/* ok 는 진한 초록 테두리 + OK 글자 — 연초록 바탕만으로는 기록 없는 칸(none)과 구분이
+   안 됐다(실측 지적). none 은 바탕·테두리를 그대로 두고 회색 None 글자만 얹는다 —
+   '괜찮았던 날'(ok)과 '모르는 날'(none)은 다른 사실이라 색과 글자 둘 다로 가른다. */
+.hm .cell.ok   { background:var(--ok-soft); border-color:var(--ok); color:var(--ok);
+                 font-size:9px; font-weight:700; }
+.hm .cell.none { color:var(--faint); font-size:9px; }
 .hm .cell.warn { background:var(--amber-soft); border-color:#fedf89; color:var(--amber-ink); }
 .hm .cell.bad  { background:var(--red-soft); border-color:#fda29b; color:var(--red-ink); font-weight:700; }
 .hm .cell.click { cursor:pointer; }
