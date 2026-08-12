@@ -162,38 +162,58 @@ const FAT_PRODUCT = {
   ],
 };
 
-test("list_products — 무거운 필드는 빼되 **검색 신호는 남긴다**", async () => {
+// 🔴 **목록은 디렉터리다** (2026-08-13). 전에는 패턴 질문 431건을 "검색 신호"로 남겼는데,
+// 그렇게 해도 제품 60종에서 **224KB** 였다. PlayMCP 심사 정책은 24k 를 넘는 tool response 를
+// **에러로 처리한다** — 9.1배라 저쪽 AI 채팅에서는 이 도구가 애초에 성립하지 않았다.
+// 그 신호는 이제 `search_products` 가 **서버에서** idf 로 훑는다(상위 3위 안 57/57) —
+// AI 컨텍스트로 옮겨 훑게 할 이유가 없어졌다.
+test("list_products — 고르는 데 필요한 것만 남긴다(디렉터리)", async () => {
   const p = (await listPayload([FAT_PRODUCT])).products[0];
-  // 남는 것 — 소비자가 제품을 고르는 데 쓰는 값
+  assert.equal(p.product_id, "p");
   assert.equal(p.product_question, "대표질문?");
-  assert.deepEqual(p.usage_patterns, [
-    { pattern_id: "cohort_survival", question_ko: "창업 후 몇 년을 버티나?" },
-    { pattern_id: "top_dong", question_ko: "어느 동이 많나?" },
-  ]);
-  assert.deepEqual(p.column_names, ["gu", "event_date"]);
   assert.equal(p.pattern_count, 2);
-  assert.equal(p.column_count, 2);
+  // 개수는 둘로 나뉜다 — "있다"와 "지금 실행할 수 있다"는 다른 뜻이다
+  assert.equal(p.runnable_pattern_count, 1);
   // 빠지는 것 — 목록 단계에서 안 쓰는데 응답의 대부분을 차지하던 것들
-  for (const u of p.usage_patterns) {
-    for (const k of ["sql", "axes", "requires", "insight_sample_ko", "verified_at", "verified_rows", "allow_empty"]) {
-      assert.equal(k in u, false, `${k} 가 목록에 남았다`);
-    }
+  for (const k of ["usage_patterns", "column_names", "columns", "sql"]) {
+    assert.equal(k in p, false, `${k} 가 목록에 남았다 — 24k 상한을 다시 넘긴다`);
   }
-  assert.equal("columns" in p, false, "컬럼 전문(설명 포함)이 목록에 남았다");
 });
 
-test("메타가 없는 제품은 개수 0 · 빈 목록 — 필드를 지어내지 않는다", async () => {
+test("메타가 없는 제품은 개수 0 — 필드를 지어내지 않는다", async () => {
   const p = (await listPayload([{ product_id: "p" }])).products[0];
   assert.equal(p.pattern_count, 0);
-  assert.equal(p.column_count, 0);
-  assert.deepEqual(p.usage_patterns, []);
-  assert.deepEqual(p.column_names, []);
+  assert.equal(p.runnable_pattern_count, 0);
+  assert.equal(p.product_question, null);
 });
 
-test("목록이 상세로 가는 길을 알려 준다", async () => {
+test("목록이 검색·상세로 가는 길을 알려 준다", async () => {
   const payload = await listPayload([FAT_PRODUCT]);
-  assert.match(payload.detail_hint, /describe_product/);
-  assert.match(payload.detail_hint, /runnable/);   // 실행 가능 여부는 목록이 말하지 않는다
+  assert.equal(payload.total_products, 1);
+  assert.match(payload.hint, /search_products/);
+  assert.match(payload.hint, /describe_product/);
+});
+
+// ── 24k 상한 (PlayMCP 심사 정책: 초과 시 **에러로 처리**) ────────────────────────
+const LIMIT_24K = 24 * 1024;
+const bytes = (s) => new TextEncoder().encode(s).length;
+
+test("list_products — 제품이 많아져도 24k 를 넘지 않는다", async () => {
+  // 운영 실측(2026-08-13)은 60종이었다. 그 4배로도 버텨야 데이터가 늘 때 조용히 안 깨진다.
+  const many = Array.from({ length: 240 }, (_, i) => ({
+    ...FAT_PRODUCT, product_id: `product_number_${i}`,
+    product_question: `이 제품 ${i} 은 무엇을 답해 주나요? 아주 긴 대표 질문 문장입니다.`,
+  }));
+  const payload = await listPayload(many);
+  const size = bytes(JSON.stringify(payload));
+  assert.ok(size <= LIMIT_24K, `목록이 ${size}B 로 24k 를 넘었다`);
+  // 잘렸다면 **반드시 말해야 한다** — 조용히 자르면 소비자는 그게 전부인 줄 안다
+  if (payload.products.length < many.length) {
+    assert.equal(payload.truncated, true);
+    assert.match(payload.truncated_note, /search_products/);
+    assert.ok(payload.truncated_note.includes(String(many.length)),
+      "전체가 몇 종인지 말하지 않으면 소비자는 그게 전부인 줄 안다");
+  }
 });
 
 test("mcp.js 는 skill.js 를 import 하지 않는다(#172 구조 회귀 방지)", async () => {
@@ -239,12 +259,37 @@ test("query_product intent 인자 — trace 로 옮겨 싣고, 슬러그 아니�
   assert.equal(trace2.intent, "other");
 });
 
-test("tools/call 인증 실패 → 키 안내(isError)", async () => {
+// 🔴 **인증 실패는 HTTP 401 이다** (2026-08-13). 전에는 200 봉투 안에 isError 로 넣었는데,
+// 그러면 호스트가 "인증 실패"와 "도구가 실패했다"를 구분하지 못한다. PlayMCP 심사 정책이
+// 못 박는다: "인증이 필요한 상황에 인증 정보가 없거나 만료된 경우 401(unauthorized) Http
+// 응답이 필요합니다." REST(/api/v1/*)는 이미 401 을 주는데 MCP 만 200 이었다.
+test("tools/call 인증 실패 → HTTP 401 + WWW-Authenticate (봉투에 숨기지 않는다)", async () => {
   const deps = mkDeps({ authenticate: async () => ({ error: jsonRes({ type: "unauthorized" }, 401) }) });
   const res = await handleMcp(rpc("tools/call", { name: "check_quota", arguments: {} }), {}, {}, deps);
+  assert.equal(res.status, 401, "200 봉투에 숨기면 호스트가 인증 실패를 못 읽는다");
+  assert.match(res.headers.get("www-authenticate") || "", /^Bearer /);
+  // OAuth 디스커버리를 약속하지 않는다 — 우리는 커스텀 헤더 방식이라 그 문이 없다
+  assert.doesNotMatch(res.headers.get("www-authenticate") || "", /resource_metadata/);
   const body = await res.json();
-  assert.equal(body.result.isError, true);
-  assert.match(body.result.content[0].text, /키가 없거나/);
+  assert.equal(body.status, 401);
+  // 안내 문구는 버리지 않고 problem+json 으로 옮겼다
+  assert.match(body.detail, /Bearer ask_/);
+  assert.match(body.detail, /key_issuance/);
+});
+
+test("폐기된 키(403)는 상태를 그대로 준다 — 401 로 바꾸지 않는다", async () => {
+  // 403 은 "키는 있는데 못 쓴다"다. 401 로 바꾸면 호스트가 재인증을 시도해 헛돈다.
+  const deps = mkDeps({ authenticate: async () => ({ error: jsonRes({ type: "revoked" }, 403) }) });
+  const res = await handleMcp(rpc("tools/call", { name: "check_quota", arguments: {} }), {}, {}, deps);
+  assert.equal(res.status, 403);
+  assert.equal(res.headers.get("www-authenticate"), null);
+});
+
+test("인증 실패해도 trace 에 상태가 남는다 — 관측이 끊기지 않는다", async () => {
+  const trace = {};
+  const deps = mkDeps({ authenticate: async () => ({ error: jsonRes({ type: "unauthorized" }, 401) }) });
+  await handleMcp(rpc("tools/call", { name: "check_quota", arguments: {} }), {}, trace, deps);
+  assert.equal(trace.status, 401);
 });
 
 test("initialize/tools-list 는 핸들러(데이터) 미호출", async () => {
@@ -598,7 +643,29 @@ test("search_products — 응답이 목록보다 훨씬 작다(도구의 존재 
   const listed = JSON.parse((await (await handleMcp(
     rpc("tools/call", { name: "list_products", arguments: {} }), {}, {},
     mkDeps({ handleCatalog: async () => jsonRes(SEARCH_CATALOG) }))).json()).result.content[0].text);
-  assert.ok(JSON.stringify(out).length < JSON.stringify(listed).length);
+  // 목록이 디렉터리가 된 뒤로도 검색이 더 작아야 한다 — 검색은 상위 몇 건만 싣는다
+  // ⚠️ 전제가 바뀌었다(2026-08-13). 목록이 224KB 던 시절에는 "검색이 훨씬 작다"가 곧 이 도구의
+  // 존재 이유였지만, 지금은 목록도 디렉터리라 작다 — 제품 두세 개짜리 카탈로그에서는 검색이
+  // 오히려 크다(근거 matched_terms·matched_patterns 를 싣기 때문이다).
+  // 그러니 크기가 아니라 **카탈로그가 커져도 검색은 안 커진다**를 못 박는다. 그게 실제 성질이다.
+  assert.ok(JSON.stringify(out).length < JSON.stringify(listed).length * 3,
+    "카탈로그 두 종짜리에서 검색이 목록의 3배를 넘으면 근거를 과하게 싣는 것이다");
+  const big = {
+    products: Array.from({ length: 200 }, (_, i) => ({
+      ...SEARCH_CATALOG.products[1], product_id: `filler_${i}`,
+      product_question: `창업 후 몇 년을 버티나 ${i}?`,
+    })).concat(SEARCH_CATALOG.products[0]),
+  };
+  const depsBig = mkDeps({ handleCatalog: async () => jsonRes(big) });
+  const outBig = JSON.parse((await (await handleMcp(
+    rpc("tools/call", { name: "search_products", arguments: { query: "20대 장소" } }),
+    {}, {}, depsBig)).json()).result.content[0].text);
+  const listBig = JSON.parse((await (await handleMcp(
+    rpc("tools/call", { name: "list_products", arguments: {} }), {}, {}, depsBig)).json())
+    .result.content[0].text);
+  assert.ok(JSON.stringify(outBig).length < JSON.stringify(listBig).length,
+    `카탈로그 201종에서 검색 ${JSON.stringify(outBig).length}B 가 목록 ${JSON.stringify(listBig).length}B 보다 작지 않다`);
+  assert.ok(outBig.products.length <= 10, "검색은 상위 몇 건만 싣는다");
 });
 
 // 🔴 흔한 낱말이 점수를 지배하면 검색이 뒤집힌다 (운영 실측 2026-08-10).
@@ -829,4 +896,39 @@ test("자유형 맵은 남아 있되 값 제약을 description 으로 말한다"
   }
   assert.ok(/배열/.test(byName.run_pattern.inputSchema.properties.params.description),
     "배열 파라미터 사용법이 사라졌다");
+});
+
+// ── 호스트가 보는 전송 계층 (2026-08-13) ────────────────────────────────────────
+// 브라우저에서 도는 MCP 호스트는 프리플라이트에서 허용받지 못한 헤더를 **본 요청에 싣지
+// 못한다** — 사양이 협상 뒤 모든 요청에 요구하는 `MCP-Protocol-Version` 이 빠져 있었다.
+// 그러면 요청이 아예 안 나가 서버 로그에는 흔적이 없고 호스트에는 "도구 0개"로 보인다.
+import worker from "../src/index.js";
+
+const ctx = { waitUntil() {}, passThroughOnException() {} };
+
+test("CORS 프리플라이트가 MCP 규격 헤더를 허용한다", async () => {
+  const res = await worker.fetch(new Request("https://x/mcp", {
+    method: "OPTIONS",
+    headers: {
+      origin: "https://claude.ai",
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "content-type,authorization,mcp-protocol-version",
+    },
+  }), {}, ctx);
+  assert.equal(res.status, 204);
+  const allowed = (res.headers.get("access-control-allow-headers") || "").toLowerCase();
+  for (const h of ["authorization", "content-type", "accept", "mcp-protocol-version",
+                   "mcp-session-id", "last-event-id"]) {
+    assert.ok(allowed.includes(h), `프리플라이트가 ${h} 를 막는다 — 브라우저 호스트가 못 붙는다`);
+  }
+  // 응답 헤더는 노출을 따로 허용해야 스크립트가 읽는다
+  const exposed = (res.headers.get("access-control-expose-headers") || "").toLowerCase();
+  assert.ok(exposed.includes("x-request-id"), "장애 문의의 실마리를 못 읽는다");
+});
+
+test("GET /mcp 405 에 Allow 헤더가 있다 (RFC 9110)", async () => {
+  // SSE 스트림을 열려고 GET 을 먼저 두드리는 호스트가 있다 — 지원 여부를 응답에서 읽어야 한다
+  const res = await worker.fetch(new Request("https://x/mcp", { method: "GET" }), {}, ctx);
+  assert.equal(res.status, 405);
+  assert.equal(res.headers.get("allow"), "POST, OPTIONS");
 });

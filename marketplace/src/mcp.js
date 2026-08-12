@@ -8,10 +8,10 @@
 // 툴(7): search_products · list_products · describe_product · preview_product · query_product · run_pattern ·
 // check_quota. run_pattern 은 #118 실행 계약(2026-08-07 확정)으로 P1 에서 승격.
 
-import { burstProblem, normalizeIntent, normalizeMcpClient, ATTRIBUTION } from "./shared.js";
+import { burstProblem, normalizeIntent, normalizeMcpClient, problem, ATTRIBUTION } from "./shared.js";
 // AI 소비자 공용 성형 — 채팅(#159)과 같은 모양을 보게 한다. `TOOLS` 는 여기가 정본이고
 // 저쪽은 인자로 받아 읽기만 한다(순환 없음).
-import { slimProductList, buildDataContext, searchProducts } from "./agent-tools.js";
+import { buildDataContext, searchProducts } from "./agent-tools.js";
 
 // 🔴 **한 버전만 지원하면 구세대 클라이언트가 통째로 떨어진다** (2026-08-12 PlayMCP 3차 반려).
 // 사양(Lifecycle)은 "서버가 요청받은 버전을 지원하면 **같은 값으로 응답해야 한다**(MUST),
@@ -80,7 +80,7 @@ export const TOOLS = [
     name: "list_products",
     annotations: annotate("서울시 데이터 제품 목록"),
     description:
-      "서울시 데이터 패턴 서비스에서 조회 가능한 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 전체를 훑어야 할 때 쓰고, 질문에 맞는 제품을 고르는 것이 목적이면 search_products 가 빠릅니다. 목록에는 컬럼 이름과 질의 패턴의 질문만 담기므로, 제품을 고른 뒤 describe_product 로 상세를 확인하세요.",
+      "서울시 데이터 패턴 서비스에서 조회 가능한 제품 전체의 목록을 제품id·대표질문·기준시점·패턴 개수만으로 보여줍니다. 무엇이 있는지 훑어볼 때 쓰고, 질문에 맞는 제품을 고르는 것이 목적이면 search_products 가 정확하고 빠릅니다. 컬럼과 질의 패턴은 제품을 고른 뒤 describe_product 로 확인하세요.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -130,7 +130,7 @@ export const TOOLS = [
         },
         from: { type: "string", description: "시간축 시작(포함)" },
         to: { type: "string", description: "시간축 끝(포함)" },
-        limit: { type: "integer", minimum: 1, maximum: 5000 },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "돌려받을 행 수(기본 20, 최대 100 — 응답 크기 상한 때문). 더 필요하면 cursor 로 이어 받으세요." },
         cursor: { type: "string", description: "다음 페이지 커서(이전 응답의 next_cursor)" },
         intent: {
           type: "string",
@@ -184,6 +184,49 @@ const rpcError = (id, code, message) => ({ jsonrpc: "2.0", id, error: { code, me
 
 const errText = (text) => ({ content: [{ type: "text", text }], isError: true });
 const okJson = (data) => ({ content: [{ type: "text", text: JSON.stringify(data) }] });
+
+// 🔴 **PlayMCP 심사 정책의 하드 리밋**: *"Tool 의 Response 가 24k 를 초과하면 **에러로
+// 처리되기 때문에** 반려 사유가 될 수 있습니다."* 권고가 아니라 저쪽 플랫폼이 응답을
+// 버리는 선이다. 실측(2026-08-13)으로 `list_products` 224KB(9.1배) · `query_product`
+// limit=1000 이 464KB(18.9배)였다 — AI 가 가장 먼저 부르는 도구와 데이터를 실제로 주는
+// 도구가 둘 다 넘었다.
+// 20KB 로 잡는 이유: 24k 는 저쪽 계산 기준(바이트/문자)이 우리와 다를 수 있어 여유를 둔다.
+const RESULT_BUDGET = 20 * 1024;
+
+const utf8Len = (s) => new TextEncoder().encode(s).length;
+
+// 조회 행 수 — 실측 약 470B/행이라 100행이면 이미 24k 를 넘는다. 상한을 스키마(5000)와
+// 따로 두는 이유: REST 는 그 상한이 맞고(파일로 받아 쓰는 소비자다), 넘치는 건 **MCP 만**이다.
+const DEFAULT_ROWS = 20;
+const MAX_ROWS = 100;
+const clampRows = (n) => {
+  const v = Math.trunc(Number(n));
+  return Number.isFinite(v) && v > 0 ? Math.min(v, MAX_ROWS) : DEFAULT_ROWS;
+};
+
+/**
+ * 예산 안에 들어갈 때까지 목록을 줄인다. **자르면 반드시 말한다** — 조용히 자르면
+ * 소비자는 그게 전부인 줄 안다(이 리포가 "조용한 유실"을 금지하는 것과 같은 이유).
+ *
+ * @param {object} payload  `listKey` 가 가리키는 배열을 가진 응답 본문
+ * @param {string} listKey  줄일 배열의 이름
+ * @param {function} note   (남긴수, 전체수) => 잘렸음을 알리는 문장
+ */
+function fitBudget(payload, listKey, note) {
+  const items = payload[listKey];
+  if (!Array.isArray(items)) return payload;
+  const total = items.length;
+  if (utf8Len(JSON.stringify(payload)) <= RESULT_BUDGET) return payload;
+  // 이분 탐색 — 항목 크기가 들쭉날쭉해도 한 번에 맞는 지점을 찾는다
+  let lo = 0, hi = total;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    const probe = { ...payload, [listKey]: items.slice(0, mid), truncated: true, truncated_note: note(mid, total) };
+    if (utf8Len(JSON.stringify(probe)) <= RESULT_BUDGET) lo = mid;
+    else hi = mid - 1;
+  }
+  return { ...payload, [listKey]: items.slice(0, lo), truncated: true, truncated_note: note(lo, total) };
+}
 
 // 상태별 안내 기본값 — `/api/v1` 의 데이터 질의(preview·query)를 기준으로 쓴 문장이다.
 // 같은 상태 코드라도 툴에 따라 **뜻이 다르면** 아래 툴별 표로 덮는다.
@@ -328,7 +371,39 @@ async function callTool(name, args, ctx) {
     // 컬럼도 같다 — 이름은 "이 축으로 필터되나"를 목록에서 판단하게 하고, 설명은 상세의 몫이다.
     // 성형은 **AI 소비자 공용 층**이 한다(agent-tools.js) — 채팅도 같은 모양을 봐야 하고,
     // 두 벌이 되면 한쪽만 고쳐진다(#159 ②, MCP 담당 조건).
-    return okJson(slimProductList(body));
+    //
+    // 🔴 **그런데 그것으로도 224KB 였다**(2026-08-13 실측, 제품 60종). PlayMCP 는 24k 를
+    // 넘는 tool response 를 **에러로 처리한다** — 9.1배다. 즉 이 도구는 저쪽 AI 채팅에서
+    // 애초에 성립하지 않았다.
+    // 그래서 여기서는 **디렉터리만** 남긴다: 무엇이 있고 무엇으로 답할 수 있나.
+    // ⚠️ 위 주석이 "패턴 질문 431건은 검색 신호라 남긴다"고 적은 판단은 **그 신호를 쓸
+    // 도구가 없던 시절의 것**이다. 지금은 `search_products` 가 같은 텍스트를 **서버에서**
+    // idf 로 훑어 상위 3위 안에 57/57 을 맞춘다(2026-08-08 실측) — 27KB 를 AI 컨텍스트로
+    // 옮겨 훑게 할 이유가 사라졌다. 목록으로 고르려는 소비자는 그 도구로 보낸다.
+    const products = Array.isArray(body.products) ? body.products : [];
+    const runnable = (u) => u && (u.verified_at || u.runnable);
+    const directory = {
+      total_products: products.length,
+      products: products.map((p) => {
+        const pats = Array.isArray(p.usage_patterns) ? p.usage_patterns : [];
+        return {
+          product_id: p.product_id,
+          product_question: p.product_question ?? null,
+          freshness: p.freshness ?? null,
+          // 개수는 남긴다 — 0 이면 "아직 메타가 게시되지 않은 제품"이라 고르는 판단에 쓰인다.
+          // 없는 필드와 빈 목록은 뜻이 다르다.
+          pattern_count: pats.length,
+          runnable_pattern_count: pats.filter(runnable).length,
+        };
+      }),
+      hint:
+        "질문에 맞는 제품을 고르는 것이 목적이면 search_products(query) 가 정확하고 빠릅니다 — " +
+        "제품의 질의 패턴 질문까지 서버에서 훑습니다. 여기서는 무엇이 있는지만 보여 줍니다. " +
+        "컬럼·질의 패턴·실행 가능 여부는 describe_product(product_id) 로 확인하세요.",
+    };
+    return okJson(fitBudget(directory, "products", (kept, total) =>
+      `응답 크기 상한(24k)에 맞춰 ${total}종 중 ${kept}종만 실었습니다 — ` +
+      `전체를 훑는 대신 search_products(query) 로 찾으세요.`));
   }
   if (name === "check_quota") {
     // /api/v1/me 는 본인에게 주는 응답이라 이메일을 담지만, MCP 결과는 LLM 컨텍스트·제3자
@@ -342,7 +417,15 @@ async function callTool(name, args, ctx) {
     if (!args.product_id) return errText("product_id 가 필요합니다.");
     const res = await deps.handleProductBundle(env, args.product_id, request, trace);
     if (res.status === 404) return notFoundWithSuggestions(env, deps, args.product_id, trace);
-    return toToolResult(res, trace);
+    if (res.status >= 400) return toToolResult(res, trace);
+    // 지금은 7.3KB 로 여유가 있지만 **패턴이 늘면 넘는다** — 실측 10건에 7.3KB 이고
+    // DBT#489 가 citydata 에 94건을 얹는다. 그때 조용히 24k 를 넘어 응답이 버려지는 대신
+    // 여기서 잘라 말한다. 자를 때 앞에서부터 남기는 것은 게시 순서(pattern_id 오름차순)가
+    // 곧 소비자가 보는 순서이기 때문이다.
+    const bundle = await res.json();
+    return okJson(fitBudget(bundle, "patterns", (kept, total) =>
+      `응답 크기 상한(24k)에 맞춰 질의 패턴 ${total}건 중 ${kept}건만 실었습니다 — ` +
+      `찾는 패턴이 없으면 search_products(query) 로 질문에 맞는 것을 고르세요.`));
   }
   if (name === "preview_product" || name === "query_product") {
     if (!args.product_id) return errText("product_id 가 필요합니다.");
@@ -363,7 +446,13 @@ async function callTool(name, args, ctx) {
     for (const [k, v] of Object.entries(args.filters || {})) params.set(k, String(v));
     if (args.from) params.set("from", String(args.from));
     if (args.to) params.set("to", String(args.to));
-    if (args.limit) params.set("limit", String(args.limit));
+    // 🔴 행 수는 **예산 안쪽으로 눌러서** 부른다. 실측(2026-08-13) 한 행이 약 470B 라
+    // limit=100 이 47KB(1.9배) · limit=1000 이 464KB(18.9배)로 24k 상한을 넘겼다. 스키마
+    // 상한이 5000 이었으니 AI 가 큰 수를 넣는 순간 응답이 통째로 버려졌다.
+    // 자른 뒤 커서를 주는 방식은 안 된다 — 커서는 **핸들러가 마지막으로 읽은 행** 기준이라
+    // 잘린 행을 건너뛴다(조용한 유실). 그래서 애초에 적게 부른다.
+    if (args.limit) params.set("limit", String(clampRows(args.limit)));
+    else params.set("limit", String(DEFAULT_ROWS));
     if (args.cursor) params.set("cursor", String(args.cursor));
     const res = await deps.handleData(env, args.product_id, params, keyRow, trace, { includeMeta: true });
     if (res.status === 404) return notFoundWithSuggestions(env, deps, args.product_id, trace);
@@ -377,7 +466,14 @@ async function callTool(name, args, ctx) {
     delete body.product_meta;
     const ctx = buildDataContext(meta);
     if (ctx) body.data_context = ctx;
-    return okJson(body);
+    // 눌러서 불렀어도 행이 유난히 넓은 제품이 있다 — 마지막 안전망. 자르면 커서를 버린다
+    // (남겨 두면 소비자가 잘린 구간을 건너뛴 채로 다음 장을 읽는다).
+    const fitted = fitBudget(body, "rows", (kept, total) =>
+      `응답 크기 상한(24k)에 맞춰 ${total}행 중 ${kept}행만 실었습니다. ` +
+      `이어보기 커서는 잘린 구간을 건너뛰게 되므로 싣지 않았습니다 — ` +
+      `filters·from·to 로 범위를 좁혀 다시 부르거나 run_pattern 으로 집계된 답을 받으세요.`);
+    if (fitted.truncated) delete fitted.next_cursor;
+    return okJson(fitted);
   }
   if (name === "run_pattern") {
     if (!args.product_id || !args.pattern_id) return errText("product_id 와 pattern_id 가 필요합니다.");
@@ -487,14 +583,27 @@ async function dispatch(msg, request, env, trace, deps) {
     const { keyRow, error } = await deps.authenticate(env, request);
     if (error) {
       trace.status = error.status;
-      return rpcResult(
-        id,
-        // 발급 방법은 배포마다 갈린다(#110 ②) — 여기서 한쪽을 단정하면 403 인 문을 가리키게 된다.
-        // MCP 클라이언트는 브라우저를 못 여니 **사람이 받아 설정에 넣는다**는 것까지 말해 준다.
-        errText("키가 없거나 유효하지 않습니다 — Authorization: Bearer ask_... 가 필요합니다. " +
-          "키는 사람이 받아 클라이언트 설정에 넣어야 합니다: GET /api/v1/catalog 의 key_issuance 가 " +
-          "이 서버의 발급 방법(google_oauth 이면 브라우저로 /api/v1/auth/google)을 알려 줍니다."),
-      );
+      // 🔴 **HTTP 상태로 답한다.** 전에는 200 봉투 안에 `isError` 로 넣었다 — 그러면 호스트
+      // 입장에서 "인증 실패"와 "도구가 실패했다"가 구분되지 않는다. PlayMCP 심사 정책의
+      // 기타 사항이 이것을 못 박는다: *"인증이 필요한 상황에 인증 정보가 없거나 만료된 경우
+      // 401(unauthorized) Http 응답이 필요합니다."* REST(`/api/v1/*`)는 이미 401 을 주는데
+      // MCP 만 200 이었다(2026-08-13 실측). 버스트 429 를 HTTP 상태로 돌려주던 것과 같은
+      // 자리·같은 방식이다 — Streamable HTTP 는 전송 계층 오류를 HTTP 상태로 허용한다.
+      //
+      // 안내 문구는 버리지 않고 problem+json 의 detail 로 옮긴다. 발급 방법을 단정하지 않는
+      // 이유는 그대로다(#110 ②) — 배포마다 갈려서, 한쪽을 못 박으면 403 인 문을 가리킨다.
+      // MCP 클라이언트는 브라우저를 못 여니 **사람이 받아 설정에 넣는다**까지 말해 준다.
+      if (error.status === 401)
+        return problem(401, "unauthorized",
+          "Authorization: Bearer ask_... 헤더가 필요합니다. 키는 사람이 받아 클라이언트 설정에 " +
+          "넣어야 합니다 — GET /api/v1/catalog 의 key_issuance 가 이 서버의 발급 방법" +
+          "(google_oauth 이면 브라우저로 /api/v1/auth/google)을 알려 줍니다.",
+          {},
+          // RFC 6750. `resource_metadata` 는 싣지 않는다 — 그걸 실으면 호스트가 OAuth 디스커버리
+          // (`/.well-known/oauth-protected-resource`)를 시작하는데 우리는 커스텀 헤더 방식이라
+          // 그 문이 없다. 없는 문을 가리키는 것이 안 가리키는 것보다 나쁘다.
+          { "www-authenticate": 'Bearer realm="ask-seoul", error="invalid_token"' });
+      return error;   // 403(폐기된 키·권한 부족)은 만든 그대로 — 상태가 이미 사실을 말한다
     }
     trace.keyHash = keyRow.key_hash;
 
