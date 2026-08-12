@@ -89,7 +89,10 @@ test("모든 툴에 annotations 가 있다 — 여섯이 같은 성격(읽기 �
     // 웹 검색처럼 예측 불가한 외부를 훑지 않는다 — 게시한 제품 안에서만 답한다
     assert.equal(t.annotations.openWorldHint, false, `${t.name}: 열린 세계로 신고했다`);
     assert.ok(t.annotations.title, `${t.name}: 사람이 읽을 이름 없음`);
-    assert.equal(t.title, t.annotations.title, `${t.name}: 표시 이름이 두 자리에서 갈렸다`);
+    // Tool 최상위 `title` 은 2025-06-18 에 생긴 필드다 — 협상이 2025-03-26 으로 내려간
+    // 클라이언트·엄격한 애그리게이터가 모르는 필드로 보고 도구를 버릴 수 있다(2026-08-12).
+    // 표시 이름은 두 버전에 다 있는 annotations.title 한 곳에만 둔다.
+    assert.equal(t.title, undefined, `${t.name}: 최상위 title 이 되살아났다 — 구버전 규격 밖이다`);
   }
 });
 
@@ -686,4 +689,104 @@ test("search_products — 제품이 적어도 매칭이 사라지지 않는다(i
     rpc("tools/call", { name: "search_products", arguments: { query: "전시 동네" } }), {}, {}, deps)).json())
     .result.content[0].text);
   assert.equal(out.matched, 1);
+});
+
+// ── 프로토콜 버전 협상 (2026-08-12 PlayMCP 3차 반려의 주 원인) ─────────────────
+// 요청 버전과 무관하게 `2025-06-18` 을 고정 반환하고 있었다. `2025-03-26` 세대 SDK 의
+// 지원 목록은 ["2025-03-26","2024-11-05","2024-10-07"] 이라 우리 응답이 거기 없어
+// 클라이언트가 핸드셰이크 직후 연결을 끊었고, 그래서 **도구 목록이 비어 보였다**.
+// 사양: 지원하는 버전을 요청받으면 **같은 값으로 응답해야 한다(MUST)**.
+
+test("initialize — 요청받은 버전을 그대로 돌려준다(지원 구간 전체)", async () => {
+  for (const v of ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]) {
+    const body = await (await handleMcp(
+      rpc("initialize", { protocolVersion: v, capabilities: {}, clientInfo: { name: "sdk", version: "1" } }),
+      {}, {}, mkDeps())).json();
+    assert.equal(body.result.protocolVersion, v,
+      `${v} 를 요청했는데 다른 버전을 우기면 그 세대 클라이언트는 연결을 끊는다`);
+  }
+});
+
+test("initialize — 모르는 버전·미신고에는 우리 기본값을 준다", async () => {
+  for (const params of [undefined, {}, { protocolVersion: "1999-01-01" }]) {
+    const body = await (await handleMcp(rpc("initialize", params), {}, {}, mkDeps())).json();
+    assert.equal(body.result.protocolVersion, "2025-06-18");
+  }
+});
+
+test("PlayMCP 지원 구간(2025-03-26 ~ 2025-11-25) 양 끝이 다 붙는다", async () => {
+  for (const v of ["2025-03-26", "2025-11-25"]) {
+    const init = await (await handleMcp(
+      rpc("initialize", { protocolVersion: v }), {}, {}, mkDeps())).json();
+    assert.equal(init.result.protocolVersion, v);
+    // 같은 세션에서 도구가 실제로 나와야 의미가 있다
+    const tools = (await (await handleMcp(rpc("tools/list"), {}, {}, mkDeps())).json()).result.tools;
+    assert.equal(tools.length, 7, `${v} 로 붙었는데 도구가 안 나온다`);
+  }
+});
+
+// ── JSON-RPC 배치 봉투 (같은 반려의 두 번째 결함) ────────────────────────────
+// 배열이 오면 `msg.method` 가 undefined 라 `-32601 method not found: undefined` 로 죽었다.
+// 배치는 2025-03-26 이하에서 **필수**다 — 하한이 그 버전인 이상 받을 수 있어야 한다.
+
+const batch = (msgs) =>
+  new Request("http://x/mcp", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(msgs),
+  });
+
+test("배치 — 여러 요청을 배열 하나로 받아 배열로 답한다", async () => {
+  const res = await handleMcp(batch([
+    { jsonrpc: "2.0", id: 1, method: "ping" },
+    { jsonrpc: "2.0", id: 2, method: "tools/list" },
+  ]), {}, {}, mkDeps());
+  const body = await res.json();
+  assert.ok(Array.isArray(body), "배치 응답은 배열이다");
+  assert.equal(body.length, 2);
+  assert.deepEqual(body[0], { jsonrpc: "2.0", id: 1, result: {} });
+  assert.equal(body[1].id, 2);
+  assert.equal(body[1].result.tools.length, 7);
+});
+
+test("배치 — 핸드셰이크를 한 봉투로 보내도 깨지지 않는다", async () => {
+  // 이 조합이 실제로 우리를 떨어뜨린 모양이다: initialize + 알림.
+  const res = await handleMcp(batch([
+    { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26" } },
+    { jsonrpc: "2.0", method: "notifications/initialized" },
+  ]), {}, {}, mkDeps());
+  const body = await res.json();
+  assert.equal(body.length, 1, "알림은 응답을 만들지 않는다 — 요청 하나만 답이 있다");
+  assert.equal(body[0].result.protocolVersion, "2025-03-26");
+});
+
+test("배치 — 전부 알림이면 본문 없이 202", async () => {
+  const res = await handleMcp(batch([
+    { jsonrpc: "2.0", method: "notifications/initialized" },
+    { jsonrpc: "2.0", method: "notifications/cancelled" },
+  ]), {}, {}, mkDeps());
+  assert.equal(res.status, 202);
+  assert.equal(await res.text(), "");
+});
+
+test("배치 — 빈 배열은 -32600", async () => {
+  const trace = {};
+  const body = await (await handleMcp(batch([]), {}, trace, mkDeps())).json();
+  assert.equal(body.error.code, -32600);
+  assert.equal(trace.status, 400);
+});
+
+test("배치 — 한 건이 실패해도 나머지는 답한다", async () => {
+  const body = await (await handleMcp(batch([
+    { jsonrpc: "2.0", id: 1, method: "no_such_method" },
+    { jsonrpc: "2.0", id: 2, method: "ping" },
+  ]), {}, {}, mkDeps())).json();
+  assert.equal(body.length, 2);
+  assert.equal(body[0].error.code, -32601);
+  assert.deepEqual(body[1].result, {});
+});
+
+test("단건 알림도 202 로 답한다(봉투 없음)", async () => {
+  const res = await handleMcp(rpc("notifications/initialized"), {}, {}, mkDeps());
+  assert.equal(res.status, 202);
 });

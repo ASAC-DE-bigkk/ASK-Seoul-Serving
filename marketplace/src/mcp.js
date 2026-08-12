@@ -13,8 +13,27 @@ import { burstProblem, normalizeIntent, normalizeMcpClient, ATTRIBUTION } from "
 // 저쪽은 인자로 받아 읽기만 한다(순환 없음).
 import { slimProductList, buildDataContext, searchProducts } from "./agent-tools.js";
 
-const PROTOCOL_VERSION = "2025-06-18";
+// 🔴 **한 버전만 지원하면 구세대 클라이언트가 통째로 떨어진다** (2026-08-12 PlayMCP 3차 반려).
+// 사양(Lifecycle)은 "서버가 요청받은 버전을 지원하면 **같은 값으로 응답해야 한다**(MUST),
+// 아니면 서버가 지원하는 다른 버전을 준다. 클라이언트가 그 버전을 모르면 **연결을 끊는다**"
+// 이다. 우리는 요청을 무시하고 `2025-06-18` 만 돌려줬다 — `2025-03-26` 세대 SDK 의 지원
+// 목록은 ["2025-03-26","2024-11-05","2024-10-07"] 이라 우리 응답이 거기 없어, 클라이언트가
+// 핸드셰이크 직후 연결을 끊었다. 그래서 **도구 목록이 빈 채로** 보였다("툴콜을 아예 하지
+// 않고 LLM 이 자체 응답" · "Claude/ChatGPT 커넥터가 도구를 못 불러옴"). 다른 등록 MCP 에
+// 같은 현상이 없던 이유도 이것이다 — 그쪽은 요청받은 버전을 그대로 돌려준다.
+// PlayMCP 가이드의 "최소 지원버전 2025-03-26, 최대 2025-11-25" 는 **그 구간을 협상할 수
+// 있어야 한다**는 뜻이었다.
+//
+// 목록에 담을 자격: 우리 표면(initialize · ping · tools/list · tools/call · notifications)은
+// 이 네 버전에서 형태가 같다. 유일하게 갈리는 것이 **배치 봉투**인데(2025-03-26 까지 필수,
+// 2025-06-18 에서 제거) 아래 진입점이 배치를 받으므로 네 버전 모두 실제로 만족한다.
+const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
+const PROTOCOL_VERSION = "2025-06-18"; // 버전을 안 밝히거나 모르는 값을 요청한 클라이언트에게 줄 값
 const SERVER_INFO = { name: "ask-seoul", version: "0.1.0" };
+
+// 요청 버전을 그대로 돌려주는 것이 규격이다 — 지원 목록에 있을 때만.
+const negotiateVersion = (requested) =>
+  SUPPORTED_PROTOCOL_VERSIONS.includes(requested) ? requested : PROTOCOL_VERSION;
 
 // 툴 주석(annotations) — MCP 사양의 선택 필드지만 **PlayMCP 심사는 필수로 본다**
 // (2026-08-09 반려 사유 ①: "툴 annotations 가 정의되지 않았습니다").
@@ -23,6 +42,10 @@ const SERVER_INFO = { name: "ask-seoul", version: "0.1.0" };
 // 바뀌기 전까지). `openWorldHint: false` 는 **닫힌 데이터셋**이라는 뜻이다 — 웹 검색처럼
 // 예측 불가한 외부를 훑지 않고 우리가 게시한 57종 안에서만 답한다.
 // 값을 툴마다 손으로 적지 않는 이유: 전부 같은 성격인데 따로 적으면 하나만 어긋난다.
+// 표시 이름은 **`annotations.title` 한 곳에만** 둔다. Tool 객체 최상위의 `title` 은
+// 2025-06-18 에 생긴 필드라 `2025-03-26` 규격에는 없다 — 협상이 그 아래로 내려간
+// 클라이언트나 엄격한 애그리게이터가 "모르는 필드"로 보고 도구를 버릴 수 있다.
+// `annotations.title` 은 두 버전에 다 있으므로 지워도 잃는 정보가 없다(2026-08-12).
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const annotate = (title) => ({ title, ...READ_ONLY });
 
@@ -40,7 +63,6 @@ export const TOOLS = [
   // 지어냈다. 질문으로 바로 찾게 하면 그 왕복이 통째로 없어진다.
   {
     name: "search_products",
-    title: "질문으로 제품 찾기",
     annotations: annotate("질문으로 제품 찾기"),
     description:
       "사용자 질문 문장을 그대로 넣어 서울시 데이터 패턴 서비스에서 맞는 제품을 찾습니다. 어떤 데이터를 써야 할지 모를 때 목록 전체를 훑는 대신 이 도구를 먼저 부르세요. 제품마다 왜 걸렸는지(matched_terms)와 바로 실행할 수 있는 질의 패턴(matched_patterns)이 함께 옵니다.",
@@ -56,7 +78,6 @@ export const TOOLS = [
   },
   {
     name: "list_products",
-    title: "서울시 데이터 제품 목록",
     annotations: annotate("서울시 데이터 제품 목록"),
     description:
       "서울시 데이터 패턴 서비스에서 조회 가능한 제품 전체의 목록과 대표 질문·조인키를 보여줍니다. 전체를 훑어야 할 때 쓰고, 질문에 맞는 제품을 고르는 것이 목적이면 search_products 가 빠릅니다. 목록에는 컬럼 이름과 질의 패턴의 질문만 담기므로, 제품을 고른 뒤 describe_product 로 상세를 확인하세요.",
@@ -64,7 +85,6 @@ export const TOOLS = [
   },
   {
     name: "describe_product",
-    title: "제품 상세 — 컬럼·질의 패턴",
     annotations: annotate("제품 상세 — 컬럼·질의 패턴"),
     description:
       "서울시 데이터 패턴 서비스의 제품 하나를 골라 컬럼 설명·기준(grain)·시간축·질의 패턴(usage_patterns)을 보여줍니다. 조회 전에 스키마와 필터 가능한 컬럼을 확인하세요. usage_patterns 중 runnable=true 인 것만 run_pattern 으로 실행할 수 있습니다.",
@@ -77,7 +97,6 @@ export const TOOLS = [
   },
   {
     name: "preview_product",
-    title: "5행 미리보기",
     annotations: annotate("5행 미리보기"),
     description:
       "서울시 데이터 패턴 서비스의 제품 데이터 5행을 미리 봅니다(일일 한도 무차감). 필터에 넣을 실제 값(장소명·코드 등)을 확인할 때 사용하세요.",
@@ -90,7 +109,6 @@ export const TOOLS = [
   },
   {
     name: "query_product",
-    title: "서울시 데이터 조회",
     annotations: annotate("서울시 데이터 조회"),
     description:
       "서울시 데이터 패턴 서비스의 데이터를 지역·기간·등가 필터로 조회합니다(sort/join/집계 불가, 커서로 페이지네이션). 응답의 data_context 에 집계 기준 시점(freshness)·출처(attribution)·주의사항(caution)이 함께 담깁니다.",
@@ -119,7 +137,6 @@ export const TOOLS = [
   },
   {
     name: "run_pattern",
-    title: "검증된 질의 패턴 실행",
     annotations: annotate("검증된 질의 패턴 실행"),
     description:
       "서울시 데이터 패턴 서비스에서 실제 데이터에 실행해 동작이 확인된 질의 패턴을 실행합니다. 질문에 맞는 패턴이 있으면 필터를 직접 조립하기보다 이 도구를 우선 사용하세요. describe_product 의 usage_patterns 에서 runnable=true 인 pattern_id 를 고르고 :파라미터 값을 params 로 전달하세요. param_defaults 가 선언된 파라미터는 생략하면 그 기본값으로 실행되고, param_enum 이 선언된 파라미터는 허용값 밖이면 400 입니다. params 선언이 array 인 파라미터는 실제 배열로 보내세요(원소별로 안전하게 바인딩됩니다). 응답에는 insight_sample_ko(해석 예시)가 함께 제공됩니다.",
@@ -144,7 +161,6 @@ export const TOOLS = [
   },
   {
     name: "check_quota",
-    title: "사용량·남은 한도 확인",
     annotations: annotate("사용량·남은 한도 확인"),
     description: "서울시 데이터 패턴 서비스 조회에 쓰는 내 API 키의 오늘 사용량과 남은 일일 한도를 확인합니다.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
@@ -154,8 +170,10 @@ export const TOOLS = [
 // ── JSON-RPC 2.0 응답 헬퍼 (stateless: 단일 application/json) ────────────────
 const rpcJson = (obj) =>
   new Response(JSON.stringify(obj), { headers: { "content-type": "application/json; charset=utf-8" } });
-const rpcResult = (id, result) => rpcJson({ jsonrpc: "2.0", id, result });
-const rpcError = (id, code, message) => rpcJson({ jsonrpc: "2.0", id, error: { code, message } });
+// 봉투(단건/배치)를 나중에 정하므로 여기서는 **평범한 객체**를 만든다 — Response 로 굳히면
+// 배치에서 여러 개를 한 배열에 담을 수 없다.
+const rpcResult = (id, result) => ({ jsonrpc: "2.0", id, result });
+const rpcError = (id, code, message) => ({ jsonrpc: "2.0", id, error: { code, message } });
 
 const errText = (text) => ({ content: [{ type: "text", text }], isError: true });
 const okJson = (data) => ({ content: [{ type: "text", text: JSON.stringify(data) }] });
@@ -381,8 +399,41 @@ export async function handleMcp(request, env, trace, deps) {
     // 봉투를 못 읽었으니 요청 형식 오류다(#62). 404 로 적지 않는 이유 — 콘솔은 404 를
     // "없는 데이터"로 읽어서, 파싱 실패가 없는 제품을 부른 것처럼 보인다.
     trace.status = 400;
-    return rpcError(null, -32700, "parse error");
+    return rpcJson(rpcError(null, -32700, "parse error"));
   }
+
+  // 🔴 **배치 봉투**(JSON-RPC 2.0 §6). `2025-03-26` 이하에서는 **필수**이고 `2025-06-18` 에서
+  // 빠졌다. 지원 버전 하한이 `2025-03-26` 인 이상 받을 수 있어야 한다 — 예전 코드는 배열이
+  // 오면 `msg.method` 가 undefined 라 `-32601 method not found: undefined` 로 죽었고,
+  // `initialize` + `notifications/initialized` 를 한 배치로 보내는 클라이언트는 핸드셰이크
+  // 단계에서 그대로 끊겼다(2026-08-12 PlayMCP 3차 반려의 두 번째 결함).
+  if (Array.isArray(msg)) {
+    if (msg.length === 0) {
+      trace.status = 400;
+      return rpcJson(rpcError(null, -32600, "invalid request: empty batch"));
+    }
+    const out = [];
+    // 순차 처리다 — 병렬로 돌리면 같은 키의 쿼터·버스트 증가가 서로를 덮어쓴다.
+    for (const one of msg) {
+      const r = await dispatch(one, request, env, trace, deps);
+      // 전송 계층 오류(429 버스트)는 봉투 밖이라 즉시 그대로 내보낸다.
+      if (r instanceof Response) return r;
+      if (r) out.push(r); // 알림(id 없음)은 응답을 만들지 않는다
+    }
+    // 전부 알림이었으면 본문 없이 202 — 규격이다.
+    return out.length ? rpcJson(out) : new Response(null, { status: 202 });
+  }
+
+  const single = await dispatch(msg, request, env, trace, deps);
+  if (single instanceof Response) return single;
+  return single ? rpcJson(single) : new Response(null, { status: 202 });
+}
+
+// 요청 하나를 처리한다. 반환은 셋 중 하나 —
+//   객체   : JSON-RPC 응답 페이로드(봉투는 호출자가 씌운다)
+//   null   : 알림이라 응답 없음
+//   Response: 전송 계층에서 끝난 것(429 버스트) — 봉투를 씌우지 않는다
+async function dispatch(msg, request, env, trace, deps) {
   const { id = null, method, params } = msg || {};
 
   // 발견 단계 — 데이터·쿼터 미소모(masondev 완료기준). 로드용이라 인증 요구 안 함.
@@ -404,13 +455,15 @@ export async function handleMcp(request, env, trace, deps) {
       trace.agentMode = "mcp_client";
     }
     return rpcResult(id, {
-      protocolVersion: PROTOCOL_VERSION,
+      // 요청받은 버전을 그대로 돌려준다 — 지원 목록에 있을 때. 고정값을 우기면 그 값을
+      // 모르는 세대의 클라이언트가 연결을 끊는다(상단 SUPPORTED_PROTOCOL_VERSIONS 주석).
+      protocolVersion: negotiateVersion(params?.protocolVersion),
       serverInfo: SERVER_INFO,
       capabilities: { tools: {} },
     });
   }
-  if (method === "notifications/initialized" || method === "notifications/cancelled")
-    return new Response(null, { status: 202 });
+  // 알림에는 응답 자체가 없다(id 가 없다) — 봉투를 호출자가 씌우므로 null 로 알린다.
+  if (method === "notifications/initialized" || method === "notifications/cancelled") return null;
   // 생존 확인 — 사양의 표준 유틸리티다. **빈 결과로 즉시** 답한다(그게 규격이다).
   //
   // 우리는 stateless HTTP 라 연결 상태라는 게 없어 기능적 필요는 작다. 그런데도 받는 이유는
