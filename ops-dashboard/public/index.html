@@ -152,6 +152,10 @@
          자동 새로고침은 선택·펼침을 건드리지 않는다. -->
     <div class="datebar" id="dateBar" hidden>
       <button class="datebar-toggle" id="dateBarToggle" aria-expanded="false" aria-controls="dateBarDays">지정 날짜만 보기</button>
+      <!-- '삭제된 키 제외' — 이용 패턴 분석 탭 전용이라 다른 탭에서는 숨긴다(showTab 이 관리).
+           🔴 토글(§5): 같은 버튼을 다시 누르면 해제. 눌림 상태는 aria-pressed 가 정본이고
+           자동 새로고침은 상태(EXDEL)를 건드리지 않는다. 서버 필터라 누르면 다시 읽는다. -->
+      <button class="datebar-toggle" id="exdelBtn" aria-pressed="false" hidden>삭제된 키 제외</button>
       <!-- 시간대는 화면이 직접 말한다 — 침묵하면 "어제 21시 요청이 왜 오늘이지"가 된다(시간축 감사 2차) -->
       <span class="datebar-state" id="dateBarState">전체 기간 · 날짜는 한국 시간(KST) 기준</span>
       <button class="clear" id="dateClear" hidden>날짜 지정 해제</button>
@@ -968,12 +972,19 @@ function renderUserStats(U, days) {
   if (!id || !id.calls) { el.innerHTML = emptyBox(["데이터 없음", "최근 " + days + "일에 요청이 없습니다"]); return; }
 
   // ① 키 있는 쪽 / 없는 쪽. 막대 하나로 붙여 두면 몫이 눈에 바로 들어온다.
-  const pct = (n) => id.calls ? (n / id.calls * 100) : 0;
+  //    identity 는 서버가 **거르지 않고** 준다('삭제된 키 제외'가 켜져도) — 이 카드가 "무엇을
+  //    뺐나"를 밝히는 근거라서다. 제외가 켜지면 식별 몫을 살아 있는 키(linked)로 바꿔 세우고,
+  //    뺀 몫은 숫자로 직접 말한다(0012 — 거른 것은 걸렀다고 말한다).
+  const delN = id.linked_calls != null ? (id.keyed || 0) - (id.linked_calls || 0) : 0;
+  const keyedShown = EXDEL && id.linked_calls != null ? id.linked_calls : (id.keyed || 0);
+  const callsShown = (id.anon || 0) + keyedShown;
+  const pct = (n) => callsShown ? (n / callsShown * 100) : 0;
   const head =
     "<div class='share'>" +
-    "<div class='row'><div class='nm'>식별된 이용자<small>키를 발급받아 인증한 요청</small></div>" +
-      "<div class='track'><div class='fill' style='width:" + Math.max(id.keyed ? 2 : 0, pct(id.keyed)) + "%'></div></div>" +
-      "<div class='num'><b>" + nf.format(id.keyed || 0) + "</b> <small>" + pct(id.keyed).toFixed(1) + "%</small></div></div>" +
+    "<div class='row'><div class='nm'>식별된 이용자<small>" +
+      (EXDEL ? "살아 있는 키의 인증 요청 — 삭제된 키 제외 중" : "키를 발급받아 인증한 요청") + "</small></div>" +
+      "<div class='track'><div class='fill' style='width:" + Math.max(keyedShown ? 2 : 0, pct(keyedShown)) + "%'></div></div>" +
+      "<div class='num'><b>" + nf.format(keyedShown) + "</b> <small>" + pct(keyedShown).toFixed(1) + "%</small></div></div>" +
     "<div class='row'><div class='nm'>익명<small>키 없이 온 요청 — 신원 축이 없습니다</small></div>" +
       "<div class='track'><div class='fill dim' style='width:" + Math.max(id.anon ? 2 : 0, pct(id.anon)) + "%'></div></div>" +
       "<div class='num'><b>" + nf.format(id.anon || 0) + "</b> <small>" + pct(id.anon).toFixed(1) + "%</small></div></div>" +
@@ -982,11 +993,14 @@ function renderUserStats(U, days) {
     "아래 목록은 <b>식별된 요청만</b> 셉니다 — 익명은 누가 보냈는지 알 수 없어 셀 사람이 없습니다." +
     // 커버리지 한 줄(#326) — 인증 요청 중 몇 건이 지금 살아 있는 키로 이어지나. 못 잇는
     // 몫은 완전삭제된 키다(처리방침 제7조 ③이 약속한 상태) — 결함이 아니라 설계다.
-    (id.linked_calls != null && id.keyed
-      ? "<br>인증 요청 <b>" + nf.format(id.keyed) + "건</b> 중 <b>" + nf.format(id.linked_calls) +
-        "건(" + (id.linked_calls / id.keyed * 100).toFixed(1) + "%)</b>이 지금 살아 있는 키 <b>" +
-        nf.format(id.keys_linked || 0) + "개</b>로 이어집니다 — 못 잇는 건 <b>삭제된 키</b>의 기록입니다."
-      : "") + "</p>";
+    (EXDEL
+      ? "<br>🔴 <b>삭제된 키 제외 중</b> — 삭제된 키의 트래픽 <b>" + nf.format(delN) +
+        "건</b>이 이 탭의 모든 지표에서 빠져 있습니다. 위 버튼을 다시 누르면 해제됩니다."
+      : (id.linked_calls != null && id.keyed
+        ? "<br>인증 요청 <b>" + nf.format(id.keyed) + "건</b> 중 <b>" + nf.format(id.linked_calls) +
+          "건(" + (id.linked_calls / id.keyed * 100).toFixed(1) + "%)</b>이 지금 살아 있는 키 <b>" +
+          nf.format(id.keys_linked || 0) + "개</b>로 이어집니다 — 못 잇는 건 <b>삭제된 키</b>의 기록입니다."
+        : "")) + "</p>";
 
   if (!rows.length) { el.innerHTML = head + emptyBox(["데이터 없음", "키를 쓴 요청이 없습니다"]); return; }
 
@@ -1332,6 +1346,9 @@ function updateScopeVisible() {
   $("scopeBar").hidden = !SCOPED_PANES.includes(pane);
   // 날짜바도 같은 판정을 쓴다 — 정본은 DATE_PANES 한 배열(§5 스코프바 규약과 동일).
   $("dateBar").hidden = !DATE_PANES.includes(pane);
+  // '삭제된 키 제외'는 이용 패턴 분석 전용이다 — 다른 탭의 지표는 이 필터를 안 타므로,
+  // 보이면 "걸었다고 믿는" 함정이 된다(스코프바를 탭별로 가리는 것과 같은 이유).
+  $("exdelBtn").hidden = pane !== "usage";
 }
 
 // ── 지정 날짜만 보기 (#293 후속) ────────────────────────────────────────────────
@@ -1343,6 +1360,34 @@ function updateScopeVisible() {
 // 달력이다. (예전에는 UTC 롤링 창이 달력일 N+1개를 걸쳐 N+1개를 냈다 — 축 통일로 N개가 됐다.)
 const DATE_PANES = ["serving", "usage", "apis"];
 let DATESEL = new Set();
+
+// ── '삭제된 키 제외' (이용 패턴 분석 전용) ──────────────────────────────────────
+//
+// 완전삭제된 키의 트래픽은 사람에 못 잇지만 지표에는 섞여 있다. 이 토글이 켜지면 서버가
+// 이용 패턴 질의에서 그 행을 뺀다(`exclude_deleted=1`) — 집계(일자별·손님 구성·AI 수요)는
+// 서버가 이미 접어서 주므로 **화면에서는 못 거른다**, 그래서 스코프(DOMSCOPE)와 달리
+// 누를 때마다 다시 읽는다. 익명은 남는다(키가 없어 '삭제된 키'일 수 없다).
+// 🔴 토글 규약(§5): 같은 버튼 재클릭 = 해제 · 상태는 EXDEL 하나 · 자동 새로고침은 안 건드림.
+// 주소(#usage?nodel=1)에 실려 새로고침·링크 공유에도 유지된다.
+let EXDEL = false;
+const exdelQ = () => EXDEL ? "&exclude_deleted=1" : "";
+function renderExdelBtn() {
+  const b = $("exdelBtn");
+  b.setAttribute("aria-pressed", String(EXDEL));
+  // 뺀 몫은 identity(전량 집계)에서 나온다 — keyed(전체 인증) - linked_calls(살아 있는 키).
+  const id = LAST_DATA && LAST_DATA.usage && LAST_DATA.usage.identity;
+  const n = id && id.linked_calls != null ? (id.keyed || 0) - (id.linked_calls || 0) : null;
+  b.textContent = EXDEL
+    ? "삭제된 키 제외 중" + (n != null ? " (" + nf.format(n) + "건 빠짐)" : "") + " — 다시 누르면 해제"
+    : "삭제된 키 제외" + (n ? " (" + nf.format(n) + "건)" : "");
+}
+function setExdel(on) {
+  if (on === EXDEL) return;
+  EXDEL = on;
+  renderExdelBtn();
+  load();   // 서버 필터라 다시 읽는다 — 화면 필터(DOMSCOPE)와 다른 점
+}
+$("exdelBtn").addEventListener("click", () => setExdel(!EXDEL));
 const dateQ = () => DATESEL.size ? "&dates=" + [...DATESEL].sort().join(",") : "";
 const dateCandidates = () => {
   const days = parseInt($("days").value, 10) || 14;
@@ -1431,7 +1476,11 @@ function showTab(name) {
   // 덮어쓰면 필터를 걸고 넘어온 링크가 그 즉시 '전체'로 되돌아간다.
   if (name === "keys") return;
   // 스코프가 걸려 있고 그 탭이 스코프 대상이면 주소에 실어 링크 공유·새로고침에 유지한다.
-  const domQ = DOMSCOPE && SCOPED_PANES.includes(name) ? "?dom=" + encodeURIComponent(DOMSCOPE) : "";
+  // '삭제된 키 제외'(nodel)도 같은 이유로 싣는다 — 이용 패턴 분석 탭에서만 뜻이 있다.
+  const qParts = [];
+  if (DOMSCOPE && SCOPED_PANES.includes(name)) qParts.push("dom=" + encodeURIComponent(DOMSCOPE));
+  if (EXDEL && name === "usage") qParts.push("nodel=1");
+  const domQ = qParts.length ? "?" + qParts.join("&") : "";
   const want = (name === "apis" && DETAIL_OPEN ? name + "/" + DETAIL_OPEN : name) + domQ;
   if (decodeURIComponent(location.hash.slice(1)) !== want)
     history.replaceState(null, "", "#" + encodeURI(want).replace("%3F", "?").replace("%3D", "="));
@@ -1456,6 +1505,9 @@ addEventListener("hashchange", () => {
   // 주소의 도메인 스코프를 상태에 반영한다(#3) — 달라졌으면 다시 그린다.
   const wantDom = h.q.get("dom") || "";
   if (wantDom !== DOMSCOPE && SCOPED_PANES.includes(h.pane)) { DOMSCOPE = wantDom; render(LAST_DATA); if (USE) renderApiList(); }
+  // '삭제된 키 제외'(nodel)도 주소가 정본이다 — 서버 필터라 다시 그리는 게 아니라 다시 읽는다.
+  const wantEx = h.q.get("nodel") === "1";
+  if (h.pane === "usage" && wantEx !== EXDEL) { EXDEL = wantEx; renderExdelBtn(); load(); }
   showTab(h.pane);
   if (h.pane === "apis" && h.api && h.api !== DETAIL_OPEN) openDetail(h.api, true);
   if (h.pane === "keys") applyKeyHash(h.q);
@@ -2342,11 +2394,16 @@ function render(d) {
         ? "선택한 " + picked.length + "일에는 요청이 없습니다"
         : "최근 " + d.window_days + "일에 요청이 없습니다"]);
 
+  renderExdelBtn();   // 뺀 몫 건수가 identity 에서 오므로 응답이 올 때마다 라벨을 갱신한다
   renderUserStats(U, d.window_days);
 
   // 재방문은 **분야 축이 없다** — 한 사람이 여러 분야를 쓴다. 그래서 언제나 전 분야 합계
   // 버킷('*')을 쓴다. 이 카드는 '응답 상태'에 있었는데, 묻는 질문이 "누가 쓰나"라서
   // 이용 패턴 분석으로 옮겼다 — 옆의 '이용자별 통계'와 같은 축을 보는 카드다.
+  //
+  // '삭제된 키 제외'는 여기서는 **화면에서** 거른다(known 플래그) — 이 질의는 서빙 구획
+  // 소속이라 서버 파라미터를 안 태웠다. 행 단위 목록이라 화면 필터로도 결과가 같다
+  // (집계 카드들과 달리 이미 사람 단위로 쪼개져 온다).
   $("keys").innerHTML = table([
     // 옆 카드('이용자별 통계')와 같은 이름 규격(#326) — 같은 사람이 같은 화면 안에서
     // 두 이름이면 그게 또 대조 숙제가 된다.
@@ -2355,6 +2412,7 @@ function render(d) {
     { t:"방문한 날", r:true, get:(r) => r.active_days > 1
         ? "<span class='pill ok'>" + r.active_days + "일</span>" : r.active_days + "일" },
   ], (d.serving.keys || []).filter((r) => r.domain === "*")
+       .filter((r) => !EXDEL || r.known !== false)
        .sort((a, b) => b.calls - a.calls).slice(0, 10),
      "키를 쓴 요청이 없습니다");
 
@@ -3174,7 +3232,7 @@ function syncMode() {
 async function load(quiet) {
   let res;
   try {
-    res = await fetch("/api/summary?days=" + $("days").value + dateQ(), { headers: authHeaders() });
+    res = await fetch("/api/summary?days=" + $("days").value + dateQ() + exdelQ(), { headers: authHeaders() });
   } catch { return quiet ? null : fail("서버에 닿지 못했습니다"); }
   if (!res.ok) {
     // 401·503 은 **토큰 문제**다 — 조용한 새로고침이어도 화면을 접고 잠금을 띄운다.
@@ -3328,6 +3386,8 @@ $("days").addEventListener("change", () => {
 //    다시 쓰므로(`domQ`), 뒤에 읽으면 `?dom=` 은 이미 지워진 뒤다 — 공유 링크의 스코프가
 //    조용히 무시되던 원인이고, 이 순서가 아니면 `load()` 안에서 읽어도 늦다.
 DOMSCOPE = parseHash().q.get("dom") || "";
+EXDEL = parseHash().q.get("nodel") === "1";   // 삭제된 키 제외 — 같은 이유로 showTab 전
+renderExdelBtn();
 showTab(parseHash().pane || PANES[0]);
 
 load();   // 토큰 없이도 뜬다 — 막는 문이 아니라 여는 문이다
