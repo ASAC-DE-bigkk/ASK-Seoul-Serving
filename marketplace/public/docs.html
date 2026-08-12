@@ -68,7 +68,7 @@
 <header class="page">
   <div class="wrap wide">
     <h1>API 문서</h1>
-    <p class="lede">읽기 전용 REST API 입니다. 응답은 JSON, 오류는 RFC 7807 형식을 따릅니다.
+    <p class="lede">읽기 전용 REST API 입니다. 응답은 JSON, 오류는 RFC 9457 형식을 따릅니다.
       규격은 <a href="/openapi.json">OpenAPI 3.1 문서</a>로도 제공되어 Postman·Swagger 등에 그대로 가져다 쓰실 수 있습니다.</p>
     <nav class="toc">
       <a href="#basics">기본 규격</a>
@@ -338,7 +338,7 @@ GET /api/v1/data/culture_event_schedule?limit=1000&amp;cursor=NTAwQDIwMjYt…</c
 
   <section id="errors">
     <h2>오류 코드 <span class="en">Errors</span></h2>
-    <p class="lead">오류는 <a href="https://www.rfc-editor.org/rfc/rfc7807" target="_blank" rel="noopener noreferrer">RFC 7807</a>
+    <p class="lead">오류는 <a href="https://www.rfc-editor.org/rfc/rfc9457" target="_blank" rel="noopener noreferrer">RFC 9457</a>
       <code>application/problem+json</code> 형식입니다. <b><code>status</code> 로 분기하지 마시고 <code>title</code> 로 분기</b>하세요 —
       같은 상태 코드에 원인이 여럿입니다.</p>
     <div class="table-scroll">
@@ -541,7 +541,8 @@ GET /api/v1/data/citydata_ppltn_daily?from=2026-08-01&amp;to=2026-08-31
           <tr>
             <td class="nw">2026-07</td><td class="nw"><span class="pill"><i aria-hidden="true"></i>기준</span></td>
             <td>v1 공개 — <code>/api/v1/catalog</code>, <code>/api/v1/preview</code>, <code>/api/v1/data</code>,
-              <code>/api/v1/me</code>, <code>/api/v1/keys</code>. 커서 페이지네이션과 RFC 7807 오류 형식.</td>
+              <code>/api/v1/me</code>, <code>/api/v1/keys</code>. 커서 페이지네이션과 RFC 7807 오류 형식
+              (이 규격은 2023년 <b>RFC 9457</b> 로 대체됐습니다 — 필드와 미디어 타입은 그대로입니다).</td>
           </tr>
         </tbody>
       </table>

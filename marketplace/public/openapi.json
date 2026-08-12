@@ -595,7 +595,7 @@
       },
       "Problem": {
         "type": "object",
-        "description": "RFC 7807. status 가 아니라 title 로 분기할 것 — 같은 상태 코드에 원인이 여럿이다.",
+        "description": "RFC 9457(구 7807). status 가 아니라 title 로 분기할 것 — 같은 상태 코드에 원인이 여럿이다.",
         "properties": {
           "type": { "type": "string", "default": "about:blank" },
           "title": { "type": "string", "description": "오류 종류의 안정된 식별자" },
