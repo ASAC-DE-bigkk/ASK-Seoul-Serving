@@ -1426,6 +1426,14 @@ function renderPick() {
     // 힌트도 같이 넘긴다 — 검증기(`_hint_of`)와 같은 세 필드다. 예시값을 SQL 주석이 아니라
     // 인사이트 문장에 적어 둔 패턴이 있어, 여기를 빼면 그것들만 빈 칸으로 남는다.
     const defs = patternDefaults(u.sql, [u.question_ko, u.axes, u.insight_sample_ko].filter(Boolean).join("\n"));
+    // ⚠️ **칸을 비워서 서버 기본값에 맡기는 쪽은 지금 더 나쁘다.** 게시 메타
+    //    (`d1_pattern_params.param_defaults`)에 상대 창이 선언돼 있고, 값을 생략하면 서버가
+    //    그걸 실행 시점 기준으로 해석한다. 그래서 "기본값이 있는 칸은 비워 두자"를 실제로
+    //    전수 실측해 봤는데(2026-08-12, 게시본 884건) **63건이 살아나고 68건이 죽었다** —
+    //    선언된 창 자체가 낡았기 때문이다(`0y` 30건: 연축이 2026 을 가리키는데 데이터는
+    //    2025 까지 · `-1d` 27건: 일별 집계가 아직 없는 어제). 그건 게시본 결함이라
+    //    (ASK-Seoul#114 "45건 0행"과 같은 뿌리) 화면이 고칠 수 없다.
+    //    그래서 **오너가 `verified_rows` 를 찍을 때 실제로 쓴 값**, 즉 주석 예시를 채운다.
     for (const nm of patternParams(u.sql)) {
       const has = Object.prototype.hasOwnProperty.call(defs, nm);
       const f = document.createElement("div");
