@@ -339,6 +339,11 @@ async function safeRows(env, sql, ...bind) {
 async function summary(env, params, writable = false) {
   const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
   const since = `-${days} days`;
+  // ⚠️ 서빙 질의의 `ts >= datetime('now', ?)` 는 사실상 **UTC 하루 경계**로 동작한다 —
+  // ts 는 'YYYY-MM-DDTHH:MM:SSZ' 꼴이고 datetime() 은 'YYYY-MM-DD HH:MM:SS' 꼴이라,
+  // 같은 날짜에서 11번째 문자 'T' > ' ' 로 경계일의 **모든** 행이 사전순 비교를 통과한다.
+  // 우연이지만 결과적으로 일자 카드·날짜 칩의 UTC 달력일 축과 맞아떨어지므로 그대로 둔다
+  // (시간축 감사 실측, 2026-08-12). 바꾸려면 축 전체(일자 카드·칩·필터)와 한 몸으로 바꿔야 한다.
   const missing = [];
 
   // ── 파이프라인
@@ -349,7 +354,10 @@ async function summary(env, params, writable = false) {
   // (표시 규약: _ops_slo 는 is_sample=1, 조회 DB 4종은 event_id 'smp_' / updated_at='sample')
   const domains = await domainRegistry(env);
   const slo = await safeRows(env,
-    "SELECT * FROM _ops_slo WHERE event_date >= date('now', ?) " +
+    // 🔴 KST 로 자른다 — 이 파일의 다른 파이프라인 창(observed_date_kst·발행 KST 접기)과
+    // 같은 규약. 예전엔 여기만 date('now')(UTC 오늘)라 KST 00~09시에 창 끝이 하루 어긋났다
+    // (시간축 감사 실측 — 혼자 다른 시간대를 쓰던 유일한 파이프라인 창).
+    "SELECT * FROM _ops_slo WHERE event_date >= date('now', '+9 hours', ?) " +
     "AND COALESCE(is_sample, 0) = 0 ORDER BY event_date", since);
   if (!domains.ok || !slo.ok) missing.push("pipeline");
 
