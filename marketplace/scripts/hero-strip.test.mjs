@@ -51,9 +51,49 @@ test("🔴 ① 숫자를 HTML 에 박지 않는다 — 자리표시자만 두고
 });
 
 test("🔴 ① 제품·질문 수는 세어서 넣는다 (분야는 위 전용 검사)", () => {
-  assert.match(HTML, /setStat\("statProducts", products\.length/);
-  assert.match(HTML, /setStat\("statPatterns", nf\.format\(patterns\)/,
+  // 2026-08-12 — 숫자 칸은 `setCount`(0에서 굴러 올라감)로 바뀌었다. 여기서 지키는 것은
+  // **수가 카탈로그에서 온다**는 것 하나이므로 두 설정자를 다 받는다. 굴리기는 표현이고,
+  // 이 검사는 출처에 대한 것이다.
+  assert.match(HTML, /set(?:Stat|Count)\("statProducts", products\.length/);
+  assert.match(HTML, /set(?:Stat|Count)\("statPatterns", (?:nf\.format\()?patterns\b/,
     "질문 수를 카탈로그에서 세지 않는다");
+});
+
+// ── 카운트업 (2026-08-12) ───────────────────────────────────────────────────
+// 🔴 **정답이 기본값이고 굴리기는 덤이다.** 처음 만든 판은 0 을 써 두고 프레임을 기다렸는데,
+//    프레임이 안 오는 자리(숨은 탭·렌더링이 멈춘 창)에서 **스트립이 "0개"로 굳었다**.
+//    실측으로 잡았다 — 장식 하나가 지표를 거짓말로 만드는 구조였다. 이 테스트가 그 자리를 지킨다.
+const COUNT_SRC = HTML.slice(HTML.indexOf("function setCount"), HTML.indexOf("function bootReveal"));
+
+function runSetCount(n) {
+  const el = { classList: { remove() {} }, innerHTML: "", getBoundingClientRect: () => ({ top: 0 }) };
+  const frames = [];
+  new Function("$", "nf", "REDUCED", "IntersectionObserver", "requestAnimationFrame", "innerHeight",
+    `${COUNT_SRC}\nreturn setCount;`)(
+    () => el, new Intl.NumberFormat("ko-KR"), false,
+    class { observe() {} disconnect() {} },
+    (cb) => frames.push(cb), 800,
+  )("stat", n, "개");
+  return { el, step: (t) => { const cb = frames.shift(); if (cb) cb(t); }, frames };
+}
+
+test("🔴 프레임이 한 번도 안 와도 진짜 수가 남는다 — 0 으로 굳으면 지표가 거짓말이 된다", () => {
+  const r = runSetCount(884);
+  assert.match(r.el.innerHTML, /884/, "프레임 전에 이미 정답이 쓰여 있어야 한다");
+  assert.doesNotMatch(r.el.innerHTML, /^0/, "0 을 미리 써 두면 프레임이 안 올 때 그대로 굳는다");
+});
+
+test("프레임이 오면 0에서 굴러 올라간다", () => {
+  const r = runSetCount(884);
+  r.step(0);
+  assert.match(r.el.innerHTML, /^0</, "첫 프레임은 0에서 시작한다");
+  r.step(900);
+  assert.match(r.el.innerHTML, /884/, "끝에서 정확히 목표값이어야 한다");
+});
+
+test("값을 모르면 굴리지 않는다 — 모르는 것을 세는 척하지 않는다", () => {
+  const r = runSetCount(0);
+  assert.equal(r.frames.length, 0, "0 을 굴리면 세는 시늉이 된다");
 });
 
 test("② 네 칸이 전부 실측이다 — 하드코딩한 사실을 끼워 넣지 않는다", () => {
