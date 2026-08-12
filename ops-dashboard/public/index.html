@@ -144,11 +144,27 @@
       <button class="clear" id="scopeClear" hidden>전체로 되돌리기</button>
     </div>
     <div class="notes" id="banners"></div>
+    <!-- 지정 날짜만 보기 (#293 후속, 2026-08-12) — 서빙 로그 화면 셋(응답 상태·이용 패턴
+         분석·API 사용량)에서만 뜬다. 정본은 DATE_PANES 한 배열, 판정은 activePane()
+         (스코프바와 같은 규약 — 주소를 읽으면 한 탭씩 밀린다).
+         🔴 #banners 안에 두지 않는다 — 배너는 렌더마다 통째로 다시 그려져 상태가 증발한다.
+         🔴 여닫이는 토글(§5): 같은 버튼을 다시 누르면 닫히고, 닫는 길은 closeDateBar() 하나,
+         자동 새로고침은 선택·펼침을 건드리지 않는다. -->
+    <div class="datebar" id="dateBar" hidden>
+      <button class="datebar-toggle" id="dateBarToggle" aria-expanded="false" aria-controls="dateBarDays">지정 날짜만 보기</button>
+      <span class="datebar-state" id="dateBarState">전체 기간</span>
+      <button class="clear" id="dateClear" hidden>날짜 지정 해제</button>
+      <div class="datebar-days" id="dateBarDays" hidden></div>
+    </div>
 
     <section class="pane" id="pane-pipeline" role="tabpanel" aria-labelledby="tab-pipeline" tabindex="0">
     <h2 class="sec">데이터 준비 상태 <span>서울시 원본을 받아 가공하는 작업이 매일 제때 끝났나</span></h2>
     <!-- 발행 점검 — #78 D-7 이 요구한 지표. 정본은 ASAC-DAG 의 _publication_ledger 이고
          콘솔은 읽기만 한다. 여기가 비어 있던 동안 화면은 "발행이 다 성공한 것처럼" 보였다. -->
+    <!-- 집계 기간 — 아래 KPI·카드가 며칠치인지를 화면이 직접 말한다(KST 오늘 포함 N일).
+         값은 서버 publication.window 가 질의 경계와 같은 규약으로 계산해 온다 — 화면이
+         따로 셈하지 않고, 없으면(구버전 응답) 지어내지 않고 숨긴다. -->
+    <p class="winnote" id="pubWindow" hidden></p>
     <div class="kpis" id="pubKpis"></div>
     <div class="grid">
       <div class="card wide">
@@ -1202,9 +1218,12 @@ function collectScopeDomains(d) {
   for (const x of P.slo || []) add(x.domain);
   for (const x of R.daily || []) add(x.domain);
   for (const x of R.expectations || []) add(x.domain);
-  // 서빙은 product_id 접두사만 분야로 인정한다 — table_name(=API 이름)엔 gold_ 같은 등급
-  // 접두사가 섞여 'gold'·'common' 같은 가짜 분야가 새어 들어온다(운영 실측). product_id 가 정본.
-  for (const x of S.products || []) add(domOf(x.product_id));
+  // 🔴 서빙 축은 **서버가 등록부로 검증한 값**(x.domain)을 쓴다 — 예전에는 여기서
+  // product_id 접두사를 다시 계산했는데(domOf), 로그에 실린 가짜 제품명(404 프로브)의
+  // 접두사가 그대로 분야 후보가 됐다(#293 실측: age·biz·invalid 등 7종). 서버 GW_DOM 이
+  // `_ops_domain` 에 있는 값만 분야로 인정하므로(미등록 접두사 = NULL = 미상) 여기서는
+  // 그 축을 그대로 받기만 한다 — 로그 오염이 드롭다운·지표에 분야를 만들 수 없다.
+  for (const x of S.products || []) add(x.domain);
   return [...seen.keys()].sort().map((domain) => ({ domain, label: seen.get(domain) || domain }));
 }
 function syncScopeBar(domains) {
@@ -1229,7 +1248,69 @@ function updateScopeVisible() {
   //    `SCOPED_PANES` 설정이 되돌려진 게 아니라 **이 한 줄이 그 설정을 무력화하고 있었다.**
   const pane = activePane() || parseHash().pane || PANES[0];
   $("scopeBar").hidden = !SCOPED_PANES.includes(pane);
+  // 날짜바도 같은 판정을 쓴다 — 정본은 DATE_PANES 한 배열(§5 스코프바 규약과 동일).
+  $("dateBar").hidden = !DATE_PANES.includes(pane);
 }
+
+// ── 지정 날짜만 보기 (#293 후속) ────────────────────────────────────────────────
+//
+// 서빙 로그 화면 셋에서 창 안의 특정 날짜만 골라 본다. 상태는 DATESEL 하나(Set)이고,
+// 서버 fetch 세 곳(/api/summary · /api/apis · /api/apis/<이름>)이 dateQ() 로 같은 값을
+// 붙인다 — 한 곳이라도 빠지면 목록과 상세가 다른 기간을 세게 된다(#63 ③ 유형).
+// 날짜 후보는 오늘(UTC)부터 창 일수만큼 — 서빙 창(rolling)이 달력일을 최대 N+1개
+// 걸치므로 N+1개를 낸다. 일자별 카드와 같은 UTC 달력일 축이다(서버 substr(ts,1,10)).
+const DATE_PANES = ["serving", "usage", "apis"];
+let DATESEL = new Set();
+const dateQ = () => DATESEL.size ? "&dates=" + [...DATESEL].sort().join(",") : "";
+const dateCandidates = () => {
+  const days = parseInt($("days").value, 10) || 14;
+  const out = [];
+  for (let i = days; i >= 0; i--)
+    out.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+  return out;
+};
+function renderDateChips() {
+  const cand = dateCandidates();
+  // 창을 줄이면 후보 밖 선택이 남을 수 있다 — 남기면 "걸었는데 안 보이는" 필터가 된다.
+  for (const d of [...DATESEL]) if (!cand.includes(d)) DATESEL.delete(d);
+  $("dateBarDays").innerHTML = cand.map((d) =>
+    "<button class='daychip" + (DATESEL.has(d) ? " on" : "") + "' data-day='" + d + "'>" +
+    esc(md(d)) + "</button>").join("");
+  renderDateState();
+}
+function renderDateState() {
+  $("dateBarState").textContent = DATESEL.size
+    ? DATESEL.size + "일 선택 — 이 세 화면은 선택한 날짜만 셉니다"
+    : "전체 기간";
+  $("dateClear").hidden = !DATESEL.size;
+}
+// 닫는 길은 한 곳(§5 토글 규약) — 토글 재클릭이 여기로 온다. 선택은 안 건드린다
+// (닫아도 필터는 유지 — 상태 문구가 계속 말한다).
+function closeDateBar() {
+  $("dateBarDays").hidden = true;
+  $("dateBarToggle").setAttribute("aria-expanded", "false");
+}
+$("dateBarToggle").addEventListener("click", () => {
+  const open = $("dateBarDays").hidden;
+  if (!open) return closeDateBar();          // 같은 것을 다시 누르면 닫힌다
+  renderDateChips();
+  $("dateBarDays").hidden = false;
+  $("dateBarToggle").setAttribute("aria-expanded", "true");
+});
+$("dateBarDays").addEventListener("click", (e) => {
+  const b = e.target.closest(".daychip");
+  if (!b) return;
+  const d = b.dataset.day;
+  if (DATESEL.has(d)) DATESEL.delete(d); else DATESEL.add(d);
+  b.classList.toggle("on", DATESEL.has(d));
+  renderDateState();
+  load(true);                                 // 선택 즉시 반영 — 화면 상태는 건드리지 않는 quiet 경로
+});
+$("dateClear").addEventListener("click", () => {
+  DATESEL.clear();
+  renderDateChips();
+  load(true);
+});
 
 // 지금 열려 있는 탭. **주소가 아니라 화면 상태가 정본이다.**
 //
@@ -1386,6 +1467,17 @@ function render(d) {
 
   // pane 별로 모은다 — 배너는 자기 탭에서만 보여야 남의 문제로 읽히지 않는다
   const N = { pipeline: [], runs: [], serving: [], usage: [], apis: [], keys: [] };
+
+  // 🔴 미등록 접두사 제품(#293)의 몫 — **전체 지표에서 뺐다는 사실을 화면이 말한다**(0012).
+  // 관측 카드(요청이 어느 분야로 세어지나 · 못 찾은 이름)에는 제외 없이 그대로 남아,
+  // 그 카드의 합과 KPI 는 정확히 이 건수만큼 다르다 — 숨기면 "숫자가 왜 다르지"가 된다.
+  if (d.meta.serving_unregistered_excluded > 0) {
+    const un = nf.format(d.meta.serving_unregistered_excluded);
+    for (const p of ["serving", "usage"])
+      N[p].push(note("info", "미등록 제품 요청 " + un + "건 제외",
+        "등록된 분야 밖 이름을 부른 요청은 <b>전체 지표에서 뺐습니다</b> — " +
+        "'요청이 어느 분야로 세어지나'·'못 찾은 이름' 카드에는 그대로 남습니다(#293)."));
+  }
 
   if (d.meta.missing.includes("pipeline") && hasSlo)
     N.pipeline.push(note("info", "데이터 없음", "<code>npm run seed</code> 를 먼저 실행하세요."));
@@ -1658,6 +1750,15 @@ function render(d) {
   // 제품을 D1 에 올리는 **시도**의 결과다. 성공만 세면 열화·실패가 안 보이는데,
   // 실측에서 실패 60건 중 56건이 traffic 한 도메인에 몰려 있었다 — 뭉뚱그리면 사라지는 신호다.
   //
+  // 집계 기간 — 서버가 질의 경계와 같은 규약(KST 오늘 포함 N일)으로 계산한 값만 보여준다.
+  // "(-N일 지표)"는 종료일(오늘)을 포함해 총 N일이라는 뜻이다. 없으면 숨긴다(지어내지 않는다).
+  const PW = P.window;
+  const pwEl = $("pubWindow");
+  if (PW && PW.from && PW.to) {
+    pwEl.hidden = false;
+    pwEl.textContent = "집계 기간 : " + PW.from + "(-" + PW.days + "일 지표) ~ " + PW.to;
+  } else pwEl.hidden = true;
+
   // 전체 합계는 분야별 행을 **화면에서 SUM** 한다. 같은 것을 서버에 두 번 묻지 않는다.
   kpis("pubKpis", [
     ["발행 성공", pTot.attempts ? Math.round(pTot.published / pTot.attempts * 100) + "%" : "—",
@@ -1739,6 +1840,13 @@ function render(d) {
     deg:a.deg+x.deg, dur:a.dur+x.dur, rows:a.rows+x.rows, api:a.api+x.api }),
     { ok:0, fail:0, empty:0, retried:0, unk:0, obs:0, deg:0, dur:0, rows:0, api:0 });
   const judged = rTot.ok + rTot.fail;
+  // 1일 평균의 분모 — 지표별로 **기록이 있던 날**만 센다(집계표에 그날 값이 실린 날).
+  // 행수와 소요는 기록 여부가 따로 갈릴 수 있어 분모도 따로 둔다.
+  const rowDays = new Set(), durDays = new Set();
+  for (const r of R.daily) {
+    if (r.row_count_sum != null) rowDays.add(r.observed_date_kst);
+    if (r.duration_s_sum != null) durDays.add(r.observed_date_kst);
+  }
   kpis("runsKpis", [
     ["성공", judged ? Math.round(rTot.ok / judged * 100) + "%" : "—",
      judged ? rTot.ok + "/" + judged + " 기록 단위 (skip 제외)" : "집계 없음",
@@ -1748,7 +1856,14 @@ function render(d) {
     ["행수 미측정", nf.format(rTot.unk), "측정 " + nf.format(rTot.obs) + "건 · 모른다 ≠ 0", ""],
     // 아래 둘은 #78 D-7 이 요구한 '적재 건수 추이'·'단계별 소요시간'의 합계다.
     ["적재 행수", nf.format(rTot.rows), "이 기간에 실제로 쌓인 행", ""],
+    // 1일 평균 — 🔴 분모는 창 일수가 아니라 **그 지표가 기록된 날**이다(§5 평균 규약:
+    // 기록 없는 날을 0으로 세면 사흘에 한 번 도는 단계가 실제보다 가벼워 보인다).
+    // 분모가 며칠인지는 부제가 직접 말한다 — 창 일수와 다를 수 있는 값이라 숨기면 오독된다.
+    ["1일 평균 적재 행수", rowDays.size ? nf.format(Math.round(rTot.rows / rowDays.size)) : "—",
+     rowDays.size ? "기록 있는 " + rowDays.size + "일 기준" : "기록 없음", ""],
     ["총 소요", hrs(rTot.dur), rTot.api ? "외부 API 호출 " + nf.format(rTot.api) + "회" : "단계 전체 합", ""],
+    ["1일 평균 소요", durDays.size ? hrs(rTot.dur / durDays.size) : "—",
+     durDays.size ? "총 소요 ÷ 기록 있는 " + durDays.size + "일" : "기록 없음", ""],
   ]);
 
   // ── 분야별 안정성 추이 — 하루가 한 칸, 분야가 한 줄 ─────────────────────────
@@ -1809,11 +1924,14 @@ function render(d) {
       const tds = hmDays.map((day) => {
         const c = HM[dom][day];
         const sev = hmSev(c);
+        // 기록 없는 칸은 회색 None 을 쓴다 — 빈 칸만으로는 '문제 없던 날'(초록)과 구분이
+        // 흐려서, 관측 공백을 괜찮았던 날로 읽는 사고가 난다(2026-08-11 실측 지적).
         if (sev === "none")
-          return "<td><span class='cell' title='" + esc(dom) + " " + esc(md(day)) +
-            " — 기록 없음(관측 공백)'></span></td>";
+          return "<td><span class='cell none' title='" + esc(dom) + " " + esc(md(day)) +
+            " — 기록 없음(관측 공백)'>None</span></td>";
+        // 문제 없던 날은 OK 를 쓴다 — 연초록 바탕만으로는 기록 없는 칸과 구분이 안 됐다.
         const label = sev === "bad" ? (c.fail + c.pubFail)
-          : sev === "warn" ? (c.empty + c.deg + c.retried + c.pubDeg + c.pubMis) : "";
+          : sev === "warn" ? (c.empty + c.deg + c.retried + c.pubDeg + c.pubMis) : "OK";
         const tip = esc(dom) + " " + esc(md(day)) +
           (c.ev ? "&#10;실행 " + nf.format(c.ev) + " · 실패 " + c.fail + " · 빈 " + c.empty +
             " · 재시도로 살림 " + c.retried + " · 품질 주의 " + c.deg : "") +
@@ -1830,8 +1948,8 @@ function render(d) {
     return "<table class='hm'><thead>" + head + "</thead><tbody>" + body + "</tbody></table>" +
       "<div class='cal-legend'><span><span class='pill bad'>빨강</span> 실패 — 숫자는 그날 실패 건수</span>" +
       "<span><span class='pill warn'>노랑</span> 빈 실행·품질 주의·재시도·행수 불일치</span>" +
-      "<span><span class='pill ok'>초록</span> 문제 없음</span>" +
-      "<span><span class='pill dim'>빈 칸</span> 기록 없음 = 관측 공백</span></div>";
+      "<span><span class='pill ok'>OK</span> 문제 없음 — 초록 테두리</span>" +
+      "<span><span class='pill dim'>None</span> 기록 없음 = 관측 공백</span></div>";
   })() : emptyBox(["데이터 없음", "실행 집계·발행 대장이 채워지면 나타납니다"]);
 
   // 매트릭스 — 셀이 비어 있으면(—) 그 도메인·단계는 기록을 안 남긴다는 뜻. 공백도 관측이다.
@@ -2102,9 +2220,15 @@ function render(d) {
   U.daily = fillDays(U.daily, d.window_days, (r) => r.day, { keyed: 0, anon: 0 });
   if (U.daily.some((x) => (x.keyed || 0) + (x.anon || 0) > 0)) {
     const maxU = Math.max(...U.daily.map((x) => x.keyed + x.anon));
+    // 🔴 title 이 아니라 data-tip(ui.js UITip)이다 — title 은 ① 뜨는 데 ~1초 걸리고
+    // ② 모바일에서 안 뜨고 ③ 서식이 안 된다. UITip 은 **말풍선이 문서 전체에 하나**라
+    // 막대 사이를 옮겨 다녀도 생기는 영역과 없어지는 영역이 겹칠 수 없고(같은 요소가
+    // 자리만 옮긴다), 열림 75ms·닫힘 120ms 페이드로 빠르고 부드럽다(2026-08-12 요청).
     $("usageDaily").innerHTML =
       "<div class='bars'>" + U.daily.map((x) =>
-        "<div class='b' title='" + esc(x.day) + " · 인증 " + x.keyed + " · 익명 " + x.anon + "'>" +
+        "<div class='b' data-tip='<b>" + esc(x.day) + "</b><br>" +
+        "요청 " + nf.format(x.keyed + x.anon) + "건 — 인증 " + nf.format(x.keyed) +
+        " · 익명 " + nf.format(x.anon) + "'>" +
         "<i style='height:" + Math.max(3, Math.round((x.keyed + x.anon) / maxU * 70)) + "px'></i></div>").join("") + "</div>" +
       "<div class='bars-axis'><span>" + esc(U.daily[0].day) + "</span><span>" +
       esc(U.daily[U.daily.length - 1].day) + "</span></div>";
@@ -2595,7 +2719,7 @@ async function openDetail(name, silent) {
   if (!insertDetailRow(name, emptyBox("불러오는 중…"))) return;   // 필터로 안 보이면 조용히
   let d;
   try {
-    const res = await fetch("/api/apis/" + encodeURIComponent(name) + "?days=" + $("days").value,
+    const res = await fetch("/api/apis/" + encodeURIComponent(name) + "?days=" + $("days").value + dateQ(),
       { headers: authHeaders() });
     if (!res.ok) throw new Error("HTTP " + res.status);
     d = await res.json();
@@ -2703,7 +2827,7 @@ $("apiQ").addEventListener("input", renderApiList);
 
 async function loadApis() {
   try {
-    const res = await fetch("/api/apis?days=" + $("days").value, { headers: authHeaders() });
+    const res = await fetch("/api/apis?days=" + $("days").value + dateQ(), { headers: authHeaders() });
     if (!res.ok) throw new Error("HTTP " + res.status);
     renderApis(await res.json());
   } catch {
@@ -2936,7 +3060,7 @@ function syncMode() {
 async function load(quiet) {
   let res;
   try {
-    res = await fetch("/api/summary?days=" + $("days").value, { headers: authHeaders() });
+    res = await fetch("/api/summary?days=" + $("days").value + dateQ(), { headers: authHeaders() });
   } catch { return quiet ? null : fail("서버에 닿지 못했습니다"); }
   if (!res.ok) {
     // 401·503 은 **토큰 문제**다 — 조용한 새로고침이어도 화면을 접고 잠금을 띄운다.
@@ -3075,7 +3199,12 @@ addEventListener("visibilitychange", () => {
 });
 syncAuto();
 
-$("days").addEventListener("change", load);
+$("days").addEventListener("change", () => {
+  // 창이 바뀌면 날짜 후보도 바뀐다 — 후보 밖에 남은 선택을 걷어내고(안 걷으면 "걸었는데
+  // 안 보이는" 필터가 된다) 칩이 열려 있으면 다시 그린다. load 는 걷어낸 뒤의 값으로 간다.
+  renderDateChips();
+  load();
+});
 // 딥링크는 **여기서 한 번** 반영한다. `hashchange` 는 최초 진입에 안 뜨고, 예전에는
 // `render()` 끝의 `showTab(parseHash().pane)` 이 그 몫까지 겸했다 — 그런데 그 자리는
 // 30초마다 다시 도는 자리라, 겸하는 동안 자동 새로고침이 사람을 옮기는 부작용이 붙어
