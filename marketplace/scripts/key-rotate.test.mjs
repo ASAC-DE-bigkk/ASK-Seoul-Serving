@@ -12,6 +12,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
 import { makeRotateTicket } from "../src/google-oauth.js";
+import { readFile } from "node:fs/promises";
 
 const SALT = "test-salt-not-a-real-secret";
 const OLD = "c".repeat(64);
@@ -23,7 +24,8 @@ const ENV = {
 };
 
 // D1 스텁 — 회전이 실제로 **무엇을 쓰는지**를 본다. 배치에 담긴 문장이 이 테스트의 관찰 대상이다.
-function fixtureDb({ row = { key_hash: OLD, rotated_day: null, rotated_count: 0 }, issuedThisHour = 0 } = {}) {
+function fixtureDb({ row = { key_hash: OLD, rotated_day: null, rotated_count: 0 },
+                     issuedThisHour = 0, updateChanges = 1 } = {}) {
   const seen = { batches: [], binds: [] };
   return {
     seen,
@@ -42,7 +44,11 @@ function fixtureDb({ row = { key_hash: OLD, rotated_day: null, rotated_count: 0 
       });
       return { bind: (...b) => { seen.binds.push({ sql, b }); return stmt(b); }, ...stmt([]) };
     },
-    async batch(list) { seen.batches.push(list.map((s) => ({ sql: s._sql, bind: s._bind }))); return []; },
+    // 실 D1 은 문장마다 `meta.changes` 를 돌려준다 — 회전이 그 값으로 "정말 앉았는가"를 본다.
+    async batch(list) {
+      seen.batches.push(list.map((s) => ({ sql: s._sql, bind: s._bind })));
+      return list.map((s) => ({ meta: { changes: s._sql.includes("UPDATE _keys") ? updateChanges : 1 } }));
+    },
   };
 }
 
@@ -149,4 +155,23 @@ test("🔴 키 원문·이메일이 응답 헤더나 로그 바인딩에 새지 
     for (const v of b)
       assert.notEqual(String(v), key, "키 원문이 D1 바인딩에 실렸다");
   assert.doesNotMatch(String(res.headers.get("set-cookie") || ""), /ask_[a-z0-9]{8}/);
+});
+
+test("🔴 갱신이 0행이면 키를 보여 주지 않는다 — 같은 확인이 두 번 처리된 경우", async () => {
+  // 버튼을 두 번 누르면 둘 다 행을 읽은 뒤 하나만 갱신에 성공한다. 진 쪽이 키를 보여 주면
+  // **작동하지 않는 키**를 쥐여 주는 것이고, 원문은 그 화면에서만 나오므로 복구도 안 된다.
+  const db = fixtureDb({ updateChanges: 0 });
+  const res = await rotate(db, await ticketBody());
+  assert.equal(res.status, 409);
+  const html = await res.text();
+  assert.doesNotMatch(html, /ask_[a-z0-9]{8}/, "안 앉은 키를 화면에 뿌렸다");
+  assert.match(html, /발급이 겹쳤어요/);
+});
+
+test("확인 버튼은 두 번 눌리지 않게 막는다 — 잡히는 쪽은 횟수만 쓴다", async () => {
+  // 서버가 겹침을 잡긴 하지만, 진 쪽은 키를 못 받고 하루 재발급 횟수만 소모한다.
+  const src = await readFile(new URL("../src/index.js", import.meta.url), "utf8");
+  const form = src.slice(src.indexOf('action="/api/v1/keys/rotate"'), src.indexOf("새 키 발급</button>"));
+  assert.match(form, /onsubmit=/, "폼이 두 번 눌리는 것을 화면에서 안 막는다");
+  assert.match(form, /disabled\s*=\s*true/);
 });

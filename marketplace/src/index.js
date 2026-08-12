@@ -179,9 +179,12 @@ async function googleCallback(env, request, url, trace) {
       `<p><strong>새로 발급하면 그 키는 즉시 무효가 됩니다.</strong> 지금 쓰고 있는 곳이 있다면 ` +
       `새 키로 바꿔 주셔야 해요. 오늘 쓴 호출 수는 새 키로 그대로 이어집니다.</p>` +
       (left > 0
-        ? `<form method="post" action="/api/v1/keys/rotate" style="margin-top:1.5rem">` +
+        // 두 번 눌리는 것을 화면에서도 한 번 막는다 — 서버가 겹침을 잡긴 하지만, 잡히는 쪽은
+        // 키를 못 받고 재발급 횟수만 쓴다. JS 가 없어도 폼은 그대로 동작한다.
+        ? `<form method="post" action="/api/v1/keys/rotate" style="margin-top:1.5rem" ` +
+          `onsubmit="setTimeout(function(){var b=document.getElementById('go');b.disabled=true;b.textContent='발급 중…'},0)">` +
           `<input type="hidden" name="ticket" value="${esc(ticket)}">` +
-          `<button type="submit" style="font:inherit;padding:.6rem 1.1rem;border-radius:.5rem;` +
+          `<button type="submit" id="go" style="font:inherit;padding:.6rem 1.1rem;border-radius:.5rem;` +
           `border:1px solid currentColor;background:transparent;cursor:pointer">새 키 발급</button>` +
           `</form>` +
           `<p style="margin-top:1rem;font-size:.9rem;opacity:.75">키가 아직 있으시면 이 창을 닫으셔도 됩니다` +
@@ -277,7 +280,7 @@ async function rotateKey(env, request, url, trace) {
   const hash = await sha256hex(key);
   const prefix = key.slice(0, 8);
   const now = new Date().toISOString();
-  await env.DB.batch([
+  const written = await env.DB.batch([
     // 오늘 쓴 양을 먼저 옮긴다 — 키를 갈아 끼운 뒤에 옮기면 그 사이 요청이 새 해시에 세어져
     // 덮어쓸 위험이 있다. 같은 batch 라 원자적이지만 순서까지 맞춰 둔다.
     env.DB.prepare(
@@ -292,6 +295,19 @@ async function rotateKey(env, request, url, trace) {
     env.DB.prepare("DELETE FROM _issuance_log WHERE created_at < ?")
       .bind(new Date(Date.now() - 86400000).toISOString()),
   ]);
+
+  // 🔴 **키를 보여 주기 전에 그 키가 실제로 앉았는지 본다.** 같은 티켓으로 두 요청이 거의
+  //    동시에 오면(버튼 두 번 누르기) 둘 다 행을 읽은 뒤 하나만 갱신에 성공한다 — 진 쪽은
+  //    `WHERE key_hash = <옛 해시>` 가 0행이 되는데, 그걸 안 보면 **작동하지 않는 키를
+  //    보여 주고** 이용자는 그 사실을 나중에 401 로 알게 된다. 원문은 여기서만 나오므로
+  //    그 화면을 놓치면 복구할 길도 없다.
+  //    (`meta` 를 못 읽는 실행기에서는 판단을 보류하고 진행한다 — 실 D1 은 항상 준다.)
+  const changed = written?.[1]?.meta?.changes;
+  if (changed === 0)
+    return authPage("다시 시도해 주세요",
+      `<h1>발급이 겹쳤어요</h1><p>같은 확인이 두 번 처리돼 이번 요청은 반영되지 않았습니다. ` +
+      `<a href="/api/v1/auth/google">다시 로그인</a>해서 새로 받아 주세요.</p>`, 409);
+
   trace.keyHash = hash;
 
   return new Response(authPage("새 키 발급 완료",
