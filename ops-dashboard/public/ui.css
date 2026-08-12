@@ -377,7 +377,7 @@ tbody tr:hover .kbtn { border-color:var(--line-strong); }
 /* 도메인 스코프 줄 — "지금 무엇을 보고 있나" + 전체로 되돌아가는 길 */
 /* 🔴 `display` 를 주는 요소는 `[hidden]` 도 **직접** 꺼야 한다. UA 기본 `[hidden]{display:none}`
    은 author 스타일한테 진다 — 아래 `display:flex` 가 이겨서, JS 가 `hidden` 을 걸어도
-   화면에는 그대로 보였다(스코프바가 '이용 행동'·'이용자 키' 탭에서 안 사라지던 원인).
+   화면에는 그대로 보였다(스코프바가 '이용 패턴 분석'·'이용자 키' 탭에서 안 사라지던 원인).
    같은 파일의 `.note`·`.why`·`.pane`·`.detail` 은 이 규칙이 있는데 여기만 빠져 있었다. */
 .scopebar[hidden] { display:none; }
 .scopebar { display:flex; align-items:center; gap:8px; flex-wrap:wrap;

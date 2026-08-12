@@ -52,7 +52,7 @@ test("🔴 ① 숫자를 HTML 에 박지 않는다 — 자리표시자만 두고
 
 test("🔴 ① 제품·질문 수는 세어서 넣는다 (분야는 위 전용 검사)", () => {
   assert.match(HTML, /setStat\("statProducts", products\.length/);
-  assert.match(HTML, /products\.reduce\(\(n, p\) => n \+ \(\(p\.usage_patterns \|\| \[\]\)\.length\), 0\)/,
+  assert.match(HTML, /setStat\("statPatterns", nf\.format\(patterns\)/,
     "질문 수를 카탈로그에서 세지 않는다");
 });
 
@@ -61,14 +61,17 @@ test("② 네 칸이 전부 실측이다 — 하드코딩한 사실을 끼워 �
     "실측이 아닌 값이 섞이면 '무료' 같은 빈 칸이 다시 생긴다");
 });
 
-// 🔴 라벨이 사실을 말하는가 — 값(전체)만 두고 "검증된 질문"이라 적었다가, 저작 스윕으로
-//    초안이 섞인 날 그 문장이 거짓이 됐다(795 중 73 미검증). 둘을 갈라 세는 코드를 고정한다.
-test("🔴 질의 패턴 라벨이 검증본과 초안을 갈라 말한다", () => {
-  assert.match(HTML, /\(p\.usage_patterns \|\| \[\]\)\.filter\(\(u\) => u\.verified_at\)\.length/,
-    "검증본 수를 따로 세지 않으면 라벨이 전체를 '검증됨'으로 말하게 된다");
-  assert.match(HTML, /patterns === verified/, "전부 검증된 경우와 섞인 경우를 갈라야 한다");
-  assert.doesNotMatch(STRIP, /실제로 돌려보고 행 수까지 확인한 질문<\/div>/,
-    "초안이 섞이면 거짓이 되는 문구가 마크업에 박혀 있다");
+// 🔴 말과 수를 같은 쪽에 맞춘다 — 설명이 "바로 물어볼 수 있는"이면 **실행되는 것만 세야** 한다.
+//    한때 전체(초안 포함)를 세면서 "검증된 질문"이라 적었다가 초안이 섞인 날 거짓이 됐고
+//    (795 중 73 미검증 — ASAC-DBT#489), 그 뒤 "행 수까지 확인함"으로 맞췄더니 이번엔 증명이
+//    방문자의 언어가 아니었다(오너 결정 2026-08-11 — 방문자의 질문은 "뭘 물어볼 수 있나"다).
+//    라벨은 설명("활용 질문")으로 바뀌었지만 세는 쪽은 그대로다: 미검증 초안은 실행하면
+//    409 라, verified_at 필터를 빼는 순간 "물어볼 수 있는"이 거짓이 된다.
+test("🔴 '바로 물어볼 수 있는'이라 말하면 실행되는 것(검증본)만 센다", () => {
+  assert.match(HTML, /const patterns = products\.reduce\(\s*\(n, p\) => n \+ \(p\.usage_patterns \|\| \[\]\)\.filter\(\(u\) => u\.verified_at\)\.length, 0\)/,
+    "verified_at 필터 없이 세면 초안이 '검증된'에 섞인다");
+  assert.doesNotMatch(HTML, /n \+ \(\(p\.usage_patterns \|\| \[\]\)\.length\)/,
+    "전체를 세는 옛 계산이 남아 있다");
 });
 
 test("🔴 ③ 카탈로그 실패 강등이 살아 있는 id 만 만진다", () => {

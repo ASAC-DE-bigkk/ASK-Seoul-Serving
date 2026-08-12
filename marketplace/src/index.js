@@ -297,12 +297,12 @@ async function handleCatalog(env, ctx) {
 }
 
 async function buildCatalog(env, cache, cacheKey) {
-  // 🔴 **다섯 질의를 줄세우지 않는다.** 서로 독립적인 읽기인데 순차로 `await` 하면 D1 왕복이
+  // 🔴 **여섯 질의를 줄세우지 않는다.** 서로 독립적인 읽기인데 순차로 `await` 하면 D1 왕복이
   // 그대로 더해진다 — 한국↔CF 왕복이 회당 0.7~0.9s 라 5번이면 4~4.5s 다(브라우저 실측 4,529ms).
   // 병렬로 띄우면 가장 느린 하나로 수렴한다. 실패 처리는 그대로다: `_catalog` 이 깨지면
-  // 전체가 reject 되고(카탈로그 없이는 응답이 성립하지 않는다), 나머지 넷은 `safeRows` 가
+  // 전체가 reject 되고(카탈로그 없이는 응답이 성립하지 않는다), 나머지 다섯은 `safeRows` 가
   // null 로 내려앉아 **그 부분만 빠진 채** 응답이 나간다.
-  const [catalogRes, docRows, patternRows, displayRows, grainRows] = await Promise.all([
+  const [catalogRes, docRows, patternRows, displayRows, grainRows, vocabularyRows] = await Promise.all([
     env.DB.prepare(
       "SELECT name, product_id, external, description, product_question, time_axis, columns, " +
       "row_count, freshness, exported_at " +
@@ -321,6 +321,9 @@ async function buildCatalog(env, cache, cacheKey) {
     safeRows(env.DB.prepare(
       "SELECT product_id, grain FROM d1_catalog_ext"
     )),
+    safeRows(env.DB.prepare(
+      "SELECT product_id, column_name, vocabulary_id FROM d1_catalog_column_vocabularies"
+    )),
   ]);
   const { results } = catalogRes;
 
@@ -337,6 +340,10 @@ async function buildCatalog(env, cache, cacheKey) {
   // 꾸미면 화면이 설명이 있는 척한다).
   const docs = new Map();
   for (const r of docRows || []) docs.set(`${r.product_id}|${r.column_name}`, r.description_ko || null);
+  const vocabularies = new Map();
+  for (const r of vocabularyRows || []) {
+    vocabularies.set(`${r.product_id}|${r.column_name}`, r.vocabulary_id);
+  }
 
   // 활용 예시도 같은 이유로 게시본에서 온다(`d1_usage_patterns`, #642 §3).
   //
@@ -400,9 +407,14 @@ async function buildCatalog(env, cache, cacheKey) {
     key_issuance: { method: "google_oauth", start: "/api/v1/auth/google" },
     join_axes: JOIN_AXES,
     products: results.map((r) => {
-      const columns = JSON.parse(r.columns).map((c) => ({
-        ...c, description: docs.get(`${r.product_id}|${c.name}`) ?? null,
-      }));
+      const columns = JSON.parse(r.columns).map((c) => {
+        const vocabularyId = vocabularies.get(`${r.product_id}|${c.name}`);
+        return {
+          ...c,
+          description: docs.get(`${r.product_id}|${c.name}`) ?? null,
+          ...(vocabularyId ? { vocabulary_id: vocabularyId } : {}),
+        };
+      });
       return {
         ...r, columns,
         join_keys: columns.map((c) => c.name).filter((n) => JOIN_AXES.includes(n)),
@@ -816,7 +828,7 @@ export const LOG_COLUMNS = [
   // 행동 로그 (#9 · agreement §3-1) — 원문은 하나도 없다. UA 는 분류 상수로, Referer 는
   // 호스트로, IP 는 아예 안 본다(§3-2). 미배선으로 남는 셋은 아래 주석에 이유를 적었다.
   "ua_class", "agent_name", "agent_mode", "agent_verified", "country", "asn", "referer_host",
-  "publication_id", "pattern_id",
+  "publication_id", "pattern_id", "page_path",
 ];
 
 export function logValues(trace, env) {
@@ -842,19 +854,18 @@ export function logValues(trace, env) {
     // 어느 검증 패턴을 돌렸는지(ASAC-DAG#642) — `run_pattern` 만 채운다. 나머지 경로는
     // 패턴이라는 개념 자체가 없어 NULL 이 맞다(§4-3: 없는 것을 0·'' 로 꾸미지 않는다).
     trace.patternId ?? null,
+    // 어느 기계 문서를 읽었는지(#285 · agreement §3-1-1) — `route="page"` 만 채운다.
+    // 값은 `LOGGED_PAGES` 셋뿐이고 사람 페이지는 안 넣는다(`/`·`/catalog` 는 부팅에서
+    // `/api/v1/catalog` 를 불러 **이미 `route=catalog` 로 세어져** 같은 방문을 두 번 센다).
+    trace.pagePath ?? null,
   ];
 }
 
-// 아직 채우지 않는 하나 — `0005` 에 컬럼은 있고 값을 넣을 곳이 없다. NULL 이 정직하다(§4-3).
+// `0005` 의 22종은 이제 전부 배선됐다 — 미배선으로 남은 컬럼이 없다.
 //
-//   page_path       기계 문서 3종(`/llms.txt`·`/openapi.json`·`/skill-openapi.json`)이
-//                   `run_worker_first` 밖이라 워커에 닿지 않는다. 범위가 **3경로로 확정**됐다
-//                   (#177 · agreement §3-1-1) — 사람 페이지(`/`·`/catalog`)는 부팅에서
-//                   `/api/v1/catalog` 를 불러 **이미 `route=catalog` 로 세어지므로** 넣으면
-//                   같은 방문을 두 번 센다.
-//                   🔴 착수 전제: `[assets]` 에 `binding` 이 없다. 그대로 `run_worker_first`
-//                   에 더하면 워커가 그 경로를 아는 분기가 없어 problem+json 으로 떨어져
-//                   **문서 파일이 깨진다.** `binding = "ASSETS"` + `route="page"` 분기가 세트다.
+// `page_path` 는 마지막 하나였다(#285). 착수를 막던 전제는 `[assets]` 의 `binding` 부재였고
+// #238(charset 수정)이 그걸 해소하면서 길이 열렸다 — 워커가 자산을 직접 꺼낼 수 있어야
+// `run_worker_first` 에 더한 경로가 problem+json 으로 떨어지지 않는다.
 //
 // `pattern_id` 는 배선됐다 — "패턴 실행 API 가 아직 없다"가 미룬 이유였고 `run_pattern`(#132)
 // 이 그 소비자다. 이걸로 ASAC-DAG#642 의 로깅 키 `(product_id, pattern_id, publication_id)`
@@ -893,12 +904,27 @@ async function logRequest(env, trace) {
 //    **로컬이 운영의 증거가 되지 않는다** — 이 파일들을 만질 때 그걸 기억한다.
 const TEXT_ASSETS = new Set(["/llms.txt", "/robots.txt"]);
 
-async function serveTextAsset(request, env) {
+// 🔴 관측 대상은 **기계 문서 3종**이고, 워커를 통과하는 4경로와 **다르다**(#285 · #177 §3).
+//    `robots.txt` 가 워커를 지나는 건 위의 charset 사고 때문이지 관측 의도가 아니다 —
+//    통과 사유와 적재 사유를 섞으면 나중에 "왜 이건 세고 저건 안 세나"를 못 답한다.
+//    그리고 크롤러가 주기적으로 치는 파일이라, 세면 "기계가 우리 **데이터 계약**을 읽었다"는
+//    신호가 그 잡음에 묻힌다. 범위의 정본은 agreement §3-1-1 이고 넓히려면 그 개정이 먼저다.
+//
+// 🔑 이 집합이 곧 `page_path` 의 **값 전체**다 — 자유 문자열이 아니라 값 셋짜리 열거형이라,
+//    콘솔 카드가 값을 그대로 표시해도 예기치 못한 것이 들어올 자리가 없다(#177 "형식이 곧 화면").
+const LOGGED_PAGES = new Set(["/llms.txt", "/openapi.json", "/skill-openapi.json"]);
+
+// 워커가 직접 꺼내 주는 정적 문서 전부(= `run_worker_first` 의 문서 넷).
+const WORKER_SERVED_ASSETS = new Set([...TEXT_ASSETS, ...LOGGED_PAGES]);
+
+async function serveAsset(request, env, path) {
   const res = await env.ASSETS.fetch(request);
   // 원본 응답을 그대로 두고 헤더만 바꾼다 — 본문·상태·`_headers` 의 보안 헤더가 다 살아야
   // 한다. `new Response(res.body, res)` 가 그걸 보장한다(헤더 사본이 따라온다).
   const out = new Response(res.body, res);
-  out.headers.set("content-type", "text/plain; charset=utf-8");
+  // ⚠️ charset 교정은 **텍스트 둘에만** 건다. `.json` 에 `text/plain` 을 씌우면 문서가
+  //    깨진다 — JSON 은 규격상 UTF-8 이라 손댈 이유도 없다.
+  if (TEXT_ASSETS.has(path)) out.headers.set("content-type", "text/plain; charset=utf-8");
   return out;
 }
 
@@ -1021,10 +1047,16 @@ const chatUnknownProduct = (productId) =>
 async function route(request, env, url, trace, ctx) {
   const path = url.pathname;
 
-  // 정적 텍스트는 게이트 앞이다 — 키도 쿼터도 없는 공개 문서고, 로깅도 아직 안 붙인다.
-  // (`route="page"` 로 세는 것은 콘솔 계약 반영이 먼저다 — #177 · agreement §3-1-1)
-  if (TEXT_ASSETS.has(path) && (request.method === "GET" || request.method === "HEAD"))
-    return serveTextAsset(request, env);
+  // 정적 문서는 게이트 앞이다 — 키도 쿼터도 없는 공개 문서다.
+  // 기계 문서 3종만 `route="page"` 로 센다(#285 · agreement §3-1-1). `page` 는 **SERVE 가
+  // 아니다** — 문서 접근은 데이터 서빙이 아니라 관측 축이다(콘솔 decision/0014 §2).
+  if (WORKER_SERVED_ASSETS.has(path) && (request.method === "GET" || request.method === "HEAD")) {
+    if (LOGGED_PAGES.has(path)) {
+      trace.route = "page";
+      trace.pagePath = path;      // 화이트리스트를 통과한 경로 원문 — 정규화하지 않는다
+    }
+    return serveAsset(request, env, path);
+  }
 
   // 폐지된 이메일 발급 경로. **경로 자체는 안내용으로 남긴다** — 지우면 아래 405 분기로
   // 떨어져 "왜 안 되는지"를 못 말하고, 같은 주소의 DELETE 는 살아 있어 더 헷갈린다.
