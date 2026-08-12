@@ -1198,44 +1198,94 @@ function patternParams(sql) {
 //    `rename` 이 들어가야 한다. `'rename'` 을 그대로 보내면 따옴표까지 값이 된다.
 // 패턴 SQL 주석의 예시값 → 입력칸 미리 채우기(#218).
 //
-// 🔴 **구표기(`:n 예시 10`)도 읽는다.** 계약은 `:이름=값` 이고(ASAC-DBT#499) 게시본도 그리로
-//    가는 중이지만, 아직 옛 표기로 게시된 것이 남아 있다. 그 사이 이 화면은 칸을 **빈 채로**
-//    뒀고, 이용자가 그대로 「호출」을 누르면 값 없는 요청이 나가 400 이 됐다 — 히어로 칩
-//    ("요즘 뜨는 상권" 등)에서 들어온 사람이 만나던 바로 그 벽이다(2026-08-12 실측: 게시본
-//    906건 중 65건이 이 경우, 전부 commerce).
+// 🔑 **읽는 규칙은 검증기(`common/serving/pattern_verify.resolve_params`)를 그대로 옮긴 것이다.**
+//    오너가 `verified_rows` 를 찍을 때 쓴 값과 화면이 채워 주는 값이 **같아야 한다** — 다르면
+//    "검증된 질문"인데 화면에서 누르면 0행이 나온다. 실제로 그랬다: 2026-08-12 전수 대조에서
+//    게시본 884건 중 **129건**이 검증기와 다른 값을 채우고 있었고, 원인은 거의 하나였다 —
+//    **값을 공백에서 끊었다.** `강남 MICE 관광특구`→`강남` · `2026-07-17 17:00:00`→`2026-07-17` ·
+//    `["서울역","건대입구역"]`→`["서울역"`(깨진 JSON). 셋 다 화면엔 값이 차 있어 멀쩡해 보이고
+//    누르면 0행이라, **데이터가 없는 것처럼** 읽혔다(오너가 주차장 질문에서 제보).
 //
-//    구표기를 읽어도 안전한 이유: 구분자가 **리터럴 한국어**(`예시`·`예`)라 옆 파라미터의
-//    숫자를 주워 올 수 없다. 검증기(`pattern_verify`)가 `=` 앵커로 좁힌 이유였던 사고
-//    (`:gu=종로구, :from=2026-07-01` → `:gu` 에 `2026`)는 이 형태에서 생기지 않는다.
-//    여기는 **화면 편의**일 뿐이고 이용자가 고쳐 쓸 수 있는 값이라, 못 채우는 것보다 낫다.
-//    게시본이 새 표기로 바뀌면 앞 갈래가 먼저 잡아 이 갈래는 저절로 안 쓰인다.
-function patternDefaults(sql) {
-  const out = {};
-  // VALUE 는 세 갈래를 캡처한다: 0=전체 · 1=홑따옴표 안 · 2=쌍따옴표 안.
-  // 🔴 갈래마다 앞에 붙는 그룹 수가 달라 **오프셋을 명시로 넘긴다** — 번호를 손으로 세다
-  //    분기 ②에서 한 칸씩 밀려 `undefined` 를 채운 적이 있다(값이 있는데 빈 칸으로 남았다).
-  const VALUE = "('([^']*)'|\"([^\"]*)\"|[^\\s,;)|]+)";
-  const take = (m, at) => m[at + 1] ?? m[at + 2] ?? m[at];
-  // 🔴 `예시`·`예` 뒤에는 **구분자가 반드시 온다**(공백 또는 `:`). 이걸 안 걸면 `예보`·`예상`
-  //    같은 낱말에서 뒷글자를 값으로 뽑는다(`예보 3시간` → `보`). 지금 게시본에는 그런 주석이
-  //    0건이지만, 날씨처럼 `예보` 를 쓰는 도메인이 주석을 달면 그날 조용히 틀린 값이 찬다.
-  //    🔴 하나의 그룹으로 감싼다 — 최상위 교대(`A|B`)로 두면 이어 붙일 때 VALUE 가 뒤쪽
-  //    갈래에만 걸려 앞 갈래가 값 없이 매치되고, 결과가 `undefined` 로 들어간다.
-  const MARK = "(?:예시|예)(?:\\s*:\\s*|\\s+)";
+// 🔴 그렇다고 괄호를 값에서 무조건 빼면 안 된다 — `광화문(세종문화회관)` 은 설명이 아니라
+//    **역의 정식 이름**이다(5호선). 반대로 `11710(법정 구 코드)` 의 괄호는 설명이다. 가르는
+//    것은 괄호가 아니라 **숫자 갈래**다: 값이 숫자로 시작하면 숫자까지만 값으로 본다.
+//
+// 🔴 **구표기(`:n 예시 10`)도 읽는다** — 계약은 `:이름=값` 이지만(ASAC-DBT#499) 옛 표기로
+//    게시된 것이 남아 있던 동안 칸이 빈 채로 남아 400 이 났다(#296). 지금 게시본엔 0건이라
+//    잠자는 갈래이고, **검증기 규칙이 먼저 걸린 뒤에만** 본다 — 그래야 둘이 갈리지 않는다.
+
+// 예시값 한 개를 읽는다 — 검증기의 네 갈래와 같은 순서다(순서를 바꾸면 결과가 갈린다).
+function exampleValue(val) {
+  // ① 따옴표 문자열. **벗긴다** — 서버는 값을 바인딩하므로 `'rename'` 을 그대로 보내면
+  //    따옴표까지 값이 된다.
+  let m = /^'((?:[^']|'')*)'/.exec(val);
+  if (m) return m[1].replace(/''/g, "'");
+  m = /^"([^"]*)"/.exec(val);
+  if (m) return m[1];
+  // ② 한 줄 배열(`:areas=["서울역","건대입구역"]` — `json_each(:areas)` 용)은 표기 그대로.
+  //    서버가 문자열로 바인딩하고 SQLite 가 JSON 으로 읽는다. 여기서 쉼표에 끊기면 깨진 JSON 이 된다.
+  m = /^\[[^\]\n]*\]/.exec(val);
+  if (m) return m[0];
+  // ③ 숫자 — **값 전체가 숫자일 때만.** `2026-07-01` 의 앞 네 자리를 숫자로 삼키면
+  //    `BETWEEN 2026 AND 2026` 이 되어 조용히 0행이다(#756 이 잡은 그 사고). 다만 마침표를
+  //    무조건 거부해서도 안 된다 — `5. 설명문…` 처럼 값 뒤에 문장이 붙는 저작 관행이 있다.
+  //    가르는 기준은 마침표 뒤가 숫자냐다(`3.5` 는 소수, `5. ` 는 문장 끝).
+  m = /^[0-9]+(?:\.[0-9]+)?(?![0-9A-Za-z_\-/:]|\.[0-9])/.exec(val);
+  if (m) return m[0];
+  // ④ 따옴표 없는 값 — 쉼표·줄끝까지. **공백에서 끊지 않는다**(`약간 붐빔`·`영등포 타임스퀘어`·
+  //    `2026-07-17 17:00:00` 이 전부 여기다).
+  m = /^[^,\n\]]+/.exec(val);
+  return m && m[0].trim() ? m[0].trim() : undefined;
+}
+
+// 🔴 `예시`·`예` 뒤에는 **구분자가 반드시 온다**(공백 또는 `:`). 이걸 안 걸면 `예보`·`예상`
+//    같은 낱말에서 뒷글자를 값으로 뽑는다(`예보 3시간` → `보`).
+const EX_MARK = "(?:예시|예)(?:\\s*:\\s*|\\s+)";
+
+// `:이름` 이 나오는 자리마다 그 줄 끝까지를 보고 값을 찾는다 — 검증기와 같은 훑기다.
+// 줄 끝까지 잡는 이유: 60자 고정이면 `:ids=["…","…","…"]` 같은 긴 한 줄 배열이 잘린다.
+function findExample(name, source) {
+  const re = new RegExp(":" + name + "(?![a-z0-9_])", "gi");
+  const sep = new RegExp("^(?:\\s*=\\s*|\\s*" + EX_MARK + ")");
+  for (let m; (m = re.exec(source)); ) {
+    const rest = source.slice(m.index + m[0].length);
+    const nl = rest.indexOf("\n");
+    const s = sep.exec((nl < 0 ? rest : rest.slice(0, nl)).slice(0, 600));
+    if (!s) continue;   // `=` 도 예시 표시도 없으면 그냥 쓰인 자리다
+    const v = exampleValue(s.input.slice(s[0].length));
+    if (v !== undefined) return v;
+  }
+  return undefined;
+}
+
+// 이름이 **코드 쪽에** 있고 주석은 값만 적은 형 — `WHERE x = :cat  -- 예시 'food'`.
+// 같은 줄에 파라미터가 하나일 때만 붙인다(둘이면 어느 것인지 알 수 없다).
+function noteOnlyExample(name, sql) {
   for (const line of String(sql || "").split("\n")) {
     const cut = line.indexOf("--");
     if (cut < 0) continue;
-    const code = line.slice(0, cut), note = line.slice(cut);
-    // ① 이름이 주석 안에 있는 형 — `-- :n=10` · `-- :n 예시 10`  (앞에 이름 그룹 1개)
-    for (const m of note.matchAll(new RegExp(":([a-z_][a-z0-9_]*)\\s*(?:=\\s*|" + MARK + ")" + VALUE, "gi")))
-      if (out[m[1]] === undefined) out[m[1]] = take(m, 2);
-    // ② 이름이 **코드 쪽에** 있고 주석은 값만 적은 형 — `WHERE x = :cat  -- 예시 'food'`
-    //    같은 줄에 파라미터가 하나일 때만 붙인다(둘이면 어느 것인지 알 수 없다).
-    const onLine = [...new Set([...code.matchAll(/:([a-z_][a-z0-9_]*)/gi)].map((x) => x[1]))];
-    if (onLine.length !== 1 || out[onLine[0]] !== undefined) continue;
-    const bare = note.match(new RegExp(MARK + VALUE, "i"));
-    if (bare) out[onLine[0]] = take(bare, 1);
+    const onLine = [...new Set([...line.slice(0, cut).matchAll(/:([a-z_][a-z0-9_]*)/gi)].map((x) => x[1]))];
+    if (onLine.length !== 1 || onLine[0] !== name) continue;
+    const note = line.slice(cut);
+    const m = new RegExp(EX_MARK, "i").exec(note);
+    if (m) {
+      const v = exampleValue(note.slice(m.index + m[0].length));
+      if (v !== undefined) return v;
+    }
   }
+  return undefined;
+}
+
+// `hint` 는 검증기의 `_hint_of` 와 같은 것 — question_ko · axes · insight_sample_ko.
+// 오너가 예시값을 SQL 주석이 아니라 인사이트 문장에 적어 둔 패턴이 있다(commerce 9건).
+function patternDefaults(sql, hint) {
+  const out = {};
+  const text = String(sql || "");
+  // 이름은 **주석까지 포함해** 훑는다 — 본문 없이 주석만 있는 조각도 읽을 수 있어야 한다.
+  for (const name of new Set([...text.matchAll(/:([a-z_][a-z0-9_]*)/gi)].map((m) => m[1]))) {
+    const v = findExample(name, text) ?? findExample(name, String(hint || "")) ?? noteOnlyExample(name, text);
+    if (v !== undefined) out[name] = v;   // 🔑 `undefined` 는 넣지 않는다 — 키만 있고 값이 없으면
+  }                                        //    코드상 "채워짐"으로 세어지고 화면에만 빈 칸이 뜬다
   return out;
 }
 
@@ -1373,17 +1423,22 @@ function renderPick() {
     $("filterField").style.display = "none";   // 패턴은 자기 WHERE 를 갖고 있다
     // 주석의 예시값으로 **미리 채운다**(#218). 그래야 질문을 고른 사람이 아무것도 안 채우고
     // 바로 「호출」을 누를 수 있다 — 바꾸고 싶은 것만 바꾸면 된다.
-    const defs = patternDefaults(u.sql);
+    // 힌트도 같이 넘긴다 — 검증기(`_hint_of`)와 같은 세 필드다. 예시값을 SQL 주석이 아니라
+    // 인사이트 문장에 적어 둔 패턴이 있어, 여기를 빼면 그것들만 빈 칸으로 남는다.
+    const defs = patternDefaults(u.sql, [u.question_ko, u.axes, u.insight_sample_ko].filter(Boolean).join("\n"));
     for (const nm of patternParams(u.sql)) {
       const has = Object.prototype.hasOwnProperty.call(defs, nm);
       const f = document.createElement("div");
       f.className = "field param";
       f.innerHTML = "<label for='prm_" + nm + "'><code>:" + esc(nm) + "</code>" +
         "<span class='hint'>" + (has ? "예시값 — 바꿔도 됩니다" : "패턴이 요구하는 값") + "</span></label>" +
-        "<input id='prm_" + nm + "' data-prm='" + esc(nm) + "' autocomplete='off'" +
-        (has ? " value='" + esc(defs[nm]) + "'" : "") + ">";
+        "<input id='prm_" + nm + "' data-prm='" + esc(nm) + "' autocomplete='off'>";
       params.appendChild(f);
-      f.querySelector("input").addEventListener("input", updatePreview);
+      // 🔴 값은 **속성 문자열이 아니라 프로퍼티로** 넣는다 — `esc` 는 홑따옴표를 안 바꾸는데
+      //    value 는 홑따옴표 속성이라, 값에 `'` 가 하나 들어오면 속성이 거기서 끝난다.
+      const input = f.querySelector("input");
+      if (has) input.value = defs[nm];
+      input.addEventListener("input", updatePreview);
     }
     return;
   }
