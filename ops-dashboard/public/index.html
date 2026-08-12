@@ -739,21 +739,25 @@ function layerVerdict(day) {
   return { cls: over.length ? "bad" : under.length ? "warn" : "ok", over, under, missing };
 }
 
-/** 단계 막대 두 줄(소요·적재). 세 보기가 같은 그림을 쓴다 — 눈이 옮겨 다니지 않게. */
-function layerBars(rows, durOf, rowOf, subOf) {
+/** 단계 막대 두 줄(소요·적재). 세 보기가 같은 그림을 쓴다 — 눈이 옮겨 다니지 않게.
+ *  marks(선택): 값 옆에 붙일 배지 HTML — 날짜별 하루 상세가 '평균 대비'를 얹는 자리다.
+ *  전체·평균은 안 넘기므로 그대로다. */
+function layerBars(rows, durOf, rowOf, subOf, marks) {
   const maxD = Math.max(1, ...rows.map(durOf));
   const maxR = Math.max(1, ...rows.map(rowOf));
   return "<div class='share'>" + rows.map((x) => {
     const d0 = durOf(x), r0 = rowOf(x);
+    const m = marks ? marks(x) : null;
     return "<div class='row'><div class='nm'>" + esc(x.label) +
         "<small>" + subOf(x) + "</small></div>" +
       "<div class='track' title='소요 " + hrs(d0) + "'>" +
         "<div class='fill' style='width:" + Math.round(d0 / maxD * 100) + "%'></div></div>" +
-      "<div class='num'><b>" + hrs(d0) + "</b></div></div>" +
+      "<div class='num'><b>" + hrs(d0) + "</b>" + (m && m.dur ? " " + m.dur : "") + "</div></div>" +
       "<div class='row'><div class='nm'><small>적재 행수</small></div>" +
       "<div class='track' title='" + nf.format(Math.round(r0)) + "행'>" +
         "<div class='fill dim' style='width:" + Math.round(r0 / maxR * 100) + "%'></div></div>" +
-      "<div class='num'><small>" + nf.format(Math.round(r0)) + "행</small></div></div>";
+      "<div class='num'><small>" + nf.format(Math.round(r0)) + "행</small>" +
+        (m && m.rows ? " " + m.rows : "") + "</div></div>";
   }).join("") + "</div>";
 }
 
@@ -822,16 +826,21 @@ function layerDayDetail(day) {
       : r < 1 - LAYER_BAND ? "<span class='pill warn'>▼ " + pctTxt + "</span>"
       : "<span class='pill ok'>= " + pctTxt + "</span>";
   };
-  const rows = LAYERS.filter(([k]) => layerAvg[k] || per[k])
-    .map(([k, lab]) => ({ key:k, label:lab, cur:per[k] || null, avg:layerAvg[k] || null }));
-  const body = table([
-    { t:"단계", name:true, get:(r) => esc(r.label) + " <span class='pill dim'>" + esc(r.key) + "</span>" },
-    { t:"소요", r:true, get:(r) => r.cur ? hrs(r.cur.dur) : "<span class='zero'>기록 없음</span>" },
-    { t:"평균 대비", r:true, get:(r) => r.cur && r.avg ? mark(r.cur.dur, r.avg.dur) : "—" },
-    { t:"적재 행수", r:true, get:(r) => r.cur ? nf.format(r.cur.rows) + "행" : "<span class='zero'>기록 없음</span>" },
-    { t:"평균 대비", r:true, get:(r) => r.cur && r.avg ? mark(r.cur.rows, r.avg.rows) : "—" },
-    { t:"실행", r:true, get:(r) => r.cur ? nf.format(r.cur.ev) : "—" },
-  ], rows, "이 날의 단계 기록이 없습니다");
+  // 🔴 하루 상세도 전체·평균과 **같은 막대 그림**을 쓴다(2026-08-12 요청) — 예전에는 여기만
+  // 표라서, 날을 고르는 순간 그림 문법이 바뀌어 눈이 다시 배워야 했다. 막대는 그날 단계끼리의
+  // 상대 크기이고, 이 보기의 고유 정보(평균 대비 판정)는 값 옆 배지로 남긴다 — 색(칩)이 왜
+  // 그 색인지 배지가 잇는다. 기록 있는 단계만 막대로 세운다(없는 단계는 0 이 아니라 모름 —
+  // 아래 글이 따로 말한다, agreement §4).
+  const rows = LAYERS.filter(([k]) => per[k])
+    .map(([k, lab]) => ({ key:k, label:lab, cur:per[k], avg:layerAvg[k] || null }));
+  const body = rows.length
+    ? layerBars(rows, (x) => x.cur.dur, (x) => x.cur.rows,
+        (x) => esc(x.key) + " · 실행 " + nf.format(x.cur.ev) +
+          (x.avg ? "" : " · <span class='zero'>평균 기준 없음</span>"),
+        (x) => x.avg
+          ? { dur: mark(x.cur.dur, x.avg.dur), rows: mark(x.cur.rows, x.avg.rows) }
+          : null)
+    : "<p class='hint'>이 날의 단계 기록이 없습니다</p>";
 
   const why = v.over.length ? "평균을 넘은 인자: <b>" + v.over.map((x) => esc(x.lab + " " + x.fl)).join(" · ") + "</b>"
     : v.under.length ? "평균에 못 미친 인자: <b>" + v.under.map((x) => esc(x.lab + " " + x.fl)).join(" · ") + "</b>"
@@ -2139,11 +2148,13 @@ function render(d) {
   const dSeries = fillDays(s.daily, d.window_days, (r) => r.day, { calls: 0, errors: 0 });
   const dMax = Math.max(1, ...dSeries.map((x) => x.calls));
   const dTotal = dSeries.reduce((a, x) => a + (x.calls || 0), 0);
+  // title → data-tip(UITip) — '일자별 손님'과 같은 이유·같은 동작(2026-08-12 요청):
+  // 말풍선이 문서에 하나뿐이라 막대 사이 이동에도 겹치지 않고, 열림 75ms·닫힘 120ms.
   $("daily").innerHTML = dTotal
     ? "<div class='bars'>" + dSeries.map((x) =>
-        "<div class='b" + (x._empty ? " none" : "") + "' title='" + esc(x.day) +
-        (x._empty ? " · 기록 없음" : " · " + nf.format(x.calls) + "회" +
-          (x.errors ? " (실패 " + x.errors + ")" : "")) + "'>" +
+        "<div class='b" + (x._empty ? " none" : "") + "' data-tip='<b>" + esc(x.day) + "</b><br>" +
+        (x._empty ? "기록 없음" : "요청 " + nf.format(x.calls) + "회" +
+          (x.errors ? " — 실패 " + nf.format(x.errors) + "건" : " — 실패 0건")) + "'>" +
         "<i style='height:" + (x.calls ? Math.max(3, Math.round(x.calls / dMax * 70)) : 0) +
         "px'></i></div>").join("") + "</div>" +
       "<div class='bars-axis'><span>" + esc(dSeries[0].day) + "</span>" +
