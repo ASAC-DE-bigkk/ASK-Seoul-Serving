@@ -250,9 +250,14 @@ const CATALOG_CACHE_HEADER = `public, max-age=${CATALOG_STALE_TTL}`;
 // 🐛 2026-08-06 사고의 잔상: 응답 본문에 `key_issuance` 가 들어 있는데 캐시 키에 그 축이
 // 없어서, 발급 방식을 바꾼 뒤 최대 10분간 **옛 방식이 그대로 나갔다**(화면은 이메일 폼,
 // 제출은 403). 그래서 키에 축을 섞었었다.
-// 이메일 발급을 폐지(2026-08-07)하면서 그 축은 **상수가 됐다** — 가를 것이 없어 뺀다.
-// ⚠️ 응답 본문에 **환경마다 달라지는 값**을 다시 넣게 되면 그 축을 여기 되살려야 한다.
-export const catalogCacheKey = () => "https://catalog.internal/api/v1/catalog";
+// 이메일 발급을 폐지(2026-08-07)하면서 그 축은 **상수가 됐다** — 가를 것이 없어 뺐었다.
+//
+// 🔴 2026-08-12 — **축이 다시 생겼다.** 응답에 `chat.enabled`(= `env.AI` 바인딩 유무)를
+//    실었기 때문이다. 위 경고("환경마다 달라지는 값을 다시 넣게 되면 그 축을 되살려야 한다")가
+//    가리키던 바로 그 경우다. 안 가르면 AI 를 켠 뒤에도 캐시가 최대 10분간 `enabled:false` 를
+//    주고, 화면은 그동안 질문 칸을 안 띄운다 — 2026-08-06 사고와 똑같은 모양이다.
+export const catalogCacheKey = (env) =>
+  `https://catalog.internal/api/v1/catalog?chat=${env && env.AI ? 1 : 0}`;
 
 // 캐시에 담긴 사본의 나이(초). `x-cached-at` 이 없으면 옛 형식이라 만료로 본다.
 const cachedAgeSeconds = (res) => {
@@ -405,6 +410,13 @@ async function buildCatalog(env, cache, cacheKey) {
     // 이메일 발급 폐지(2026-08-07) 후로 방법은 하나뿐이지만 필드는 유지한다 — 소비자가
     // 문서가 아니라 **응답을 보고** 알게 하는 것이 이 필드의 목적이다.
     key_issuance: { method: "google_oauth", start: "/api/v1/auth/google" },
+    // 🔴 **채팅이 실제로 답할 수 있는지**를 응답이 말한다(#0006 의 `env.AI` 바인딩 유무).
+    //    화면이 이 값을 보고 질문 칸을 띄운다 — 안 보고 띄우면 **답 못 하는 입구**가 선다.
+    //    실측(2026-08-12 운영): 바인딩이 없으면 `degraded: ai_unavailable` 이고 `answer` 가
+    //    늘 null 이다. 질문이 그 제품과 안 맞으면 후보도 0건이라, 화면이 약속한 "추천"조차
+    //    안 나온다 — 라벨은 "골라 실행합니다"인데 실행이 없다.
+    //    ⚠️ 이 값을 넣었으므로 **캐시 키에 축이 생겼다**(`catalogCacheKey` 주석 참조).
+    chat: { enabled: Boolean(env.AI) },
     join_axes: JOIN_AXES,
     products: results.map((r) => {
       const columns = JSON.parse(r.columns).map((c) => {

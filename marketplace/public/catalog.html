@@ -744,6 +744,7 @@ const DOMAINS = [
 //   ③ **비우는 조건**: 각 도메인이 `meta.serving.display` 를 선언·발행하면 그 제품은
 //      자동으로 여기를 안 본다. 전 도메인이 차면 이 파일과 아래 폴백을 함께 지운다.
 let TITLE_FALLBACK = {};
+let CHAT_ON = false;   // 카탈로그가 말해 주기 전까지는 닫혀 있다
 
 let PRODUCTS = [];
 let activeDomain = "all";
@@ -826,6 +827,15 @@ async function boot() {
   if (catalog.key_issuance && catalog.key_issuance.method === "google_oauth") {
     $("googleAuth").style.display = "";
   }
+  // 🔴 **채팅 칸은 서버가 답할 수 있다고 할 때만 연다.** `env.AI` 가 안 붙은 배포에서는
+  //    `degraded: ai_unavailable` 이라 **답이 없고**(2026-08-12 운영 실측: `answer` 늘 null),
+  //    질문이 그 제품과 안 맞으면 후보도 0건이라 화면이 약속한 "추천"조차 안 나온다.
+  //    라벨은 "AI 가 검증된 질의 패턴을 골라 **실행합니다**"인데 실행이 없다 —
+  //    **눌러도 안 되는 문**을 세우지 않는다(옛 이메일 발급 칸을 지운 것과 같은 이유).
+  //    지우지 않고 가리는 이유: 바인딩은 "안 만든 것"이 아니라 **켜기로 정해 둔 것**이라
+  //    (decision/0006), 켜는 날 이 조건이 참이 되면서 **저절로 돌아온다**.
+  //    값이 없으면(옛 배포본) 닫힌 채로 둔다 — 답 못 하는 입구보다 없는 편이 낫다.
+  CHAT_ON = Boolean(catalog.chat && catalog.chat.enabled);
   // 설명·표시명이 없어도 카탈로그는 그대로 뜬다 — 부가 정보라 실패를 삼킨다
   // 검증된 질의 예시(usage) — 라이브 d1_usage_patterns(commerce) + culture Phase 0 검증분.
   // #600 채택 시 이 정적 자산은 게시 테이블 조회(안 B 번들)로 교체된다.
@@ -1405,7 +1415,8 @@ function renderPick() {
     return;
   }
   const { product: p, pattern: u } = PICK;
-  $("chatField").style.display = "";   // 제품이 정해졌으니 질문으로 묻는 길을 연다
+  // 제품이 정해졌으니 질문으로 묻는 길을 연다 — 단 서버가 답할 수 있을 때만(위 CHAT_ON)
+  $("chatField").style.display = CHAT_ON ? "" : "none";
   box.className = "pick";
   $("runBtn").disabled = false;
   box.innerHTML = u
