@@ -1386,7 +1386,9 @@ async function bootCatalog() {
         "<i class='" + (Date.now() - new Date(p.exported_at).getTime() < 48 * 3600000 ? "on" : "") +
         "' aria-hidden='true'></i>" + esc(rel) + "</span>"
       : "";
-    return "<a class='card' href='/catalog?q=" + encodeURIComponent(p.name) + "'>" +
+    // 🔴 넘기는 검색어는 **표시명**이다. 기술명(`gold_…`)을 넘기면 카탈로그 검색창에 그게
+    //    그대로 뜨는데, 사용자가 친 적도 없고 다시 칠 일도 없는 말이다(2026-08-12 오너 제보).
+    return "<a class='card' href='/catalog?q=" + encodeURIComponent(titleOf(p)) + "'>" +
       "<span class='t'>" + esc(titleOf(p)) + "</span>" +
       // 질문형 대신 설명 문장 — 카탈로그 목록과 같은 우선순위(쉬운 문장 desc 우선)
       "<span class='q'>" + esc(d.summary || fb(p).desc || p.description || p.product_question || "—") + "</span>" +
