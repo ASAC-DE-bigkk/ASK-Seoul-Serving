@@ -15,6 +15,7 @@
 
 const LIMIT_PARAM = /^(n|limit|top_n)$/i;
 const ARRAY_HARD_CAP = 100;              // 카티전 팬아웃 상한 — spec.max_len 은 이걸 넘을 수 없다
+const DECIMAL = /^-?\d+(?:\.\d+)?$/;     // 숫자 강제의 입력 표기 — `0x10`·`1e5` 는 안 받는다
 const problem = (status, title, detail) => ({ ok: false, problem: { status, title, detail } });
 
 // ── 동적 기본값(상대 날짜) ─────────────────────────────────────────────────────
@@ -135,6 +136,19 @@ export function convertPattern(sql, supplied, opts = {}) {
         const num = Number(v);
         if (!Number.isFinite(num)) return problem(400, "invalid parameter", `:${nm} 은 숫자여야 한다`);
         v = num;
+      } else if (typeof v === "string" && typeof defaults[nm] === "number" && DECIMAL.test(v.trim())) {
+        // 🔴 **REST 로 온 값은 전부 문자열이다.** 그런데 SQLite 는 타입 어피니티를 **컬럼과
+        //    비교할 때만** 적용한다 — `WHERE successions >= ?` 는 '50' 을 숫자로 바꿔 주지만
+        //    `WHERE a_to_b + b_to_a >= ?` 는 **식이라 어피니티가 없어** INTEGER < TEXT 규칙이
+        //    그대로 걸린다. 그래서 같은 50 인데 MCP(타입 있는 JSON)는 행이 나오고 REST 는
+        //    **조용히 0행**이 된다. 오류도 안 난다(2026-08-12 실측: 게시본 30건이 이 경우).
+        //
+        //    숫자로 볼 근거는 **게시본이 준다** — 오너가 기본값을 JSON 숫자로 선언한
+        //    파라미터만 바꾼다. `"02"`·`"ALL"` 처럼 문자열로 선언한 것은 그대로 둔다
+        //    (코드값을 숫자로 바꾸면 `'02'` → `2` 가 되어 이번엔 반대로 0행이다).
+        //    표기도 좁게 본다(`DECIMAL`) — `0x10`·`1e5`·`Infinity` 를 `Number()` 가 받아
+        //    주는 바람에 이용자가 쓴 것과 다른 수가 들어가는 일은 없어야 한다.
+        v = Number(v.trim());
       }
       // 행수 파라미터는 서빙 상한을 넘지 못한다 — 문자열 "999999" 도 SQLite LIMIT 이 받으므로
       // 타입과 무관하게 숫자로 강제한 뒤 누른다(#132 사후 리뷰 ②).

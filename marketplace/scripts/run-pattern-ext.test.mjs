@@ -144,3 +144,49 @@ test("convertPattern: 상대 기본값 형식 오류는 400 invalid default", ()
   const r = convertPattern("SELECT * FROM t WHERE d >= :from", {}, { defaults: { from: { rel: "bad", as: "date" } }, nowMs: NOW });
   assert.equal(r.problem.title, "invalid default");
 });
+
+// ── REST 문자열 ↔ SQLite 타입 어피니티 (2026-08-12) ────────────────────────────
+//
+// 🔴 **REST 로 온 값은 전부 문자열이다.** SQLite 는 타입 어피니티를 **컬럼과 비교할 때만**
+//    적용한다 — `WHERE successions >= ?` 는 '50' 을 숫자로 바꿔 주지만
+//    `WHERE a_to_b + b_to_a >= ?` 는 **식이라 어피니티가 없어** INTEGER < TEXT 규칙이 그대로
+//    걸린다. 그래서 같은 50 인데 MCP(타입 있는 JSON)는 행이 나오고 REST 는 **조용히 0행**이다.
+//    오류도 안 난다. D1 실측(2026-08-12):
+//      컬럼 비교 → '50' 5행 · 50 5행   /   식 비교 → '50' **0행** · 50 5행
+//    게시본 884건 전수 실행에서 이 강제 하나로 0행 78건 → 12건이 됐다(회귀 0).
+test("🔴 숫자 기본값이 선언된 파라미터는 REST 문자열도 숫자로 bind — 식 비교에서 조용히 0행이 된다", () => {
+  const sql = "SELECT * FROM t WHERE a + b >= :min_pair";
+  const r = convertPattern(sql, { min_pair: "50" }, { defaults: { min_pair: 50 } });
+  assert.ok(r.ok);
+  assert.strictEqual(r.values[0], 50, "문자열 '50' 이 그대로 나가면 식 비교에서 0행이다");
+});
+
+test("🔴 문자열로 선언된 기본값은 건드리지 않는다 — 코드값을 숫자로 바꾸면 반대로 0행이다", () => {
+  // `'02'`(휴업 상태 코드) → `2` 가 되면 TEXT 컬럼과 안 맞는다. 선언이 문자열이면 그대로 둔다.
+  const sql = "SELECT * FROM t WHERE from_status = :s";
+  const r = convertPattern(sql, { s: "02" }, { defaults: { s: "01" } });
+  assert.ok(r.ok);
+  assert.strictEqual(r.values[0], "02");
+});
+
+test("숫자 선언이 없으면 강제하지 않는다 — 근거 없이 타입을 바꾸지 않는다", () => {
+  const r = convertPattern("SELECT * FROM t WHERE a + b >= :min", { min: "50" }, {});
+  assert.ok(r.ok);
+  assert.strictEqual(r.values[0], "50");
+});
+
+test("숫자 표기만 받는다 — `0x10`·`1e5` 로 다른 수가 들어가면 안 된다", () => {
+  const sql = "SELECT * FROM t WHERE a + b >= :min";
+  const d = { defaults: { min: 50 } };
+  assert.strictEqual(convertPattern(sql, { min: "0x10" }, d).values[0], "0x10");
+  assert.strictEqual(convertPattern(sql, { min: "1e5" }, d).values[0], "1e5");
+  assert.strictEqual(convertPattern(sql, { min: "가나다" }, d).values[0], "가나다");
+  assert.strictEqual(convertPattern(sql, { min: " 50 " }, d).values[0], 50, "앞뒤 공백은 벗긴다");
+  assert.strictEqual(convertPattern(sql, { min: "-3.5" }, d).values[0], -3.5);
+});
+
+test("spec.type=number 가 있으면 그쪽이 먼저다 — 두 규칙이 싸우지 않는다", () => {
+  const r = convertPattern("SELECT * FROM t WHERE a + b >= :min", { min: "1e5" },
+    { defaults: { min: 50 }, spec: { min: { type: "number" } } });
+  assert.ok(r.ok && r.values[0] === 100000, "명시 선언(spec)은 넓은 표기를 그대로 받는다");
+});

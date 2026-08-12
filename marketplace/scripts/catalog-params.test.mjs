@@ -17,7 +17,10 @@ function extract(name) {
   assert.ok(m, `${name} 를 catalog.html 에서 못 찾았다 — 이름이 바뀌었나`);
   return new Function(`${m[0]}\nreturn ${name};`)();
 }
-const patternDefaults = extract("patternDefaults");
+// `patternDefaults` 는 값 갈래 헬퍼들과 한 묶음이다(검증기 규칙을 옮겨 온 자리) — 블록째 뽑는다.
+const DEFAULTS_BLOCK = HTML.slice(HTML.indexOf("function exampleValue"), HTML.indexOf("function pickProduct"));
+assert.ok(DEFAULTS_BLOCK.includes("function patternDefaults"), "patternDefaults 블록을 못 찾았다 — 이름이 바뀌었나");
+const patternDefaults = new Function(`${DEFAULTS_BLOCK}\nreturn patternDefaults;`)();
 const patternParams = extract("patternParams");
 
 // 실제 운영 패턴(commerce_change_activity / above_avg_multiple)의 첫 줄이다.
@@ -65,8 +68,18 @@ test("본문의 `=` 는 기본값이 아니다 — 주석만 읽는다", () => {
 
 test("렌더가 기본값을 실제로 쓴다 — 함수만 있고 안 쓰면 소용없다", () => {
   const render = HTML.slice(HTML.indexOf("function renderPick"));
-  assert.match(render, /patternDefaults\(u\.sql\)/, "renderPick 이 기본값을 안 읽는다");
-  assert.match(render, /value='"\s*\+\s*esc\(defs\[nm\]\)/, "읽어 놓고 input value 에 안 넣는다");
+  assert.match(render, /patternDefaults\(u\.sql,/, "renderPick 이 기본값을 안 읽는다");
+  assert.match(render, /if \(has\) input\.value = defs\[nm\];/, "읽어 놓고 input value 에 안 넣는다");
+  // 🔴 힌트도 넘겨야 한다 — 검증기(`_hint_of`)와 같은 세 필드다. 빼면 예시값을 인사이트
+  //    문장에 적어 둔 패턴(commerce 9건)만 빈 칸으로 남는다.
+  assert.match(render, /u\.question_ko, u\.axes, u\.insight_sample_ko/, "힌트를 안 넘긴다");
+});
+
+test("🔴 값은 속성 문자열이 아니라 프로퍼티로 넣는다 — `'` 하나에 속성이 끊긴다", () => {
+  // `esc` 는 홑따옴표를 안 바꾸는데 value 는 홑따옴표 속성이다. 값에 `'` 가 들어오면
+  // 거기서 속성이 끝나고 뒷부분이 마크업으로 읽힌다.
+  const render = HTML.slice(HTML.indexOf("function renderPick"));
+  assert.doesNotMatch(render, /value='"\s*\+\s*esc\(defs\[nm\]\)/, "값을 속성 문자열로 넣고 있다");
 });
 
 // ── 필터 값 후보 (#218 나머지) ────────────────────────────────────────────────
