@@ -116,10 +116,17 @@ export const TOOLS = [
       type: "object",
       properties: {
         product_id: { type: "string" },
+        // 🔴 자유형 맵은 **가장 밋밋한 모양**으로 둔다 — `type` 유니온(`["string","number"]`)도,
+        // 스키마 객체인 `additionalProperties` 도 쓰지 않는다. JSON Schema 로는 둘 다
+        // 적법하지만, AI 채팅·커넥터는 이 스키마를 **자기 함수호출 스키마로 변환**해서
+        // 싣는데 그 계층(OpenAI strict 계열)이 둘 다 거부한다. 변환이 실패하면 LLM 에게
+        // 도구가 아예 안 보여 "툴콜을 하지 않고 자체 응답"이 된다(2026-08-12 PlayMCP 회신).
+        // 값 제약은 description 으로 옮긴다 — LLM 이 실제로 읽는 곳이고, **강제는 서버가
+        // 한다**(run-pattern-ext.js 가 타입·배열 길이·선언 여부를 직접 검사한다).
         filters: {
           type: "object",
-          description: "{컬럼: 값} 등가 필터. 유효 값은 preview_product 로 먼저 확인.",
-          additionalProperties: { type: ["string", "number"] },
+          description:
+            "{컬럼: 값} 등가 필터 — 값은 문자열 또는 숫자. 유효 값은 preview_product 로 먼저 확인.",
         },
         from: { type: "string", description: "시간축 시작(포함)" },
         to: { type: "string", description: "시간축 끝(포함)" },
@@ -145,14 +152,14 @@ export const TOOLS = [
       properties: {
         product_id: { type: "string" },
         pattern_id: { type: "string", description: "describe_product 응답 usage_patterns 의 pattern_id" },
+        // 위 filters 와 같은 이유로 밋밋하게 둔다. 여기 있던 `maxItems: 100` 도 안전장치가
+        // 아니었다 — 배열 상한은 run-pattern-ext.js 의 ARRAY_HARD_CAP 이 강제한다.
         params: {
           type: "object",
-          description: "패턴 SQL 의 :이름 파라미터 값 — 선언된 이름만 받는다(모자라면/넘치면 400 에 목록 안내). 기본값(param_defaults) 있는 이름은 생략 가능, 배열 선언(params.type=array)인 이름은 배열로",
-          additionalProperties: {
-            type: ["string", "number", "array"],
-            items: { type: ["string", "number"] },
-            maxItems: 100,
-          },
+          description:
+            "패턴 SQL 의 :이름 파라미터 값 — 선언된 이름만 받는다(모자라면/넘치면 400 에 목록 안내). " +
+            "값은 문자열 또는 숫자이고, 배열 선언(params.type=array)인 이름만 문자열·숫자의 배열로 보낸다. " +
+            "기본값(param_defaults) 있는 이름은 생략 가능.",
         },
       },
       required: ["product_id", "pattern_id"],
