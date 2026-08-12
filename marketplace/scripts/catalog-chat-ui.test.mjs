@@ -78,3 +78,22 @@ test("Enter 로도 보낸다 · 로그는 낭독기에 읽힌다", () => {
   assert.match(HTML, /chatQ"\)\.addEventListener\("keydown", \(e\) => \{ if \(e\.key === "Enter"\) sendChat/);
   assert.match(HTML, /id="chatLog" aria-live="polite"/);
 });
+
+// ── 채팅 칸의 표시 조건 (2026-08-12) ─────────────────────────────────────────
+// 🔴 **답할 수 없으면 입구를 세우지 않는다.** `env.AI` 가 안 붙은 배포에서 이 칸은
+//    `degraded: ai_unavailable` 을 받아 **답이 없고**(운영 실측: `answer` 늘 null), 질문이
+//    그 제품과 안 맞으면 후보도 0건이라 라벨이 약속한 "추천"조차 안 나온다. 라벨은
+//    "AI 가 검증된 질의 패턴을 골라 **실행합니다**"인데 실행이 없다 — 옛 이메일 발급 칸을
+//    지운 것과 같은 이유다.
+// 🔑 지우지 않고 **가리는** 이유: 바인딩은 켜기로 정해 둔 것이라(decision/0006), 켜는 날
+//    이 조건이 참이 되면서 저절로 돌아온다. 되돌릴 코드가 0 이다.
+test("🔴 서버가 켜졌다고 할 때만 질문 칸을 연다", () => {
+  assert.match(HTML, /CHAT_ON = Boolean\(catalog\.chat && catalog\.chat\.enabled\)/,
+    "카탈로그의 chat.enabled 를 안 본다");
+  assert.match(HTML, /\$\("chatField"\)\.style\.display = CHAT_ON \? "" : "none";/,
+    "제품만 고르면 무조건 여는 옛 배선이 남아 있다");
+});
+
+test("카탈로그가 말을 안 해 주면 닫힌 채로 둔다 — 답 못 하는 입구보다 없는 편이 낫다", () => {
+  assert.match(HTML, /let CHAT_ON = false;/, "기본값이 false 가 아니면 옛 배포본에서 열린다");
+});
