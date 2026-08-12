@@ -790,3 +790,43 @@ test("단건 알림도 202 로 답한다(봉투 없음)", async () => {
   const res = await handleMcp(rpc("notifications/initialized"), {}, {}, mkDeps());
   assert.equal(res.status, 202);
 });
+
+// ── inputSchema 는 LLM 함수호출 계층까지 통과해야 한다 (2026-08-12 PlayMCP 회신) ─────
+// *"도구함에 담기는 되나 AI채팅에서 툴콜이 되지 않는다(툴콜을 아예 하지 않고 LLM 이 자체
+// 응답) · Claude/ChatGPT 커넥터가 도구를 못 불러온다"* — 도구함은 우리 응답을 **그대로
+// 저장**하지만, AI 채팅과 커넥터는 이 스키마를 **자기 함수호출 스키마로 변환**해서 싣는다.
+// 그 계층(OpenAI strict 계열)이 거부하는 두 가지를 쓰고 있었다:
+//   ① `type` 이 배열(유니온) — `["string","number"]`
+//   ② `additionalProperties` 가 boolean 이 아니라 스키마 객체
+// 변환이 실패하면 LLM 에게 도구가 아예 안 보인다. 값 제약은 description 으로 옮겼고
+// **강제는 서버가 한다**(run-pattern-ext.js).
+
+const walkSchema = (node, path, out) => {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node.type)) out.push(`${path}.type 이 배열(유니온): ${JSON.stringify(node.type)}`);
+  const ap = node.additionalProperties;
+  if (ap !== undefined && typeof ap !== "boolean")
+    out.push(`${path}.additionalProperties 가 boolean 이 아니다`);
+  for (const [k, v] of Object.entries(node.properties || {})) walkSchema(v, `${path}.${k}`, out);
+  if (node.items) walkSchema(node.items, `${path}.items`, out);
+};
+
+test("모든 inputSchema 가 함수호출 계층이 받는 모양이다 — 유니온 타입·자유형 스키마 금지", async () => {
+  const tools = (await (await handleMcp(rpc("tools/list"), {}, {}, mkDeps())).json()).result.tools;
+  const bad = [];
+  for (const t of tools) walkSchema(t.inputSchema, t.name, bad);
+  assert.deepEqual(bad, [], `변환기가 거부할 스키마가 있다:\n  ${bad.join("\n  ")}`);
+});
+
+test("자유형 맵은 남아 있되 값 제약을 description 으로 말한다", async () => {
+  const tools = (await (await handleMcp(rpc("tools/list"), {}, {}, mkDeps())).json()).result.tools;
+  const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
+  for (const [tool, prop] of [["query_product", "filters"], ["run_pattern", "params"]]) {
+    const s = byName[tool].inputSchema.properties[prop];
+    assert.equal(s.type, "object", `${tool}.${prop} 가 자유형 맵이 아니게 됐다`);
+    // 스키마에서 뺀 정보를 사람이 읽는 자리에 남겼는지 — 빼기만 하면 AI 가 타입을 모른다
+    assert.ok(/문자열|숫자/.test(s.description), `${tool}.${prop}: 값 타입 안내가 사라졌다`);
+  }
+  assert.ok(/배열/.test(byName.run_pattern.inputSchema.properties.params.description),
+    "배열 파라미터 사용법이 사라졌다");
+});
