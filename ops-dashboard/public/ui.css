@@ -317,6 +317,12 @@ tbody tr:hover .kbtn { border-color:var(--line-strong); }
 .bars-axis { display:flex; justify-content:space-between; margin-top:6px;
              font-family:var(--mono); font-size:10px; color:var(--faint); gap:8px; }
 .bars-axis span { white-space:nowrap; }
+/* 날짜를 골라 보는 모드 — 고른 날짜의 막대만 그린다. 막대 폭을 고정해, 하나만 남아도
+   줄 전체를 차지해 값이 커 보이는 일이 없게 한다. 축도 왼쪽 정렬로 막대를 따라간다. */
+.bars.picked { justify-content:flex-start; }
+.bars.picked .b { flex:0 0 28px; max-width:28px; }
+.bars-axis.picked { justify-content:flex-start; }
+.bars-axis.picked span { white-space:normal; }
 
 /* ── 카드 안 스크롤 ────────────────────────────────────────────────────────── */
 .scroll { max-height:360px; overflow:auto; }
