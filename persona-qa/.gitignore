@@ -1,11 +1,9 @@
-# 원자료(answers/ 231개 파일 등)는 추적하지 않는다 — 전문은 detail-table.csv 에 있다
-out/*
-!out/summary.json
-!out/report.md
-!out/domain-recommendations.md
-!out/detail-table.csv
-!out/dashboard.html
-!out/personas.json
-!out/questions.json
-!out/verdicts.json
-!out/catalog.json
+# out/ 은 실측 산출물이라 통째로 추적하지 않는다 (2026-08-12 결정).
+#
+# 회차가 늘 때마다 answers 원자료·상세표·대시보드가 수 MB씩 붙는데, 저장소에 두면
+# 코드 diff 가 데이터에 묻힌다. 산출물은 로컬과 발표 자료로 관리하고, 저장소는
+# "그 산출물을 다시 만드는 방법"(scripts/ + *-PLAN.md)만 담는다.
+#
+# ⚠️ 이전 커밋에는 out/ 평면 구조 시절의 1차 산출물 9개가 들어 있다.
+#    히스토리에는 남지만 작업트리 기준으로는 더 이상 추적하지 않는다.
+out/
