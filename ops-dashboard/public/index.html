@@ -1100,6 +1100,14 @@ document.addEventListener("ui:page", (e) => {
 });
 // 시각은 초·밀리초까지 필요 없다 — "언제쯤"이면 충분하고, 짧을수록 표가 읽힌다
 const fmtTs = (s) => (s ? String(s).slice(0, 16).replace("T", " ") : null);
+// 🔴 시각 문자면은 **그 표면의 날짜 축과 같은 시간대**여야 한다 (실측: 드릴다운이 KST 날짜
+// 08/12 아래에 UTC 문자면 17:40 을 찍어, 아직 오지 않은 시각으로 읽혔다 — logship 건).
+//   파이프라인·발행·이용자 키 표면 → 날짜 축이 KST(observed_date_kst · +9h 접기) → fmtTsKst
+//   서빙·이용·API 표면            → 날짜 축이 UTC(substr(ts,1,10))            → fmtTs 유지
+// 축 자체를 한쪽으로 통일하는 것은 별개 결정이다 — 여기서는 문자면이 축을 따르게만 한다.
+const kstMs = (s) => { const t = Date.parse(s); return isNaN(t) ? null : t + 9 * 3600e3; };
+const fmtTsKst = (s) => { const t = kstMs(s);
+  return t == null ? fmtTs(s) : new Date(t).toISOString().slice(0, 16).replace("T", " "); };
 // 응답 시간 — DB 가 `17.717784881591797` 같은 부동소수를 그대로 준다. 소수 15자리는
 // 사람이 못 읽고 표를 넓힌다. 1ms 미만은 소수 한 자리, 그 이상은 정수로 접는다.
 const fmtMs = (v) => v == null ? "—"
@@ -1116,7 +1124,7 @@ const kpis = (el, items) => {
 // 운영자가 그걸 실시간으로 읽는다 — "지금 안 돌고 있다"와 "적재를 아직 안 했다"가
 // 구분되지 않아 없는 장애를 쫓게 된다. 그래서 시각 옆에 **경과와 주기를 같이** 쓴다.
 function freshness(load, meta) {
-  const ts = fmtTs(load.last_ingest);
+  const ts = fmtTsKst(load.last_ingest);   // 실행 기록 탭은 KST 축 — 문자면도 KST
   if (!ts) return "최근 적재 기록 없음";
   const age = load.ingest_age_min;
   const cycle = (meta && meta.runs_ingest_cycle_min) || 180;
@@ -1146,8 +1154,11 @@ const bundleNote = (load) => !load || load.bundled ? ""
 const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
 function fillDays(rows, days, keyOf, zero) {
   const by = new Map(rows.map((r) => [keyOf(r), r]));
-  // 오늘(KST)을 끝으로 days 칸. 서버가 자르는 창과 같은 규약이라 칸과 값이 어긋나지 않는다.
-  const endMs = Date.parse(dayKey(Date.now() + 9 * 3600 * 1000) + "T00:00:00Z");
+  // 🔴 끝 칸은 **UTC 오늘**이다 — 이 함수를 쓰는 일자 카드(응답 상태·이용 패턴)의 날짜 키가
+  // 서버의 UTC 달력일(substr(ts,1,10))이라서다. 예전에는 KST 오늘로 앵커해서, KST 00~09시
+  // 사이엔 마지막 칸(KST 오늘 = 아직 없는 UTC 날)이 늘 '기록 없음'이고 창의 첫 UTC 날이
+  // 조용히 밀려났다(시간축 감사 실측). 날짜 칩(dateCandidates)도 같은 UTC 오늘 기준이다.
+  const endMs = Date.parse(dayKey(Date.now()) + "T00:00:00Z");
   const out = [];
   for (let i = days - 1; i >= 0; i--) {
     const k = dayKey(endMs - i * 86400000);
@@ -1786,14 +1797,14 @@ function render(d) {
     { t:"실패", r:true, get:(r) => r.failed ? "<span class='pill bad'>" + nf.format(r.failed) + "</span>" : num(0) },
     { t:"건너뜀", r:true, get:(r) => num(r.skipped) },
     { t:"행수 안 맞음", r:true, get:(r) => r.row_mismatch ? "<span class='pill warn'>" + nf.format(r.row_mismatch) + "</span>" : num(0) },
-    { t:"마지막", r:true, get:(r) => esc(fmtTs(r.last_at) || "—") },
+    { t:"마지막", r:true, get:(r) => esc(fmtTsKst(r.last_at) || "—") },   // 발행 카드는 KST 창 — 문자면도 KST
   ], P.by_domain, "데이터 없음");
 
   $("pubStages").innerHTML = table([
     { t:"결과", get:(r) => pubPill(r.outcome) },
     { t:"단계", name:true, get:(r) => stageKo(r.stage) },
     { t:"건수", r:true, get:(r) => nf.format(r.n) },
-    { t:"마지막", r:true, get:(r) => esc(fmtTs(r.last_at) || "—") },
+    { t:"마지막", r:true, get:(r) => esc(fmtTsKst(r.last_at) || "—") },   // 발행 카드는 KST 창 — 문자면도 KST
   ], P.by_stage, "데이터 없음");
 
   $("pubWorst").innerHTML = table([
@@ -1813,11 +1824,11 @@ function render(d) {
     { t:"D1", r:true, get:(r) => r.d1_row_count == null ? "—" : nf.format(r.d1_row_count) },
     { t:"스모크", get:(r) => esc(r.api_smoke_status || "—") },
     { t:"되돌림", get:(r) => esc(r.rollback_status || "—") },
-    { t:"시각", r:true, get:(r) => esc(fmtTs(r.attempted_at) || "—") },
+    { t:"시각", r:true, get:(r) => esc(fmtTsKst(r.attempted_at) || "—") },
   ], P.row_mismatch, "데이터 없음") +
   (P.recent_published?.length
     ? "<p class='hint' style='margin-top:8px'>마지막 성공 발행 " +
-      esc(fmtTs(P.recent_published[0].published_at)) + " · " +
+      esc(fmtTsKst(P.recent_published[0].published_at)) + " · " +
       esc(P.recent_published[0].product_id) + "</p>"
     : "");
 
@@ -2091,7 +2102,7 @@ function render(d) {
         esc(r.environment) + "</span>" },
     { t:"기록", r:true, get:(r) => nf.format(r.events) },
     { t:"도메인", r:true, get:(r) => r.domains },
-    { t:"마지막", r:true, get:(r) => fmtTs(r.last_seen) },
+    { t:"마지막", r:true, get:(r) => fmtTsKst(r.last_seen) },   // 실행 기록 탭 KST 축
   ], R.environments, "데이터 없음");
 
   // ── 서빙
@@ -2345,7 +2356,10 @@ function renderDrill(d0) {
   const el = $("runsDrill");
   // 각 표를 가로 스크롤 상자로 감싼다 — drill 박스(칩)를 뚫고 나가지 않고 상자 안에서 스크롤한다.
   const sec = (title, html) => "<h4>" + title + "</h4><div class='tscroll'>" + html + "</div>";
-  const tOf = (x) => x ? esc(String(x).slice(11, 16)) : "—";
+  // 🔴 KST 시각이다 — 드릴 머리의 날짜가 KST 축(observed_date_kst)이라, 예전처럼 UTC
+  // 문자면(slice(11,16))을 그대로 찍으면 "08/12 에 17:40" 같은 미래 시각이 나온다(실측:
+  // logship 02:40 KST 실패가 17:40 으로 보였다). 행은 그 KST 날로 골라졌으므로 HH:MM 만 쓴다.
+  const tOf = (x) => { const t = kstMs(x); return t == null ? "—" : esc(new Date(t).toISOString().slice(11, 16)); };
   const tries = (r) => r.is_final_try === 1 ? "<span class='pill bad'>최종 실패</span>"
     : r.is_final_try === 0 ? "<span class='pill warn'>재시도 중</span>"
     : "<span class='pill dim'>정보 없음</span>";
@@ -2906,10 +2920,12 @@ function renderKeys(rows) {
     // 두 숫자가 서로를 설명한다. 창 밖 호출은 여기 안 잡힌다.
     { t: "구간 내 요청", r: true, get: (r) => num(r.calls) },
     { t: "첫 데이터 호출", r: true, get: (r) => r.first_data_call
-        ? esc(fmtTs(r.first_data_call))
+        ? esc(fmtTsKst(r.first_data_call))   // 키 탭 창은 KST(발급일 기준) — 문자면도 KST
         : "<span class='pill dim' title='발급만 하고 아직 데이터를 부르지 않았다'>없음</span>" },
-    { t: "마지막 요청", r: true, get: (r) => r.last_call ? esc(fmtTs(r.last_call)) : "<span class='zero'>—</span>" },
-    { t: "발급일", r: true, get: (r) => esc(fmtTs(r.created_at) || "—") },
+    { t: "마지막 요청", r: true, get: (r) => r.last_call ? esc(fmtTsKst(r.last_call)) : "<span class='zero'>—</span>" },
+    // 발급일이 특히 위험했다 — 창은 KST 발급일로 거르는데 표시가 UTC 면이라, KST 00~09시에
+    // 발급된 키가 "창에는 있는데 날짜는 전날"로 보였다(시간축 감사 실측).
+    { t: "발급일", r: true, get: (r) => esc(fmtTsKst(r.created_at) || "—") },
     { t: "", r: true, get: (r) => CAN_WRITE
         ? "<div class='kacts'>" + (r.status === "active"
             ? "<button class='kbtn danger' data-act='revoke' data-h='" + r.key_hash + "'>차단</button>"
