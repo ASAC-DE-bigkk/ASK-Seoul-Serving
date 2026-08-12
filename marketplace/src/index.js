@@ -39,6 +39,40 @@ const ISSUE_HOURLY_CAP = 5;
 // 한 사람이 반복 회전하면 같은 사무실·학교의 다른 사람이 발급을 못 한다. 회전 자체로는
 // 쿼터 이득이 없지만(당일 사용량 이월), 그건 "이득이 없다"이지 "해가 없다"가 아니다.
 const ROTATE_DAILY_CAP = 5;
+
+// 🔴 **상한은 키 행 밖에 산다** (#320). 예전엔 `_keys.rotated_*` 에 얹혀 있었는데
+//    완전삭제가 그 행을 지워, **상한이 막으려던 행동으로 상한이 사라졌다**:
+//    남용 → 완전삭제 → 재로그인 → 신규 발급 → 반복. 그래서 이메일 해시를 키로 하는
+//    `_issuance_guard` 로 옮긴다 — 완전삭제는 이 표를 건드리지 않는다.
+// 보존 30일: 남용 대응에 필요한 만큼만 둔다(요청 로그와 같은 창). 처리방침 제3조에 명시.
+const GUARD_RETENTION_DAYS = 30;
+const guardHash = (secret, email) => sha256hex(`guard|${secret}|${String(email).trim().toLowerCase()}`);
+
+// 오늘 몇 번 썼나. 가드 행이 없으면 `_keys` 의 옛 컬럼에서 읽는다 — 0008 적용 **전에**
+// 회전한 계정의 오늘치가 그쪽에만 있기 때문이다. 하루가 지나면 어차피 0이라 이 seed 는
+// 저절로 쓸모를 잃는다(그때 지워도 되는 코드다).
+const usedTodayFrom = (guard, legacyRow) => {
+  const day = kstDay();
+  if (guard) return guard.day === day ? Number(guard.count) || 0 : 0;
+  if (legacyRow && legacyRow.rotated_day === day) return Number(legacyRow.rotated_count) || 0;
+  return 0;
+};
+
+const readGuard = (env, hash) =>
+  env.DB.prepare("SELECT day, count FROM _issuance_guard WHERE email_hash = ?").bind(hash).first();
+
+// 카운터를 `count` 로 맞춘다. **키 발급과 같은 batch 로 나가야** 키만 나가고 카운터는
+// 안 오르는 창이 안 생긴다. 청소도 여기 붙인다 — 별도 스케줄러는 안 도는 걸 아무도 모른다.
+// ⚠️ 첫 발급은 재발급이 아니므로 `count = 0` 으로 **자리만** 만든다. 1 로 시작하면
+//    "재발급 하루 5회"라 해 놓고 처음 받은 사람이 4번만 쓰게 된다.
+const writeGuard = (env, hash, count) => [
+  env.DB.prepare(
+    "INSERT INTO _issuance_guard (email_hash, day, count, updated_at) VALUES (?, ?, ?, ?) " +
+    "ON CONFLICT(email_hash) DO UPDATE SET day = excluded.day, count = excluded.count, updated_at = excluded.updated_at")
+    .bind(hash, kstDay(), count, new Date().toISOString()),
+  env.DB.prepare("DELETE FROM _issuance_guard WHERE updated_at < ?")
+    .bind(new Date(Date.now() - GUARD_RETENTION_DAYS * 86400000).toISOString()),
+];
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 5000;
 
@@ -164,13 +198,17 @@ async function googleCallback(env, request, url, trace) {
   //    게다가 폐기는 행을 남기므로(status='revoked'), 폐기에 성공해도 아래 검사에 다시 걸려
   //    재발급이 안 됐다. 그래서 이 검사는 **상태를 안 본다** — 살아 있든 폐기됐든 "다시
   //    로그인 = 재발급" 하나로 통일한다.
+  // 🔴 가드를 **키 행보다 먼저** 읽는다 — 완전삭제로 키 행이 없어도 상한은 살아 있어야 한다.
+  const gHash = await guardHash(secret, email);
+  const guard = await readGuard(env, gHash);
+
   const existing = await env.DB.prepare(
     "SELECT key_hash, key_prefix, status, rotated_day, rotated_count FROM _keys WHERE email = ?")
     .bind(email).first();
   if (existing) {
     const ticket = await makeRotateTicket(secret, existing.key_hash, nowSec());
     const dead = existing.status !== "active";
-    const usedToday = existing.rotated_day === kstDay() ? Number(existing.rotated_count) || 0 : 0;
+    const usedToday = usedTodayFrom(guard, existing);
     const left = Math.max(0, ROTATE_DAILY_CAP - usedToday);
     return authPage("키를 새로 발급할까요?",
       `<h1>이 계정에 이미 키가 있어요</h1>` +
@@ -195,6 +233,17 @@ async function googleCallback(env, request, url, trace) {
       409);
   }
 
+  // 🔴 **키 행이 없는데 가드가 있으면 그건 첫 발급이 아니다** — 완전삭제하고 돌아온 것이다.
+  //    여기서 상한을 안 걸면 완전삭제가 상한의 우회로가 된다(#320 의 전부가 이 갈래다).
+  const usedToday = usedTodayFrom(guard, null);
+  if (guard && usedToday >= ROTATE_DAILY_CAP)
+    return authPage("오늘은 여기까지",
+      `<h1>오늘 재발급 횟수를 다 쓰셨어요</h1>` +
+      `<p>한 계정은 하루 ${ROTATE_DAILY_CAP}번까지 새로 발급할 수 있어요. ` +
+      `내일 다시 시도해 주세요 — 하루 경계는 한국 시간 자정입니다.</p>` +
+      `<p style="font-size:.9rem;opacity:.75">이 횟수는 키를 완전 삭제하셔도 이어서 셉니다 ` +
+      `(<a href="/privacy#retention">개인정보 처리방침 제3조</a> — 30일 보관).</p>`, 429);
+
   const key = newKey();
   const hash = await sha256hex(key);
   const prefix = key.slice(0, 8);
@@ -205,6 +254,8 @@ async function googleCallback(env, request, url, trace) {
     env.DB.prepare("INSERT INTO _issuance_log (ip, created_at) VALUES (?, ?)").bind(ip, now),
     env.DB.prepare("DELETE FROM _issuance_log WHERE created_at < ?")
       .bind(new Date(Date.now() - 86400000).toISOString()),
+    // 첫 발급이면 자리만(0), 완전삭제 뒤 재발급이면 한 칸 올린다
+    ...writeGuard(env, gHash, guard ? usedToday + 1 : 0),
   ]);
   trace.keyHash = hash;
 
@@ -251,15 +302,16 @@ async function rotateKey(env, request, url, trace) {
   // 🔑 티켓은 **그 해시의 행이 아직 있을 때만** 유효하다. 회전하면 해시가 바뀌므로 같은
   //    티켓을 두 번 쓰면 여기서 걸린다 — 사용 여부를 적어 둘 표가 필요 없다.
   const row = await env.DB.prepare(
-    "SELECT key_hash, rotated_day, rotated_count FROM _keys WHERE key_hash = ?").bind(ok.keyHash).first();
+    "SELECT key_hash, email, rotated_day, rotated_count FROM _keys WHERE key_hash = ?").bind(ok.keyHash).first();
   if (!row)
     return authPage("이미 처리됐어요",
       `<h1>이미 새 키가 발급됐어요</h1><p>이 확인은 한 번만 쓸 수 있어요. ` +
       `키를 못 받으셨다면 <a href="/api/v1/auth/google">다시 로그인</a>해 주세요.</p>`, 409);
 
-  // 계정 기준 상한 — 오늘이 아니면 0 부터 다시 센다(그래서 청소할 것이 없다).
-  const day = kstDay();
-  const usedToday = row.rotated_day === day ? Number(row.rotated_count) || 0 : 0;
+  // 계정 기준 상한 — 오늘이 아니면 0 부터 다시 센다. 정본은 `_issuance_guard` 이고
+  // (완전삭제가 못 지우는 자리), `_keys` 의 옛 컬럼은 0008 적용 전 계정의 seed 로만 읽는다.
+  const gHash = await guardHash(secret, row.email);
+  const usedToday = usedTodayFrom(await readGuard(env, gHash), row);
   if (usedToday >= ROTATE_DAILY_CAP)
     return authPage("오늘은 여기까지",
       `<h1>오늘 재발급 횟수를 다 쓰셨어요</h1>` +
@@ -287,13 +339,15 @@ async function rotateKey(env, request, url, trace) {
       "INSERT INTO _usage (key_hash, day, count) SELECT ?, day, count FROM _usage WHERE key_hash = ? AND day = ? " +
       "ON CONFLICT(key_hash, day) DO UPDATE SET count = excluded.count")
       .bind(hash, ok.keyHash, kstDay()),
+    // ⚠️ `rotated_day/rotated_count` 는 **더 쓰지 않는다** — 정본이 `_issuance_guard` 로
+    //    옮겨졌다(#320). 컬럼은 증분 원칙상 남겨 두고(0008 주석) 읽기만 한다.
     env.DB.prepare(
-      "UPDATE _keys SET key_hash = ?, key_prefix = ?, status = 'active', created_at = ?, " +
-      "rotated_day = ?, rotated_count = ? WHERE key_hash = ?")
-      .bind(hash, prefix, now, day, usedToday + 1, ok.keyHash),
+      "UPDATE _keys SET key_hash = ?, key_prefix = ?, status = 'active', created_at = ? WHERE key_hash = ?")
+      .bind(hash, prefix, now, ok.keyHash),
     env.DB.prepare("INSERT INTO _issuance_log (ip, created_at) VALUES (?, ?)").bind(ip, now),
     env.DB.prepare("DELETE FROM _issuance_log WHERE created_at < ?")
       .bind(new Date(Date.now() - 86400000).toISOString()),
+    ...writeGuard(env, gHash, usedToday + 1),
   ]);
 
   // 🔴 **키를 보여 주기 전에 그 키가 실제로 앉았는지 본다.** 같은 티켓으로 두 요청이 거의
@@ -325,6 +379,12 @@ async function rotateKey(env, request, url, trace) {
 // 폐기 — 키를 즉시 무효화한다. purge=true 면 이메일·사용량까지 지운다(처리방침의 삭제 요청
 // 셀프 경로). 요청 로그의 key_hash 는 남지만, 해시→이메일 대응이 사라지므로 사람과 연결되지
 // 않는다. 30일 뒤 자동 삭제되는 건 그대로다.
+//
+// 🔴 **`_issuance_guard` 는 지우지 않는다** (#320). 지우면 완전삭제가 재발급 상한의
+//    우회로가 된다 — 남용 → 완전삭제 → 재로그인 → 새 키가 무제한으로 돈다. 가드에는
+//    이메일 **해시**만 있고 30일 뒤 사라지므로, 삭제권을 지우는 대신 **범위를 좁혀** 남긴다
+//    (처리방침 제3조·제7조에 그대로 적었다). 이건 정보를 늘린 게 아니라 — 원문 이메일이
+//    무기한 남던 자리를 해시 30일로 **줄인** 것이다.
 async function revokeKey(env, keyRow, purge) {
   if (purge) {
     await env.DB.batch([
@@ -334,7 +394,8 @@ async function revokeKey(env, keyRow, purge) {
     ]);
     return json({
       key_prefix: keyRow.key_prefix, purged: true,
-      note: "키와 이메일·사용량 기록을 삭제했다. 요청 로그(30일 보존)는 키 해시만 남아 사람과 연결되지 않는다",
+      note: "키와 이메일·사용량 기록을 삭제했다. 요청 로그(30일 보존)는 키 해시만 남아 사람과 연결되지 않는다. " +
+        "재발급 횟수는 이메일 해시로 30일 더 남는다 — 하루 5회 상한을 위한 것이며 삭제해도 이어서 센다",
     });
   }
   await env.DB.prepare("UPDATE _keys SET status = 'revoked' WHERE key_hash = ?")
@@ -1236,11 +1297,15 @@ async function route(request, env, url, trace, ctx) {
     return rotateKey(env, request, url, trace);
   }
   if (path === "/api/v1/keys" && request.method === "DELETE") {
-    trace.route = "revoke";
+    // 🔴 **폐기와 완전삭제를 가른다** (#320 Phase 0). 예전엔 둘 다 `revoke` 로 찍혀
+    //    **완전삭제가 쓰이고 있는지조차 몰랐다** — 무엇을 고칠지 정하는 근거가 없었다.
+    //    ⚠️ `route` 값은 콘솔과의 공유 계약이라 값을 늘리면 콘솔 담당에게 통지한다(0001).
+    const purge = url.searchParams.get("purge") === "true";
+    trace.route = purge ? "purge" : "revoke";
     const { keyRow, error } = await authenticate(env, request, { allowRevoked: true });
     if (error) return error;
     trace.keyHash = keyRow.key_hash;
-    return revokeKey(env, keyRow, url.searchParams.get("purge") === "true");
+    return revokeKey(env, keyRow, purge);
   }
   // 채팅 — 질문 하나를 검증된 패턴 실행으로 (#159 · decision/0006). 루프는 chat.js,
   // 여기는 문(상한·인증·제품 찾기)만 지킨다.
