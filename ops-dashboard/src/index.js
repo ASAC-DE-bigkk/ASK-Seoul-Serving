@@ -145,8 +145,20 @@ const dayWhere = (dates, col = "ts") => dates.length
     // (`seoul-weather-risk` 같은 스킬 키 — 운영 실측 39건)은 **NULL** 로 둔다.
 // 🔴 NULL 을 아무 분야에나 끼워 넣지 않는다. '분야 미상'이고, **화면이 그 몫을 밝힌다** —
 // 조용히 빼면 분야 합이 전체와 안 맞는데 화면은 맞는 척한다(0012: 거른 것은 걸렀다고 말한다).
-const GW_DOM = "CASE WHEN instr(COALESCE(product_id, ''), '_') > 1 " +
-               "THEN substr(product_id, 1, instr(product_id, '_') - 1) END";
+// 🔴 접두사만으로는 부족하다 — **등록부(`_ops_domain`)에 있는 값만 분야다** (#293, 2026-08-12).
+// 실측: 존재하지 않는 제품명을 추측해 찌른 404 프로브 11행이 `age`·`biz`·`invalid` 같은
+// **가짜 분야 7종**을 드롭다운·분야 집계에 만들었다. 로그는 무엇이든 실을 수 있는 표라
+// (게이트웨이는 404 에도 요청된 product_id 를 남긴다 — '못 찾은 이름' 카드에 필요한 값),
+// 로그에서 분야를 **만들면** 오염이 지표가 된다. 분야의 정본은 파이프라인이 정한
+// 등록부이므로, 접두사가 등록부에 없으면 **분야 미상(NULL)** 으로 둔다 — 미상은 화면이
+// 이미 몫을 밝히는 축이라(0012) 오염이 조용히 지표가 되는 길이 닫힌다.
+// ⚠️ `_ops_domain` 은 콘솔 소유 표(migrations/0001)라 반드시 있다 — 없으면 이 식을 쓰는
+// 질의가 통째로 실패해 safeRows 가 서빙 섹션을 강등한다(빈 화면 + meta.missing).
+// 내용이 0행이면 전 분야가 미상으로 보인다 — 그건 등록부가 비었다는 **정확한 신호**다
+// (manual-steps §4-1 이 채우는 법이다).
+const GW_DOM_RAW = "CASE WHEN instr(COALESCE(product_id, ''), '_') > 1 " +
+                   "THEN substr(product_id, 1, instr(product_id, '_') - 1) END";
+const GW_DOM = "(SELECT od.domain FROM _ops_domain od WHERE od.domain = " + GW_DOM_RAW + ")";
 
 // ── '분야 미상'을 셋으로 가른다 (#162 🅐 — 2026-08-07 결정) ────────────────────
 //

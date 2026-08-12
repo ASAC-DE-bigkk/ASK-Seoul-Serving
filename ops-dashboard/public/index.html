@@ -1218,9 +1218,12 @@ function collectScopeDomains(d) {
   for (const x of P.slo || []) add(x.domain);
   for (const x of R.daily || []) add(x.domain);
   for (const x of R.expectations || []) add(x.domain);
-  // 서빙은 product_id 접두사만 분야로 인정한다 — table_name(=API 이름)엔 gold_ 같은 등급
-  // 접두사가 섞여 'gold'·'common' 같은 가짜 분야가 새어 들어온다(운영 실측). product_id 가 정본.
-  for (const x of S.products || []) add(domOf(x.product_id));
+  // 🔴 서빙 축은 **서버가 등록부로 검증한 값**(x.domain)을 쓴다 — 예전에는 여기서
+  // product_id 접두사를 다시 계산했는데(domOf), 로그에 실린 가짜 제품명(404 프로브)의
+  // 접두사가 그대로 분야 후보가 됐다(#293 실측: age·biz·invalid 등 7종). 서버 GW_DOM 이
+  // `_ops_domain` 에 있는 값만 분야로 인정하므로(미등록 접두사 = NULL = 미상) 여기서는
+  // 그 축을 그대로 받기만 한다 — 로그 오염이 드롭다운·지표에 분야를 만들 수 없다.
+  for (const x of S.products || []) add(x.domain);
   return [...seen.keys()].sort().map((domain) => ({ domain, label: seen.get(domain) || domain }));
 }
 function syncScopeBar(domains) {
