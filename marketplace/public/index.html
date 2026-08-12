@@ -352,6 +352,31 @@
                background:linear-gradient(90deg, transparent, var(--sk-sheen), transparent);
                animation:shimmer 1.3s infinite; }
   @keyframes shimmer { to { transform:translateX(100%); } }
+
+  /* ── 움직임 (2026-08-12) ──────────────────────────────────────────────────────
+     생동감은 **가만히 있을 때 움직이는 것**이 아니라 **반응할 때 움직이는 것**에서 온다.
+     히어로 배경을 두 번 되돌린 뒤의 결론이다(2026-08-03 정지 · 2026-08-12 재확인) —
+     글자 뒤에서 계속 도는 것은 시선을 뺏고, 스크롤·질문에 답하는 움직임은 그렇지 않다.
+
+     🔴 `.rv` 는 **JS 가 달 때만** 켜진다. 마크업에 처음부터 넣으면 스크립트가 못 뜬 순간
+        본문이 통째로 안 보인다 — **장식 때문에 내용을 잃지 않는다.**
+     🔴 `prefers-reduced-motion` 이면 JS 가 아예 안 달고, CSS 로도 한 번 더 끈다(두 겹).
+        `.rv` 를 못 켜는 상황에서도 내용은 보여야 하므로 `opacity` 를 되돌려 놓는다. */
+  .rv { opacity:0; transform:translateY(12px); will-change:opacity, transform; }
+  .rv.in { opacity:1; transform:none;
+           transition:opacity .5s ease, transform .5s cubic-bezier(.2,.7,.3,1); }
+  /* 답 카드는 순서대로 들어온다 — 한 번에 나타나면 몇 건인지 세어지지 않는다 */
+  .answer .hit { animation:hitin .34s cubic-bezier(.2,.7,.3,1) both;
+                 animation-delay:calc(var(--i, 0) * 70ms);
+                 transition:background .14s; }
+  .answer .hit:hover { background:var(--panel-2); }
+  @keyframes hitin { from { opacity:0; transform:translateY(8px); } }
+  /* 도메인 칸은 hover 색이 이미 있는데 전환이 없어 딱 끊겼다 */
+  .dom { transition:background .14s; }
+  @media (prefers-reduced-motion: reduce) {
+    .rv, .rv.in { opacity:1; transform:none; transition:none; }
+    .answer .hit { animation:none; }
+  }
   .sk-card { height:140px; background:var(--panel); border:1px solid var(--line); border-radius:10px; }
   .state { grid-column:1/-1; padding:22px; text-align:center; font-size:12.5px; color:var(--muted);
            border:1px dashed var(--line-strong); border-radius:10px; background:var(--panel); }
@@ -1169,7 +1194,8 @@ function renderHeroAnswer(b) {
     "<div class='hits'>" + hits.map((p, i) => {
       const dom = String(p.product_id || "").split("_")[0];
       const pats = (p.matched_patterns || []).slice(0, i === 0 ? 2 : 0);   // 1등만 실행 후보를 편다
-      return "<div class='hit' data-dom='" + esc(dom) + "'>" +
+      // `--i` 는 순서대로 들어오게 하는 지연값이다(CSS `.answer .hit` 참조)
+      return "<div class='hit' data-dom='" + esc(dom) + "' style='--i:" + i + "'>" +
         "<div class='h'><i class='d' aria-hidden='true'></i><span class='t'>" + esc(p.title) + "</span>" +
         "<span class='meta'>" + (domName(dom) || "") +
           (p.pattern_count ? " · 질문 " + p.pattern_count + "건" : "") + "</span></div>" +
@@ -1200,6 +1226,74 @@ function setStat(id, text) {
   el.classList.remove("sk");
   el.innerHTML = text;
 }
+
+// 계기 스트립의 수는 **화면에 들어올 때 0에서 올라간다.**
+// 🔴 이 자리에 애니메이션을 붙일 수 있는 이유는 **그 숫자가 진짜이기 때문**이다 —
+//    카탈로그 응답에서 센 값이라(박아두면 조용히 거짓이 된다) 세는 시늉이 아니다.
+//    반대로 값을 모르는 칸("—")은 절대 굴리지 않는다. 모르는 것을 세는 척하면 안 된다.
+// ⚠️ `.strip .v` 에 `tabular-nums` 가 이미 걸려 있어 자릿수가 바뀌어도 폭이 안 튄다.
+//    그게 없으면 숫자가 굴러가는 동안 칸이 들썩인다.
+function setCount(id, n, unit) {
+  const el = $(id);
+  el.classList.remove("sk");
+  const paint = (v) => { el.innerHTML = nf.format(v) + "<span class='u'>" + unit + "</span>"; };
+  // 🔴 **정답을 먼저 쓴다.** 굴리기는 덤이라, 관찰자가 한 번도 안 불려도(숨은 탭·구형 브라우저·
+  //    렌더링이 멈춘 창) 화면에는 늘 진짜 수가 남는다. 처음엔 0 을 써 두고 관찰자를 기다렸는데,
+  //    그 판은 관찰자가 안 불리는 순간 **스트립이 "0개"로 굳었다**(실측으로 잡았다) —
+  //    장식 하나가 지표를 거짓말로 만드는 구조였다.
+  paint(Number.isFinite(n) ? n : 0);
+  if (REDUCED || !Number.isFinite(n) || n <= 0 || typeof IntersectionObserver !== "function") return;
+  // 🔴 **0 은 프레임 안에서만 쓴다.** 프레임 밖에서 미리 0 을 써 두면, rAF 가 안 도는 상황
+  //    (숨은 탭·렌더링이 멈춘 창)에서 그 0 이 그대로 굳는다 — 실측으로 그렇게 만들었다가 고쳤다.
+  //    첫 프레임이 실제로 왔을 때 k=0 이라 자연히 0 부터 시작하고, 프레임이 영영 안 오면
+  //    위에 써 둔 정답이 그대로 남는다.
+  const DUR = 900;
+  const roll = () => {
+    let t0 = null;
+    const step = (now) => {
+      if (t0 === null) t0 = now;   // `!t0` 로 두면 now 가 정확히 0 인 프레임에서 기준이 안 잡힌다
+      const k = Math.min(1, (now - t0) / DUR);
+      paint(Math.round(n * (1 - Math.pow(1 - k, 3))));    // 끝에서 감속 — 딱 멈추면 기계적이다
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+  // 스트립은 히어로 바로 아래라 창 높이에 따라 이미 보이기도 한다. 그 경우는 관찰자를 기다리지
+  // 않고 바로 굴린다 — 기다리면 첫 화면에서 아무 일도 안 일어난 것처럼 보인다.
+  if (el.getBoundingClientRect().top < innerHeight) { roll(); return; }
+  new IntersectionObserver((es, ob) => {
+    if (!es[0].isIntersecting) return;
+    ob.disconnect(); roll();
+  }, { threshold: 0.4 }).observe(el);
+}
+
+// 스크롤로 들어올 때 한 번만 올라오며 나타난다.
+// 🔴 클래스를 **JS 가 단다.** HTML 에 `.rv` 를 박아 두면 스크립트가 못 뜬 순간 본문이
+//    통째로 사라진다 — 장식 때문에 내용을 잃지 않는다(점진적 향상).
+function bootReveal() {
+  if (REDUCED || typeof IntersectionObserver !== "function") return;
+  const hidden = [];
+  let any = false;
+  const io = new IntersectionObserver((es) => {
+    for (const e of es) if (e.isIntersecting) { any = true; e.target.classList.add("in"); io.unobserve(e.target); }
+  }, { threshold: 0.08, rootMargin: "0px 0px -40px 0px" });
+  for (const el of document.querySelectorAll("main.wrap > section, .strip")) {
+    // 이미 화면 안에 있는 것(첫 화면)은 굳이 숨겼다 보이지 않는다 — 로드 직후 깜빡임이 된다
+    if (el.getBoundingClientRect().top < innerHeight * 0.9) continue;
+    el.classList.add("rv");
+    hidden.push(el);
+    io.observe(el);
+  }
+  // 🔴 **안전망**: 관찰자가 한 번도 안 불리면 본문이 통째로 안 보인다. 장식 하나 때문에
+  //    내용을 잃을 수는 없으므로, 5초 안에 아무것도 안 열렸으면 전부 열고 끝낸다.
+  //    (정상 동작에서는 첫 스크롤에 `any` 가 서므로 이 길로 오지 않는다 — 읽는 속도가 느린
+  //     사람에게서 효과를 뺏지 않는다.)
+  if (hidden.length) setTimeout(() => {
+    if (any) return;
+    io.disconnect();
+    for (const el of hidden) el.classList.add("in");
+  }, 5000);
+}
 function failState(id, msg) {
   $(id).innerHTML = "<div class='state'>" + msg +
     " — <a href='/catalog'>카탈로그에서 직접 보기</a></div>";
@@ -1219,14 +1313,14 @@ async function bootCatalog() {
     return;
   }
 
-  setStat("statProducts", products.length + "<span class='u'>종</span>");
+  setCount("statProducts", products.length, "종");
   // 분야 수는 라벨이 아니라 **세어서** 넣는다 — 도메인이 늘거나 줄면 따라간다.
   // domainOf 는 product_id 앞머리라 DOMAINS 상수와 무관하게 실물을 센다.
   // 분야 — **수는 카탈로그에서 세고 이름만 DOMAINS 에서 가져온다.** 새 접두사가 오면
   // 수에는 잡히고 이름에서만 빠진다(모르는 분야의 한글 이름을 지어내지 않는다).
   // 이름은 제품이 많은 순서다 — 아래 도메인 격자와 같은 정렬이라 두 곳이 안 어긋난다.
   const domIds = new Set(products.map(domainOf));
-  setStat("statDomains", domIds.size + "<span class='u'>개</span>");
+  setCount("statDomains", domIds.size, "개");
   const domCounts = {};
   for (const p of products) domCounts[domainOf(p)] = (domCounts[domainOf(p)] || 0) + 1;
   const domNames = [...domIds]
@@ -1244,7 +1338,7 @@ async function bootCatalog() {
   //    않는 이유는 스트립 주석 참조 — 증명은 우리가 아는 사실이지 방문자의 질문이 아니다.
   const patterns = products.reduce(
     (n, p) => n + (p.usage_patterns || []).filter((u) => u.verified_at).length, 0);
-  setStat("statPatterns", nf.format(patterns) + "<span class='u'>개</span>");
+  setCount("statPatterns", patterns, "개");
   const stamps = products.map((p) => p.exported_at).filter(Boolean).sort();
   const newest = stamps[stamps.length - 1];
   setStat("statFresh", (newest && relTime(newest)) || "—");
@@ -1299,6 +1393,7 @@ async function bootCatalog() {
 }
 
 bootField();
+bootReveal();
 bootCatalog();
 bootDemo();
 </script>
