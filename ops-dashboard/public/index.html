@@ -152,7 +152,8 @@
          자동 새로고침은 선택·펼침을 건드리지 않는다. -->
     <div class="datebar" id="dateBar" hidden>
       <button class="datebar-toggle" id="dateBarToggle" aria-expanded="false" aria-controls="dateBarDays">지정 날짜만 보기</button>
-      <span class="datebar-state" id="dateBarState">전체 기간</span>
+      <!-- 시간대는 화면이 직접 말한다 — 침묵하면 "어제 21시 요청이 왜 오늘이지"가 된다(시간축 감사 2차) -->
+      <span class="datebar-state" id="dateBarState">전체 기간 · 날짜는 한국 시간(KST) 기준</span>
       <button class="clear" id="dateClear" hidden>날짜 지정 해제</button>
       <div class="datebar-days" id="dateBarDays" hidden></div>
     </div>
@@ -677,8 +678,9 @@ function renderAxis(s0) {
         { t:"부른 이름", name:true, get:(r) => "<code>" + esc(r.target) + "</code>" },
         { t:"요청 종류", get:(r) => String(r.routes || "").split(",")
             .map((x) => ROUTE_KO[x] || esc(x)).join(" · ") },
+        // 이름 규격은 이용자 카드와 같다(#326) — by_key 에서 해시 8자 → ask_… 를 되찾는다.
         { t:"부른 키", get:(r) => String(r.key_ids || "").split(",").filter(Boolean)
-            .map((x) => "<span class='pill dim'>" + esc(x) + "</span>").join(" ") || "—" },
+            .map(hash8Name).join(" ") || "—" },
         { t:"마지막", r:true, get:(r) => fmtTs(r.last_ts) },
         { t:"건수", r:true, get:(r) => "<span class='pill bad'>" + nf.format(r.calls) + "</span>" },
       ], nf404, "")
@@ -920,6 +922,31 @@ const pageFoot = (id, shown, total) =>
     : "<b>" + nf.format(shown) + " / " + nf.format(total) + "</b> · 스크롤하면 이어집니다") +
   "</div>";
 
+// ── 이용자 이름 한 벌 (#326) ─────────────────────────────────────────────────────
+//
+// 서빙 로그의 신원은 해시 앞 8자(`key_id`)뿐이었고, '이용자 키' 화면은 `ask_…`(key_prefix)
+// 를 쓴다 — **같은 사람이 화면마다 다른 이름**이라 눈으로 대조해야 했다. 서버가 `_keys` 지도
+// (keymap)로 이름을 붙여 주므로, 화면은 어디서든 이 한 함수로 부른다.
+//
+//   잇긴 행     ask_2508… (ma***@gmail.com) + 해시 8자(작게, 대조용)
+//   못 잇는 행  '삭제된 키' 배지 + 해시 8자 — 🔴 처리방침 제7조 ③이 약속한 상태라
+//               못 잇는 게 **맞다**. 빈칸으로 두면 '모른다'가 '없다'로 읽힌다.
+const userName = (r) => r.known
+  ? "<code>" + esc(r.key_prefix) + "…</code>" +
+    (r.email_masked ? " <small style='color:var(--faint)'>" + esc(r.email_masked) + "</small>" : "") +
+    " <span class='pill dim'>" + esc(r.key_id) + "</span>" +
+    (r.key_status === "revoked" ? " <span class='pill warn'>차단됨</span>" : "")
+  : "<span class='pill warn'>삭제된 키</span> <span class='pill dim'>" + esc(r.key_id) + "</span>";
+
+// 해시 8자만 손에 있을 때(요청 추적·API 상세·못 찾은 요청) — by_key 목록에서 이름을 되찾는다.
+// 목록(상위 50) 밖이면 해시 그대로 남긴다: 지어내는 것보다 낫다.
+const hash8Name = (x) => {
+  if (!x) return "<span class='zero'>비로그인</span>";
+  const u = ((LAST_DATA && LAST_DATA.usage && LAST_DATA.usage.by_key) || [])
+    .find((b) => b.key_id === x);
+  return u ? userName(u) : "<span class='pill dim'>" + esc(x) + "</span>";
+};
+
 // ── 이용자별 통계 ────────────────────────────────────────────────────────────────
 //
 // 여태 이 콘솔은 이용자를 **비율로만** 말했다('익명 비중' KPI). 비율은 "얼마나 많나"에는
@@ -952,14 +979,24 @@ function renderUserStats(U, days) {
       "<div class='num'><b>" + nf.format(id.anon || 0) + "</b> <small>" + pct(id.anon).toFixed(1) + "%</small></div></div>" +
     "</div>" +
     "<p class='hint' style='margin-top:10px'>이 기간에 <b>" + nf.format(id.keys_used || 0) + "명</b>이 키로 요청했습니다. " +
-    "아래 목록은 <b>식별된 요청만</b> 셉니다 — 익명은 누가 보냈는지 알 수 없어 셀 사람이 없습니다.</p>";
+    "아래 목록은 <b>식별된 요청만</b> 셉니다 — 익명은 누가 보냈는지 알 수 없어 셀 사람이 없습니다." +
+    // 커버리지 한 줄(#326) — 인증 요청 중 몇 건이 지금 살아 있는 키로 이어지나. 못 잇는
+    // 몫은 완전삭제된 키다(처리방침 제7조 ③이 약속한 상태) — 결함이 아니라 설계다.
+    (id.linked_calls != null && id.keyed
+      ? "<br>인증 요청 <b>" + nf.format(id.keyed) + "건</b> 중 <b>" + nf.format(id.linked_calls) +
+        "건(" + (id.linked_calls / id.keyed * 100).toFixed(1) + "%)</b>이 지금 살아 있는 키 <b>" +
+        nf.format(id.keys_linked || 0) + "개</b>로 이어집니다 — 못 잇는 건 <b>삭제된 키</b>의 기록입니다."
+      : "") + "</p>";
 
   if (!rows.length) { el.innerHTML = head + emptyBox(["데이터 없음", "키를 쓴 요청이 없습니다"]); return; }
 
   // ② 이용자 한 사람이 한 줄. 누른 줄 **바로 밑에** 상세를 끼운다 — 카드 밖으로 내보내면
   //    어느 줄을 편 것인지 눈으로 못 잇는다.
   const cols = [
-    { t:"이용자", name:true, get:(r) => "<span class='pill dim'>" + esc(r.key_id) + "</span>" +
+    // 🔴 이름은 '이용자 키' 화면과 **같은 규격**이다(#326) — `ask_…`(key_prefix) + 가린
+    //    이메일. 해시 앞 8자는 대조용으로 옆에 작게 남긴다(로그·이슈가 그 값으로 말한다).
+    //    못 잇는 행은 '삭제된 키' — 빈칸은 '모른다'가 '없다'로 읽힌다.
+    { t:"이용자", name:true, get:(r) => userName(r) +
         (UKEY === r.key_id ? " <span class='pill ok'>펼침</span>" : "") },
     { t:"요청 수", r:true, get:(r) => nf.format(r.calls) },
     { t:"데이터 조회", r:true, get:(r) => nf.format(r.data_calls || 0) },
@@ -1015,7 +1052,8 @@ function userApisRow(U, keyRow, span) {
       ], mine, "")
     : emptyBox(["데이터 없음", "이 이용자의 요청 내역이 없습니다"]);
   return "<tr class='udet'><td colspan='" + span + "'>" +
-    "<div class='drill-hd'><b>" + esc(keyRow.key_id) + "</b>" +
+    "<div class='drill-hd'><b>" + (keyRow.known ? esc(keyRow.key_prefix) + "…" : esc(keyRow.key_id)) + "</b>" +
+    (keyRow.known ? "" : " <span class='pill warn'>삭제된 키</span>") +
     "<span class='sub'>많이 쓴 순서 · 최근 " + nf.format(shown) + "건</span>" +
     "<button class='kbtn' data-user-close style='margin-left:auto'>닫기</button></div>" +
     "<div class='tscroll'>" + inner + "</div>" +
@@ -1107,16 +1145,29 @@ document.addEventListener("ui:page", (e) => {
   const foot = document.querySelector('[data-page-foot="' + t.dataset.page + '"]');
   if (foot) foot.outerHTML = pageFoot(t.dataset.page, st.shown, st.rows.length);
 });
-// 시각은 초·밀리초까지 필요 없다 — "언제쯤"이면 충분하고, 짧을수록 표가 읽힌다
-const fmtTs = (s) => (s ? String(s).slice(0, 16).replace("T", " ") : null);
-// 🔴 시각 문자면은 **그 표면의 날짜 축과 같은 시간대**여야 한다 (실측: 드릴다운이 KST 날짜
-// 08/12 아래에 UTC 문자면 17:40 을 찍어, 아직 오지 않은 시각으로 읽혔다 — logship 건).
-//   파이프라인·발행·이용자 키 표면 → 날짜 축이 KST(observed_date_kst · +9h 접기) → fmtTsKst
-//   서빙·이용·API 표면            → 날짜 축이 UTC(substr(ts,1,10))            → fmtTs 유지
-// 축 자체를 한쪽으로 통일하는 것은 별개 결정이다 — 여기서는 문자면이 축을 따르게만 한다.
-const kstMs = (s) => { const t = Date.parse(s); return isNaN(t) ? null : t + 9 * 3600e3; };
-const fmtTsKst = (s) => { const t = kstMs(s);
-  return t == null ? fmtTs(s) : new Date(t).toISOString().slice(0, 16).replace("T", " "); };
+// 시각은 초·밀리초까지 필요 없다 — "언제쯤"이면 충분하고, 짧을수록 표가 읽힌다.
+//
+// 🔴 **모든 시각 문자면은 KST 다** (시간축 감사 2차, 2026-08-12). 1차 감사 때는 "문자면이
+// 그 표면의 날짜 축을 따른다"로 두어 서빙 화면 셋만 UTC 로 남겼는데, 서버 축 자체가 KST 로
+// 통일되면서(GW_DAY·TS_SINCE) 그 갈래가 사라졌다 — 이제 화면 어디서든 같은 시각은 같은
+// 문자면이다. 저장은 여전히 UTC ISO 그대로다(원본 불변) — **접는 곳은 여기 하나다.**
+//
+// ⚠️ 시간대 표기가 없는 문자열('YYYY-MM-DD HH:MM:SS')은 **UTC 로 못 박는다.** Date.parse 에
+// 그대로 주면 브라우저가 **로컬 시간**으로 읽어(엔진 재량), 해외 브라우저에서 값이 틀어진다.
+// 이 화면이 읽는 표의 naive 문자열은 전부 UTC 로 적재된 것들이다(ingested_at 등).
+const kstMs = (s) => {
+  if (!s) return null;
+  let str = String(s).trim().replace(" ", "T");
+  if (!/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(str)) str += "Z";
+  const t = Date.parse(str);
+  return isNaN(t) ? null : t + 9 * 3600e3;
+};
+const fmtTs = (s) => { const t = kstMs(s);
+  return t == null ? (s ? String(s).slice(0, 16).replace("T", " ") : null)
+                   : new Date(t).toISOString().slice(0, 16).replace("T", " "); };
+// 1차 감사 때 파이프라인 표면용으로 갈라 뒀던 이름 — 이제 전부 KST 라 같은 함수다.
+// 호출부를 다 바꾸는 대신 별칭으로 남긴다(갈랐던 이유가 §5 주석에 남아 있다).
+const fmtTsKst = fmtTs;
 // 응답 시간 — DB 가 `17.717784881591797` 같은 부동소수를 그대로 준다. 소수 15자리는
 // 사람이 못 읽고 표를 넓힌다. 1ms 미만은 소수 한 자리, 그 이상은 정수로 접는다.
 const fmtMs = (v) => v == null ? "—"
@@ -1160,7 +1211,9 @@ const bundleNote = (load) => !load || load.bundled ? ""
 // 기간을 14일로 고르면 **14칸이 나와야 한다.** 행이 있는 날만 그리면 하루치 데이터일 때
 // 막대 하나에 축 양끝이 같은 날짜가 되어, 고른 기간이 화면에 반영되지 않은 것처럼 보인다.
 // (실제로 "기간을 바꿔도 안 변한다"는 지적이 여기서 나왔다.)
-const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
+// 🔴 KST 달력일 — 서버 축(GW_DAY = date(ts,'+9 hours'))과 같은 접기다. 여기가 UTC 면
+// 일자 카드 끝 칸·날짜 칩이 서버가 세는 날과 하루 어긋난다(시간축 감사 2차).
+const dayKey = (t) => new Date(t + 9 * 3600e3).toISOString().slice(0, 10);
 // fillDays 의 자매 — 창 전체가 아니라 **주어진 날짜 목록만** 채운다. '지정 날짜만 보기'가
 // 켜졌을 때 쓴다: 서버는 선택한 날짜의 행만 주므로, 선택했는데 요청이 없던 날을 0 막대로
 // 세우는 몫만 여기서 한다(없는 날을 지어내지도, 선택 밖 날을 끼워 넣지도 않는다).
@@ -1170,14 +1223,16 @@ function fillDaysList(rows, dayList, keyOf, zero) {
 }
 function fillDays(rows, days, keyOf, zero) {
   const by = new Map(rows.map((r) => [keyOf(r), r]));
-  // 🔴 끝 칸은 **UTC 오늘**이다 — 이 함수를 쓰는 일자 카드(응답 상태·이용 패턴)의 날짜 키가
-  // 서버의 UTC 달력일(substr(ts,1,10))이라서다. 예전에는 KST 오늘로 앵커해서, KST 00~09시
-  // 사이엔 마지막 칸(KST 오늘 = 아직 없는 UTC 날)이 늘 '기록 없음'이고 창의 첫 UTC 날이
-  // 조용히 밀려났다(시간축 감사 실측). 날짜 칩(dateCandidates)도 같은 UTC 오늘 기준이다.
+  // 끝 칸은 **KST 오늘**이다 — dayKey 가 KST 접기라 서버 축(GW_DAY·오늘 포함 N일 창)과
+  // 같은 달력을 센다. (1차 감사 때 UTC 오늘로 앵커를 옮겼던 것은 서버 축이 UTC 이던 시절
+  // 이야기다 — 축이 KST 로 통일되면서 앵커도 함께 돌아왔다. 앵커만 바꾸고 축을 안 바꾸면
+  // KST 00~09시에 끝 칸이 늘 비는 그 결함이 재현된다.)
   const endMs = Date.parse(dayKey(Date.now()) + "T00:00:00Z");
   const out = [];
   for (let i = days - 1; i >= 0; i--) {
-    const k = dayKey(endMs - i * 86400000);
+    // endMs 는 'KST 날짜 문자열'을 UTC 자정으로 읽은 값이라 하루 뺄셈만 하면 된다 —
+    // dayKey 를 다시 통과시키면 +9h 가 두 번 얹힌다.
+    const k = new Date(endMs - i * 86400000).toISOString().slice(0, 10);
     out.push(by.get(k) || { ...zero, day: k, _empty: true });
   }
   return out;
@@ -1284,16 +1339,16 @@ function updateScopeVisible() {
 // 서빙 로그 화면 셋에서 창 안의 특정 날짜만 골라 본다. 상태는 DATESEL 하나(Set)이고,
 // 서버 fetch 세 곳(/api/summary · /api/apis · /api/apis/<이름>)이 dateQ() 로 같은 값을
 // 붙인다 — 한 곳이라도 빠지면 목록과 상세가 다른 기간을 세게 된다(#63 ③ 유형).
-// 날짜 후보는 오늘(UTC)부터 창 일수만큼 — 서빙 창(rolling)이 달력일을 최대 N+1개
-// 걸치므로 N+1개를 낸다. 일자별 카드와 같은 UTC 달력일 축이다(서버 substr(ts,1,10)).
+// 날짜 후보는 **KST 오늘 포함 N개** — 서버 창(TS_SINCE, KST 오늘 포함 N일)과 정확히 같은
+// 달력이다. (예전에는 UTC 롤링 창이 달력일 N+1개를 걸쳐 N+1개를 냈다 — 축 통일로 N개가 됐다.)
 const DATE_PANES = ["serving", "usage", "apis"];
 let DATESEL = new Set();
 const dateQ = () => DATESEL.size ? "&dates=" + [...DATESEL].sort().join(",") : "";
 const dateCandidates = () => {
   const days = parseInt($("days").value, 10) || 14;
   const out = [];
-  for (let i = days; i >= 0; i--)
-    out.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+  for (let i = days - 1; i >= 0; i--)
+    out.push(dayKey(Date.now() - i * 86400000));
   return out;
 };
 function renderDateChips() {
@@ -1306,9 +1361,11 @@ function renderDateChips() {
   renderDateState();
 }
 function renderDateState() {
+  // 시간대를 화면이 직접 말한다 — 축이 KST 로 통일된 사실은 말하지 않으면 안 보인다
+  // (예전 UTC 축 시절 "어제 21시 요청이 왜 오늘이 아니지"가 정확히 이 침묵에서 나왔다).
   $("dateBarState").textContent = DATESEL.size
-    ? DATESEL.size + "일 선택 — 이 세 화면은 선택한 날짜만 셉니다"
-    : "전체 기간";
+    ? DATESEL.size + "일 선택 — 이 세 화면은 선택한 날짜만 셉니다 (한국 시간)"
+    : "전체 기간 · 날짜는 한국 시간(KST) 기준";
   $("dateClear").hidden = !DATESEL.size;
 }
 // 닫는 길은 한 곳(§5 토글 규약) — 토글 재클릭이 여기로 온다. 선택은 안 건드린다
@@ -1442,8 +1499,11 @@ function render(d) {
     const tag = $("envTag");
     tag.hidden = false;
     tag.className = "envtag" + (ev.label === "운영" ? " prod" : "");
-    // 언제 읽은 값인지를 붙인다 — 자동 새로고침 중이면 "멈춘 화면"과 구분이 되어야 한다
-    const at = new Date(d.generated_at).toLocaleTimeString("ko-KR", { hour12: false });
+    // 언제 읽은 값인지를 붙인다 — 자동 새로고침 중이면 "멈춘 화면"과 구분이 되어야 한다.
+    // 🔴 toLocaleTimeString 은 **브라우저 로컬 시간대**로 찍는다 — 해외 브라우저에서 이 칸만
+    //    다른 시간대가 되어 "모든 문자면은 KST" 규약이 깨진다. kstMs 로 접는다(시간축 감사 2차).
+    const atMs = kstMs(d.generated_at);
+    const at = atMs == null ? "—" : new Date(atMs).toISOString().slice(11, 19);
     tag.innerHTML = esc(ev.label) + "<small>" + esc(ev.d1) + " · " + esc(at) + "</small>";
     tag.title = "이 화면은 " + ev.label + " 환경의 " + ev.d1 + " 데이터를 읽고 있습니다\n"
               + "마지막으로 읽은 시각: " + at;
@@ -1655,7 +1715,9 @@ function render(d) {
   // ② 창 앞부분이 '가르기 전' 기록인 경우. 옛 기록은 데이터 조회도 뭉뚱그려 남아 있어
   //    되살릴 방법이 없다 — 기간을 좁히면 사라지는 안내이므로 그 방법을 같이 알려 준다.
   if (mcp.pre_split) {
-    const from = mcp.split_from ? String(mcp.split_from).slice(0, 10) : null;
+    // split_from 은 UTC 순간값 — 그대로 자르면 UTC 달력일이다. KST 로 접는다(fmtTs 규약).
+    const fromMs = mcp.split_from ? kstMs(mcp.split_from) : null;
+    const from = fromMs == null ? null : new Date(fromMs).toISOString().slice(0, 10);
     const why = "이 기간의 앞부분은 AI 호출을 <b>기능별로 가르기 전</b> 기록입니다" +
       (from ? "(가르기 시작: " + esc(from) + ")" : "") + " — 그 구간의 AI 데이터 조회는 " +
       "다른 AI 호출과 뭉뚱그려 남아 있어 <b>되살릴 수 없습니다.</b> " +
@@ -2286,7 +2348,9 @@ function render(d) {
   // 버킷('*')을 쓴다. 이 카드는 '응답 상태'에 있었는데, 묻는 질문이 "누가 쓰나"라서
   // 이용 패턴 분석으로 옮겼다 — 옆의 '이용자별 통계'와 같은 축을 보는 카드다.
   $("keys").innerHTML = table([
-    { t:"이용자", get:(r) => esc(r.key_id), name:true },
+    // 옆 카드('이용자별 통계')와 같은 이름 규격(#326) — 같은 사람이 같은 화면 안에서
+    // 두 이름이면 그게 또 대조 숙제가 된다.
+    { t:"이용자", get:userName, name:true },
     { t:"요청 수", r:true, get:(r) => nf.format(r.calls) },
     { t:"방문한 날", r:true, get:(r) => r.active_days > 1
         ? "<span class='pill ok'>" + r.active_days + "일</span>" : r.active_days + "일" },
@@ -2840,7 +2904,7 @@ async function openDetail(name, silent) {
         { t:"조건 항목", get:(r) => r.filters ? esc(r.filters) : "<span class='zero'>없음</span>" },
         { t:"응답 건수", r:true, get:(r) => r.row_count ?? "—" },
         { t:"소요", r:true, get:(r) => fmtMs(r.ms) },
-        { t:"이용자", get:(r) => r.key_id ? esc(r.key_id) : "<span class='zero'>비로그인</span>", name:true },
+        { t:"이용자", get:(r) => hash8Name(r.key_id), name:true },
         { t:"요청 번호", get:(r) => esc(r.request_id || "—"), name:true },
       ], d.recent, "이 기간에 요청이 없습니다") + "</div></div>" +
     "</div>";
@@ -3087,7 +3151,7 @@ async function traceLookup() {
         { t:"대상 API", name:true, get:(r) => esc(r.table_name || r.product_id || "—") },
         { t:"결과", get:(r) => "<span class='pill " + (r.status >= 500 ? "bad" : r.status >= 400 ? "warn" : "ok") + "'>" +
             (r.status < 400 ? "정상" : (STATUS_KO[r.status] || r.status)) + "</span>" },
-        { t:"이용자", get:(r) => r.key_id ? "<code>" + esc(r.key_id) + "…</code>" : "익명" },
+        { t:"이용자", get:(r) => r.key_id ? hash8Name(r.key_id) : "익명" },
         { t:"조건 항목", get:(r) => esc(r.filters || "—") },
         { t:"응답 건수", r:true, get:(r) => r.row_count ?? "—" },
         { t:"소요", r:true, get:(r) => fmtMs(r.ms) },
