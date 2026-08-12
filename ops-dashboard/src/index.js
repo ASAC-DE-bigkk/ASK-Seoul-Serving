@@ -118,6 +118,22 @@ const envScope = (env) => SCOPES[String(env.ENV_SCOPE || "").trim()] || null;
 const gwWhere = (env) => { const c = envScope(env); return c ? ` AND env = '${c}'` : ""; };
 const gwWhereR = (env) => { const c = envScope(env); return c ? ` AND r.env = '${c}'` : ""; };
 
+// ── 지정 날짜만 보기 (#293 후속, 2026-08-12) ─────────────────────────────────
+//
+// 서빙 로그를 읽는 화면 셋(응답 상태·이용 패턴 분석·API 사용량)에서 사람이 창 안의
+// **특정 날짜만** 골라 본다. 🔴 축은 `ts` 의 **UTC 달력일**(`substr(ts,1,10)`)이다 —
+// 일자별 카드가 이미 그 축으로 그리므로 필터도 같은 축이어야 화면과 숫자가 맞는다.
+//
+// 값은 정규식으로 형태(YYYY-MM-DD)를 강제한 뒤에만 SQL 조각에 넣는다 — envScope 와
+// 같은 근거다: 실수의 방향이 '덜 거름'이지 주입이 아니다. 개수는 창 최대치로 자른다.
+// 거른 사실은 응답 meta(`dates_filter`)가 밝힌다(0012 — 거른 것은 걸렀다고 말한다).
+const parseDates = (params) => String(params.get("dates") || "").split(",")
+  .map((s) => s.trim()).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s))
+  .slice(0, MAX_DAYS + 1);
+const dayWhere = (dates, col = "ts") => dates.length
+  ? " AND substr(" + col + ",1,10) IN (" + dates.map((d) => "'" + d + "'").join(",") + ")"
+  : "";
+
 // ── 서빙 로그의 분야 축 (#156) ─────────────────────────────────────────────────
 //
 // 🔴 **`product_id` 접두사 하나만 분야로 인정한다.** `table_name` 은 물리명이라 접두사가
@@ -129,8 +145,31 @@ const gwWhereR = (env) => { const c = envScope(env); return c ? ` AND r.env = '$
     // (`seoul-weather-risk` 같은 스킬 키 — 운영 실측 39건)은 **NULL** 로 둔다.
 // 🔴 NULL 을 아무 분야에나 끼워 넣지 않는다. '분야 미상'이고, **화면이 그 몫을 밝힌다** —
 // 조용히 빼면 분야 합이 전체와 안 맞는데 화면은 맞는 척한다(0012: 거른 것은 걸렀다고 말한다).
-const GW_DOM = "CASE WHEN instr(COALESCE(product_id, ''), '_') > 1 " +
-               "THEN substr(product_id, 1, instr(product_id, '_') - 1) END";
+// 🔴 접두사만으로는 부족하다 — **등록부(`_ops_domain`)에 있는 값만 분야다** (#293, 2026-08-12).
+// 실측: 존재하지 않는 제품명을 추측해 찌른 404 프로브 11행이 `age`·`biz`·`invalid` 같은
+// **가짜 분야 7종**을 드롭다운·분야 집계에 만들었다. 로그는 무엇이든 실을 수 있는 표라
+// (게이트웨이는 404 에도 요청된 product_id 를 남긴다 — '못 찾은 이름' 카드에 필요한 값),
+// 로그에서 분야를 **만들면** 오염이 지표가 된다. 분야의 정본은 파이프라인이 정한
+// 등록부이므로, 접두사가 등록부에 없으면 **분야 미상(NULL)** 으로 둔다 — 미상은 화면이
+// 이미 몫을 밝히는 축이라(0012) 오염이 조용히 지표가 되는 길이 닫힌다.
+// ⚠️ `_ops_domain` 은 콘솔 소유 표(migrations/0001)라 반드시 있다 — 없으면 이 식을 쓰는
+// 질의가 통째로 실패해 safeRows 가 서빙 섹션을 강등한다(빈 화면 + meta.missing).
+// 내용이 0행이면 전 분야가 미상으로 보인다 — 그건 등록부가 비었다는 **정확한 신호**다
+// (manual-steps §4-1 이 채우는 법이다).
+const GW_DOM_RAW = "CASE WHEN instr(COALESCE(product_id, ''), '_') > 1 " +
+                   "THEN substr(product_id, 1, instr(product_id, '_') - 1) END";
+const GW_DOM = "(SELECT od.domain FROM _ops_domain od WHERE od.domain = " + GW_DOM_RAW + ")";
+
+// 🔴 미등록 접두사 제품은 **전체 지표에서도 뺀다** (#293 후속, 2026-08-12 요청).
+// 분야 축을 미상으로 돌리는 것(위)만으로는 전체 합계(호출·오류·이용자·일자별·수요)에
+// 오염 트래픽이 여전히 섞인다 — 로그에 잘못 실린 데이터가 운영 지표를 움직이면 안 된다.
+// 빼는 것은 **도메인 모양(밑줄 접두사)을 하고서 등록부에 없는 제품**뿐이다:
+//   · product_id IS NULL(목록·인증·연결 절차)은 정상 트래픽 — 남긴다
+//   · 밑줄 없는 값(스킬 키·번들)도 실재 트래픽 — 남긴다(갈래는 AXIS_BUCKET 이 밝힌다)
+// 뺀 몫은 감추지 않는다(0012): 관측 질의 둘(분야 갈래·못 찾은 이름)은 **제외 없이** 그대로
+// 보고, meta.serving_unregistered_excluded + 화면 배너가 건수를 말한다.
+const GW_UNREG = "(product_id IS NOT NULL AND instr(product_id, '_') > 1 " +
+  "AND NOT EXISTS (SELECT 1 FROM _ops_domain od WHERE od.domain = " + GW_DOM_RAW + "))";
 
 // ── '분야 미상'을 셋으로 가른다 (#162 🅐 — 2026-08-07 결정) ────────────────────
 //
@@ -404,14 +443,21 @@ async function summary(env, params, writable = false) {
   // 서빙 로그 전 질의가 **같은 조각**을 쓴다(#64). 한 곳에 두지 않으면 새 질의에서
   // 빠뜨리고, 그게 환경이 조용히 섞이는 경로다 — `SERVE` 를 한 줄로 모은 것과 같은 이유고,
   // 파이프라인에서 이미 배운 것이다.
-  const gwW = gwWhere(env);
+  // 날짜 필터는 환경 스코프와 **같은 조각**에 얹는다 — 서빙·이용·사용량 질의 전부가
+  // gwW 하나를 쓰므로 여기 한 곳이면 전 화면이 같은 날짜를 센다(#64 와 같은 구조).
+  // 퍼널(발급→첫 호출)만 예외다: 생애 지표라 날짜로 자르면 "첫 호출" 의 뜻이 바뀐다.
+  const dates = parseDates(params);
+  // gwW = 지표용(미등록 접두사 제품 제외) · gwWX = 관측용(제외 없음 — 분야 갈래·못 찾은
+  // 이름은 뺀 몫을 **보여주는** 질의라 빼면 안 된다). 표준 질의는 전부 gwW 를 쓴다.
+  const gwWX = gwWhere(env) + dayWhere(dates);
+  const gwW = gwWX + " AND NOT " + GW_UNREG;
   const routes = await safeRows(env,
     "SELECT route, " + GW_DOM + " AS domain, COUNT(*) AS calls, SUM(status >= 400) AS errors, " +
     "ROUND(AVG(ms),1) AS avg_ms " +
     "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW +
     " GROUP BY route, domain ORDER BY calls DESC", since);
   if (!routes.ok) missing.push("serving");
-  const [daily, products, failures, empty, keys, servTotals, axis, notFound] = await Promise.all([
+  const [daily, products, failures, empty, keys, servTotals, axis, notFound, unreg] = await Promise.all([
     // `keys_used`(COUNT DISTINCT)는 뺐다 — 화면이 한 번도 안 읽었고, 분야 축이 붙은 뒤로는
     // **분야별로 더할 수 없는 값**이라(같은 키가 두 분야에 있으면 중복) 있으면 오히려 위험하다.
     // `errors` 를 대신 싣는다: 막대 툴팁이 `x.errors` 를 읽고 있는데 질의에 없어서 **실패 수가
@@ -479,9 +525,11 @@ async function summary(env, params, writable = false) {
     // 🔴 분야 축 내역 (#162 🅐). '미상' 한 덩어리를 셋으로 가른다 — `AXIS_BUCKET` 주석 참고.
     // `_catalog` 를 참조하므로 **따로 읽는다.** 위 집계에 섞으면 카탈로그를 못 읽을 때
     // 응답 상태 탭 전체가 빈다(표시명에서 이미 배운 것 — DISPLAY_COLS 주석).
+    // 🔴 관측용 gwWX — 이 두 질의(갈래·못 찾은 이름)는 미등록 접두사 제품을 **보여주는**
+    //    자리라 지표용 제외를 걸지 않는다. 다섯 갈래 합 = 창 전체(제외 전)가 유지된다.
     safeRows(env,
       "SELECT " + AXIS_BUCKET + " AS bucket, COUNT(*) AS calls, SUM(status >= 400) AS errors " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW +
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwWX +
       " GROUP BY bucket", since),
     // 못 찾은 이름은 **이름째로** 보여준다. 건수만 말하면 "무엇을 고쳐야 하나"에 답이 안 된다.
     // 부른 키(`key_id`)까지 싣는 이유: 실측에서 이 7건이 **외부 클라이언트의 오타가 아니라
@@ -491,10 +539,14 @@ async function summary(env, params, writable = false) {
       "SELECT " + PRODUCT_KEY + " AS target, group_concat(DISTINCT route) AS routes, " +
       "COUNT(*) AS calls, SUM(status >= 400) AS errors, " +
       "group_concat(DISTINCT substr(key_hash, 1, 8)) AS key_ids, MAX(ts) AS last_ts " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwW +
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwWX +
       " AND " + PRODUCT_KEY + " IS NOT NULL AND NOT " + IS_BUNDLE +
       " AND NOT " + IS_QA_PROBE + " AND NOT " + IN_CATALOG +
       " GROUP BY target ORDER BY calls DESC LIMIT 20", since),
+    // 전체 지표에서 뺀 미등록 접두사 제품의 몫 — 화면 배너·meta 가 이 값으로 말한다(0012).
+    safeRows(env,
+      "SELECT COUNT(*) AS n FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwWX +
+      " AND " + GW_UNREG, since),
   ]);
 
   // 화면이 "왜 비었나"에 답할 수 있어야 한다.
@@ -562,7 +614,8 @@ async function summary(env, params, writable = false) {
     // 거른 범위를 화면이 말하려면 거르기 **전**을 한 번은 봐야 한다(decision/0012).
     // NULL 은 `(미상)` 으로 따로 센다 — 운영으로 채우지 않는다(ASAC-DAG#692).
     safeRows(env, "SELECT COALESCE(env, '(미상)') AS env, COUNT(*) AS calls " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?) GROUP BY env ORDER BY calls DESC", since),
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + dayWhere(dates) +
+      " GROUP BY env ORDER BY calls DESC", since),
     // ── 이용자 축 ─────────────────────────────────────────────────────────────
     //
     // 🔴 **'키를 발급받은 사람'과 '아닌 사람'을 먼저 가른다.** 여태 화면은 '익명 비중'
@@ -658,6 +711,12 @@ async function summary(env, params, writable = false) {
       // ── #64 환경 스코프 ──────────────────────────────────────────────────
       // 서빙 수치가 **한 환경의 것임을 보장**하고, 무엇을 뺐는지 같이 말한다.
       // 침묵하면 "숫자가 왜 이렇지"가 되고, 그건 필터를 안 건 것만큼 나쁘다(decision/0012).
+      // 지정 날짜 필터(#293 후속) — 서빙·이용·사용량 수치가 이 날짜들만 센 값임을 밝힌다.
+      // 빈 배열 = 필터 없음(창 전체). 퍼널은 생애 지표라 이 필터 밖이다(위 주석).
+      dates_filter: dates,
+      // 전체 지표에서 뺀 미등록 접두사 제품 요청 수(#293 후속). 0 이면 배너가 안 뜬다.
+      // 분야 갈래·못 찾은 이름 카드는 제외 없이 그대로라, KPI 와 그 카드의 합은 이 값만큼 다르다.
+      serving_unregistered_excluded: unreg.ok && unreg.rows[0] ? unreg.rows[0].n : 0,
       serving_env_scope: envCol,
       // 거르기 **전** 분포. 스코프가 없어도(=null) 섞였다는 사실은 보여야 한다.
       serving_env_mix: genv.ok ? genv.rows : [],
@@ -1107,8 +1166,9 @@ async function displayMap(env) {
 async function usage(env, params) {
   const days = Math.min(MAX_DAYS, Math.max(1, parseInt(params.get("days"), 10) || DEFAULT_DAYS));
   const since = `-${days} days`;
-  // 별칭 붙은 질의라 `_R` 을 쓴다(#64).
-  const gwWR = gwWhereR(env);
+  // 별칭 붙은 질의라 `_R` 을 쓴다(#64). 날짜 필터도 같은 조각에 얹는다(summary 와 같은 구조).
+  const dates = parseDates(params);
+  const gwWR = gwWhereR(env) + dayWhere(dates, "r.ts");
 
   const [apis, domains, monthly, disp, cov, pmeta, rpu] = await Promise.all([
     safeRows(env,
@@ -1156,7 +1216,10 @@ async function usage(env, params) {
       "SELECT COALESCE(SUM(route IN ('run_pattern','mcp_run_pattern')), 0) AS calls, " +
       "COALESCE(SUM((route IN ('run_pattern','mcp_run_pattern')) AND status >= 400), 0) AS errors, " +
       "COALESCE(SUM((route IN ('run_pattern','mcp_run_pattern')) AND status = 500), 0) AS drift " +
-      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwWhere(env), since),
+      // 미등록 접두사 제품 제외는 summary 의 지표용 조각과 같은 판단(#293 후속) —
+      // 가짜 제품명으로 찌른 패턴 호출이 패턴 현황 카드의 오류·드리프트를 움직이면 안 된다.
+      "FROM _gateway_request_log WHERE ts >= datetime('now', ?)" + gwWhere(env) + dayWhere(dates) +
+      " AND NOT " + GW_UNREG, since),
   ]);
 
   // 표시 메타는 조인이 아니라 여기서 붙인다(DISPLAY_COLS 주석). 미선언은 null 그대로 간다.
@@ -1189,6 +1252,8 @@ async function usage(env, params) {
       // 안 남긴 것"이라고 말할 수 있도록 서버가 명시한다 — 사용자가 버그로 오해하지 않게.
       detail_scope: "filters_axis_only",
       log_retention_days: 30,
+      // 지정 날짜 필터(#293 후속) — 목록·도메인·월별·패턴 사용이 이 날짜들만 센 값임을 밝힌다.
+      dates_filter: dates,
     },
     domains: domains.rows,
     apis: apiRows,
@@ -1215,7 +1280,9 @@ async function usageDetail(env, name, params) {
   // `product_id` 를 두 번째 열쇠로 쓴다.
   //
   // 환경 스코프도 목록과 같이 건다(#64) — 안 그러면 상세 합이 목록보다 커진다.
-  const KEY_W = gwWhere(env) + " AND (table_name = ? OR product_id = ?) ";
+  // 날짜 필터도 목록과 같은 조각에 얹는다 — 안 그러면 상세 합이 목록과 어긋난다(#63 ③과 같은 유형).
+  const KEY_W = gwWhere(env) + dayWhere(parseDates(params)) +
+    " AND (table_name = ? OR product_id = ?) ";
   const K = [name, product.product_id || name];
 
   // 표시 메타는 한 행만 읽는다 — 목록과 **같은 표·같은 규약**이고, 여기서도 조인하지 않는다
