@@ -114,7 +114,13 @@ export function buildDataContext(meta) {
  * 정확도의 한계는 응답이 스스로 말한다(`matched_terms`) — 왜 걸렸는지 보이면 AI 가 틀린
  * 후보를 스스로 버린다.
  */
-const HAY_WEIGHT = { pattern: 3, question: 2, text: 1 };
+// 🔴 **소개문이 가장 강한 주제 신호다.** `display.title`·`summary` 는 "이 제품이 무엇을
+//    담는가"를 사람이 한 줄로 적은 것이고, 패턴 질문은 "그 제품으로 물을 수 있는 질문"이다.
+//    전자에 낱말이 있으면 **제품의 주제**이고 후자는 **질문의 소재**라, 주제 쪽이 세다.
+//    실측(2026-08-12): *"강남에 내일 하는 축제 알려줘"* 의 정답인 `culture_event_schedule`
+//    은 `축제` 를 소개문에만 갖고 있어 8위였다 — 패턴 질문에 `축제` 가 스쳐 지나간 집계
+//    제품들에 밀렸다. 소개문을 층으로 세우면 1위가 된다.
+const HAY_WEIGHT = { intro: 4, pattern: 3, question: 2, text: 1 };
 
 // 한국어는 조사가 붙어 낱말이 어긋난다("장소가" vs "장소"). 형태소 분석기를 넣을 자리는
 // 아니므로 **꼬리 한 글자를 떼어 본다** — 조사 대부분이 1음절이라 이것만으로 크게 는다.
@@ -122,6 +128,21 @@ const forms = (tok) => (tok.length >= 3 ? [tok, tok.slice(0, -1)] : [tok]);
 
 const tokenize = (s) => String(s || "").toLowerCase()
   .split(/[^0-9a-z가-힣]+/).filter((w) => w.length >= 2);
+
+// 말뭉치도 같은 규칙으로 쪼갠다. 길이 2 컷을 여기엔 두지 않는다 — "구"·"동" 같은 한 글자
+// 낱말이 통째로 사라지면 접두 비교의 상대가 없어진다(질의 쪽만 2자 이상을 요구한다).
+const words = (s) => String(s || "").toLowerCase().split(/[^0-9a-z가-힣]+/).filter(Boolean);
+
+// 🔴 **예시 괄호는 값이지 주제가 아니다.** 패턴 질문에 적힌 `(예: 강남역 vs 홍대)` 는 파라미터를
+//    어떻게 채우는지 보여 주는 견본인데, 그 안의 지명·업종이 그대로 검색 신호가 되면 **엉뚱한
+//    제품이 지명으로 1등을 한다**. 실측(2026-08-12): "강남에 … 축제" 의 1위가 `commerce_geo_grid_overview`
+//    였고 근거는 오직 그 괄호 안의 "강남역" 이었다.
+// ⚠️ 괄호를 통째로 버리지 않는다 — `(:gus 는 구 이름의 JSON 배열 문자열, 예: '["강남구"…]')`
+//    처럼 **설명과 예시가 한 괄호에 같이** 들어 있는 것이 많다. 괄호 안에서 `예:` **뒤만**
+//    지우고 앞의 설명은 남긴다.
+const stripExamples = (s) => String(s || "").replace(
+  /[(（]([^)）]*)[)）]/g,
+  (whole, inner) => (/예\s*[:：]/.test(inner) ? ` ${inner.replace(/예\s*[:：][\s\S]*/, "")} ` : whole));
 
 // 🔴 **고를 수 있는 패턴만 신호로 쓴다.** 검증 스탬프가 없는 초안까지 매칭에 넣으면,
 // AI 가 추천받은 `pattern_id` 로 `run_pattern` 을 불렀다가 **409 pattern not verified** 를
@@ -137,13 +158,24 @@ function haystacks(p) {
   const patterns = runnablePatterns(p);
   return {
     patterns,
-    question: String(p.product_question || "").toLowerCase(),
-    text: [p.display?.title, p.display?.summary, p.description,
-      String(p.product_id || "").replace(/_/g, " ")].join(" ").toLowerCase(),
+    patternWords: patterns.map((u) => words(stripExamples(u.question_ko))),
+    intro: words([p.display?.title, p.display?.summary].join(" ")),
+    question: words(stripExamples(p.product_question)),
+    text: words([p.description, String(p.product_id || "").replace(/_/g, " ")].join(" ")),
   };
 }
 
-const hitsIn = (tok, hay) => forms(tok).some((f) => hay.includes(f));
+// 🔴 **낱말 경계에서 시작할 때만 걸린다.** 예전엔 말뭉치 전체를 한 문자열로 두고
+//    `includes` 했는데, 한국어는 어미가 뒤에 붙는 언어라 `하는` 이 "차지**하는**"·"비교**하는**"
+//    에 걸려 **60제품 중 29개**에 점수를 뿌렸다(실측 2026-08-12). 조사·어미는 낱말 **뒤**에
+//    붙으므로 접두 일치가 맞다 — "장소가".startsWith("장소") 는 그대로 걸리고,
+//    "차지하는".startsWith("하는") 은 걸리지 않는다.
+const hitsIn = (tok, bag) => forms(tok).some((f) => bag.some((w) => w.startsWith(f)));
+
+// 낱말이 이 제품 어딘가에 있나 — df 를 셀 때 층을 가리지 않는다.
+const anyHit = (tok, h) =>
+  hitsIn(tok, h.intro) || hitsIn(tok, h.question) || hitsIn(tok, h.text) ||
+  h.patternWords.some((b) => hitsIn(tok, b));
 
 /**
  * 🔴 **흔한 낱말은 값이 없다.** 첫 판은 겹친 낱말 수만 셌더니 *"서울에서 요즘 전시 많이
@@ -156,19 +188,30 @@ const hitsIn = (tok, hay) => forms(tok).some((f) => hay.includes(f));
  * 불용어 목록을 손으로 들지 않는 이유는 그 목록이 늘 실물보다 늦기 때문이다 — 카탈로그가
  * 바뀌면 무엇이 흔한지도 같이 바뀌고, df 는 그걸 저절로 따라간다.
  */
+// 절반 넘는 제품에 나오는 낱말은 **고르는 데 못 쓴다** — 누르는 것으로는 모자라 지운다.
+// 다만 이 컷은 통계가 성립할 때만 뜻이 있다(제품이 셋이면 df=2 가 '흔함'이 아니다).
+const COMMON_DF_RATIO = 0.5;
+const CUT_MIN_PRODUCTS = 10;
+
 function idfOf(tokens, products) {
   const N = Math.max(products.length, 1);
   const hays = products.map(haystacks);
   const idf = new Map();
+  const df = new Map();
   for (const tok of tokens) {
-    const df = hays.filter((h) =>
-      hitsIn(tok, h.question) || hitsIn(tok, h.text) ||
-      h.patterns.some((pat) => hitsIn(tok, String(pat.question_ko || "").toLowerCase()))).length;
+    const n = hays.filter((h) => anyHit(tok, h)).length;
+    df.set(tok, n);
     // df=N(전부에 있음) → 작아지고 · df=1(한 제품에만) → 커진다.
     // 🔴 `log((N+1)/(df+1))` 이 아니라 `log(1 + N/df)` 를 쓴다 — 전자는 **모든 제품에 있는
     //    낱말을 정확히 0 으로** 만들어, 제품이 적을 때(테스트·소규모 카탈로그) 걸린 낱말이
     //    통째로 사라진다. 흔한 말을 **누르는 것**이 목적이지 지우는 것이 아니다.
-    idf.set(tok, Math.log(1 + N / Math.max(df, 1)));
+    idf.set(tok, Math.log(1 + N / Math.max(n, 1)));
+  }
+  // ⚠️ **다 지워질 것 같으면 하나도 지우지 않는다.** 흔한 말만으로 이뤄진 질의("있는 날")
+  //    까지 0건으로 만들면, 사용자는 "맞는 데이터가 없다"로 읽는다 — 모른다 ≠ 없다.
+  if (products.length >= CUT_MIN_PRODUCTS) {
+    const common = tokens.filter((t) => df.get(t) / N >= COMMON_DF_RATIO);
+    if (common.length < tokens.length) for (const t of common) idf.set(t, 0);
   }
   return idf;
 }
@@ -183,22 +226,22 @@ export function searchProducts(body, query, limit = 5) {
     const hits = new Set();
     let score = 0;
     const matchedPatterns = [];
-    for (const pat of h.patterns) {
-      const q = String(pat.question_ko || "").toLowerCase();
-      const on = tokens.filter((t) => hitsIn(t, q));
+    h.patterns.forEach((pat, i) => {
+      const on = tokens.filter((t) => hitsIn(t, h.patternWords[i]));
       if (on.length) {
         matchedPatterns.push({
           pattern_id: pat.pattern_id, question_ko: pat.question_ko,
           weight: on.reduce((s, t) => s + (idf.get(t) || 0), 0),
         });
       }
-    }
+    });
     // 한 낱말이 여러 곳에서 걸려도 **한 번만** 센다 — 패턴 22개짜리 제품이 이기는 것을 막는다.
+    // 여러 층에 걸리면 **가장 무거운 층**으로 센다(소개문 > 패턴 질문 > 대표질문 > 나머지).
     for (const t of tokens) {
       const w = idf.get(t) || 0;
       if (w <= 0) continue;
-      const where = h.patterns.some((pat) => hitsIn(t, String(pat.question_ko || "").toLowerCase()))
-        ? HAY_WEIGHT.pattern
+      const where = hitsIn(t, h.intro) ? HAY_WEIGHT.intro
+        : h.patternWords.some((b) => hitsIn(t, b)) ? HAY_WEIGHT.pattern
         : hitsIn(t, h.question) ? HAY_WEIGHT.question
         : hitsIn(t, h.text) ? HAY_WEIGHT.text : 0;
       if (where) { score += where * w; hits.add(t); }
