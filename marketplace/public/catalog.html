@@ -553,9 +553,11 @@
       <li onclick="location.href='/status'"><span class="dot" style="background:#3a5450"></span>서비스 상태</li>
       <li onclick="location.href='/support'"><span class="dot" style="background:#3a5450"></span>문의하기</li>
     </ul>
-    <!-- 개발자용 페이지라 오류 형식(RFC 7807)은 남긴다 — 그건 붙일 때 실제로 필요한 정보다.
-         반면 내부 계약 버전·배치 시각·이슈 번호는 이용자가 알 일이 아니라 뺐다. -->
-    <div class="foot">매시간~매일 갱신<br>오류 응답 <code>RFC 7807</code>
+    <!-- ⚠️ 2026-08-12 — 오류 형식 표기를 뺐다(오너 결정). 개발자용 페이지라 남겨 뒀었는데,
+         **붙이는 사람은 이미 API 문서를 보고 온다** — 거기 오류 절이 형식·필드·분기 기준까지
+         말한다. 사이드바는 그 한 줄을 반복할 자리가 아니다.
+         내부 계약 버전·배치 시각·이슈 번호를 뺀 것과 같은 기준이다. -->
+    <div class="foot">매시간~매일 갱신
       <br><a href="/attribution">데이터 출처</a> · <a href="/terms">이용약관</a> · <a href="/privacy">개인정보</a>
       <br>© 2026 ASK: SEOUL</div>
   </aside>
