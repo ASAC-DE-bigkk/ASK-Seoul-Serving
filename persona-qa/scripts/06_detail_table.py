@@ -2,12 +2,28 @@
 # 출력: out/detail-table.csv (전문) + out/detail.json (대시보드 임베드용 축약)
 # 주의: "사용한 서빙 데이터"는 답변 본문에 product_id 가 명시된 경우만 — 하한값.
 #       (실행 당시 툴 인자를 기록하지 않았다. 정확한 정본은 서버 _gateway_request_log.)
+#
+# 사용: python scripts/06_detail_table.py v3-20260812   # 회차 폴더 지정
+#       python scripts/06_detail_table.py               # out/ 평면 (정리 전 레이아웃)
 import csv
 import json
 import re
+import sys
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parent.parent / "out"
+# Windows 기본 콘솔은 cp949 라 한글 출력에서 UnicodeEncodeError 로 죽는다.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
+ROOT = Path(__file__).resolve().parent.parent
+ROUND = sys.argv[1] if len(sys.argv) > 1 else None
+OUT = ROOT / "out" / ROUND if ROUND else ROOT / "out"
+SHARED = ROOT / "out" / "shared"
+# 회차마다 실측 시점의 카탈로그가 다르다. 1차 카탈로그로 2·3차를 매칭하면
+# 그 사이 신설된 제품(시간표 2종 등)이 "사용한 서빙 데이터" 에서 통째로 빠진다.
+CATALOG_BY_ROUND = {"v1-20260811": "catalog-v1.json"}
+DEFAULT_CATALOG = "catalog-v2v3.json"
 MCP_TOOLS = ("list_products", "search_products", "describe_product",
              "preview_product", "query_product", "run_pattern", "check_quota")
 
@@ -31,10 +47,16 @@ def question_type(q: str) -> str:
 
 
 def main() -> None:
-    personas = {p["uuid"]: p for p in
-                json.loads((OUT / "personas.json").read_text(encoding="utf-8"))}
+    pf = OUT / "personas.json"
+    if not pf.exists():                      # 1·2차는 페르소나가 shared/ 에 있다
+        pf = SHARED / "personas-v1v2.json"
+    personas = {p["uuid"]: p for p in json.loads(pf.read_text(encoding="utf-8"))}
     verdicts = json.loads((OUT / "verdicts.json").read_text(encoding="utf-8"))
-    catalog = json.loads((OUT / "catalog.json").read_text(encoding="utf-8"))
+    cf = OUT / "catalog.json"
+    if not cf.exists():
+        cf = SHARED / CATALOG_BY_ROUND.get(ROUND, DEFAULT_CATALOG)
+    catalog = json.loads(cf.read_text(encoding="utf-8"))
+    print(f"카탈로그: {cf.name} ({len(catalog['products'])}제품)")
     product_re = re.compile("|".join(p["product_id"] for p in catalog["products"]))
 
     rows = []

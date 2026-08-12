@@ -1,12 +1,23 @@
 # 02 — 페르소나당 질문 3건 생성 (claude-sonnet-5, headless).
 # 57개 제품 목록은 절대 프롬프트에 넣지 않는다 — 카탈로그를 모르는 수요를 흉내낸다.
+#
+# 사용: python scripts/02_generate_questions.py v4-20260812 [limit]
 import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parent.parent / "out"
+# Windows 기본 콘솔은 cp949 라 한글 출력에서 UnicodeEncodeError 로 죽는다.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
+_args = [a for a in sys.argv[1:]]
+ROUND = _args[0] if _args and not _args[0].isdigit() else None
+LIMIT_ARG = next((a for a in _args if a.isdigit()), None)
+OUT = (Path(__file__).resolve().parent.parent / "out" / ROUND if ROUND
+       else Path(__file__).resolve().parent.parent / "out")
 MODEL = "claude-sonnet-5"
 CLAUDE = shutil.which("claude") or "claude"  # Windows: claude.cmd 해석
 
@@ -49,7 +60,7 @@ def generate(p: dict) -> list[str]:
 
 def main() -> None:
     personas = json.loads((OUT / "personas.json").read_text(encoding="utf-8"))
-    limit = int(sys.argv[1]) if len(sys.argv) > 1 else len(personas)
+    limit = int(LIMIT_ARG) if LIMIT_ARG else len(personas)
     out_file = OUT / "questions.json"
     done: dict = {}
     if out_file.exists():  # 재실행 시 이어서
