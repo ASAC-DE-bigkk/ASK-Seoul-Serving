@@ -1315,7 +1315,12 @@ async function route(request, env, url, trace, ctx) {
   }
   // MCP 서버 — Streamable HTTP, stateless POST /mcp (#26 P0). shared 핸들러 재사용(내부 HTTP X).
   if (path === "/mcp") {
-    if (request.method !== "POST") return problem(405, "method not allowed", "MCP 는 POST /mcp (Streamable HTTP)");
+    // `Allow` 는 405 의 필수 헤더다(RFC 9110 §15.5.6). 없으면 "무엇으로 다시 걸어야 하나"를
+    // 클라이언트가 못 읽는다 — SSE 스트림을 열려고 `GET /mcp` 를 먼저 두드리는 호스트가
+    // 여기서 막히면 지원 여부를 판단할 근거가 응답에 없다.
+    if (request.method !== "POST")
+      return problem(405, "method not allowed", "MCP 는 POST /mcp (Streamable HTTP)", {},
+        { allow: "POST, OPTIONS" });
     trace.route = "mcp";
     return handleMcp(request, env, trace, {
       authenticate, checkBurst,
@@ -1476,8 +1481,19 @@ export default {
         status: 204,
         headers: {
           "access-control-allow-origin": "*",
-          "access-control-allow-headers": "authorization, content-type",
+          // 🔴 **MCP 가 규격으로 요구하는 헤더들이 빠져 있었다**(2026-08-13). 사양은
+          // 협상 뒤 모든 요청에 `MCP-Protocol-Version` 을 실으라고 하는데, 브라우저에서
+          // 도는 MCP 호스트는 프리플라이트에서 그 이름을 허용받지 못하면 **본 요청을 아예
+          // 보내지 않는다** — 서버 로그에는 아무것도 안 남고 호스트에는 "도구 0개"로 보인다.
+          // `Mcp-Session-Id`·`Last-Event-ID` 는 우리가 stateless 라 쓰지 않지만, 클라이언트가
+          // 실어 보내는 것을 막을 이유는 없다(막으면 그쪽이 실패한다).
+          "access-control-allow-headers":
+            "authorization, content-type, accept, mcp-protocol-version, mcp-session-id, last-event-id",
           "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+          // 응답 헤더는 **노출을 따로 허용**해야 스크립트가 읽는다. 세션 헤더를 안 쓰더라도
+          // `x-request-id` 는 장애 문의의 유일한 실마리라 읽히게 둔다.
+          "access-control-expose-headers": "mcp-session-id, x-request-id",
+          "access-control-max-age": "86400",
         },
       });
 
