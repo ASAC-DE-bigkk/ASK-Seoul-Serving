@@ -119,6 +119,16 @@ curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '[.usage.by_key[] | {id:.key
 curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '[.usage.by_key[].email_masked // empty] | map(test("^..[*]{3}@")) | all'
 #   → true. false 면 원문이 새는 것이다 — 즉시 막는다
 
+# ④-1-c 삭제된 키 제외 — 이용 패턴 지표에서 삭제된 키 트래픽을 빼는 토글
+curl -s -H "$AUTH" "$BASE/api/summary?days=14&exclude_deleted=1" | jq '{ex: .meta.usage_exclude_deleted,
+  keyed_daily: ([.usage.daily[].keyed] | add), by_key: (.usage.by_key | length),
+  all_known: ([.usage.by_key[].known] | all)}'
+#   ex=true · by_key 전원 known=true 여야 한다
+#   🔴 identity 는 파라미터와 무관하게 전량이다 — 뺀 몫(keyed - linked_calls)을 세는 근거
+#   무필터 keyed_daily 합 - 필터 keyed_daily 합 == identity.keyed - identity.linked_calls
+#   화면: 이용 패턴 분석 탭 날짜 바 옆 '삭제된 키 제외' 버튼 — 다시 누르면 해제(§5),
+#   주소 #usage?nodel=1 로 공유·새로고침 유지
+
 # ④-2 응답 상태 탭의 분야 축 — 여섯 카드가 다 분야로 갈리나 (#156)
 curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.serving.totals'
 #   domain='*'  전 분야 합계 · domain=null  분야 미상 · 나머지는 분야별
@@ -143,7 +153,9 @@ curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '
   (.serving.totals | map(select(.domain=="*")) | .[0].calls) as $all
   | (.serving.axis | map(.calls) | add // 0) as $axis
   | {all: $all, axis_sum: $axis, ok: ($axis == $all)}'
-#   🔴 다섯 갈래 합 == 전체. 모자라면 어느 갈래에도 안 들어간 요청이 있다는 뜻이고,
+#   🔴 다섯 갈래 합 == 전체 + meta.serving_unregistered_excluded (0d3a6f2 부터 전체 지표는
+#      미등록 접두사 제품을 뺀 값이다 — 갈래 카드는 제외 없이 전량). 그래도 모자라면
+#      어느 갈래에도 안 들어간 요청이 있다는 뜻이고,
 #      그건 예전의 '미상 한 덩어리'로 되돌아간 것이다
 curl -s -H "$AUTH" "$BASE/api/summary?days=14" | jq '.serving.not_found'
 #   조치 대상을 **이름째로**. `key_ids` 가 우리 팀 키면 점검 트래픽이니 `qa-` 로 바꾸게 한다
