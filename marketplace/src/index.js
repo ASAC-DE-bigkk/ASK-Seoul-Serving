@@ -31,9 +31,14 @@ import { loadProductAvailability, productNotReadyResponse } from "./product-avai
 import {
   isConfigured, redirectUri, authorizeUrl, exchangeCode, makeState, verifyState,
   readIdTokenFromTokenEndpoint, stateCookie, readCookie, STATE_COOKIE,
+  makeRotateTicket, verifyRotateTicket,
 } from "./google-oauth.js";
 
 const ISSUE_HOURLY_CAP = 5;
+// 계정 기준 재발급 상한(#303). IP 상한만으로는 **공유 IP 에서 남의 몫을 갉아먹는다** —
+// 한 사람이 반복 회전하면 같은 사무실·학교의 다른 사람이 발급을 못 한다. 회전 자체로는
+// 쿼터 이득이 없지만(당일 사용량 이월), 그건 "이득이 없다"이지 "해가 없다"가 아니다.
+const ROTATE_DAILY_CAP = 5;
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 5000;
 
@@ -150,15 +155,45 @@ async function googleCallback(env, request, url, trace) {
   if (recent[0].n >= ISSUE_HOURLY_CAP)
     return authPage("잠시 뒤에", `<h1>발급이 잦았어요</h1><p>같은 네트워크에서 시간당 ${ISSUE_HOURLY_CAP}회까지예요. 잠시 뒤 다시 시도해 주세요.</p>`, 429);
 
-  // 🔑 이미 키가 있으면 **회전하지 않는다.** 콜백의 code 는 일회용이라 "정말 만료시킬까요"를
-  // 되물을 왕복을 만들 수 없고, 파괴적 동작을 확인 없이 실행하지 않는다는 규약(#58)이 있다.
-  // 기존 키를 못 찾는 사람은 폐기 후 다시 로그인하면 된다 — 그 경로는 이미 있다.
-  const existing = await env.DB.prepare("SELECT key_prefix FROM _keys WHERE email = ?").bind(email).first();
-  if (existing)
-    return authPage("이미 키가 있어요",
-      `<h1>이미 발급된 키가 있어요</h1><p>이 계정에는 <code>${esc(existing.key_prefix)}…</code> 로 시작하는 키가 이미 있습니다. ` +
-      `키는 계정당 하나예요.</p><p>키를 잃어버리셨다면 기존 키를 폐기한 뒤 다시 로그인해 주세요 — ` +
-      `<code>DELETE /api/v1/keys</code> 에 기존 키로 요청하시면 됩니다.</p>`, 409);
+  // 🔑 이미 키가 있으면 **여기서 바로 회전하지 않는다.** 파괴적 동작을 확인 없이 실행하지
+  // 않는다는 규약(#58) 때문이다. 대신 **되묻는다** — 콜백의 code 는 일회용이라 왕복을 못
+  // 만들지만, 소유 확인 결과를 짧은 서명 티켓으로 바꿔 실어 보내면 된다(#303).
+  //
+  // ⚠️ 예전에는 여기서 409 로 끝내고 *"기존 키를 폐기한 뒤 다시 로그인하라"* 고 안내했는데,
+  //    폐기에는 그 키가 필요하다 — **키를 잃은 사람에게 그가 할 수 없는 일을 시키고 있었다.**
+  //    게다가 폐기는 행을 남기므로(status='revoked'), 폐기에 성공해도 아래 검사에 다시 걸려
+  //    재발급이 안 됐다. 그래서 이 검사는 **상태를 안 본다** — 살아 있든 폐기됐든 "다시
+  //    로그인 = 재발급" 하나로 통일한다.
+  const existing = await env.DB.prepare(
+    "SELECT key_hash, key_prefix, status, rotated_day, rotated_count FROM _keys WHERE email = ?")
+    .bind(email).first();
+  if (existing) {
+    const ticket = await makeRotateTicket(secret, existing.key_hash, nowSec());
+    const dead = existing.status !== "active";
+    const usedToday = existing.rotated_day === kstDay() ? Number(existing.rotated_count) || 0 : 0;
+    const left = Math.max(0, ROTATE_DAILY_CAP - usedToday);
+    return authPage("키를 새로 발급할까요?",
+      `<h1>이 계정에 이미 키가 있어요</h1>` +
+      `<p><code>${esc(existing.key_prefix)}…</code> 로 시작하는 키가 있습니다` +
+      (dead ? " (이미 폐기된 키예요)" : "") + `. 키는 계정당 하나예요.</p>` +
+      `<p><strong>새로 발급하면 그 키는 즉시 무효가 됩니다.</strong> 지금 쓰고 있는 곳이 있다면 ` +
+      `새 키로 바꿔 주셔야 해요. 오늘 쓴 호출 수는 새 키로 그대로 이어집니다.</p>` +
+      (left > 0
+        // 두 번 눌리는 것을 화면에서도 한 번 막는다 — 서버가 겹침을 잡긴 하지만, 잡히는 쪽은
+        // 키를 못 받고 재발급 횟수만 쓴다. JS 가 없어도 폼은 그대로 동작한다.
+        ? `<form method="post" action="/api/v1/keys/rotate" style="margin-top:1.5rem" ` +
+          `onsubmit="setTimeout(function(){var b=document.getElementById('go');b.disabled=true;b.textContent='발급 중…'},0)">` +
+          `<input type="hidden" name="ticket" value="${esc(ticket)}">` +
+          `<button type="submit" id="go" style="font:inherit;padding:.6rem 1.1rem;border-radius:.5rem;` +
+          `border:1px solid currentColor;background:transparent;cursor:pointer">새 키 발급</button>` +
+          `</form>` +
+          `<p style="margin-top:1rem;font-size:.9rem;opacity:.75">키가 아직 있으시면 이 창을 닫으셔도 됩니다` +
+          ` · 오늘 ${left}번 더 재발급할 수 있어요.</p>`
+        : `<p style="margin-top:1.5rem"><strong>오늘 재발급 횟수를 다 쓰셨어요.</strong> ` +
+          `한 계정은 하루 ${ROTATE_DAILY_CAP}번까지예요 — 내일 다시 시도해 주세요` +
+          `(하루 경계는 한국 시간 자정입니다).</p>`),
+      409);
+  }
 
   const key = newKey();
   const hash = await sha256hex(key);
@@ -176,6 +211,108 @@ async function googleCallback(env, request, url, trace) {
   // 키 원문은 여기 한 번만 나온다. 쿠키는 역할이 끝났으니 즉시 지운다.
   return new Response(authPage("키 발급 완료",
     `<h1>키가 발급됐어요</h1>` +
+    `<p><strong>이 키는 지금 한 번만 표시됩니다</strong> — 서버에는 해시만 저장돼 다시 보여드릴 수 없어요.</p>` +
+    `<p><code style="display:block;padding:.75rem 1rem;font-size:1.05rem;word-break:break-all">${esc(key)}</code></p>` +
+    `<p>요청 헤더에 <code>Authorization: Bearer &lt;키&gt;</code> 로 실어 보내세요.</p>`).body,
+    { status: 201, headers: {
+        "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
+        "set-cookie": stateCookie("", url, 0),
+      } });
+}
+
+// 회전 — 잃어버린 키를 **본인이** 새로 발급받는 경로(#303).
+//
+// 여기 오는 사람은 이미 Google 로 이메일 소유를 증명했고(콜백), 확인 페이지에서 버튼을
+// 한 번 더 눌렀다. 티켓이 그 둘을 이어 준다 — 서명이 소유를, POST 가 확인을 맡는다.
+//
+// 🔴 **행을 제자리에서 갈아 끼운다.** `_keys.email` 이 UNIQUE 라 새 행을 못 넣고, 넣을
+//    이유도 없다 — "계정당 키 하나"가 이 서비스의 모델이다.
+// 🔴 **오늘 쓴 양을 새 해시로 이월한다.** `_usage` 는 `(key_hash, day)` 가 PK 라 새 키는
+//    당일 사용량이 0 으로 시작한다 — 이월하지 않으면 **회전이 곧 쿼터 리셋**이라, 한도를
+//    다 쓴 사람이 재발급으로 초기화할 수 있다(오너 결정, 2026-08-12). 버스트(`_burst`)는
+//    분 단위라 이월하지 않는다 — 회전 한 번으로 얻는 이득이 없다.
+async function rotateKey(env, request, url, trace) {
+  if (!oauthConfigured(env)) return problem(503, "oauth disabled", "GOOGLE_CLIENT_ID·GOOGLE_CLIENT_SECRET 미설정");
+  const secret = authSecret(env);
+  if (!secret) return problem(503, "issuance disabled", "ISSUANCE_SALT 미설정");
+
+  let ticket = "";
+  try {
+    const form = await request.formData();
+    ticket = String(form.get("ticket") || "");
+  } catch { /* 폼이 아니면 아래에서 티켓 없음으로 떨어진다 */ }
+
+  const ok = await verifyRotateTicket(secret, ticket, nowSec());
+  if (!ok)
+    return authPage("다시 시도해 주세요",
+      `<h1>확인이 만료됐어요</h1><p>확인 창은 10분 동안만 열려 있어요. ` +
+      `<a href="/api/v1/auth/google">다시 로그인</a>해서 새로 시작해 주세요.</p>`, 400);
+
+  // 🔑 티켓은 **그 해시의 행이 아직 있을 때만** 유효하다. 회전하면 해시가 바뀌므로 같은
+  //    티켓을 두 번 쓰면 여기서 걸린다 — 사용 여부를 적어 둘 표가 필요 없다.
+  const row = await env.DB.prepare(
+    "SELECT key_hash, rotated_day, rotated_count FROM _keys WHERE key_hash = ?").bind(ok.keyHash).first();
+  if (!row)
+    return authPage("이미 처리됐어요",
+      `<h1>이미 새 키가 발급됐어요</h1><p>이 확인은 한 번만 쓸 수 있어요. ` +
+      `키를 못 받으셨다면 <a href="/api/v1/auth/google">다시 로그인</a>해 주세요.</p>`, 409);
+
+  // 계정 기준 상한 — 오늘이 아니면 0 부터 다시 센다(그래서 청소할 것이 없다).
+  const day = kstDay();
+  const usedToday = row.rotated_day === day ? Number(row.rotated_count) || 0 : 0;
+  if (usedToday >= ROTATE_DAILY_CAP)
+    return authPage("오늘은 여기까지",
+      `<h1>오늘 재발급 횟수를 다 쓰셨어요</h1>` +
+      `<p>한 계정은 하루 ${ROTATE_DAILY_CAP}번까지 재발급할 수 있어요. ` +
+      `내일 다시 시도해 주세요 — 하루 경계는 한국 시간 자정입니다.</p>` +
+      `<p style="font-size:.9rem;opacity:.75">지금 쓰고 계신 키는 그대로 살아 있습니다.</p>`, 429);
+
+  // 발급 상한은 그대로 건다 — 로그인이 확인해 주는 건 주소 소유이지 남용 의도가 아니다.
+  const ip = await sha256hex(`${kstDay()}|${secret}|${request.headers.get("cf-connecting-ip") || "local"}`);
+  const hourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
+  const { results: recent } = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM _issuance_log WHERE ip = ? AND created_at > ?").bind(ip, hourAgo).all();
+  if (recent[0].n >= ISSUE_HOURLY_CAP)
+    return authPage("잠시 뒤에",
+      `<h1>발급이 잦았어요</h1><p>같은 네트워크에서 시간당 ${ISSUE_HOURLY_CAP}회까지예요. 잠시 뒤 다시 시도해 주세요.</p>`, 429);
+
+  const key = newKey();
+  const hash = await sha256hex(key);
+  const prefix = key.slice(0, 8);
+  const now = new Date().toISOString();
+  const written = await env.DB.batch([
+    // 오늘 쓴 양을 먼저 옮긴다 — 키를 갈아 끼운 뒤에 옮기면 그 사이 요청이 새 해시에 세어져
+    // 덮어쓸 위험이 있다. 같은 batch 라 원자적이지만 순서까지 맞춰 둔다.
+    env.DB.prepare(
+      "INSERT INTO _usage (key_hash, day, count) SELECT ?, day, count FROM _usage WHERE key_hash = ? AND day = ? " +
+      "ON CONFLICT(key_hash, day) DO UPDATE SET count = excluded.count")
+      .bind(hash, ok.keyHash, kstDay()),
+    env.DB.prepare(
+      "UPDATE _keys SET key_hash = ?, key_prefix = ?, status = 'active', created_at = ?, " +
+      "rotated_day = ?, rotated_count = ? WHERE key_hash = ?")
+      .bind(hash, prefix, now, day, usedToday + 1, ok.keyHash),
+    env.DB.prepare("INSERT INTO _issuance_log (ip, created_at) VALUES (?, ?)").bind(ip, now),
+    env.DB.prepare("DELETE FROM _issuance_log WHERE created_at < ?")
+      .bind(new Date(Date.now() - 86400000).toISOString()),
+  ]);
+
+  // 🔴 **키를 보여 주기 전에 그 키가 실제로 앉았는지 본다.** 같은 티켓으로 두 요청이 거의
+  //    동시에 오면(버튼 두 번 누르기) 둘 다 행을 읽은 뒤 하나만 갱신에 성공한다 — 진 쪽은
+  //    `WHERE key_hash = <옛 해시>` 가 0행이 되는데, 그걸 안 보면 **작동하지 않는 키를
+  //    보여 주고** 이용자는 그 사실을 나중에 401 로 알게 된다. 원문은 여기서만 나오므로
+  //    그 화면을 놓치면 복구할 길도 없다.
+  //    (`meta` 를 못 읽는 실행기에서는 판단을 보류하고 진행한다 — 실 D1 은 항상 준다.)
+  const changed = written?.[1]?.meta?.changes;
+  if (changed === 0)
+    return authPage("다시 시도해 주세요",
+      `<h1>발급이 겹쳤어요</h1><p>같은 확인이 두 번 처리돼 이번 요청은 반영되지 않았습니다. ` +
+      `<a href="/api/v1/auth/google">다시 로그인</a>해서 새로 받아 주세요.</p>`, 409);
+
+  trace.keyHash = hash;
+
+  return new Response(authPage("새 키 발급 완료",
+    `<h1>새 키가 발급됐어요</h1>` +
+    `<p>이전 키는 <strong>이제 무효</strong>입니다.</p>` +
     `<p><strong>이 키는 지금 한 번만 표시됩니다</strong> — 서버에는 해시만 저장돼 다시 보여드릴 수 없어요.</p>` +
     `<p><code style="display:block;padding:.75rem 1rem;font-size:1.05rem;word-break:break-all">${esc(key)}</code></p>` +
     `<p>요청 헤더에 <code>Authorization: Bearer &lt;키&gt;</code> 로 실어 보내세요.</p>`).body,
@@ -206,7 +343,10 @@ async function revokeKey(env, keyRow, purge) {
     key_prefix: keyRow.key_prefix, revoked: true,
     // 발급 경로가 환경마다 갈리므로(#110 ②) 한쪽을 단정하지 않는다 — 이메일 폼일 수도,
     // Google 로그인일 수도 있다. 어느 쪽인지는 카탈로그의 key_issuance 가 말한다.
-    note: "이 키는 즉시 무효다. 같은 주소로 다시 발급받으면 새 키를 받는다 — 발급 방법은 GET /api/v1/catalog 의 key_issuance 참조",
+    // 🔴 예전 문구는 "같은 주소로 다시 발급받으면 새 키를 받는다"였는데, 폐기는 행을 남기고
+    //    존재 검사가 그 행을 잡아 **재발급이 409 로 막혔다**(#303). 지금은 그 검사가 상태를
+    //    안 보고 회전 확인 페이지로 보내므로 이 말이 사실이 됐다 — 경로까지 밝혀 둔다.
+    note: "이 키는 즉시 무효다. 다시 로그인하면(GET /api/v1/auth/google) 확인 뒤 새 키를 받는다",
   });
 }
 
@@ -1075,6 +1215,14 @@ async function route(request, env, url, trace, ctx) {
     trace.route = "auth_callback";
     return googleCallback(env, request, url, trace);
   }
+  // 회전(#303) — 확인 페이지의 폼이 여기로 POST 한다. **GET 이면 안 된다**: 파괴적 동작이라
+  // 주소를 누르거나 미리 가져오기만 해도 실행되면 곤란하다.
+  if (path === "/api/v1/keys/rotate") {
+    trace.route = "rotate";
+    if (request.method !== "POST")
+      return problem(405, "method not allowed", "회전은 POST 다 — 확인 페이지의 버튼으로 실행할 것");
+    return rotateKey(env, request, url, trace);
+  }
   if (path === "/api/v1/keys" && request.method === "DELETE") {
     trace.route = "revoke";
     const { keyRow, error } = await authenticate(env, request, { allowRevoked: true });
@@ -1220,7 +1368,7 @@ async function route(request, env, url, trace, ctx) {
   return problem(404, "not found",
     "GET /api/v1/catalog · /api/v1/preview/<table> · /api/v1/data/<table> · /api/v1/me · " +
     "/api/v1/products/<product_id> · /api/v1/patterns/<product_id>/<pattern_id> · " +
-    "/api/v1/glossary, POST·DELETE /api/v1/keys · " +
+    "/api/v1/glossary, POST·DELETE /api/v1/keys, POST /api/v1/keys/rotate · " +
     "GET /skill/v1/bundles/seoul-weather-risk, POST /mcp — 문법·한도 안내는 GET /llms.txt (사람용 문서 /docs)");
 }
 

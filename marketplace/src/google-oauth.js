@@ -60,6 +60,40 @@ export async function verifyState(secret, state, nowSec) {
   return diff === 0;
 }
 
+// ── 회전 티켓 (#303) ─────────────────────────────────────────────────────────
+// 이미 키가 있는 사람이 **로그인 뒤 "정말 새로 발급할까요"에 답하기 위한** 증표다.
+//
+// 🔑 왜 필요한가: 콜백의 `code` 는 일회용이라 되묻는 왕복을 만들 수 없다. 그래서 콜백에서
+//    **소유 확인 결과를 짧은 서명값으로 바꿔** 확인 페이지에 실어 보내고, 버튼을 누르면
+//    그 값을 되받아 회전한다. 파괴적 동작을 확인 없이 실행하지 않는다는 규약(#58)을
+//    지키면서, 잃어버린 사람이 혼자 재발급할 수 있게 하는 유일한 방법이다.
+//
+// 🔴 **현재 key_hash 를 서명에 넣는다.** 그래서 재생 방지가 공짜다 — 한 번 회전하면 해시가
+//    바뀌어 같은 티켓이 두 번 안 먹는다. D1 에 사용 여부를 적어 둘 표가 필요 없다.
+// 🔴 이메일은 **서명 안에만** 있고 값으로는 안 나간다 — 티켓을 주운 사람이 주소를 읽으면
+//    안 된다. 회전 시점에 해시로 행을 찾으므로 이메일을 실을 이유도 없다.
+const TICKET_TTL_SEC = 600;
+
+export async function makeRotateTicket(secret, keyHash, nowSec) {
+  const payload = `${keyHash}.${nowSec}`;
+  return `${payload}.${await hmac(secret, `rotate.${payload}`)}`;
+}
+
+// 통과하면 `{ keyHash }`, 아니면 null. 호출자는 그 해시의 행이 **아직 있는지**로 한 번 더 건다.
+export async function verifyRotateTicket(secret, ticket, nowSec) {
+  const parts = String(ticket || "").split(".");
+  if (parts.length !== 3) return null;
+  const [keyHash, issued, sig] = parts;
+  if (!/^[0-9a-f]{64}$/.test(keyHash)) return null;
+  const ts = Number(issued);
+  if (!Number.isFinite(ts) || nowSec - ts > TICKET_TTL_SEC || ts - nowSec > 60) return null;
+  const expected = await hmac(secret, `rotate.${keyHash}.${issued}`);
+  if (expected.length !== sig.length) return null;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
+  return diff === 0 ? { keyHash } : null;
+}
+
 // ── ID 토큰 ──────────────────────────────────────────────────────────────────
 // 🔑 **서명을 검증하지 않는다.** 이 토큰은 우리가 client_secret 을 내고 **토큰 엔드포인트에서
 // TLS 로 직접** 받은 것이라, 중간에 낀 사람이 없다 — OIDC Core §3.1.3.7 과 Google 문서가

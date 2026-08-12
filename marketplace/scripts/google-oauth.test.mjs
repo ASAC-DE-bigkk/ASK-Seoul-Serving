@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import {
   makeState, verifyState, readIdTokenFromTokenEndpoint,
   authorizeUrl, isConfigured, readCookie, stateCookie,
+  makeRotateTicket, verifyRotateTicket,
 } from "../src/google-oauth.js";
 
 const SECRET = "test-salt-not-a-real-secret";
@@ -127,4 +128,43 @@ test("쿠키 파싱 — 같은 이름의 접두가 겹쳐도 정확히 집는다
   assert.equal(readCookie("ask_oauth_state_other=nope", "ask_oauth_state"), null);
   assert.equal(readCookie("", "ask_oauth_state"), null);
   assert.equal(readCookie(null, "ask_oauth_state"), null);
+});
+
+// ── 회전 티켓 (#303) ─────────────────────────────────────────────────────────
+// 잃어버린 키를 **본인이** 재발급받게 하는 증표다. 여기서 지키는 것은 셋 —
+// ① 우리가 만든 것만 통과 ② 10분 지나면 폐기 ③ **현재 key_hash 에 묶여 재생이 안 된다.**
+// ③ 이 티켓의 핵심이다: 한 번 회전하면 해시가 바뀌므로 같은 티켓이 두 번 안 먹는다.
+// 그래서 "이 티켓을 썼는가"를 적어 둘 표가 필요 없다.
+const HASH_A = "a".repeat(64), HASH_B = "b".repeat(64);
+
+test("회전 티켓 — 우리가 만든 것만, 그 해시로만 통과한다", async () => {
+  const t = await makeRotateTicket(SECRET, HASH_A, NOW);
+  assert.deepEqual(await verifyRotateTicket(SECRET, t, NOW), { keyHash: HASH_A });
+  // 🔴 다른 해시로 만든 티켓은 그 해시로만 풀린다 — 호출자가 그 행을 찾아 한 번 더 건다
+  const other = await verifyRotateTicket(SECRET, await makeRotateTicket(SECRET, HASH_B, NOW), NOW);
+  assert.equal(other.keyHash, HASH_B);
+  assert.notEqual(other.keyHash, HASH_A);
+});
+
+test("🔴 회전 티켓 — 서명이 다르면 안 된다 (남이 만든 티켓·손댄 티켓)", async () => {
+  const t = await makeRotateTicket(SECRET, HASH_A, NOW);
+  assert.equal(await verifyRotateTicket("다른-비밀값", t, NOW), null, "남의 비밀값으로 만든 티켓");
+  const [h, ts, sig] = t.split(".");
+  assert.equal(await verifyRotateTicket(SECRET, `${HASH_B}.${ts}.${sig}`, NOW), null, "해시만 바꿔치기");
+  assert.equal(await verifyRotateTicket(SECRET, `${h}.${ts}.${sig.slice(0, -1)}x`, NOW), null, "서명 훼손");
+  assert.equal(await verifyRotateTicket(SECRET, "", NOW), null);
+  assert.equal(await verifyRotateTicket(SECRET, `${h}.${ts}`, NOW), null, "형식이 셋이 아니면");
+});
+
+test("🔴 회전 티켓 — 10분이 지나면 안 통한다 (확인 창의 수명)", async () => {
+  const t = await makeRotateTicket(SECRET, HASH_A, NOW);
+  assert.ok(await verifyRotateTicket(SECRET, t, NOW + 599), "10분 안에는 통해야 한다");
+  assert.equal(await verifyRotateTicket(SECRET, t, NOW + 601), null, "10분이 지나면 폐기");
+  assert.equal(await verifyRotateTicket(SECRET, t, NOW - 120), null, "미래에서 온 티켓도 거절");
+});
+
+test("🔴 회전 티켓 — 해시 자리에 아무 문자열이나 못 넣는다", async () => {
+  // 서명이 맞아도 형식을 먼저 본다 — 이 값은 그대로 SQL 바인딩으로 간다.
+  const bad = await makeRotateTicket(SECRET, "not-a-hash", NOW);
+  assert.equal(await verifyRotateTicket(SECRET, bad, NOW), null);
 });
