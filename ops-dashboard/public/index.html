@@ -1499,8 +1499,11 @@ function render(d) {
     const tag = $("envTag");
     tag.hidden = false;
     tag.className = "envtag" + (ev.label === "운영" ? " prod" : "");
-    // 언제 읽은 값인지를 붙인다 — 자동 새로고침 중이면 "멈춘 화면"과 구분이 되어야 한다
-    const at = new Date(d.generated_at).toLocaleTimeString("ko-KR", { hour12: false });
+    // 언제 읽은 값인지를 붙인다 — 자동 새로고침 중이면 "멈춘 화면"과 구분이 되어야 한다.
+    // 🔴 toLocaleTimeString 은 **브라우저 로컬 시간대**로 찍는다 — 해외 브라우저에서 이 칸만
+    //    다른 시간대가 되어 "모든 문자면은 KST" 규약이 깨진다. kstMs 로 접는다(시간축 감사 2차).
+    const atMs = kstMs(d.generated_at);
+    const at = atMs == null ? "—" : new Date(atMs).toISOString().slice(11, 19);
     tag.innerHTML = esc(ev.label) + "<small>" + esc(ev.d1) + " · " + esc(at) + "</small>";
     tag.title = "이 화면은 " + ev.label + " 환경의 " + ev.d1 + " 데이터를 읽고 있습니다\n"
               + "마지막으로 읽은 시각: " + at;
@@ -1712,7 +1715,9 @@ function render(d) {
   // ② 창 앞부분이 '가르기 전' 기록인 경우. 옛 기록은 데이터 조회도 뭉뚱그려 남아 있어
   //    되살릴 방법이 없다 — 기간을 좁히면 사라지는 안내이므로 그 방법을 같이 알려 준다.
   if (mcp.pre_split) {
-    const from = mcp.split_from ? String(mcp.split_from).slice(0, 10) : null;
+    // split_from 은 UTC 순간값 — 그대로 자르면 UTC 달력일이다. KST 로 접는다(fmtTs 규약).
+    const fromMs = mcp.split_from ? kstMs(mcp.split_from) : null;
+    const from = fromMs == null ? null : new Date(fromMs).toISOString().slice(0, 10);
     const why = "이 기간의 앞부분은 AI 호출을 <b>기능별로 가르기 전</b> 기록입니다" +
       (from ? "(가르기 시작: " + esc(from) + ")" : "") + " — 그 구간의 AI 데이터 조회는 " +
       "다른 AI 호출과 뭉뚱그려 남아 있어 <b>되살릴 수 없습니다.</b> " +
