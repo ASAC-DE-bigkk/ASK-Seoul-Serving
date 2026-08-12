@@ -1187,14 +1187,17 @@ function renderHeroAnswer(b) {
       "<a href='/catalog' style='color:var(--accent-deep);font-weight:600'>카탈로그 전체</a>에서 직접 보실 수 있습니다.</div>";
     return;
   }
-  // 걸린 낱말을 밝힌다 — 근거가 있어야 사용자가 틀린 후보를 스스로 버린다(matched_terms 는
-  // search_products 가 이미 주는 값이라 공짜다). 1등의 근거만 말한다: 셋을 다 늘어놓으면 소음이다.
+  // 무엇을 보고 찾았는지 밝힌다 — 근거가 있어야 사용자가 틀린 후보를 스스로 버린다
+  // (matched_terms 는 search_products 가 이미 주는 값이라 공짜다). 1등의 근거만 말한다:
+  // 셋을 다 늘어놓으면 소음이다.
   // ⚠️ 낱말 뒤에 조사를 붙이지 않는다 — 이/가·은/는은 받침에 따라 갈리는데 값이 원천에서
-  //    오므로 고를 수 없다("날씨 이 걸렸어요"가 된다). 콜론으로 끊어 조사 자체를 없앤다.
+  //    오므로 고를 수 없다("날씨 이 걸렸어요"가 된다). 이름표로 끊어 조사 자체를 없앤다.
+  // 🔴 "걸린 낱말"이라고 쓰지 않는다 — 걸렸다는 말은 **막혔다**로 읽힌다(필터·오류의 어휘).
+  //    여기 값은 결과의 **근거**이므로 찾았다는 말로 적는다.
   const terms = (hits[0].matched_terms || []).slice(0, 4);
   box.innerHTML =
     "<div class='said'>답할 수 있는 데이터가 <b>" + hits.length + "종</b> 있습니다" +
-      (terms.length ? " · 걸린 낱말 <b>" + terms.map(esc).join(" · ") + "</b>" : "") + "</div>" +
+      (terms.length ? " · 찾은 낱말 <b>" + terms.map(esc).join(" · ") + "</b>" : "") + "</div>" +
     "<div class='hits'>" + hits.map((p, i) => {
       const dom = String(p.product_id || "").split("_")[0];
       const pats = (p.matched_patterns || []).slice(0, i === 0 ? 2 : 0);   // 1등만 실행 후보를 편다
