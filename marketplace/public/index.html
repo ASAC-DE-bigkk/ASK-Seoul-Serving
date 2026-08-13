@@ -264,6 +264,14 @@
                     font-size:11.5px; color:var(--muted); line-height:1.55; }
   .answer .caveat b { color:var(--ink); font-weight:600; }
   @media (max-width:520px){ .chatbox { flex-wrap:wrap; } .chatbox button { width:100%; padding:12px 0; } }
+  /* 🔴 iOS Safari 는 글자 16px 미만인 입력칸에 포커스가 가면 **페이지를 확대한다** — 확대된
+     채로 남아 손으로 되돌려야 한다. 이 화면에서 사람이 만지는 입력은 히어로의 질문칸
+     하나뿐이고, 그게 랜딩이 하는 일의 전부다(15px 이라 1px 차이로 걸렸다).
+     `user-scalable=no` 는 접근성 위반이라 쓰지 않는다 — 글자를 올리는 것이 유일한 처방이다.
+     터치 태블릿·노트북은 폭 조건에 안 걸리므로 `pointer:coarse` 를 함께 본다. */
+  @media (max-width:760px), (pointer:coarse) {
+    .search-hero input, .chatbox input { font-size:16px; }
+  }
 
   /* ─── 계기 스트립 (통계) — 카드 4장 대신 구획된 한 줄 ─── */
   .strip { background:var(--panel); border:1px solid var(--line-strong); border-radius:10px;
@@ -464,6 +472,17 @@
               padding:0 24px 24px; font-size:12px; color:var(--faint); }
   .foot-btm .r { margin-left:auto; }
   @media (max-width:640px){ .foot-btm .r { margin-left:0; } }
+
+  /* ─── 폰 좌우 여백 — 다른 화면과 같은 16px ───
+     site.css(문서형)·catalog 이 폰에서 16px 로 서므로 랜딩만 24px 이면 페이지를 옮길 때
+     세로선이 8px 씩 튄다("어긋나면 티가 난다"는 위 바닥 주석과 같은 이유다).
+     덤으로 320px 안폭이 272 → 288 이 된다 — 카드 최소폭이 한 번 페이지를 밀었던 자리라
+     (`.cards` 주석) 여유가 그대로 안전 마진이 된다.
+     ⚠️ 파일 끝에 두는 이유는 site.css 와 같다 — `.foot-in`·`.foot-btm` 과 특이도가 같아
+     위로 올리면 원래 `padding` 단축형이 도로 이긴다. */
+  @media (max-width:560px){
+    .wrap, .foot-in, .foot-btm { padding-left:16px; padding-right:16px; }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior:auto; }
