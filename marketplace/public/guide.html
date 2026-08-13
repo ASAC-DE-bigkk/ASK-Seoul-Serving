@@ -103,8 +103,14 @@
 
   <section id="how">
     <h2>어떻게 만들어지나 <span class="en">Pipeline</span></h2>
-    <p>정해진 시각에 아래 세 단계가 자동으로 돕니다 — 도메인에 따라 <b>매시간</b> 또는 <b>매일</b>입니다.
-      사람이 손으로 올리는 데이터는 없습니다.</p>
+    <!-- 🔴 "정해진 시각에 … 매시간 또는 매일" 이라고 적혀 있었는데, 시각이 고정된 것은 셋뿐이고
+         나머지 셋은 앞 단계가 끝나는 대로 도는 구조다(/status 가 그렇게 적고 있어 두 페이지가
+         서로 다른 말을 하고 있었다). 주기도 "시간당 4회"가 빠져 있었다. -->
+    <p>아래 세 단계가 자동으로 돕니다 — 사람이 손으로 올리는 데이터는 없습니다.
+      주기는 도메인마다 <b>시간당 4회부터 하루 1회까지</b> 다르고, <b>시각이 정해진 도메인</b>과
+      <b>앞 단계가 끝나는 대로 도는 도메인</b>이 함께 있어 발행 시각이 매일 조금씩 달라집니다.
+      정확한 주기는 아래 <a href="#limits">한도와 갱신</a> 표에, 제품별 마지막 발행 시각은
+      <a href="/status">서비스 상태</a>에 있습니다.</p>
     <div class="flow">
       <div class="st">
         <div class="lab">1 · Collect</div>
@@ -215,10 +221,10 @@
         <thead><tr><th>도구</th><th>하는 일</th><th>쿼터</th></tr></thead>
         <tbody>
           <tr><td class="nw"><code>search_products</code></td><td><b>질문 문장으로 맞는 제품 찾기</b> — 어떤 데이터를 쓸지 모를 때 이걸 먼저 부릅니다. 후보와 함께 바로 쓸 질의 패턴이 옵니다.</td><td class="nw">무과금</td></tr>
-          <tr><td class="nw"><code>list_products</code></td><td>제품 목록 — 대표 질문·조인키·설명. 전체를 훑어야 할 때 씁니다.</td><td class="nw">무과금</td></tr>
+          <tr><td class="nw"><code>list_products</code></td><td>제품 목록 — 제품 id·대표 질문·기준 시점·패턴 개수. <b>무엇이 있는지 훑어볼 때</b> 씁니다(컬럼·조인키·설명은 <code>describe_product</code> 에 있습니다).</td><td class="nw">무과금</td></tr>
           <tr><td class="nw"><code>describe_product</code></td><td>제품 상세 — 컬럼 설명·시간축·검증된 질의 패턴·출처.</td><td class="nw">무과금</td></tr>
           <tr><td class="nw"><code>preview_product</code></td><td>5행 미리보기 — 필터에 넣을 값의 실제 예시를 봅니다.</td><td class="nw">무과금</td></tr>
-          <tr><td class="nw"><code>query_product</code></td><td>데이터 조회 — 등가 필터·기간·커서.</td><td class="nw">1회</td></tr>
+          <tr><td class="nw"><code>query_product</code></td><td>데이터 조회 — 등가 필터·기간·커서. 행 수는 <b>기본 20 · 최대 100</b> 이고(REST 는 500·5,000), 더 필요하면 커서로 이어 받습니다.</td><td class="nw">1회</td></tr>
           <tr><td class="nw"><code>run_pattern</code></td><td><b>검증된 질의 패턴 실행(권장)</b> — 도메인 담당자가 미리 검증해 둔 질의를 그대로 돌립니다.</td><td class="nw">1회</td></tr>
           <tr><td class="nw"><code>check_quota</code></td><td>남은 일일 쿼터 확인.</td><td class="nw">무과금</td></tr>
         </tbody>
@@ -227,6 +233,10 @@
     <p><b><code>run_pattern</code> 을 권합니다.</b> 에이전트가 필터를 스스로 조립하면 틀린 질의를 만들 수 있는데,
       이 도구는 <b>검증을 마친 질의만</b> 돌리므로 답이 어긋날 여지가 적습니다.
       쓸 수 있는 패턴은 <code>describe_product</code> 응답에 들어 있습니다.</p>
+    <p class="sidenote"><b>도구 응답은 20KB 안으로 맞춥니다</b> — 호스트 쪽에서 큰 응답을 오류로 처리하는
+      경우가 있어서입니다. 목록이 그보다 크면 줄여서 보내되 <b>줄였다는 사실을 응답에 적습니다</b>
+      (<code>truncated</code>·<code>truncated_note</code>). 인증에 실패한 <code>tools/call</code> 은
+      봉투가 아니라 <code>401</code> 로 답합니다 — 호스트가 “키 문제”와 “도구 문제”를 구분할 수 있게 하기 위해서입니다.</p>
     <p>기계가 읽는 요약은 <a href="/llms.txt">/llms.txt</a>, 전체 규격은
       <a href="/openapi.json">/openapi.json</a> 에 있습니다.</p>
   </section>
@@ -243,7 +253,7 @@
         <summary>실시간 데이터인가요?</summary>
         <div class="a"><p>아닙니다. 원천이 실시간이더라도(예: 실시간 인구, 도로 소통) 이 API 가 내보내는 것은
           <b>발행 시점의 스냅샷</b>입니다. 다만 <b>발행 주기는 도메인마다 다릅니다</b> — 실시간성이 중요한
-          쪽은 <b>매시간</b> 발행합니다.</p>
+          쪽은 자주 발행합니다(대중교통 <b>시간당 4회</b> · 인구·도시와 날씨 <b>매시간</b>).</p>
           <p><b>초 단위의 지금 값</b>이 필요하시면 원천 API 를 직접 쓰시는 편이 맞습니다.
           이 API 는 <b>같은 축으로 붙여 놓은 이력</b>이 필요할 때 쓰는 쪽에 가깝습니다.</p>
           <p>제품마다 마지막 발행이 언제였는지는 <a href="/status">서비스 상태</a>와 카탈로그에서 확인하실 수 있고,
@@ -294,8 +304,12 @@
         <summary>“커서가 만료됐다”(409)고 나옵니다.</summary>
         <div class="a"><p>페이지를 넘기는 중에 그 제품이 새로 발행된 경우입니다.
           발행이 바뀌면 이전 커서로 이어받을 때 행이 조용히 빠지거나 겹칠 수 있어, 그걸 감추지 않고 오류로 알려드립니다.</p>
+          <!-- 🔴 "발행 시각(새벽)" 이라고 단정하고 있었다 — 새벽 발행은 문화·행사와 상권뿐이고,
+               대중교통은 시간당 4회, 인구·도시와 날씨는 매시간이라 피할 새벽이 없다. -->
           <p>커서를 버리고 <b>첫 페이지부터 다시</b> 받으시면 됩니다. 큰 제품을 통째로 받는 작업이라면
-          발행 시각(새벽)을 피해 돌리시는 편이 안전합니다.</p></div>
+          <b>그 제품의 발행 시각을 피해</b> 돌리시는 편이 안전합니다 — 마지막 발행 시각은
+          카탈로그의 <code>exported_at</code> 과 <a href="/status">서비스 상태</a>에 있습니다.
+          매시간 발행되는 도메인이라면 애초에 한 번에 많이 받아 왕복을 줄이는 편이 낫습니다.</p></div>
       </details>
       <details>
         <summary>어떤 제품이 있는지 기계가 읽을 수 있는 형식으로 받고 싶습니다.</summary>
