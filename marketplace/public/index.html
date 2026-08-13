@@ -157,16 +157,33 @@
   :root[data-theme="dark"] .theme-btn .sun { display:block; }
   :root[data-theme="dark"] .theme-btn .moon { display:none; }
   @media (max-width:900px){ .env-pill { display:none; } .nav-in { gap:12px; } }
+  /* 🔴 여기 있던 `.nav-links a { display:none }` 은 **카탈로그 하나만 남기고 셋을 지웠다**
+     (2026-07-28 부터). 그런데 문서형 페이지(site.css)는 같은 상황에서 정반대를 택하고
+     이유까지 적어 두었다 — *"링크를 숨기면 그 페이지로 가는 길이 헤더에서 사라지므로
+     (푸터에만 남는다) 숨기지 않는다"*. 하필 **첫 화면**인 랜딩만 숨기는 쪽이어서,
+     처음 온 사람이 API 문서·가이드·상태로 가려면 푸터까지 내려가야 했다.
+     처방을 site.css 와 같게 맞춘다: **지우지 않고 가로 스크롤로 흘린다.**
+     실측(2026-08-13, 운영에 주입해 확인): 네 링크의 필요 폭 222px 을
+     375px 에서 136px 칸이 · 320px 에서 81px 칸이 스크롤로 받는다. **두 폭 모두 가로 밀림 0**,
+     테마 버튼과 「시작하기」도 화면 안에 그대로다(320 에서 CTA 오른끝 304 < 320).
+     대가는 320px 에서 한 번에 한 항목 반쯤만 보인다는 것 — 헤더에 아예 없는 것보다 낫다는
+     판단은 문서형 페이지에서 이미 내렸다. */
   @media (max-width:760px){
-    .nav-links a { display:none; }
-    .nav-links a.keep { display:block; padding:6px 10px; }
+    .nav-links a { padding:6px 9px; font-size:12.5px; }
+  }
+  @media (max-width:560px){
+    /* `.spacer` 를 걷는다 — 링크가 남은 폭을 다 쓰므로 자리를 두면 버튼이 밀린다(site.css 와 같다) */
+    .nav .spacer { display:none; }
+    .nav-links { margin-left:0; overflow-x:auto; overscroll-behavior-x:contain;
+                 scrollbar-width:none; -ms-overflow-style:none; }
+    .nav-links::-webkit-scrollbar { display:none; }
   }
   /* 320 실측(2026-08-10): 카드 300px 을 고친 뒤에도 13px 이 남았다 — 범인은 헤더다.
-     워드마크 89 + 카탈로그 링크 + 테마 버튼 + '시작하기'가 안폭 272px 을 넘는다.
-     항목을 숨기는 대신 간격·패딩만 줄인다 — 320 에서도 네 가지가 다 눌리는 게 맞다. */
+     워드마크 89 + 링크 묶음 + 테마 버튼 + '시작하기'가 안폭 272px 을 넘는다.
+     항목을 숨기는 대신 간격·패딩만 줄인다 — 320 에서도 네 가지가 다 눌리는 게 맞다.
+     (`.nav-links { margin-left:0 }` 은 위 560 블록으로 옮겼다 — 같은 값을 두 번 두지 않는다.) */
   @media (max-width:380px){
     .nav-in { gap:8px; }
-    .nav-links { margin-left:0; }
     .nav-cta { padding:7px 10px; }
   }
 
@@ -502,7 +519,7 @@
     <!-- 카탈로그 안의 섹션(플레이그라운드·API 키)은 헤더에 걸지 않는다 — 같은 문서로 가는
          링크가 여럿이 되기 때문. 섹션 이동은 카탈로그 사이드바 몫이고, 여기엔 별도 문서만 건다. -->
     <div class="nav-links">
-      <a class="keep" href="/catalog">카탈로그</a>
+      <a href="/catalog">카탈로그</a>
       <a href="/docs">API 문서</a>
       <a href="/guide">가이드</a>
       <a href="/status">상태</a>
