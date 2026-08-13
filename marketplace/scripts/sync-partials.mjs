@@ -28,23 +28,27 @@ const PUB = join(ROOT, "public");
  * 페이지마다 다른 건 셋뿐이다:
  *   navIn  — 바깥 폭. 랜딩만 1140px(.wrap)이고 문서형은 1080px(.nav-in 자체)이다.
  *   active — 현재 위치를 굵게 표시할 링크. 없으면 어느 것도 표시하지 않는다.
- *   keep   — 760px 아래에서도 남길 링크(.keep). 랜딩만 카탈로그를 남긴다.
  *   cta    — 오른쪽 버튼. [href, 라벨] 또는 null.
+ *
+ * ⚠️ `keep` 이 하나 더 있었다 — 760px 아래에서 랜딩이 카탈로그 링크만 남기고 셋을 숨기던
+ *    장치다. 2026-08-13 에 랜딩도 **숨기지 않고 가로 스크롤**로 바꾸면서(index.html 의 nav
+ *    주석 참조) 쓰는 페이지가 없어져 걷었다. 안 쓰는 설정을 남기면 다음 사람이 "이 화면은
+ *    아직 링크를 숨기나 보다"로 읽는다.
  */
 const PAGES = {
-  "index.html":   { navIn: "wrap nav-in", active: null,      keep: ["/catalog"], cta: ["/catalog#auth", "시작하기"] },
-  "docs.html":    { navIn: "nav-in",      active: "/docs",   keep: [],           cta: ["/catalog#auth", "키 발급"] },
-  "guide.html":   { navIn: "nav-in",      active: "/guide",  keep: [],           cta: ["/catalog#auth", "시작하기"] },
-  "status.html":  { navIn: "nav-in",      active: "/status", keep: [],           cta: null },
-  "skill-demo.html": { navIn: "nav-in",   active: null,      keep: [],           cta: ["/catalog#auth", "API Key 발급"] },
-  "support.html": { navIn: "nav-in",      active: null,      keep: [],           cta: null },
-  "legal.html":   { navIn: "nav-in",      active: null,      keep: [],           cta: null },
+  "index.html":   { navIn: "wrap nav-in", active: null,      cta: ["/catalog#auth", "시작하기"] },
+  "docs.html":    { navIn: "nav-in",      active: "/docs",   cta: ["/catalog#auth", "키 발급"] },
+  "guide.html":   { navIn: "nav-in",      active: "/guide",  cta: ["/catalog#auth", "시작하기"] },
+  "status.html":  { navIn: "nav-in",      active: "/status", cta: null },
+  "skill-demo.html": { navIn: "nav-in",   active: null,      cta: ["/catalog#auth", "API Key 발급"] },
+  "support.html": { navIn: "nav-in",      active: null,      cta: null },
+  "legal.html":   { navIn: "nav-in",      active: null,      cta: null },
   // 정책 3종은 각각 한 화면이다(2026-08-07). `legal.html` 은 옛 `/legal#…` 링크가 착지할
   // 안내 페이지로 남는다 — 프래그먼트는 서버로 안 가서 리다이렉트로는 셋을 못 가른다.
-  "attribution.html": { navIn: "nav-in",  active: null,      keep: [],           cta: null },
-  "terms.html":   { navIn: "nav-in",      active: null,      keep: [],           cta: null },
-  "privacy.html": { navIn: "nav-in",      active: null,      keep: [],           cta: null },
-  "404.html":     { navIn: "nav-in",      active: null,      keep: [],           cta: null },
+  "attribution.html": { navIn: "nav-in",  active: null,      cta: null },
+  "terms.html":   { navIn: "nav-in",      active: null,      cta: null },
+  "privacy.html": { navIn: "nav-in",      active: null,      cta: null },
+  "404.html":     { navIn: "nav-in",      active: null,      cta: null },
 };
 
 const NAV_RE = /<nav class="nav">[\s\S]*?<\/nav>/;
@@ -58,12 +62,8 @@ function renderNav(cfg) {
 
   // nav-links 의 각 <a> 에 상태 클래스를 붙인다. 정본에는 클래스가 없고 여기서만 생긴다 —
   // 그래야 "어느 페이지가 어디를 활성으로 보는가"가 PAGES 한 곳에만 적힌다.
-  out = out.replace(/<a href="([^"]+)">/g, (m, href) => {
-    const cls = [];
-    if (href === cfg.active) cls.push("active");
-    if (cfg.keep.includes(href)) cls.push("keep");
-    return cls.length ? `<a class="${cls.join(" ")}" href="${href}">` : m;
-  });
+  out = out.replace(/<a href="([^"]+)">/g, (m, href) =>
+    (href === cfg.active ? `<a class="active" href="${href}">` : m));
 
   const cta = cfg.cta ? `    <a class="nav-cta" href="${cfg.cta[0]}">${cfg.cta[1]}</a>\n` : "";
   return out.replace("{{CTA}}", cta);
