@@ -98,8 +98,18 @@
         <span class="ds">모든 출처에서 호출할 수 있습니다(<code>Access-Control-Allow-Origin: *</code>). 브라우저에서 직접 부르셔도 됩니다.</span></div>
       <div class="row"><span class="nm">문자 인코딩</span><span class="ty">UTF-8</span>
         <span class="ds">한글 값이 그대로 들어 있습니다. 테이블·컬럼 이름은 영문 소문자와 밑줄만 씁니다.</span></div>
-      <div class="row"><span class="nm">시간 기준</span><span class="ty">KST</span>
-        <span class="ds">데이터의 날짜 축과 일일 한도 초기화는 한국 시간 기준입니다. 발행 시각(<code>exported_at</code>)만 ISO 8601 UTC 입니다.</span></div>
+      <!-- 🔴 원래 "발행 시각(exported_at)**만** ISO 8601 UTC" 라고 적혀 있었는데 사실이 아니었다.
+           `verified_at` 도 UTC 이고, 그쪽은 **형태까지 섞여** 있다(운영 실측 2026-08-13:
+           `…THH:MM:SSZ` 762건 + `YYYY-MM-DD` 122건). "만" 이라는 낱말 하나가, 두 형태를
+           한 필드에서 받게 되는 소비자에게 "이건 UTC 가 아니겠지"를 심어 준다. -->
+      <!-- 요약 칩이 `KST` 하나였다 — 답의 절반이 UTC 인데 칩만 보고 넘기면 그게 오해의 출처다.
+           표를 훑는 사람에게 남는 것은 이 두 낱말이므로 둘 다 적는다. -->
+      <div class="row"><span class="nm">시간 기준</span><span class="ty">KST·UTC</span>
+        <span class="ds">데이터의 날짜 축과 일일 한도 초기화는 한국 시간 기준입니다.
+        <b>메타데이터의 시각 값은 UTC</b> 입니다 — 발행 시각(<code>exported_at</code>)은 ISO 8601 UTC,
+        검증 시각(<code>verified_at</code>)은 <code>YYYY-MM-DDTHH:MM:SSZ</code>(UTC) 또는
+        <code>YYYY-MM-DD</code>(날짜만) 두 형태가 섞여 옵니다. 화면에 그대로 쓰실 때는
+        <b>UTC 15:00 이후 값이 한국 날짜로는 다음 날</b>이라는 점에 주의하세요.</span></div>
     </div>
     <div class="note">
       <b>본격적으로 연결하시기 전에 브라우저에서 한 번 불러 보세요.</b> <a href="/catalog#playground">플레이그라운드</a>에서

@@ -505,7 +505,7 @@
           },
           "row_count": { "type": "integer" },
           "freshness": { "type": ["string", "null"] },
-          "exported_at": { "type": ["string", "null"], "format": "date-time", "description": "발행 시각. 커서 유효성의 기준" }
+          "exported_at": { "type": ["string", "null"], "format": "date-time", "description": "발행 시각(ISO 8601 UTC). 커서 유효성의 기준 — 화면에 쓸 때 UTC 15:00 이후 값은 한국 날짜로 다음 날이다" }
         }
       },
       "DataPage": {
@@ -568,7 +568,7 @@
                 "axes": { "type": ["string", "null"] },
                 "requires": { "type": "array", "items": { "type": "string" }, "description": "이 질의가 쓰는 SQL 능력(sort·aggregate·group_by 등)" },
                 "verified_rows": { "type": ["integer", "null"] },
-                "verified_at": { "type": ["string", "null"], "format": "date-time" },
+                "verified_at": { "type": ["string", "null"], "description": "검증 시각. 두 형태가 섞여 온다 — 'YYYY-MM-DDTHH:MM:SSZ'(UTC) 또는 'YYYY-MM-DD'(날짜만). format 을 date-time 으로 선언하지 않는 이유가 이것이다: 날짜만인 값이 실제로 있어(2026-08-13 실측 122/884) 엄격한 검증기가 그것들을 거절한다" },
                 "runnable": { "type": "boolean", "description": "verified_at 파생값. false 면 실행 시 409 pattern not verified — 고르기 전에 걸러 쓰라고 미리 준다" },
                 "allow_empty": { "type": "boolean", "description": "0행이 정상인 패턴(이상 감지 스크린 등)" },
                 "insight_sample_ko": { "type": ["string", "null"], "description": "검증 당시의 해석 문장 — 현재값이 아니다" },
