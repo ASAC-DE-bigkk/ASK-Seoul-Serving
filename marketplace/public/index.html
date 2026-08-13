@@ -868,6 +868,21 @@ function kstStamp(iso) {
   if (isNaN(d)) return "";
   return new Date(d.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ") + " KST";
 }
+// 🔴 **검증·스냅샷 시각은 날짜형과 UTC 타임스탬프가 섞여 온다** — 운영 실측(2026-08-13):
+// `verified_at` 884건 = `YYYY-MM-DDTHH:MM:SSZ` 762 + `YYYY-MM-DD` 122.
+// 앞의 762건을 그대로 `.slice(0,10)` 하면 **15:00Z 이후 값이 하루 전으로 보인다**
+// (그 구간이 389건 = 전체의 44%). 실례: `2026-07-31T15:12:23Z` 는 KST 로 2026-08-01 00:12 다.
+// 뒤의 122건은 **이미 날짜라 옮길 순간이 없다** — 변환하면 없는 정밀도를 지어내는 꼴이라
+// 그대로 둔다. 그래서 "시각이 붙어 있나"로 갈라야 하고, 형태 판별이 이 함수의 일 전부다.
+// 각주 한 줄이라 시·분은 안 보인다 — 날짜만 KST 로 맞춘다.
+function kstDate(value) {
+  const s = String(value || "");
+  if (!s) return "";
+  if (!/T\d{2}:\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  if (isNaN(d)) return s.slice(0, 10);
+  return new Date(d.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
 
 // ── 데모: 질문 → 호출 → 응답 3박자.
 // 화면에 타이핑되는 명령은 누구나 그대로 실행할 수 있는 실제 주소다(무인증 /api/v1/preview).
@@ -1067,12 +1082,14 @@ async function playDemo(i, manual) {
   // 위 curl 은 지금도 유효한 명령이지만 표의 행은 고정된 시점의 미리보기이고, 실측 한 줄은
   // 그와 다른 시점의 검증 결과다 — **두 시점을 뭉뚱그리지 않고 각각 적는다.**
   // 검증 시각은 도메인마다 날짜(2026-08-05)와 타임스탬프(…T14:39:11Z)가 섞여 있어 날짜로 맞춘다.
-  const snap = (SAMPLES && SAMPLES.generated_at || "").slice(0, 10);
+  // 🔴 그 "날짜로 맞춘다"를 `.slice(0,10)` 로 하고 있었다 — 타임스탬프는 **UTC** 라
+  //    15:00Z 이후 값이 하루 전으로 찍혔다(884건 중 389건이 그 구간). `kstDate` 참조.
+  const snap = kstDate(SAMPLES && SAMPLES.generated_at);
   const parts = [];
   if (snap) parts.push(snap + " 미리보기 스냅샷");
   // "답은 … 검증"은 **실제로 답이 있을 때만** 붙인다
   if (insight && pat.verified_at) {
-    parts.push("답은 " + String(pat.verified_at).slice(0, 10) + " 검증" +
+    parts.push("답은 " + kstDate(pat.verified_at) + " 검증" +
       (pat.verified_rows ? "(" + nf.format(pat.verified_rows) + "행)" : ""));
   }
   parts.push("위 명령으로 최신 5행을 직접 받을 수 있습니다");
