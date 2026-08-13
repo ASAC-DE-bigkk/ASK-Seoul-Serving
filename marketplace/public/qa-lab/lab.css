@@ -133,3 +133,13 @@ table.tbl tr:hover td { background: color-mix(in srgb, var(--brand) 5%, transpar
 .foot { margin-top: 2rem; color: var(--muted); font-size: .82rem; border-top: 1px solid var(--line); padding-top: 1rem; }
 .foot a { color: var(--brand); }
 .hide { display: none !important; }
+
+/* 🔴 iOS Safari 는 글자 16px 미만인 입력칸에 포커스가 가면 페이지를 확대하고 그대로 둔다.
+   이 콘솔은 입력이 13칸(키·SQL·파라미터 …)이라 전부 해당했다 — 확대된 채로 SQL 을
+   붙여넣게 된다. `user-scalable=no` 는 접근성 위반이라 쓰지 않는다.
+   폭이 아니라 입력 방식이 만드는 문제라 `pointer:coarse` 를 함께 본다.
+   ⚠️ `textarea` 를 따로 적는 이유는 위 91줄이 `.86rem` 을 이미 박아 두어서다(같은 특이도라
+   뒤에 선 이 규칙이 이긴다 — 순서가 곧 잠금이므로 이 블록을 파일 위로 올리지 않는다). */
+@media (max-width: 760px), (pointer: coarse) {
+  input, select, textarea { font-size: 16px; }
+}
