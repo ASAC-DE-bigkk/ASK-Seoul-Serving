@@ -135,7 +135,12 @@
   .brand .wm { font-weight:800; font-size:16.5px; line-height:1; letter-spacing:-.03em; color:var(--ink); }
   .brand .wm em { font-style:normal; color:var(--accent-deep); padding:0 1.5px; }
   .nav-links { display:flex; gap:2px; margin-left:6px; }
-  .nav-links a { font-size:13px; font-weight:500; color:var(--muted); padding:6px 12px; border-radius:6px; }
+  /* 🐛 `white-space:nowrap` 이 **여기만 빠져 있었다**(site.css 의 같은 규칙은 갖고 있다).
+     드러나지 않은 이유: 종전에는 폰에서 「카탈로그」 하나만 보였고 그 낱말에는 공백이 없다.
+     네 링크를 다 보이게 한 순간 **「API 문서」가 공백에서 접혀** 머리가 두 줄이 됐다
+     (2026-08-13 오너 제보 · 실물 폰 스크린샷). 가로 스크롤로 흘리려면 항목이 안 접혀야 한다. */
+  .nav-links a { font-size:13px; font-weight:500; color:var(--muted); padding:6px 12px;
+                 border-radius:6px; white-space:nowrap; }
   .nav-links a:hover { background:var(--panel-2); color:var(--ink); }
   .nav-links a.active { color:var(--ink); font-weight:600; background:var(--panel-2); }
   .nav .spacer { flex:1; }
