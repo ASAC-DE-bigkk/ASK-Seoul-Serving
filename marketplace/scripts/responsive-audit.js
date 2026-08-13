@@ -14,9 +14,17 @@
  *   ② 카드 내용이 테두리를 28px 넘음   → 페이지는 안 밀린다. 그래서 안 걸렸다
  *   ③ 사이드바가 안 숨겨져 본문이 한 화면 아래에서 시작 → 375px 만 봐서 못 봤다
  *
- * 그래서 지표가 셋이고 폭이 넷이다. 셋 다 원인이 같은 함정인 경우가 많다 —
- * **flex/grid 항목의 `min-width:auto`**(`.wrap`·`.auth`·`.side` 가 전부 이것이었다).
- * 안 줄어드는 항목이 보이면 그 조상에 `min-width:0` 또는 `minmax(0,1fr)` 을 먼저 의심한다.
+ * 셋 다 원인이 같은 함정인 경우가 많다 — **flex/grid 항목의 `min-width:auto`**
+ * (`.wrap`·`.auth`·`.side` 가 전부 이것이었다). 안 줄어드는 항목이 보이면 그 조상에
+ * `min-width:0` 또는 `minmax(0,1fr)` 을 먼저 의심한다.
+ *
+ * ④ 는 종류가 다르다(2026-08-13 추가). **폭이 아니라 입력 방식이 만드는 결함**이라
+ * 위 셋을 아무리 봐도 안 나왔다: iOS Safari 는 글자 16px 미만인 입력칸에 포커스가 가면
+ * 페이지를 확대하고 **그대로 둔다**. 그 상태에서는 레이아웃이 화면보다 넓어 가로로 밀리는데,
+ * 정작 이 감사에서는 "밀림 없음"으로 나온다 — 확대는 렌더 뒤에 일어나기 때문이다.
+ * 실측(2026-08-13): 카탈로그 7칸·랜딩 1칸·QA Lab 13칸·스킬데모 1칸 = **전 화면의 입력 22칸
+ * 전부**가 12~15px 이었다. 처방은 폰 폭에서 16px 로 올리는 것 하나다 —
+ * `user-scalable=no` 는 확대 자체를 막아 접근성 위반이고, 그건 고침이 아니라 은폐다.
  */
 (() => {
   const vw = document.documentElement.clientWidth;
@@ -48,15 +56,26 @@
     if (over > 2) 박스넘침.push({ 요소: name(el), 부모: name(p), 넘침: over });
   });
 
-  const 결함수 = (가로밀림 ? 1 : 0) + 찌그러짐.length + 박스넘침.length;
+  // ④ 폰에서 포커스 시 화면이 확대되나. 16px 미만이면 iOS Safari 가 확대한다(위 주석 참조).
+  //    데스크톱 폭에서는 해당 없으므로 폰 구간에서만 센다 — 그래서 `matchMedia` 로 스스로 건너뛴다.
+  const 폰 = matchMedia("(max-width:760px), (pointer:coarse)").matches;
+  const 확대유발 = !폰 ? [] : [...document.querySelectorAll("input, select, textarea")]
+    .filter((el) => !["radio", "checkbox", "hidden"].includes(el.type))
+    .map((el) => ({ el, fs: parseFloat(getComputedStyle(el).fontSize) }))
+    .filter(({ fs }) => fs < 16)
+    .map(({ el, fs }) => ({ 요소: name(el), 글자: `${fs}px` }));
+
+  const 결함수 = (가로밀림 ? 1 : 0) + 찌그러짐.length + 박스넘침.length + 확대유발.length;
   const 결과 = {
     뷰포트: vw,
     판정: 결함수 === 0 ? "✅ 통과" : `❌ ${결함수}건`,
     "① 가로밀림": 가로밀림 ? `문서폭 ${document.documentElement.scrollWidth}px` : "없음",
     "② 찌그러진 입력": 찌그러짐.length ? 찌그러짐 : "없음",
     "③ 부모 박스 넘침": 박스넘침.length ? 박스넘침.slice(0, 10) : "없음",
+    "④ 포커스 확대 유발": 폰 ? (확대유발.length ? 확대유발 : "없음") : "해당 없음(데스크톱 폭)",
   };
   console.table([{ 뷰포트: vw, 판정: 결과.판정, 밀림: 가로밀림 ? "❌" : "✅",
-                   찌그러짐: 찌그러짐.length || "✅", 넘침: 박스넘침.length || "✅" }]);
+                   찌그러짐: 찌그러짐.length || "✅", 넘침: 박스넘침.length || "✅",
+                   확대: 폰 ? (확대유발.length || "✅") : "—" }]);
   return 결과;
 })();

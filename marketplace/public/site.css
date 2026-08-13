@@ -129,7 +129,7 @@ code { font-family:var(--mono); font-size:.9em; background:var(--panel-2); paddi
    링크를 숨기면 그 페이지로 가는 길이 헤더에서 사라지므로(푸터에만 남는다) 숨기지 않는다.
    `.spacer` 는 여기서 필요 없다 — 링크가 남은 폭을 다 쓰므로 자리를 두면 버튼이 또 밀린다. */
 @media (max-width:560px){
-  .nav-in { gap:10px; padding:0 14px; }
+  .nav-in { gap:10px; padding:0 16px; }
   .nav .spacer { display:none; }
   .nav-links { margin-left:0; overflow-x:auto; overscroll-behavior-x:contain;
                scrollbar-width:none; -ms-overflow-style:none; }
@@ -275,3 +275,15 @@ footer { border-top:1px solid var(--line); background:var(--panel); margin-top:a
 /* 오른쪽 정렬 슬롯 — 지금은 쓰는 곳이 없지만 한 줄에 항목이 둘 이상이면 필요하다. */
 .foot-btm .r { margin-left:auto; }
 @media (max-width:640px){ .foot-btm .r { margin-left:0; } }
+
+/* ─── 폰 좌우 여백 통일 ───
+   🐛 머리만 좁혀 놓아 **세로선이 갈라져 있었다** — 375px 실측에서 워드마크는 x=14,
+   제목·본문·바닥은 x=24 였다. 폰에서 한 화면에 세로선이 둘이면 그건 두 화면처럼 읽힌다.
+   16px 은 위 `.nav-in`(560px 이하)과 같은 값이다 — 한쪽만 고치면 어긋남이 도로 생긴다.
+   ⚠️ **이 블록은 파일 맨 끝에 있어야 한다.** `.foot-in`(0,1,0)·`.foot-btm`(0,1,0) 이 이
+   규칙과 특이도가 같아, 위로 올리면 나중에 선 원래 규칙의 `padding` 단축형이 도로 이긴다
+   (처음에 nav 블록 안에 넣었다가 바닥만 24px 로 남는 것을 실측으로 확인했다).
+   가로만 덮는 이유: 세로 여백(`.foot-in` 30/22 · `.foot-btm` 24)은 이 문제와 무관하다. */
+@media (max-width:560px){
+  .wrap, .foot-in, .foot-btm { padding-left:16px; padding-right:16px; }
+}

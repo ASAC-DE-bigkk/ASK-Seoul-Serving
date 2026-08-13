@@ -62,6 +62,12 @@
   .support-item p { margin:0; font-size:12.5px; }
   .handoff { border-color:var(--accent-line); background:var(--accent-soft); }
   [hidden] { display:none !important; }
+  /* 🔴 iOS Safari 는 글자 16px 미만인 입력칸에 포커스가 가면 페이지를 확대하고, 확대된 채로
+     둔다. 여기 입력칸은 API 키 붙여넣기 하나뿐인데 이 화면의 3단계 중 2단계가 그것이다.
+     터치 태블릿·노트북은 폭 조건에 안 걸리므로 `pointer:coarse` 를 함께 본다. */
+  @media (max-width:760px), (pointer:coarse) {
+    .field input { font-size:16px; }
+  }
   @media (max-width:760px) {
     .demo-card { padding:15px; }
     .support-grid { grid-template-columns:1fr; }
