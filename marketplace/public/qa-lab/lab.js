@@ -23,6 +23,17 @@ const el = (tag, props = {}, ...kids) => {
   return n;
 };
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// 🔴 `verified_at` 은 **날짜형과 UTC 타임스탬프가 섞여** 온다(운영 실측 2026-08-13:
+// `…THH:MM:SSZ` 762건 + `YYYY-MM-DD` 122건). 앞쪽을 그대로 자르면 15:00Z 이후 값이
+// **하루 전**으로 보인다(389건이 그 구간). 날짜형은 이미 날짜라 옮길 순간이 없어 그대로 둔다.
+// index.html 의 `kstDate` 와 같은 규칙 — 앱이 갈려 있어 사본이다(같이 고친다).
+const kstDate = (value) => {
+  const s = String(value || "");
+  if (!s) return "";
+  if (!/T\d{2}:\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  return isNaN(d) ? s.slice(0, 10) : new Date(d.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+};
 
 // ── 테마 ─────────────────────────────────────────────
 (function theme() {
@@ -521,7 +532,7 @@ function renderAB(pid, patId, asis, tobe) {
     ["이 호출 지연", aErr ? "—" : `${asis.ms}ms`, tErr ? "—" : `${tobe.ms}ms`],
     ["쿼터 소모", total ? `1/페이지 → 최대 ${pages}회` : "다수", tErr ? "—" : "1회"],
     ["답 직결성", "❌ 원시 행 — 정렬·집계 후처리 필요", tErr ? "—" : "✅ 계산된 답 직행"],
-    ["검증", "❌ 없음(클라 집계 = 환각 위험)", verified && verified.at ? `✅ ${verified.rows ?? "?"}행 확인 (${String(verified.at).slice(0, 10)})` : (tErr ? "—" : "✅ 검증 패턴")],
+    ["검증", "❌ 없음(클라 집계 = 환각 위험)", verified && verified.at ? `✅ ${verified.rows ?? "?"}행 확인 (${kstDate(verified.at)})` : (tErr ? "—" : "✅ 검증 패턴")],
     ["해석(insight)", "—", tErr ? "—" : (insight ? escapeHtml(insight) : "—")],
   ];
   const t = $("abTbl"); t.innerHTML = "";
