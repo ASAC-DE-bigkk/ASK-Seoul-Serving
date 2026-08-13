@@ -696,7 +696,10 @@
   </section>
 
   <section>
-    <div class="sec-head"><h2>시작하기</h2><span class="hint">Google 로그인만 · 아래 데모는 도메인을 돌아가며 실제 응답을 보여줍니다</span></div>
+    <!-- 부제가 관계 없는 두 사실("로그인 방법" + "데모 동작")을 한 줄에 붙여 두어, 어느 쪽을
+         가리키는 설명인지 흐렸다. 이 절의 부제는 이 절(시작하는 법)만 말한다 —
+         데모의 동작은 데모 아래 각주가 이미 적는다. -->
+    <div class="sec-head"><h2>시작하기</h2><span class="hint">Google 로그인 한 번이면 끝납니다</span></div>
     <div class="how">
       <div>
         <div class="hstep"><div class="num2">1</div><div>
@@ -705,8 +708,11 @@
         </div></div>
         <div class="hstep"><div class="num2">2</div><div>
           <div class="tt">API 키 발급</div>
-          <div class="dd">Google 계정으로 로그인하면 즉시 발급됩니다. 별도 가입도, 비밀번호도 없어요 —
-            이메일이 본인 것인지 Google 이 확인해 주기 때문입니다. 서버에는 키의 <code>SHA-256</code> 해시만 저장돼요.</div>
+          <!-- 이 칸만 "없어요/저장돼요"(해요체)라 사이트 전체(합니다체)와 어긋나 있었다.
+               앞뒤 칸이 "볼 수 있습니다"·"지원합니다"라, 문체가 한 화면에서 갈리면 다른 사람이
+               쓴 문장처럼 읽힌다. -->
+          <div class="dd">Google 계정으로 로그인하면 즉시 발급됩니다. 별도 가입도 비밀번호도 없습니다 —
+            이메일이 본인 것인지 Google 이 확인해 주기 때문입니다. 서버에는 키의 <code>SHA-256</code> 해시만 저장합니다.</div>
         </div></div>
         <div class="hstep"><div class="num2">3</div><div>
           <div class="tt">호출</div>
