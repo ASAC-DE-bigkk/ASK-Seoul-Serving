@@ -52,6 +52,13 @@
 - **조치**: DAG/DBT가 이미 게시하는 `d1_product_query_availability`의 현재 `publication_id` 결속을 정본으로 삼아, `/skill/v1`에 KST 시간 정규화·`query_context`·query-bound cursor v2·fail-closed 오류를 적용하는 A안 설계 문서를 추가했다. 일반 `/api/v1`, MCP, Traffic, D1 schema는 범위에서 제외했다.
 - **결과**: `docs/superpowers/specs/2026-08-14-weather-risk-query-context-design.md`에 API 입력·출력·쿼터 순서·rollback·검증 기준을 고정했다. 이 커밋에는 운영 변경이나 prod 배포가 없다.
 
+### Weather risk publication-bound query context 구현
+
+- **작업자**: @masondev1024
+- **의도 · 목표**: 장소별 강수 위험 상품의 빈 결과를 현재 publication의 가용성·신선도 증거와 함께 반환하고, 범위·cursor 오류가 quota를 소모하지 않도록 한다.
+- **조치**: `/skill/v1/products/weather_place_risk_window/data`에 필수 `place_id`, KST/date-only/RFC3339 시간창 정규화, `d1_product_query_availability` 기반 fail-closed gate, `query_context`, publication·query-bound cursor v2, keyset pagination과 실패/소진 cursor 환불을 구현했다. OpenAPI·데모·standalone K-Skill 검증 계약과 provenance hash도 갱신했다.
+- **결과**: targeted Worker 24/24, demo 24/24, standalone Python 계약 4/4, marketplace 전체 `npm test` 700/700 및 partials 정합성 검증이 통과했다. 변경은 Weather risk K-Skill 경로에 한정되며 Traffic·Dashboard·prod 리소스는 건드리지 않았다.
+
 ---
 
 ## 2026-08-13

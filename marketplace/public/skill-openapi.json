@@ -46,10 +46,11 @@
     "/skill/v1/products/{product_id}/data": {
       "get": {
         "summary": "준비된 제품의 데이터 조회",
-        "description": "현재 publication_id에 결속된 출처·이용권리·품질·구조 증거가 모두 통과한 제품만 데이터를 반환한다. 미준비 503은 빈 데이터 집합이 아니다. cursor는 publication_id에 결속되므로 재게시 뒤에는 409로 만료된다.",
+        "description": "현재 publication_id에 결속된 출처·이용권리·품질·구조·장소 가용성 증거가 모두 통과한 제품만 데이터를 반환한다. place_id는 필수이며, 미준비 503은 빈 데이터 집합이 아니다. cursor는 publication·장소·정규화된 시간 범위에 결속되므로 조건 변경 또는 재게시 뒤에는 409로 만료된다.",
         "operationId": "getSeoulWeatherRiskData",
         "parameters": [
           { "$ref": "#/components/parameters/ProductId" },
+          { "$ref": "#/components/parameters/PlaceId" },
           { "$ref": "#/components/parameters/Limit" },
           { "$ref": "#/components/parameters/From" },
           { "$ref": "#/components/parameters/To" },
@@ -61,6 +62,7 @@
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "description": "요청 범위가 현재 publication의 장소별 complete availability 밖이다.", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
           "409": { "$ref": "#/components/responses/CursorExpired" },
           "429": { "$ref": "#/components/responses/TooManyRequests" },
           "503": { "$ref": "#/components/responses/ProductNotReady" }
@@ -88,6 +90,13 @@
           ]
         }
       },
+      "PlaceId": {
+        "name": "place_id",
+        "in": "query",
+        "required": true,
+        "description": "서울 행정동 canonical place_id. 예: seoul_admd_1120069000",
+        "schema": { "type": "string", "pattern": "^seoul_admd_[0-9]{10}$" }
+      },
       "Limit": {
         "name": "limit",
         "in": "query",
@@ -98,21 +107,21 @@
         "name": "from",
         "in": "query",
         "required": false,
-        "description": "제품의 공개 time axis 하한. time axis가 없는 제품은 사용할 수 없다.",
+        "description": "KST 또는 RFC3339 요청 구간 하한. to와 함께 주며, 날짜만 주면 KST 00:00:00으로 확장한다.",
         "schema": { "type": "string" }
       },
       "To": {
         "name": "to",
         "in": "query",
         "required": false,
-        "description": "제품의 공개 time axis 상한. time axis가 없는 제품은 사용할 수 없다.",
+        "description": "KST 또는 RFC3339 요청 구간 상한. from과 함께 주며, 날짜만 주면 KST 23:59:59로 확장한다.",
         "schema": { "type": "string" }
       },
       "Cursor": {
         "name": "cursor",
         "in": "query",
         "required": false,
-        "description": "직전 응답 next_cursor. 발행본이 달라지면 409로 만료된다.",
+        "description": "직전 응답 next_cursor. publication·장소·정규화된 시간 범위가 달라지면 409로 만료된다.",
         "schema": { "type": "string" }
       }
     },
@@ -159,9 +168,29 @@
           }
         ]
       },
+      "QueryContext": {
+        "type": "object",
+        "required": ["schema_version", "place_id", "requested_from_at", "requested_to_at", "available_from_at", "available_to_at", "snapshot_as_of_hour", "forecast_collected_at_min", "forecast_collected_at_max", "source_population_revision", "publication_id", "coverage_status", "freshness_state", "zero_result_reason"],
+        "properties": {
+          "schema_version": { "const": "weather-risk-query-context/v1" },
+          "place_id": { "type": "string" },
+          "requested_from_at": { "type": "string" },
+          "requested_to_at": { "type": "string" },
+          "available_from_at": { "type": "string" },
+          "available_to_at": { "type": "string" },
+          "snapshot_as_of_hour": { "type": "string" },
+          "forecast_collected_at_min": { "type": "string" },
+          "forecast_collected_at_max": { "type": "string" },
+          "source_population_revision": { "type": "string" },
+          "publication_id": { "type": "string" },
+          "coverage_status": { "const": "covered" },
+          "freshness_state": { "const": "fresh" },
+          "zero_result_reason": { "type": ["string", "null"], "enum": ["no_upcoming_weather_risk_candidate", null] }
+        }
+      },
       "DataPage": {
         "type": "object",
-        "required": ["bundle_id", "product_id", "publication_id", "row_count", "limit", "has_more", "next_cursor", "rows"],
+        "required": ["bundle_id", "product_id", "publication_id", "row_count", "limit", "time_axis", "query_context", "has_more", "next_cursor", "usage", "rows"],
         "properties": {
           "bundle_id": { "const": "seoul-weather-risk" },
           "product_id": { "type": "string" },
@@ -170,6 +199,7 @@
           "row_count": { "type": "integer", "minimum": 0 },
           "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
           "time_axis": { "type": ["string", "null"] },
+          "query_context": { "$ref": "#/components/schemas/QueryContext" },
           "has_more": { "type": "boolean" },
           "next_cursor": { "type": ["string", "null"] },
           "usage": { "type": "object" },

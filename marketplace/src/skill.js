@@ -6,7 +6,17 @@
 // 게시되지 않은 동안에는 데이터보다 먼저 `product_not_ready`를 반환한다.
 // "모르는 데이터를 성공으로 보인다"보다 실패를 명시하는 편이 등록 심사와 사용자
 // 모두에게 안전하다.
-import { countUsage, json, parseJsonArray, problem, quotaExceededProblem, quotaHeaders, safeRows } from "./shared.js";
+import { countUsage, json, parseJsonArray, problem, quotaExceededProblem, quotaHeaders, refundUsage, safeRows } from "./shared.js";
+import {
+  buildQueryContext,
+  decodeWeatherCursor,
+  encodeWeatherCursor,
+  hourlySlotBounds,
+  parseQueryBound,
+  queryFingerprint,
+  readCurrentAvailability,
+  validPlaceId,
+} from "./weather-risk-query.js";
 
 export const SKILL_BUNDLE_ID = "seoul-weather-risk";
 export const SKILL_SERVICE_SCOPE = "skill:seoul-weather-risk:read";
@@ -99,22 +109,6 @@ function explicitNotApplicableCoverage(coverage) {
 function quoteIdentifier(value) {
   if (!SQL_IDENTIFIER_RE.test(value)) throw new Error(`unsafe identifier: ${value}`);
   return `"${value}"`;
-}
-
-function encodeCursor(publicationId, rowid) {
-  return btoa(JSON.stringify({ publication_id: publicationId, rowid }))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function decodeCursor(raw) {
-  try {
-    const parsed = JSON.parse(atob(raw.replace(/-/g, "+").replace(/_/g, "/")));
-    return nonEmpty(parsed.publication_id) && Number.isSafeInteger(parsed.rowid) && parsed.rowid >= 0
-      ? parsed
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 function parseLimit(raw) {
@@ -326,6 +320,18 @@ export async function handleSkillBundle(env, trace = {}) {
   });
 }
 
+function queryAvailabilityNotReady(product, reason) {
+  return problem(503, "product not ready",
+    "현재 publication의 장소별 조회 가능 증거가 준비되지 않았다",
+    {
+      code: "product_not_ready",
+      product_id: product.product_id,
+      publication_id: product.publication_id,
+      blockers: ["query_availability_evidence_unavailable"],
+      reason,
+    });
+}
+
 export async function handleSkillProduct(env, productId, trace = {}) {
   // `/skill/v1` 은 계약상 경로 인자가 곧 공개 식별자다 — 해석을 기다릴 필요가 없다
   trace.table = productId;
@@ -344,16 +350,19 @@ export async function handleSkillData(env, productId, _searchParams, _keyRow, tr
   if (!product) return unknownProduct(productId);
   trace.publicationId = product.publication_id ?? null;
 
-  // 쿼터는 실제 데이터 제공 뒤에만 소모한다. 준비 전 503을 사용자가 반복 확인하는
-  // 상황에서 호출 한도를 잃게 하면 관측 가능한 운영 상태가 숨겨진다.
+  // 쿼터는 현재 publication의 availability와 요청 구간을 검증한 뒤, 실제 risk
+  // projection을 읽기 직전에만 차감한다. 준비 전 반복 확인은 과금하지 않는다.
   if (!product.registration_ready) return notReady(product);
 
   const publicColumns = product.metadata.columns.map((column) => column.name);
   const allowedColumns = new Set(publicColumns);
+  const timeAxis = product.metadata.structure?.time_axis;
   if (!SQL_IDENTIFIER_RE.test(product.table_name || "") || !publicColumns.length ||
-      publicColumns.some((column) => !SQL_IDENTIFIER_RE.test(column))) {
+      publicColumns.some((column) => !SQL_IDENTIFIER_RE.test(column)) ||
+      !allowedColumns.has("place_id") || !allowedColumns.has("product_row_id") ||
+      !timeAxis || !allowedColumns.has(timeAxis)) {
     // registration_ready는 D1 metadata의 publication identity까지 확인했지만, identifier
-    // 형식은 SQL 경계에서 한 번 더 fail-closed 한다. 카탈로그 오염이 쿼리로 번지지 않는다.
+    // 형식과 keyset에 필요한 두 축은 SQL 경계에서 한 번 더 fail-closed 한다.
     return problem(503, "data serving unavailable", "안전한 공개 조회 스키마를 확인할 수 없다",
       { code: "data_serving_contract_invalid", product_id: product.product_id });
   }
@@ -363,10 +372,72 @@ export async function handleSkillData(env, productId, _searchParams, _keyRow, tr
     return problem(400, "invalid limit", `limit 는 1 이상 정수여야 하며 최대 ${MAX_LIMIT}까지다`);
   }
 
-  const where = [];
-  const binds = [];
+  const placeIds = _searchParams.getAll("place_id");
+  if (placeIds.length !== 1 || !validPlaceId(placeIds[0])) {
+    return problem(400, "invalid place_id", "place_id는 canonical 서울 행정동 식별자 하나가 필요하다", {
+      code: "invalid_place_id",
+    });
+  }
+  const placeId = placeIds[0];
+
+  const rawFrom = _searchParams.get("from");
+  const rawTo = _searchParams.get("to");
+  if ((rawFrom === null) !== (rawTo === null)) {
+    return problem(400, "invalid time window", "from과 to는 함께 주거나 둘 다 생략해야 한다", {
+      code: "invalid_time_window",
+    });
+  }
+
+  let requestedFrom = rawFrom === null ? null : parseQueryBound(rawFrom, "from");
+  let requestedTo = rawTo === null ? null : parseQueryBound(rawTo, "to");
+  if ((rawFrom !== null && !requestedFrom) || (rawTo !== null && !requestedTo)) {
+    return problem(400, "invalid time window", "from/to가 실제 달력 날짜와 KST/RFC3339 timestamp가 아니다", {
+      code: "invalid_time_window",
+    });
+  }
+  if (requestedFrom && requestedTo && requestedFrom.epochMs > requestedTo.epochMs) {
+    return problem(400, "invalid time window", "from이 to보다 늦다", { code: "invalid_time_window" });
+  }
+
+  const availability = await readCurrentAvailability(env, product, placeId, Date.now());
+  if (availability.error) return queryAvailabilityNotReady(product, availability.error);
+  if (!requestedFrom || !requestedTo) {
+    requestedFrom = availability.availableFrom;
+    requestedTo = availability.availableTo;
+  }
+  if (requestedFrom.epochMs < availability.availableFrom.epochMs ||
+      requestedTo.epochMs > availability.availableTo.epochMs) {
+    return problem(422, "query window unavailable", "요청한 시간 범위가 현재 publication의 장소별 완전 가용 구간에 포함되지 않는다", {
+      code: "query_window_unavailable",
+      publication_id: product.publication_id,
+      place_id: placeId,
+    });
+  }
+
+  const slotBounds = hourlySlotBounds(requestedFrom, requestedTo);
+  if (!slotBounds) {
+    return problem(400, "invalid time window", "요청 구간에 hourly forecast slot이 없다", {
+      code: "invalid_time_window",
+      reason: "no_hourly_forecast_slot",
+    });
+  }
+
+  const fingerprint = await queryFingerprint(
+    product.product_id,
+    product.publication_id,
+    placeId,
+    requestedFrom.canonical,
+    requestedTo.canonical,
+  );
+
+  const where = [
+    `${quoteIdentifier("place_id")} = ?`,
+    `datetime(${quoteIdentifier(timeAxis)}) >= datetime(?)`,
+    `datetime(${quoteIdentifier(timeAxis)}) <= datetime(?)`,
+  ];
+  const binds = [placeId, slotBounds.from, slotBounds.to];
   for (const [key, value] of _searchParams.entries()) {
-    if (["limit", "from", "to", "cursor"].includes(key)) continue;
+    if (["limit", "from", "to", "cursor", "place_id"].includes(key)) continue;
     if (!allowedColumns.has(key)) {
       return problem(400, "unknown filter", `'${key}' 컬럼은 이 제품의 공개 projection에 없다`, {
         product_id: product.product_id,
@@ -377,34 +448,23 @@ export async function handleSkillData(env, productId, _searchParams, _keyRow, tr
     trace.filterCols = (trace.filterCols || []).concat(key);
   }
 
-  const timeAxis = product.metadata.structure?.time_axis;
-  if (_searchParams.get("from") || _searchParams.get("to")) {
-    if (!timeAxis || !allowedColumns.has(timeAxis)) {
-      return problem(400, "no time axis", "이 제품은 공개 time axis가 없어 from/to를 지원하지 않는다", {
-        product_id: product.product_id,
-      });
-    }
-    if (_searchParams.get("from")) {
-      where.push(`${quoteIdentifier(timeAxis)} >= ?`);
-      binds.push(_searchParams.get("from"));
-    }
-    if (_searchParams.get("to")) {
-      where.push(`${quoteIdentifier(timeAxis)} <= ?`);
-      binds.push(_searchParams.get("to"));
-    }
-  }
-
   const rawCursor = _searchParams.get("cursor");
-  if (rawCursor) {
-    const cursor = decodeCursor(rawCursor);
-    if (!cursor) return problem(400, "invalid cursor", "이전 응답의 next_cursor 값을 그대로 넣어야 한다");
-    if (cursor.publication_id !== product.publication_id) {
-      return problem(409, "cursor expired", "제품이 재게시됐다 — cursor 없이 첫 페이지부터 다시 조회할 것", {
+  const cursor = rawCursor ? decodeWeatherCursor(rawCursor) : null;
+  if (rawCursor && !cursor) {
+    return problem(400, "invalid cursor", "이전 응답의 next_cursor 값을 그대로 넣어야 한다", {
+      code: "invalid_cursor",
+    });
+  }
+  if (cursor) {
+    if (cursor.publication_id !== product.publication_id || cursor.query_fingerprint !== fingerprint) {
+      return problem(409, "cursor expired", "publication 또는 query window가 바뀌었다 — cursor 없이 첫 페이지부터 다시 조회할 것", {
+        code: "cursor_query_mismatch",
         publication_id: product.publication_id,
       });
     }
-    where.push("rowid > ?");
-    binds.push(cursor.rowid);
+    const timeExpression = `datetime(${quoteIdentifier(timeAxis)})`;
+    where.push(`(${timeExpression} > datetime(?) OR (${timeExpression} = datetime(?) AND ${quoteIdentifier("product_row_id")} > ?))`);
+    binds.push(cursor.forecast_at, cursor.forecast_at, cursor.product_row_id);
   }
 
   const usage = await countUsage(env, _keyRow);
@@ -413,27 +473,76 @@ export async function handleSkillData(env, productId, _searchParams, _keyRow, tr
   }
 
   const selectColumns = publicColumns.map(quoteIdentifier).join(", ");
-  const sql = `SELECT rowid AS "_rid", ${selectColumns} FROM ${quoteIdentifier(product.table_name)}` +
-    (where.length ? ` WHERE ${where.join(" AND ")}` : "") +
-    ` ORDER BY rowid LIMIT ${limit + 1}`;
-  const { results } = await env.DB.prepare(sql).bind(...binds).all();
-  const hasMore = results.length > limit;
-  const page = hasMore ? results.slice(0, limit) : results;
-  const lastRowId = page.length ? page[page.length - 1]._rid : null;
-  const rows = page.map(({ _rid, ...row }) => row);
+  const timeExpression = `datetime(${quoteIdentifier(timeAxis)})`;
+  const sql = `SELECT ${selectColumns} FROM ${quoteIdentifier(product.table_name)}` +
+    ` WHERE ${where.join(" AND ")}` +
+    ` ORDER BY ${timeExpression} ASC, ${quoteIdentifier("product_row_id")} ASC LIMIT ${limit + 1}`;
+  let results;
+  try {
+    ({ results } = await env.DB.prepare(sql).bind(...binds).all());
+  } catch {
+    const refunded = await refundUsage(env, _keyRow, usage.day);
+    return problem(500, "data query failed", "현재 publication 데이터를 조회하지 못했다", {
+      code: "data_query_failed",
+      ...(refunded ? { quota_charged: false } : {}),
+    }, quotaHeaders(refunded ? Math.max(0, usage.used - 1) : usage.used, usage.quota));
+  }
+  const resultRows = Array.isArray(results) ? results : [];
+  const hasMore = resultRows.length > limit;
+  const page = hasMore ? resultRows.slice(0, limit) : resultRows;
 
-  trace.rows = rows.length;
+  // cursor가 가리키는 다음 행이 없어졌다면 정상적인 no-candidate가 아니다. 이미
+  // 차감한 이번 호출만 되돌리고, 다음 cursor를 새로 발급하도록 fail-closed 한다.
+  if (cursor && page.length === 0) {
+    const refunded = await refundUsage(env, _keyRow, usage.day);
+    return problem(400, "invalid cursor", "cursor가 가리키는 다음 행이 없다 — 첫 페이지부터 다시 조회할 것", {
+      code: "invalid_cursor",
+      ...(refunded ? { quota_charged: false } : {}),
+    }, quotaHeaders(refunded ? Math.max(0, usage.used - 1) : usage.used, usage.quota));
+  }
+
+  const last = page.length ? page[page.length - 1] : null;
+  const lastForecast = last ? parseQueryBound(String(last[timeAxis]), "from") : null;
+  if (hasMore && (!lastForecast || typeof last.product_row_id !== "string" || !last.product_row_id)) {
+    const refunded = await refundUsage(env, _keyRow, usage.day);
+    return problem(500, "data query contract invalid", "다음 페이지 cursor를 안전하게 만들 수 없다", {
+      code: "data_query_contract_invalid",
+      ...(refunded ? { quota_charged: false } : {}),
+    }, quotaHeaders(refunded ? Math.max(0, usage.used - 1) : usage.used, usage.quota));
+  }
+  const nextCursor = hasMore && last
+    ? encodeWeatherCursor({
+        publicationId: product.publication_id,
+        queryFingerprint: fingerprint,
+        forecastAt: lastForecast.canonical,
+        productRowId: last.product_row_id,
+      })
+    : null;
+  const zeroResultReason = !cursor && page.length === 0
+    ? "no_upcoming_weather_risk_candidate"
+    : null;
+  const queryContext = buildQueryContext({
+    product,
+    placeId,
+    requestedFrom,
+    requestedTo,
+    availability,
+    zeroResultReason,
+  });
+
+  trace.rows = page.length;
   return json({
     bundle_id: SKILL_BUNDLE_ID,
     product_id: product.product_id,
     table_name: product.table_name,
     publication_id: product.publication_id,
-    row_count: rows.length,
+    row_count: page.length,
     limit,
-    time_axis: timeAxis ?? null,
+    time_axis: timeAxis,
+    query_context: queryContext,
     has_more: hasMore,
-    next_cursor: hasMore ? encodeCursor(product.publication_id, lastRowId) : null,
+    next_cursor: nextCursor,
     usage: { used: usage.used, daily_quota: usage.quota },
-    rows,
+    rows: page,
   }, 200, quotaHeaders(usage.used, usage.quota));
 }

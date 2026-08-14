@@ -12,6 +12,22 @@ const SYNC = await readFile(new URL("./sync-partials.mjs", import.meta.url), "ut
 const FOOTER = await readFile(new URL("../partials/footer.html", import.meta.url), "utf8");
 const OPENAPI = JSON.parse(await readFile(new URL("../public/skill-openapi.json", import.meta.url), "utf8"));
 const EXPECTED_ARTIFACT_COMMIT = "7203c869380f2907175919733b3282742767cbc6";
+const DEMO_QUERY_CONTEXT = {
+  schema_version: "weather-risk-query-context/v1",
+  place_id: "seoul_admd_1120069000",
+  requested_from_at: "2026-08-14 00:00:00",
+  requested_to_at: "2026-08-14 23:59:59",
+  available_from_at: "2026-08-14 00:00:00",
+  available_to_at: "2026-08-15 02:00:00",
+  snapshot_as_of_hour: "2026-08-14 00:00:00",
+  forecast_collected_at_min: "2026-08-14 08:00:00",
+  forecast_collected_at_max: "2026-08-14 08:05:00",
+  source_population_revision: `kma_admin_dong_grid_20260325:${"0".repeat(64)}`,
+  publication_id: "pub-1",
+  coverage_status: "covered",
+  freshness_state: "fresh",
+  zero_result_reason: null,
+};
 
 test("API key stays in a password field and module memory only", () => {
   assert.match(HTML, /<input[^>]+id="skillApiKey"[^>]+type="password"/);
@@ -51,7 +67,7 @@ test("install commands use a skills-cli-compatible commit archive", () => {
 test("readiness runs bundle, product, then one-row data and preserves request ids", () => {
   assert.match(CLIENT, /\/skill\/v1\/bundles\/seoul-weather-risk/);
   assert.match(CLIENT, /\/skill\/v1\/products\/weather_place_risk_window/);
-  assert.match(CLIENT, /\/skill\/v1\/products\/weather_place_risk_window\/data\?limit=1/);
+  assert.match(CLIENT, /\/skill\/v1\/products\/weather_place_risk_window\/data\?place_id=\$\{DEMO_PLACE_ID\}&limit=1/);
   assert.match(CLIENT, /response\.headers\.get\("x-request-id"\)/i);
   assert.match(CLIENT, /Authorization: `Bearer \$\{apiKey\}`/);
 });
@@ -160,7 +176,7 @@ test("verification is a distinct step that names all three readiness checks", ()
   assert.match(HTML, /<ol class="readiness-checks" aria-label="검증 항목">/);
   assert.match(HTML, /<code>bundle<\/code>.*registration_ready=true/s);
   assert.match(HTML, /<code>product<\/code>.*registration_ready=true/s);
-  assert.match(HTML, /<code>data<\/code>.*row_count &gt; 0/s);
+  assert.match(HTML, /<code>data<\/code>.*query_context=covered\/fresh/s);
 });
 
 test("supporting guidance is one flat information region instead of three cards", () => {
@@ -181,7 +197,7 @@ test("live runner preserves the three successful request ids", async () => {
   const payloads = [
     { bundle_id: "seoul-weather-risk", registration_ready: true, products: [{ product_id: "weather_place_risk_window", registration_ready: true, blockers: [], publication_id: "pub-1" }] },
     { bundle_id: "seoul-weather-risk", product_id: "weather_place_risk_window", registration_ready: true, blockers: [], publication_id: "pub-1", metadata: {} },
-    { bundle_id: "seoul-weather-risk", product_id: "weather_place_risk_window", publication_id: "pub-1", row_count: 1, rows: [{ place_id: "seoul_admd_1120069000" }] },
+    { bundle_id: "seoul-weather-risk", product_id: "weather_place_risk_window", publication_id: "pub-1", row_count: 1, query_context: DEMO_QUERY_CONTEXT, rows: [{ place_id: "seoul_admd_1120069000" }] },
   ];
   const fetchImpl = async (path, options) => {
     calls.push({ path, authorization: options.headers.Authorization });
@@ -196,12 +212,13 @@ test("live runner preserves the three successful request ids", async () => {
   assert.deepEqual(calls.map(({ path }) => path), [
     "/skill/v1/bundles/seoul-weather-risk",
     "/skill/v1/products/weather_place_risk_window",
-    "/skill/v1/products/weather_place_risk_window/data?limit=1",
+    "/skill/v1/products/weather_place_risk_window/data?place_id=seoul_admd_1120069000&limit=1",
   ]);
   assert.ok(calls.every(({ authorization }) => authorization === "Bearer secret-in-memory"));
   assert.deepEqual(result.requestIds, { bundle: "req-1", product: "req-2", data: "req-3" });
   assert.equal(result.publicationId, "pub-1");
   assert.equal(result.rowCount, 1);
+  assert.equal(result.noCandidate, false);
 });
 
 test("live runner blocks not-ready and zero-row responses", async () => {
@@ -221,7 +238,7 @@ test("live runner blocks not-ready and zero-row responses", async () => {
       ? { registration_ready: true, products: [{ product_id: "weather_place_risk_window", registration_ready: true, blockers: [] }] }
       : call === 2
         ? { registration_ready: true, blockers: [], product_id: "weather_place_risk_window", metadata: {} }
-        : { publication_id: "pub-1", row_count: 0, rows: [] };
+        : { publication_id: "pub-1", row_count: 0, query_context: { ...DEMO_QUERY_CONTEXT, zero_result_reason: null }, rows: [] };
     return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
   };
   await assert.rejects(
@@ -230,13 +247,30 @@ test("live runner blocks not-ready and zero-row responses", async () => {
   );
 });
 
+test("live runner accepts a covered fresh no-candidate result but rejects evidence-free empty data", async () => {
+  let call = 0;
+  const validEmpty = async () => {
+    call += 1;
+    const body = call === 1
+      ? { registration_ready: true, products: [{ product_id: "weather_place_risk_window", registration_ready: true, blockers: [] }] }
+      : call === 2
+        ? { registration_ready: true, blockers: [], product_id: "weather_place_risk_window", metadata: {} }
+        : { publication_id: "pub-1", row_count: 0, query_context: { ...DEMO_QUERY_CONTEXT, zero_result_reason: "no_upcoming_weather_risk_candidate" }, rows: [] };
+    return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const result = await runSkillDemo({ apiKey: "secret", fetchImpl: validEmpty });
+  assert.equal(result.noCandidate, true);
+  assert.equal(result.rowCount, 0);
+  assert.equal(result.sample, null);
+});
+
 test("CLI smoke targets the configured HTTPS origin without exposing its key", async () => {
   const urls = [];
   let call = 0;
   const bodies = [
     { registration_ready: true, products: [{ product_id: "weather_place_risk_window", registration_ready: true, blockers: [] }] },
     { registration_ready: true, product_id: "weather_place_risk_window", blockers: [], metadata: {} },
-    { publication_id: "pub-live", row_count: 1, rows: [{ place_id: "seoul_admd_1120069000" }] },
+    { publication_id: "pub-live", row_count: 1, query_context: { ...DEMO_QUERY_CONTEXT, publication_id: "pub-live" }, rows: [{ place_id: "seoul_admd_1120069000" }] },
   ];
   const result = await runLiveSmoke({
     apiKey: "never-print-this",
