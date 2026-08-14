@@ -31,7 +31,7 @@ metadata:
 - 오타, 유사 이름, 생활권·통칭 또는 부분 이름(예: `성수동`)은 fuzzy match하거나 추측하지 않으며 `unknown_admin_dong`으로 처리한다.
 - 동명이명은 자치구를 물어본 뒤 `--gu`를 함께 전달한다. 현재 `신사동`은 강남구와 관악구에 모두 있으므로 자치구 없이 선택하지 않는다.
 - 매핑은 `kma_admin_dong_grid_20260325` 버전의 서울 행정동 427개 reference다.
-- 자동화된 기존 호출은 `--filter place_id=seoul_admd_...`를 계속 사용할 수 있지만 `--admin-dong`과 동시에 사용하지 않는다.
+- data 조회에는 반드시 하나의 canonical `place_id`가 필요하다. 자연어 경로는 `--admin-dong`에서 이를 만들고, 자동화된 호출은 `--filter place_id=seoul_admd_...`를 사용한다. 둘을 동시에 사용하지 않는다.
 - 자연어의 오늘·내일·이번 주는 호출 전에 KST의 명시적 기간으로 해석한다. `--from YYYY-MM-DD`는 그 날 `00:00:00`, `--to YYYY-MM-DD`는 그 날 `23:59:59`로 확장하며, 명시적인 시각은 바꾸지 않는다.
 
 ## Workflow
@@ -75,7 +75,7 @@ python scripts/seoul_weather_risk.py query \
   --limit 100
 ```
 
-응답의 `registration_ready`, `publication_id`, `blockers`를 먼저 확인한다. data 응답의 `next_cursor`는 같은 제품의 다음 page에만 그대로 재사용한다. publication이 바뀌면 cursor는 `409`로 만료된다.
+응답의 `registration_ready`, `publication_id`, `blockers`를 먼저 확인한다. data 응답은 현재 publication의 장소별 조회 가능 구간을 `query_context`로 함께 반환한다. `row_count=0`은 `coverage_status=covered`, `freshness_state=fresh`, `zero_result_reason=no_upcoming_weather_risk_candidate`가 모두 있을 때만 정상적인 위험 후보 없음으로 해석한다. 그 증거가 없으면 성공 빈 결과가 아니다. data 응답의 `next_cursor`는 같은 publication·장소·정규화된 시간 범위의 다음 page에만 그대로 재사용한다. publication 또는 query 조건이 바뀌면 cursor는 `409`로 만료된다.
 
 설치 직후 또는 운영 상태 점검 때 위의 `preflight`, `catalog`, `describe`를 한 번 실행한 뒤에는 다음 data-only 경로를 사용한다. 이 경로는 bundle/product metadata를 다시 조회하지 않고 data endpoint 한 곳만 호출하므로, 실제 자연어 질문의 지연을 줄인다.
 
@@ -88,7 +88,7 @@ python scripts/seoul_weather_risk.py query --fast \
   --limit 100
 ```
 
-`--fast`는 `--admin-dong`, 선택적 `--gu`, 기간, `limit`, `cursor`만 허용한다. 임의 projection이 필요한 경우에는 기존 `query` 경로에서 `--filter`를 사용해 product metadata를 먼저 검증한다. fast data 응답의 `bundle_id`, `product_id`, `publication_id`, `row_count`, `usage` 및 `registration_ready`/오류 상태를 그대로 확인하며, live 실패를 추정값으로 대체하지 않는다.
+`--fast`는 `--admin-dong`, 선택적 `--gu`, 기간, `limit`, `cursor`만 허용한다. 임의 projection이 필요한 경우에는 기존 `query` 경로에서 `--filter`를 사용해 product metadata를 먼저 검증한다. fast data 응답의 `bundle_id`, `product_id`, `publication_id`, `row_count`, `query_context`, `usage` 및 `registration_ready`/오류 상태를 그대로 확인하며, live 실패를 추정값으로 대체하지 않는다.
 
 ## Local pre-registration fallback
 
@@ -117,6 +117,7 @@ MARKETPLACE_API_KEY=<기존 로컬 Marketplace 키>
 ## Done when
 
 - 실제 응답의 `publication_id`, `time_axis`(`forecast_at`), `usage` 및 행 수를 함께 설명했다.
+- 실제 data 응답의 `query_context`에서 현재 publication·장소·coverage·freshness와 0행 사유를 확인했다.
 - 준비되지 않은 제품(`503`)과 인증·권한·할당량 오류를 성공으로 표현하지 않았다.
 
 ## Failure modes
@@ -126,6 +127,9 @@ MARKETPLACE_API_KEY=<기존 로컬 Marketplace 키>
 - `unknown_admin_dong`, `unknown_gu`: reference에 없는 행정동 또는 자치구. 오타·생활권·부분 이름(예: `성수동`)은 `unknown_admin_dong`이다.
 - `ambiguous_admin_dong`: 동명이거나 별칭 후보가 충돌해 `--gu`가 필요함. `details.candidates`에서 가능한 자치구를 확인한다.
 - `location_mapping_invalid`: bundled 행정동 reference의 버전·스키마·행 수 계약 오류
+- `location_mapping_revision_mismatch`: publication의 모집단 revision과 bundled mapping의 결정적 SHA-256이 다름
+- `invalid_time_window`: 실제 달력·KST/RFC3339 bound 오류, 역전 구간 또는 hourly slot 없음
+- `query_window_unavailable`(422): 요청 범위가 현재 publication의 장소별 complete prefix 밖임
 - `proxy_disabled`, `invalid_proxy_base_url`: proxy 환경 설정 오류
 - `local_direct_not_configured`, `invalid_local_direct_base_url`: local-direct 환경 설정 오류
 - `unauthorized`/`api_key_missing`(401), `forbidden`/`api_key_forbidden`(403), `unknown_product`(404)

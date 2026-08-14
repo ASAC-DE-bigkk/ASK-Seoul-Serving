@@ -1,6 +1,9 @@
 const BUNDLE_PATH = "/skill/v1/bundles/seoul-weather-risk";
 const PRODUCT_PATH = "/skill/v1/products/weather_place_risk_window";
-const DATA_PATH = "/skill/v1/products/weather_place_risk_window/data?limit=1";
+const DEMO_PLACE_ID = "seoul_admd_1120069000";
+const DATA_PATH = `/skill/v1/products/weather_place_risk_window/data?place_id=${DEMO_PLACE_ID}&limit=1`;
+const QUERY_CONTEXT_SCHEMA_VERSION = "weather-risk-query-context/v1";
+const ZERO_RESULT_REASON = "no_upcoming_weather_risk_candidate";
 
 const STATUS_CODES = new Map([
   [401, "unauthorized"],
@@ -84,7 +87,30 @@ export async function runSkillDemo({ apiKey, fetchImpl = fetch }) {
 
   const data = await requestJson({ path: DATA_PATH, apiKey: normalizedKey, fetchImpl });
   const rows = Array.isArray(data.body.rows) ? data.body.rows : [];
+  const context = data.body.query_context;
+  if (!context || context.schema_version !== QUERY_CONTEXT_SCHEMA_VERSION ||
+      context.publication_id !== data.body.publication_id || context.place_id !== DEMO_PLACE_ID ||
+      context.coverage_status !== "covered" || context.freshness_state !== "fresh") {
+    throw new SkillDemoError("malformed_response", "현재 publication의 장소별 조회 가능 증거를 확인할 수 없습니다.", {
+      requestId: data.requestId,
+      publicationId: data.body.publication_id ?? null,
+    });
+  }
   if (data.body.row_count === 0 || rows.length === 0) {
+    if (data.body.row_count === 0 && rows.length === 0 && context.zero_result_reason === ZERO_RESULT_REASON) {
+      return {
+        publicationId: data.body.publication_id,
+        rowCount: 0,
+        sample: null,
+        noCandidate: true,
+        queryContext: context,
+        requestIds: {
+          bundle: bundle.requestId,
+          product: product.requestId,
+          data: data.requestId,
+        },
+      };
+    }
     throw new SkillDemoError("zero_rows", "현재 publication에서 시연할 행을 찾지 못했습니다.", {
       requestId: data.requestId,
       publicationId: data.body.publication_id ?? null,
@@ -95,6 +121,8 @@ export async function runSkillDemo({ apiKey, fetchImpl = fetch }) {
     publicationId: data.body.publication_id,
     rowCount: data.body.row_count,
     sample: rows[0],
+    noCandidate: false,
+    queryContext: context,
     requestIds: {
       bundle: bundle.requestId,
       product: product.requestId,
@@ -110,7 +138,7 @@ const RECOVERY = {
   rate_limited: "요청 한도를 초과했습니다. Retry-After 이후 다시 시도해 주세요.",
   product_not_ready: "freshness·coverage·권리 blocker가 해소되기 전에는 live 단계로 진행할 수 없습니다.",
   network_error: "네트워크와 ask-seoul.kr 연결 상태를 확인한 뒤 다시 시도해 주세요.",
-  zero_rows: "빈 결과는 성공 답변이 아닙니다. 다음 publication 이후 다시 확인해 주세요.",
+  zero_rows: "장소별 조회 가능 증거가 없는 빈 결과입니다. 다음 publication 이후 다시 확인해 주세요.",
   malformed_response: "배포된 API 계약과 페이지 버전이 일치하는지 확인해 주세요.",
   api_error: "요청 ID와 함께 운영 담당자에게 문의해 주세요.",
 };
@@ -169,7 +197,9 @@ function init() {
       byId("resultRows").textContent = String(verified.rowCount);
       byId("resultRequest").textContent = verified.requestIds.data || "헤더 없음";
       byId("resultSample").textContent = JSON.stringify(verified.sample, null, 2);
-      status.textContent = "연결 확인이 완료되었습니다. 이제 AI에 질문해 보세요.";
+      status.textContent = verified.noCandidate
+        ? "연결 확인이 완료되었습니다. 선택한 장소에 현재 위험 후보가 없습니다."
+        : "연결 확인이 완료되었습니다. 이제 AI에 질문해 보세요.";
       result.hidden = false;
       liveHandoff.hidden = false;
       verificationDetails.hidden = false;

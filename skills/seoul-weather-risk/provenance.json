@@ -13,9 +13,9 @@
   ],
   "hash_normalization": "lf",
   "files": {
-    "SKILL.md": "4a1cc3a5685bb62665a12b4e80191754891d5b9e1be2edad0acaf1b827bedb51",
+    "SKILL.md": "2821725267b044cb2d85021676a96a89145de86c82b0e7dee0c8aaa38da3bb2e",
     "NOTICE": "1ad0105ff3c47eb9335b028c5ad6444577be06a4b5097ab86aa00c3f3dc30817",
-    "scripts/seoul_weather_risk.py": "23dd7a81b5d291aba1286005aaa7eb2bce9a04a1f2e58ceb985d62dd0964a06b",
+    "scripts/seoul_weather_risk.py": "f86bfcd55f67cd5b248570623da9092d0d0a7adaf937f8f58137e9618985dce5",
     "references/admin-dong-place-map.json": "d0f99bd96aff19684ede2ec8700f9bf6086a2b48208166d91a37126b147aaf23"
   }
 }

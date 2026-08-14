@@ -4,6 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
+import hashlib
 import json
 import os
 import pathlib
@@ -11,6 +14,7 @@ import re
 import sys
 import unicodedata
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
@@ -34,6 +38,27 @@ PROXY_ROUTE_ROOT = "/v1/ask-seoul/weather-risk"
 LOCATION_MAPPING_PATH = pathlib.Path(__file__).resolve().parents[1] / "references" / "admin-dong-place-map.json"
 LOCATION_MAPPING_VERSION = "kma_admin_dong_grid_20260325"
 LOCATION_MAPPING_SIZE = 427
+QUERY_CONTEXT_SCHEMA_VERSION = "weather-risk-query-context/v1"
+QUERY_CONTEXT_ZERO_RESULT_REASON = "no_upcoming_weather_risk_candidate"
+QUERY_CONTEXT_REQUIRED_FIELDS = frozenset({
+    "schema_version",
+    "place_id",
+    "requested_from_at",
+    "requested_to_at",
+    "available_from_at",
+    "available_to_at",
+    "snapshot_as_of_hour",
+    "forecast_collected_at_min",
+    "forecast_collected_at_max",
+    "source_population_revision",
+    "publication_id",
+    "coverage_status",
+    "freshness_state",
+    "zero_result_reason",
+})
+KST_NAIVE_TIMESTAMP_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$"
+)
 EXACT_PRODUCT_IDS = frozenset({
     "weather_place_risk_window",
 })
@@ -71,6 +96,15 @@ class ApiConfig:
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _mapping_revision(locations: list[dict[str, str]]) -> str:
+    canonical_rows = [
+        [row["place_id"], row["admin_dong"], row["gu"]]
+        for row in sorted(locations, key=lambda item: item["place_id"])
+    ]
+    encoded = json.dumps(canonical_rows, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return f"{LOCATION_MAPPING_VERSION}:{hashlib.sha256(encoded).hexdigest()}"
 
 
 def _local_direct_config(values: dict[str, str]) -> ApiConfig:
@@ -243,7 +277,69 @@ def _validate_product(payload: dict[str, Any], product_id: str) -> dict[str, Any
     return payload
 
 
-def _validate_data(payload: dict[str, Any], product_id: str, requested_limit: int) -> dict[str, Any]:
+def _valid_kst_timestamp(value: Any, *, hourly: bool = False) -> bool:
+    if not isinstance(value, str) or not KST_NAIVE_TIMESTAMP_RE.fullmatch(value):
+        return False
+    try:
+        parsed = datetime.fromisoformat(value.replace(" ", "T"))
+    except ValueError:
+        return False
+    return not parsed.tzinfo and (not hourly or (parsed.minute == 0 and parsed.second == 0 and parsed.microsecond == 0))
+
+
+def _validate_query_context(
+    context: Any,
+    *,
+    product_id: str,
+    publication_id: str,
+    expected_place_id: str | None,
+    row_count: int,
+) -> dict[str, Any]:
+    if not isinstance(context, dict) or not QUERY_CONTEXT_REQUIRED_FIELDS.issubset(context):
+        raise _contract_error("ASK Seoul API data 응답의 query_context 계약이 올바르지 않습니다.")
+    if context.get("schema_version") != QUERY_CONTEXT_SCHEMA_VERSION:
+        raise _contract_error("ASK Seoul API data 응답의 query_context schema_version이 지원 계약과 다릅니다.")
+    place_id = context.get("place_id")
+    if not isinstance(place_id, str) or not re.fullmatch(r"seoul_admd_\d{10}", place_id):
+        raise _contract_error("ASK Seoul API data 응답의 query_context place_id가 올바르지 않습니다.")
+    if expected_place_id is not None and place_id != expected_place_id:
+        raise _contract_error("ASK Seoul API data 응답의 query_context place_id가 요청과 다릅니다.")
+    if context.get("publication_id") != publication_id:
+        raise _contract_error("ASK Seoul API data 응답의 query_context publication_id가 본문과 다릅니다.")
+    if not isinstance(context.get("source_population_revision"), str):
+        raise _contract_error("ASK Seoul API data 응답의 query_context source_population_revision이 올바르지 않습니다.")
+    _version, locations = _load_location_mapping()
+    expected_revision = _mapping_revision(locations)
+    if context["source_population_revision"] != expected_revision:
+        raise SkillError(
+            "location_mapping_revision_mismatch",
+            "ASK Seoul API의 장소 모집단 revision이 bundled mapping과 다릅니다.",
+            {"expected_revision": expected_revision, "actual_revision": context["source_population_revision"]},
+        )
+
+    timestamp_fields = (
+        "requested_from_at", "requested_to_at", "available_from_at", "available_to_at",
+        "snapshot_as_of_hour", "forecast_collected_at_min", "forecast_collected_at_max",
+    )
+    for field in timestamp_fields:
+        if not _valid_kst_timestamp(context.get(field), hourly=field == "snapshot_as_of_hour"):
+            raise _contract_error(f"ASK Seoul API data 응답의 query_context {field}가 KST timestamp가 아닙니다.")
+    if context["coverage_status"] != "covered" or context["freshness_state"] != "fresh":
+        raise _contract_error("ASK Seoul API data 응답의 query_context coverage/freshness가 통과 상태가 아닙니다.")
+    zero_reason = context.get("zero_result_reason")
+    if row_count == 0 and zero_reason != QUERY_CONTEXT_ZERO_RESULT_REASON:
+        raise _contract_error("ASK Seoul API data의 0행 query_context 사유가 올바르지 않습니다.")
+    if row_count > 0 and zero_reason is not None:
+        raise _contract_error("ASK Seoul API data의 비어 있지 않은 page에 zero_result_reason이 있습니다.")
+    return context
+
+
+def _validate_data(
+    payload: dict[str, Any],
+    product_id: str,
+    requested_limit: int,
+    expected_place_id: str | None = None,
+) -> dict[str, Any]:
     if payload.get("bundle_id") != SKILL_BUNDLE_ID or payload.get("product_id") != product_id:
         raise _contract_error("ASK Seoul API data 응답의 bundle_id 또는 product_id가 일치하지 않습니다.")
     publication_id = _require(payload, "publication_id", str)
@@ -260,8 +356,33 @@ def _validate_data(payload: dict[str, Any], product_id: str, requested_limit: in
         raise _contract_error("ASK Seoul API data page의 next_cursor 계약이 올바르지 않습니다.")
     if has_more != (next_cursor is not None):
         raise _contract_error("ASK Seoul API data page의 has_more와 next_cursor가 일치하지 않습니다.")
+    if next_cursor is not None:
+        try:
+            encoded = next_cursor.encode("ascii")
+            decoded = base64.urlsafe_b64decode(encoded + b"=" * ((4 - len(encoded) % 4) % 4))
+            cursor = json.loads(decoded.decode("utf-8"))
+        except (UnicodeEncodeError, binascii.Error, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+            raise _contract_error("ASK Seoul API data page의 next_cursor가 cursor v2가 아닙니다.") from None
+        if (
+            not isinstance(cursor, dict)
+            or cursor.get("v") != 2
+            or cursor.get("publication_id") != publication_id
+            or not isinstance(cursor.get("query_fingerprint"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", cursor["query_fingerprint"])
+            or not isinstance(cursor.get("product_row_id"), str)
+            or not cursor["product_row_id"]
+            or not _valid_kst_timestamp(cursor.get("forecast_at"))
+        ):
+            raise _contract_error("ASK Seoul API data page의 next_cursor가 cursor v2가 아닙니다.")
     if not all(isinstance(row, dict) for row in rows):
         raise _contract_error("ASK Seoul API data page의 rows 계약이 올바르지 않습니다.")
+    _validate_query_context(
+        payload.get("query_context"),
+        product_id=product_id,
+        publication_id=publication_id,
+        expected_place_id=expected_place_id,
+        row_count=row_count,
+    )
     return payload
 
 
@@ -416,9 +537,22 @@ def _detail(config: ApiConfig, product_id: str) -> dict[str, Any]:
 
 def _data(config: ApiConfig, product_id: str, query: dict[str, str], limit: int) -> dict[str, Any]:
     _validate_product_id(product_id)
+    expected_place_id = query.get("place_id")
+    if not isinstance(expected_place_id, str) or not expected_place_id:
+        raise SkillError("invalid_location_input", "weather risk data 조회에는 place_id가 필요합니다.")
     if config.mode == "local_direct":
-        return _validate_data(_request_json(config, f"/skill/v1/products/{product_id}/data", query), product_id, limit)
-    return _validate_data(_request_json(config, f"{PROXY_ROUTE_ROOT}/data", query), product_id, limit)
+        return _validate_data(
+            _request_json(config, f"/skill/v1/products/{product_id}/data", query),
+            product_id,
+            limit,
+            expected_place_id,
+        )
+    return _validate_data(
+        _request_json(config, f"{PROXY_ROUTE_ROOT}/data", query),
+        product_id,
+        limit,
+        expected_place_id,
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -485,6 +619,11 @@ def run(argv: list[str]) -> int:
                     )
                 resolved = _resolve_admin_dong(args.admin_dong, args.gu)
                 filters["place_id"] = resolved["place_id"]
+            if "place_id" not in filters:
+                raise SkillError(
+                    "invalid_location_input",
+                    "weather risk data 조회에는 --admin-dong 또는 --filter place_id=...가 필요합니다.",
+                )
             if not args.fast:
                 allowed_columns = {column["name"] for column in detail["metadata"].get("columns", [])}
                 unknown = sorted(set(filters) - allowed_columns)
