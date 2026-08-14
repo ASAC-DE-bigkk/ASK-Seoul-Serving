@@ -43,6 +43,17 @@
 
 ---
 
+## 2026-08-14
+
+### Weather risk 조회 가능 증거를 소비자 계약으로 연결하는 설계
+
+- **작업자**: @masondev1024
+- **의도 · 목표**: `weather_place_risk_window`의 0행이 실제 위험 후보 없음인지 원천·장소·시간 구간을 판정할 수 없는 상태인지 소비자가 구분하게 한다.
+- **조치**: DAG/DBT가 이미 게시하는 `d1_product_query_availability`의 현재 `publication_id` 결속을 정본으로 삼아, `/skill/v1`에 KST 시간 정규화·`query_context`·query-bound cursor v2·fail-closed 오류를 적용하는 A안 설계 문서를 추가했다. 일반 `/api/v1`, MCP, Traffic, D1 schema는 범위에서 제외했다.
+- **결과**: `docs/superpowers/specs/2026-08-14-weather-risk-query-context-design.md`에 API 입력·출력·쿼터 순서·rollback·검증 기준을 고정했다. 이 커밋에는 운영 변경이나 prod 배포가 없다.
+
+---
+
 ## 2026-08-13
 
 ### 한 줄을 네 번 고쳤다 — 그리고 그 과정에서 발행이 멈춰 있던 걸 찾았다
